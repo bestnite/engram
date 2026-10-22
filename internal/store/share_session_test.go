@@ -8,12 +8,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// 本文件覆盖 L3 的分享会话授权（share_session.go）：
-//   - 登记后读取鉴权第三支放行，且只对登记的那个会话放行（会话隔离）；
-//   - 授权过期后不再放行；RemoveExpired 负责回收；
-//   - 会话作废（登出、改密码踢下线、禁用）时该会话的授权行一并删除。
+// This file covers the L3 share session grant (share_session.go):
+//   - after registering, the third branch of read authorization allows access, and only for the session that registered it (session isolation);
+//   - once the grant expires it no longer allows access; RemoveExpired reclaims it;
+//   - when a session is revoked (logout, signed out by a password change, disabled) that session's grant rows are deleted with it.
 
-// seedSession 插入一条服务端会话行，供授权与会话回收用例使用。
+// seedSession inserts one server-side session row for the grant and session-reclamation cases.
 func seedSession(t *testing.T, db *gorm.DB, userID uint64, id string, expiresAt time.Time) {
 	t.Helper()
 	if err := NewSessionStore(db).Create(context.Background(), &Session{
@@ -24,7 +24,7 @@ func seedSession(t *testing.T, db *gorm.DB, userID uint64, id string, expiresAt 
 	}
 }
 
-// shareGrantCount 统计某会话的授权行数。
+// shareGrantCount counts the grant rows of a session.
 func shareGrantCount(t *testing.T, db *gorm.DB, sessionID string) int64 {
 	t.Helper()
 	var n int64
@@ -34,8 +34,8 @@ func shareGrantCount(t *testing.T, db *gorm.DB, sessionID string) int64 {
 	return n
 }
 
-// TestShareSessionGrantAuthorizesMediaForItsSessionOnly 覆盖读取侧第三支与会话隔离：
-// 分享授权只对登记它的那个会话放行；同一用户的另一个会话、以及无会话的调用都不放行。
+// TestShareSessionGrantAuthorizesMediaForItsSessionOnly covers the third read-side branch and session isolation:
+// the share grant allows only the session that registered it; another session of the same user and a call without a session are both denied.
 func TestShareSessionGrantAuthorizesMediaForItsSessionOnly(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -52,7 +52,7 @@ func TestShareSessionGrantAuthorizesMediaForItsSessionOnly(t *testing.T) {
 			now := time.Now().UTC()
 			seedSession(t, db, visitor, "sess-open", now.Add(time.Hour))
 			seedSession(t, db, visitor, "sess-other", now.Add(time.Hour))
-			// 卡组必须仍有一条有效分享链接，读取才会放行（撤销/过期即时失效，见 share_session.go）。
+			// The deck must still have an active share link for the read to be allowed (revocation/expiry takes effect at once, see share_session.go).
 			if _, _, err := NewShareLinkStore(db).Create(ctx, ShareLinkInput{DeckID: deckID, CreatedBy: owner}); err != nil {
 				t.Fatalf("create share link: %v", err)
 			}
@@ -73,7 +73,7 @@ func TestShareSessionGrantAuthorizesMediaForItsSessionOnly(t *testing.T) {
 	}
 }
 
-// TestShareSessionGrantLapsesWhenExpired 覆盖过期：授权行过期后读取变 false，RemoveExpired 把它清掉。
+// TestShareSessionGrantLapsesWhenExpired covers expiry: once the grant row expires the read becomes false, and RemoveExpired clears it.
 func TestShareSessionGrantLapsesWhenExpired(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestShareSessionGrantLapsesWhenExpired(t *testing.T) {
 			deckID := seedDeck(t, db, owner)
 			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("share-expiry"))
 			saveRefNote(t, db, deckID, Ptr(owner), refFront(sha))
-			// 链接不过期，确保「过期」这一支只来自授权行本身。
+			// The link does not expire, so the "expired" branch can only come from the grant row itself.
 			if _, _, err := NewShareLinkStore(db).Create(ctx, ShareLinkInput{DeckID: deckID, CreatedBy: owner}); err != nil {
 				t.Fatalf("create share link: %v", err)
 			}
@@ -114,8 +114,8 @@ func TestShareSessionGrantLapsesWhenExpired(t *testing.T) {
 	}
 }
 
-// TestShareSessionGrantRemovedWhenSessionRevoked 覆盖清理：登出（Revoke）与批量作废
-// （RevokeAllForUserExcept / RevokeAllForUser）都要删掉被作废会话的授权行。
+// TestShareSessionGrantRemovedWhenSessionRevoked covers the cleanup: logout (Revoke) and the bulk revocations
+// (RevokeAllForUserExcept / RevokeAllForUser) must all delete the grant rows of the revoked sessions.
 func TestShareSessionGrantRemovedWhenSessionRevoked(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -129,7 +129,7 @@ func TestShareSessionGrantRemovedWhenSessionRevoked(t *testing.T) {
 			store := NewShareSessionStore(db)
 			now := time.Now().UTC()
 
-			// 1) 登出单个会话：只删该会话的行。
+			// 1) Logging out a single session: only that session's rows go.
 			seedSession(t, db, visitor, "sess-logout", now.Add(time.Hour))
 			seedSession(t, db, visitor, "sess-keep", now.Add(time.Hour))
 			for _, sid := range []string{"sess-logout", "sess-keep"} {
@@ -147,7 +147,7 @@ func TestShareSessionGrantRemovedWhenSessionRevoked(t *testing.T) {
 				t.Errorf("kept session has %d grants, want 1", n)
 			}
 
-			// 2) 改密码保留当前会话：其它会话的授权被删，当前会话的保留。
+			// 2) A password change keeping the current session: the other sessions' grants are deleted, the current session's is kept.
 			if err := NewSessionStore(db).RevokeAllForUserExcept(ctx, visitor, "sess-keep", now); err != nil {
 				t.Fatalf("RevokeAllForUserExcept() error = %v", err)
 			}
@@ -155,7 +155,7 @@ func TestShareSessionGrantRemovedWhenSessionRevoked(t *testing.T) {
 				t.Errorf("kept session lost its grant: %d rows, want 1", n)
 			}
 
-			// 3) 全部作废（禁用/强制下线）：该用户所有会话的授权清空。
+			// 3) Revoking everything (disabling/forced sign-out): all grants of that user's sessions are cleared.
 			if err := store.Grant(ctx, "sess-keep", deckID, nil, now.Add(time.Hour)); err != nil {
 				t.Fatalf("Grant() error = %v", err)
 			}
@@ -165,7 +165,7 @@ func TestShareSessionGrantRemovedWhenSessionRevoked(t *testing.T) {
 			if n := shareGrantCount(t, db, "sess-keep"); n != 0 {
 				t.Errorf("after RevokeAllForUser: %d grants, want 0", n)
 			}
-			// owner 的会话不受影响（不同用户）。
+			// The owner's session is unaffected (a different user).
 			seedSession(t, db, owner, "sess-owner", now.Add(time.Hour))
 			if err := store.Grant(ctx, "sess-owner", deckID, nil, now.Add(time.Hour)); err != nil {
 				t.Fatalf("Grant(owner) error = %v", err)

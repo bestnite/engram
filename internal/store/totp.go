@@ -10,33 +10,33 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 本文件是（TOTP 二次验证）的持久化层。
+// This file is the persistence layer for (TOTP two-factor authentication).
 //
-// 为什么不把这两张表并进 models.go：models.go 是单写者热点（AGENTS.md §6.4），
-// 本轮与其它泳道并行，故新表定义放在独立文件里，仅在 AutoMigrate 处并集一次。
-// 表结构是纯粹的新增（AGENTS.md §2.3 第 5 条允许 AutoMigrate 加表）。
+// Why these two tables are not merged into models.go: models.go is a single-writer hotspot (AGENTS.md §6.4),
+// and this round runs in parallel with other swimlanes, so the new table definitions live in a separate file and are unioned in only at AutoMigrate.
+// The schema change is purely additive (AGENTS.md §2.3 item 5 allows AutoMigrate to add tables).
 //
-// 安全约定：
-//   - TOTP secret 只以密文落库（SecretCodec，AES-GCM），明文绝不出现在任何列里；
-//   - 恢复码只存 sha256 摘要，明文只在生成时返回一次；
-//   - 恢复码一次性由「条件更新 + used_at IS NULL」保证（见 ConsumeRecoveryCode），
-//     不依赖读-判断-再写，因此并发下也不会被用两次；
-//   - 6 位验证码的防重放由「条件更新 + last_used_step < step」保证（见 AcceptStep），
-//     同一手法：并发下同一个（或更早的）时间步只可能被接受一次。
+// Security conventions:
+//   - the TOTP secret is stored only as ciphertext (SecretCodec, AES-GCM); the plaintext never appears in any column;
+//   - recovery codes are stored only as sha256 digests, and the plaintext is returned once at generation;
+//   - a recovery code's single use is guaranteed by "a conditional update + used_at IS NULL" (see ConsumeRecoveryCode),
+//     not relying on read-check-write, so it cannot be used twice even under concurrency;
+//   - replay protection for the 6-digit code is guaranteed by "a conditional update + last_used_step < step" (see AcceptStep),
+//     the same technique: under concurrency the same (or an earlier) time step can only be accepted once.
 
-// ErrTOTPRecordNotFound 表示该用户没有 TOTP 记录（或尚未确认）。
+// ErrTOTPRecordNotFound means the user has no TOTP record (or has not confirmed yet).
 var ErrTOTPRecordNotFound = errors.New("totp record not found")
 
-// UserTOTP 是用户的 TOTP 状态；每人至多一行。
-// ConfirmedAt 为 NULL 表示「已生成 secret 但尚未用验证码确认」，此时二次验证不生效。
+// UserTOTP is a user's TOTP state; at most one row per person.
+// ConfirmedAt NULL means "a secret was generated but not yet confirmed with a code"; two-factor does not apply in that state.
 type UserTOTP struct {
 	UserID uint64 `gorm:"primaryKey;column:user_id" json:"user_id"`
-	// SecretCiphertext 是 SecretCodec 加密后的 secret，带 `v1:` 版本前缀。
+	// SecretCiphertext is the secret after SecretCodec encryption, carrying the `v1:` version prefix.
 	SecretCiphertext string     `gorm:"not null;column:secret_ciphertext" json:"-"`
 	ConfirmedAt      *time.Time `json:"confirmed_at,omitempty"`
-	// LastUsedStep 是已接受的最大 TOTP 时间步（unix 秒 / period）；NULL 表示尚未接受过任何验证码。
-	// 用可空列而非 NOT NULL 默认值：AutoMigrate 只允许加列（AGENTS.md §2.3 第 5 条），
-	// 而既有行在加列后必须是「未用过」语义，NULL 正是这个语义，且不会给旧行带来约束。
+	// LastUsedStep is the largest accepted TOTP time step (unix seconds / period); NULL means no code has been accepted yet.
+	// A nullable column rather than a NOT NULL default: AutoMigrate is only allowed to add columns (AGENTS.md §2.3 item 5),
+	// and existing rows must read as "never used" after the column is added; NULL is exactly that semantics and imposes no constraint on old rows.
 	LastUsedStep *int64    `gorm:"column:last_used_step" json:"last_used_step,omitempty"`
 	CreatedAt    time.Time `gorm:"not null" json:"created_at"`
 	UpdatedAt    time.Time `gorm:"not null" json:"updated_at"`
@@ -44,8 +44,8 @@ type UserTOTP struct {
 
 func (UserTOTP) TableName() string { return "user_totp" }
 
-// TOTPRecoveryCode 是一条一次性恢复码；只存摘要。
-// UsedAt 非空即已使用，之后同一码再也无法通过校验。
+// TOTPRecoveryCode is one single-use recovery code; only the digest is stored.
+// A non-null UsedAt means it has been used; after that the same code can never pass validation again.
 type TOTPRecoveryCode struct {
 	ID        uint64     `gorm:"primaryKey" json:"id"`
 	UserID    uint64     `gorm:"not null;index" json:"user_id"`
@@ -56,18 +56,18 @@ type TOTPRecoveryCode struct {
 
 func (TOTPRecoveryCode) TableName() string { return "totp_recovery_codes" }
 
-// TOTPModels 返回 TOTP 相关的全部模型，供 AutoMigrate 并集（见 store.AutoMigrate）。
+// TOTPModels returns all TOTP-related models for AutoMigrate to union in (see store.AutoMigrate).
 func TOTPModels() []any { return []any{&UserTOTP{}, &TOTPRecoveryCode{}} }
 
-// TOTPStore 封装 user_totp 与 totp_recovery_codes 的 GORM 访问。
+// TOTPStore wraps GORM access to user_totp and totp_recovery_codes.
 type TOTPStore struct {
 	db *gorm.DB
 }
 
-// NewTOTPStore 构造 TOTP 存储。
+// NewTOTPStore builds the TOTP store.
 func NewTOTPStore(db *gorm.DB) *TOTPStore { return &TOTPStore{db: db} }
 
-// Get 取用户的 TOTP 行；不存在时返回 gorm.ErrRecordNotFound（用 IsNotFound 判定）。
+// Get fetches the user's TOTP row; returns gorm.ErrRecordNotFound when absent (test it with IsNotFound).
 func (s *TOTPStore) Get(ctx context.Context, userID uint64) (*UserTOTP, error) {
 	var row UserTOTP
 	if err := s.db.WithContext(ctx).First(&row, "user_id = ?", userID).Error; err != nil {
@@ -76,7 +76,7 @@ func (s *TOTPStore) Get(ctx context.Context, userID uint64) (*UserTOTP, error) {
 	return &row, nil
 }
 
-// Enabled 报告该用户是否真正启用了 TOTP：只有已确认的行才算启用。
+// Enabled reports whether the user really has TOTP enabled: only a confirmed row counts as enabled.
 func (s *TOTPStore) Enabled(ctx context.Context, userID uint64) (bool, error) {
 	var n int64
 	if err := s.db.WithContext(ctx).Model(&UserTOTP{}).
@@ -86,10 +86,10 @@ func (s *TOTPStore) Enabled(ctx context.Context, userID uint64) (bool, error) {
 	return n > 0, nil
 }
 
-// UpsertPending 写入（或覆盖）一个未确认的 secret 密文；confirmed_at 一律清空，
-// 因此重新开始绑定会把上一次未完成的绑定顶掉。
-// last_used_step 也一并清空：换 secret 即换了一套验证码，旧 secret 接受过的最大步
-// 不得约束新绑定（否则新 secret 在旧步覆盖的时间窗内会莫名被拒）。
+// UpsertPending writes (or overwrites) an unconfirmed secret ciphertext; confirmed_at is always cleared,
+// so starting enrollment again displaces the previous unfinished enrollment.
+// last_used_step is cleared too: a new secret means a new set of codes, and the largest step the old secret accepted
+// must not constrain the new enrollment (otherwise the new secret would be rejected for no apparent reason within the window the old step covers).
 func (s *TOTPStore) UpsertPending(ctx context.Context, userID uint64, ciphertext string, at time.Time) error {
 	row := UserTOTP{UserID: userID, SecretCiphertext: ciphertext, CreatedAt: at.UTC(), UpdatedAt: at.UTC()}
 	if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
@@ -106,12 +106,12 @@ func (s *TOTPStore) UpsertPending(ctx context.Context, userID uint64, ciphertext
 	return nil
 }
 
-// AcceptStep 尝试把「已接受的最大时间步」前移到 step：只有当 step 严格大于已记录的步
-// （或此前从未记录，即 NULL）时才写入成功。
+// AcceptStep tries to advance "the largest accepted time step" to step: the write succeeds only when step is strictly greater than the recorded step
+// (or nothing was recorded before, i.e. NULL).
 //
-// 防重放与并发一次性由这条条件更新保证：并发调用时只有一个请求能把 RowsAffected 变成 1，
-// 其余拿到 0 —— 与 ConsumeRecoveryCode 同一手法，不需要行锁或读-判断-写。
-// updated_at 由 GORM 的 Update 回调按约定自动带上，这里不再显式赋值。
+// Replay protection and concurrent single use are guaranteed by this conditional update: under concurrent calls only one request can turn RowsAffected into 1,
+// the rest get 0 -- the same technique as ConsumeRecoveryCode, needing no row lock or read-check-write.
+// updated_at comes along automatically per the GORM Update callback convention, so it is not set explicitly here.
 func (s *TOTPStore) AcceptStep(ctx context.Context, userID uint64, step int64) (bool, error) {
 	res := s.db.WithContext(ctx).Model(&UserTOTP{}).
 		Where("user_id = ? AND (last_used_step IS NULL OR last_used_step < ?)", userID, step).
@@ -122,7 +122,7 @@ func (s *TOTPStore) AcceptStep(ctx context.Context, userID uint64, step int64) (
 	return res.RowsAffected > 0, nil
 }
 
-// Confirm 把已存在的待确认行标记为已确认；没有待确认行时返回 ErrTOTPRecordNotFound。
+// Confirm marks an existing pending row as confirmed; returns ErrTOTPRecordNotFound when there is no pending row.
 func (s *TOTPStore) Confirm(ctx context.Context, userID uint64, at time.Time) error {
 	res := s.db.WithContext(ctx).Model(&UserTOTP{}).
 		Where("user_id = ? AND confirmed_at IS NULL", userID).
@@ -136,7 +136,7 @@ func (s *TOTPStore) Confirm(ctx context.Context, userID uint64, at time.Time) er
 	return nil
 }
 
-// Delete 关闭 TOTP：在同一事务里删除 secret 行与全部恢复码，二者不会出现半删状态。
+// Delete turns TOTP off: the secret row and all recovery codes are deleted in one transaction, so they can never be half deleted.
 func (s *TOTPStore) Delete(ctx context.Context, userID uint64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("user_id = ?", userID).Delete(&TOTPRecoveryCode{}).Error; err != nil {
@@ -149,8 +149,8 @@ func (s *TOTPStore) Delete(ctx context.Context, userID uint64) error {
 	})
 }
 
-// ReplaceRecoveryCodes 用一批新的摘要替换用户现有的全部恢复码（同一事务）。
-// 旧的未使用码因此立即失效——重新生成即作废上一批，这是恢复码唯一合理的语义。
+// ReplaceRecoveryCodes replaces all of the user's existing recovery codes with a new batch of digests (in one transaction).
+// The old unused codes therefore lapse immediately -- regenerating invalidates the previous batch, the only sensible semantics for recovery codes.
 func (s *TOTPStore) ReplaceRecoveryCodes(ctx context.Context, userID uint64, hashes []string, at time.Time) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("user_id = ?", userID).Delete(&TOTPRecoveryCode{}).Error; err != nil {
@@ -170,10 +170,10 @@ func (s *TOTPStore) ReplaceRecoveryCodes(ctx context.Context, userID uint64, has
 	})
 }
 
-// ConsumeRecoveryCode 尝试把一条恢复码标记为已用。
+// ConsumeRecoveryCode tries to mark one recovery code as used.
 //
-// 一次性由这条 SQL 保证：`used_at IS NULL` 的条件更新即使被并发调用，
-// 也只有一个请求能把 RowsAffected 变成 1，其余拿到 0 —— 不需要行锁或读改写。
+// Single use is guaranteed by this SQL: even when the `used_at IS NULL` conditional update is called concurrently,
+// only one request can turn RowsAffected into 1, the rest get 0 -- no row lock or read-modify-write needed.
 func (s *TOTPStore) ConsumeRecoveryCode(ctx context.Context, userID uint64, hash string, at time.Time) (bool, error) {
 	res := s.db.WithContext(ctx).Model(&TOTPRecoveryCode{}).
 		Where("user_id = ? AND code_hash = ? AND used_at IS NULL", userID, hash).
@@ -184,7 +184,7 @@ func (s *TOTPStore) ConsumeRecoveryCode(ctx context.Context, userID uint64, hash
 	return res.RowsAffected > 0, nil
 }
 
-// UnusedRecoveryCodeCount 返回用户尚未使用的恢复码数量，供设置页展示余量。
+// UnusedRecoveryCodeCount returns the number of recovery codes the user has not used yet, for the settings page to show how many are left.
 func (s *TOTPStore) UnusedRecoveryCodeCount(ctx context.Context, userID uint64) (int64, error) {
 	var n int64
 	if err := s.db.WithContext(ctx).Model(&TOTPRecoveryCode{}).

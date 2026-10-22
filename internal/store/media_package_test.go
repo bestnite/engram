@@ -15,11 +15,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// 媒体是卡组包里唯一会往磁盘写文件的路径，却是覆盖最少的：要求导出→导入新库后
-// 文件真的落盘且字节一致，并断言 skip_missing_media 的两种取值。
+// Media is the only path in a deck package that writes files to disk, yet it has the thinnest coverage: this requires that after export → import into a new
+// DB the files really land on disk byte-identically, and asserts both values of skip_missing_media.
 
-// seedMediaNote 把 raw 按内容寻址写进 srcRoot 与媒体元数据表，并在卡组里放一条引用它的 note；
-// 返回 sha256。媒体引用形如 media/<sha256>.<ext>。
+// seedMediaNote writes raw into srcRoot and the media metadata table by content address, and puts a note referencing it in the deck;
+// it returns the sha256. Media references look like media/<sha256>.<ext>.
 func seedMediaNote(t *testing.T, db *gorm.DB, srcRoot string, owner, deckID uint64, raw []byte, mime, ext string) string {
 	t.Helper()
 	m, err := NewMediaStore(db).SaveBytes(context.Background(), srcRoot, mime, raw, Ptr(owner))
@@ -35,7 +35,7 @@ func seedMediaNote(t *testing.T, db *gorm.DB, srcRoot string, owner, deckID uint
 	return m.Sha256
 }
 
-// TestImportPackageMediaRoundTrip 断言带媒体的包导出后导入全新库，媒体文件真的落盘且字节一致。
+// TestImportPackageMediaRoundTrip asserts that a package with media, exported and imported into a brand-new DB, really lands its media files on disk byte-identically.
 func TestImportPackageMediaRoundTrip(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -47,7 +47,7 @@ func TestImportPackageMediaRoundTrip(t *testing.T) {
 			deckID := seedPresetDeck(t, src, owner)
 			srcRoot := t.TempDir()
 
-			// 一段带 PNG 魔数的字节：SaveBytes 只按内容寻址，不校验 magic，这里刻意保留可辨识头。
+			// a chunk of bytes with the PNG magic number: SaveBytes only addresses by content and does not validate magic, so a recognizable header is kept deliberately here.
 			raw := append([]byte("\x89PNG\r\n\x1a\n"), []byte("media-round-trip-payload")...)
 			sum := sha256.Sum256(raw)
 			sha := hex.EncodeToString(sum[:])
@@ -98,8 +98,8 @@ func TestImportPackageMediaRoundTrip(t *testing.T) {
 	}
 }
 
-// TestImportMissingMediaRespectsSkipFlag 断言 skip_missing_media 两种取值的行为：
-// false（默认）缺媒体即失败并列出清单；true 只计数、继续导入且不落盘任何文件。
+// TestImportMissingMediaRespectsSkipFlag asserts the behavior of both skip_missing_media values:
+// false (the default) fails on missing media and lists them; true only counts them, keeps importing, and writes no file at all.
 func TestImportMissingMediaRespectsSkipFlag(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -110,7 +110,7 @@ func TestImportMissingMediaRespectsSkipFlag(t *testing.T) {
 			owner := seedUsers(t, src, "pkg_missing_owner")[0]
 			deckID := seedPresetDeck(t, src, owner)
 
-			// note 引用一个包里根本没有字节的 sha（导出时 include_media=0，引用仍在字段里）。
+			// the note references a sha whose bytes are not in the package at all (export used include_media=0, the reference is still in the fields).
 			sha := strings.Repeat("a", 64)
 			n := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(owner)}
 			if _, err := NewNoteStore(src).Create(ctx, &n, map[string]any{"front": "x?", "back": "media/" + sha + ".png"}); err != nil {
@@ -118,7 +118,7 @@ func TestImportMissingMediaRespectsSkipFlag(t *testing.T) {
 			}
 			raw := exportZip(t, src, owner, deckID, PackageOptions{IncludeMedia: false})
 
-			// 默认（skip_missing_media=false）：失败并指名缺失的媒体条目。
+			// default (skip_missing_media=false): it fails and names the missing media entries.
 			_, err := NewDeckStore(dst).ImportPackage(ctx, 1, bytes.NewReader(raw), PackageImportOptions{})
 			var pe *PackageError
 			if !errors.As(err, &pe) || pe.Code != CodePackageBadFormat {
@@ -128,7 +128,7 @@ func TestImportMissingMediaRespectsSkipFlag(t *testing.T) {
 				t.Fatalf("entries = %v, want one naming media/%s", pe.Entries, sha)
 			}
 
-			// skip_missing_media=true：只计数、继续导入。
+			// skip_missing_media=true: it only counts and keeps importing.
 			dstRoot := t.TempDir()
 			importer := seedUsers(t, dst, "pkg_missing_importer")[0]
 			report, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(raw), PackageImportOptions{SkipMissingMedia: true, MediaRoot: dstRoot})
@@ -156,7 +156,7 @@ func TestImportMissingMediaRespectsSkipFlag(t *testing.T) {
 	}
 }
 
-// entryContains 判断逐条错误列表里是否有条目提到 needle。
+// entryContains reports whether any entry in the per-item error list mentions needle.
 func entryContains(entries []string, needle string) bool {
 	for _, e := range entries {
 		if strings.Contains(e, needle) {
@@ -166,15 +166,15 @@ func entryContains(entries []string, needle string) bool {
 	return false
 }
 
-// TestImportPackageRollbackLeavesNoOrphanMedia 是验收测试：媒体写入发生在
-// 事务提交之前，若事务随后失败回滚，写下的字节必须一并清理，不能留下无人引用的孤儿文件。
+// TestImportPackageRollbackLeavesNoOrphanMedia is an acceptance test: media is written
+// before the transaction commits, so if the transaction then fails and rolls back, the written bytes must be cleaned up too, leaving no orphaned file nobody references.
 //
-// 构造方式：目标卡组里预置一条与包内 note 同 external_ref 的记录，配合 on_conflict=fail
-// 让导入在“媒体已落盘、note 已判定冲突”之后整体失败。冲突判定发生在媒体写入之后
-// （见 importInTx 的顺序），因此这条路径确实会先写文件再回滚。
+// How it is set up: the target deck is pre-seeded with a row sharing the packaged note's external_ref, and on_conflict=fail
+// makes the import fail wholesale after 'media is on disk and the note has been judged conflicting'. The conflict check happens after the media write
+// (see the ordering in importInTx), so this path really does write files and then roll back.
 //
-// 断言两侧：媒体分片目录存在（证明写盘路径真的执行过，测试没有空转）且文件已被清掉，
-// 同时元数据行不存在。
+// Both sides are asserted: the media shard directory exists (proving the disk-write path really ran, so the test is not a no-op) and the file has been cleaned up,
+// while no metadata row exists.
 func TestImportPackageRollbackLeavesNoOrphanMedia(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -206,7 +206,7 @@ func TestImportPackageRollbackLeavesNoOrphanMedia(t *testing.T) {
 
 			importer := seedUsers(t, dst, "pkg_orphan_importer")[0]
 			dstDeck := seedPresetDeck(t, dst, importer)
-			// 预置同 external_ref 的 note，让包内 note 命中冲突（on_conflict=fail → 整包回滚）。
+			// pre-seed a note with the same external_ref so the packaged note hits the conflict (on_conflict=fail → the whole package rolls back).
 			pre := Note{DeckID: dstDeck, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(importer), ExternalRef: Ptr("ext:conflict")}
 			if _, err := NewNoteStore(dst).Create(ctx, &pre, map[string]any{"front": "already here", "back": "x"}); err != nil {
 				t.Fatalf("create conflicting note: %v", err)
@@ -225,7 +225,7 @@ func TestImportPackageRollbackLeavesNoOrphanMedia(t *testing.T) {
 				t.Fatalf("error = %v, want *PackageError", err)
 			}
 
-			// 元数据行必须随事务回滚。
+			// the metadata row must roll back with the transaction.
 			row, err := NewMediaStore(dst).BySha256(ctx, sha)
 			if err != nil {
 				t.Fatalf("load media metadata: %v", err)
@@ -233,12 +233,12 @@ func TestImportPackageRollbackLeavesNoOrphanMedia(t *testing.T) {
 			if row != nil {
 				t.Fatalf("rolled-back import left media metadata %+v", row)
 			}
-			// 写盘路径确实执行过：分片目录是 MkdirAll 建的，清理只删文件不删目录。
+			// the disk-write path really ran: the shard directory was created by MkdirAll, and cleanup only deletes files, not directories.
 			shardDir := filepath.Join(dstRoot, sha[:2])
 			if fi, err := os.Stat(shardDir); err != nil || !fi.IsDir() {
 				t.Fatalf("shard dir %s missing (err=%v); the media write path did not run", shardDir, err)
 			}
-			// 关键断言：没有任何孤儿文件残留。
+			// the key assertion: no orphaned file is left behind.
 			orphan := filepath.Join(shardDir, sha+".png")
 			if _, err := os.Stat(orphan); !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("orphan media file %s survived the rollback (err=%v)", orphan, err)

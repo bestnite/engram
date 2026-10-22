@@ -8,19 +8,19 @@ import (
 	"gorm.io/gorm"
 )
 
-// 媒体回收的存储侧：标记孤立媒体、删除孤立超过宽限期的媒体行。文件删除在 internal/media。
+// The storage side of media reclamation: mark orphaned media, delete media rows orphaned past the grace period. File deletion lives in internal/media.
 //
-// 「孤立」= media_notes 里没有任何行指向这份字节。软删除 note 的映射行保留（note 可以恢复），
-// 所以被软删除 note 引用的媒体不算孤立；卡组被删除时 note 与映射一起硬删除，媒体随之孤立。
+// 'Orphaned' = no row in media_notes points at these bytes. Mapping rows of soft-deleted notes are kept (a note can be restored),
+// so media referenced by a soft-deleted note is not orphaned; when a deck is deleted its notes and mappings are hard-deleted together, and the media becomes orphaned.
 //
-// 为什么分两步而不是看到孤立就删：编辑 note 时先删掉图片、稍后再改回来是常见操作；上传与
-// 插入卡片之间也有时间差。先记下「从何时起孤立」，只删孤立超过宽限期的，才不会误删。
+// Why two steps instead of deleting as soon as something looks orphaned: removing an image while editing a note and adding it back later is common, and there is also a
+// time gap between upload and card insertion. Recording 'since when it has been orphaned' and deleting only past the grace period avoids deleting by mistake.
 
-// orphanCondition 是「没有任何 note 引用」的 SQL 条件，标记、清除与删除共用这一处定义。
+// orphanCondition is the SQL condition for 'no note references it', shared by marking, clearing and deleting.
 const orphanCondition = "NOT EXISTS (SELECT 1 FROM media_notes AS ref WHERE ref.media_sha = media.sha256)"
 
-// MarkOrphanedMedia 给新出现的孤立媒体记下 orphaned_at = now，并清掉重新被引用的媒体的标记。
-// 返回新标记与清除的行数。
+// MarkOrphanedMedia stamps orphaned_at = now on newly orphaned media and clears the mark on media that got referenced again.
+// It returns the number of rows newly marked and cleared.
 func MarkOrphanedMedia(ctx context.Context, db *gorm.DB, now time.Time) (marked, cleared int64, err error) {
 	res := db.WithContext(ctx).Model(&Media{}).
 		Where("orphaned_at IS NULL").Where(orphanCondition).
@@ -38,10 +38,10 @@ func MarkOrphanedMedia(ctx context.Context, db *gorm.DB, now time.Time) (marked,
 	return marked, res.RowsAffected, nil
 }
 
-// DeleteOrphanedMedia 删除孤立时刻不晚于 before、且此刻仍然孤立的媒体行（最多 limit 行），
-// 连同它们的 media_uploaders 行，返回被删除的行（调用方据 RelPath 删文件）。
+// DeleteOrphanedMedia deletes media rows orphaned no later than before and still orphaned right now (at most limit rows),
+// together with their media_uploaders rows, returning the deleted rows (callers delete files based on RelPath).
 //
-// 删除语句里再判一次孤立：选出之后、删除之前若有 note 引用了它，这一行就不删。
+// The delete statement checks orphanhood again: if a note referenced it between selection and deletion, that row is not deleted.
 func DeleteOrphanedMedia(ctx context.Context, db *gorm.DB, before time.Time, limit int) ([]Media, error) {
 	var rows []Media
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -59,7 +59,7 @@ func DeleteOrphanedMedia(ctx context.Context, db *gorm.DB, before time.Time, lim
 		if err := tx.Where("sha256 IN ?", shas).Where(orphanCondition).Delete(&Media{}).Error; err != nil {
 			return fmt.Errorf("store: delete orphaned media: %w", err)
 		}
-		// 只清理确实删掉了媒体行的 sha：被并发引用而保留的那几行，上传者记录也要留着。
+		// only shas whose media rows were actually deleted are cleaned: rows kept because of a concurrent reference must also keep their uploader records.
 		var kept []string
 		if err := tx.Model(&Media{}).Where("sha256 IN ?", shas).Pluck("sha256", &kept).Error; err != nil {
 			return fmt.Errorf("store: reload kept media: %w", err)

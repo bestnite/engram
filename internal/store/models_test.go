@@ -12,12 +12,12 @@ import (
 	"git.nite07.com/nite/engram/internal/pgtest"
 )
 
-// testDatabases 返回本机可用的测试数据库。SQLite 必须真实跑通；
-// PostgreSQL 路径用 TEST_PG_DSN 门控（本机没有可用实例时自动跳过，见约定）。
+// testDatabases returns the test databases available on this machine. SQLite must really run;
+// the PostgreSQL path is gated by TEST_PG_DSN (skipped automatically when no usable instance is local, see the convention).
 //
-// PG 侧每次调用都拿到一个全新的临时 schema（见 internal/pgtest）：共享实例上的
-// 测试会互相污染、重跑必炸；SQLite 用 t.TempDir() 建全新库文件，所以这个缺陷
-// 只在 PG 下暴露。
+// Each call on the PG side gets a brand-new temporary schema (see internal/pgtest): tests on a shared instance
+// pollute each other and a rerun is bound to blow up; SQLite builds a fresh database file in t.TempDir(), so this flaw
+// only shows up under PG.
 func testDatabases(t *testing.T) map[string]*gorm.DB {
 	t.Helper()
 	out := make(map[string]*gorm.DB)
@@ -32,14 +32,14 @@ func testDatabases(t *testing.T) map[string]*gorm.DB {
 	return out
 }
 
-// expectedTables 是全部模型对应的表：schema_version、sessions、
-// user_totp 与 totp_recovery_codes、mail_outbox。
+// expectedTables are the tables for all models: schema_version, sessions,
+// user_totp and totp_recovery_codes, mail_outbox.
 var expectedTables = []string{
 	"users", "identities", "invites", "settings", "presets", "decks", "notes", "cards",
 	"card_states", "reviews", "deck_grants", "share_links", "media", "media_notes", "media_uploaders",
 	"api_keys", "jobs",
 	"audit_log", "schema_version", "sessions", "user_totp", "totp_recovery_codes", "mail_outbox",
-	// L3 分享会话授权表（share_session.go）。
+	// L3 share-session authorization table (share_session.go).
 	"share_session_decks",
 }
 
@@ -61,7 +61,7 @@ func TestAutoMigrateCreatesAllTables(t *testing.T) {
 	}
 }
 
-// fixture 是被测唯一约束需要的关联行。
+// fixture holds the related rows the unique constraints under test need.
 type fixture struct {
 	userA  uint64
 	userB  uint64
@@ -141,7 +141,7 @@ func TestUniqueConstraints(t *testing.T) {
 				if err := db.Create(&first).Error; err != nil {
 					t.Fatalf("first insert: %v", err)
 				}
-				// 同一个 (provider, subject) 挂到另一个用户也必须被拒。
+				// The same (provider, subject) attached to another user must also be rejected.
 				dup := Identity{UserID: fx.userB, Provider: "issuer.example.com", Subject: "sub-1", LinkedAt: now}
 				if err := db.Create(&dup).Error; err == nil {
 					t.Error("duplicate (provider, subject) was accepted, want unique violation")

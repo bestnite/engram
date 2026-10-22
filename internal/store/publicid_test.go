@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// TestPublicIDGeneratedOnCreate 断言对外可见实体在创建时自动获得一个 UUIDv7，
-// 且显式给出的 public_id 不会被钩子覆盖（钩子只填空值）。
+// TestPublicIDGeneratedOnCreate asserts externally visible entities automatically get a UUIDv7 on creation,
+// and that an explicitly supplied public_id is not overwritten by the hook (the hook only fills empty values).
 func TestPublicIDGeneratedOnCreate(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -38,8 +38,8 @@ func TestPublicIDGeneratedOnCreate(t *testing.T) {
 	}
 }
 
-// TestBackfillPublicIDsFillsLegacyRows 覆盖迁移 0003：迁移前写入、public_id 为空的行被补上
-// v7；已经在用的 public_id 不被动，且回填后全表唯一。
+// TestBackfillPublicIDsFillsLegacyRows covers migration 0003: rows written before the migration with an empty public_id are filled with
+// a v7; public_ids already in use are left alone, and after the backfill the whole table is unique.
 func TestBackfillPublicIDsFillsLegacyRows(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -47,7 +47,7 @@ func TestBackfillPublicIDsFillsLegacyRows(t *testing.T) {
 				t.Fatalf("AutoMigrate() error = %v", err)
 			}
 			now := time.Now().UTC()
-			// SkipHooks 造出「迁移前的旧行」：public_id 为空，绕开 BeforeCreate。
+			// SkipHooks produces a "row from before the migration": public_id empty, bypassing BeforeCreate.
 			legacy := User{Username: "legacy", Email: "legacy@example.com", DisplayName: "L",
 				Role: "user", Status: "active", Locale: "en", Timezone: "UTC", CreatedAt: now}
 			if err := db.Session(&gorm.Session{SkipHooks: true}).Create(&legacy).Error; err != nil {
@@ -83,7 +83,7 @@ func TestBackfillPublicIDsFillsLegacyRows(t *testing.T) {
 	}
 }
 
-// TestPublicIDUniqueIndexRejectsDuplicate 断言唯一索引真的建了出来：两行同 public_id 必须被拒。
+// TestPublicIDUniqueIndexRejectsDuplicate asserts the unique index really exists: two rows with the same public_id must be rejected.
 func TestPublicIDUniqueIndexRejectsDuplicate(t *testing.T) {
 	db := newSQLite(t)
 	if err := db.AutoMigrate(AllModels()...); err != nil {
@@ -103,7 +103,7 @@ func TestPublicIDUniqueIndexRejectsDuplicate(t *testing.T) {
 	}
 }
 
-// assertUUIDv7 断言字符串是可解析的 UUID 且版本为 7。
+// assertUUIDv7 asserts the string is a parseable UUID of version 7.
 func assertUUIDv7(t *testing.T, label, raw string) {
 	t.Helper()
 	parsed, err := uuid.Parse(raw)
@@ -115,8 +115,8 @@ func assertUUIDv7(t *testing.T, label, raw string) {
 	}
 }
 
-// TestStoreByPublicID 断言按对外 id 能查到对应行；未知 id 与空串都返回未找到。
-// 覆盖通用实现（Deck/User/APIKey）、自定义可见性实现（Card）与哨兵错误映射（Invite/Identity）。
+// TestStoreByPublicID asserts the matching row is found by external id; an unknown id and an empty string both return not found.
+// It covers the generic implementation (Deck/User/APIKey), the custom visibility one (Card) and the sentinel error mapping (Invite/Identity).
 func TestStoreByPublicID(t *testing.T) {
 	db := newSQLite(t)
 	if err := db.AutoMigrate(AllModels()...); err != nil {

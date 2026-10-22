@@ -8,8 +8,8 @@ import (
 	"unicode/utf8"
 )
 
-// TestDeckCopyNameKeepsResultWithinLimit 断言「源名 + 副本后缀」的结果始终满足统一名称校验：
-// 超长时按 rune 截断源名，保留的部分是源名的前缀（截断而非改写），并仍以后缀结尾。
+// TestDeckCopyNameKeepsResultWithinLimit asserts that 'source name + copy suffix' always satisfies the shared name validation:
+// when too long, the source name is truncated by rune, the kept part is a prefix of the source name (truncated, not rewritten), and the result still ends with the suffix.
 func TestDeckCopyNameKeepsResultWithinLimit(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -41,8 +41,8 @@ func TestDeckCopyNameKeepsResultWithinLimit(t *testing.T) {
 	}
 }
 
-// TestCloneRejectsInvalidName 是 AUDIT-05 的验收：克隆与建组、改名共用同一套名称校验，
-// 超长名称被拒且不落库（修复前克隆只检查非空，能写出超过 200 字符的卡组）。
+// TestCloneRejectsInvalidName is AUDIT-05 acceptance: cloning shares one name validation with deck creation and rename,
+// so an over-long name is rejected and not stored (before the fix, cloning only checked non-emptiness and could write a deck over 200 characters).
 func TestCloneRejectsInvalidName(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

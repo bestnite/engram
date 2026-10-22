@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// TestPresetDefaultsAppliedAndRoundTrip 是验收用例：
-// 文档化默认值必须落到库里，且每个可改参数都能原样读回。
+// TestPresetDefaultsAppliedAndRoundTrip is the acceptance case:
+// the documented defaults must reach the database, and every changeable parameter must read back unchanged.
 func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -21,7 +21,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 			owner := seedUsers(t, db, "preset_owner")[0]
 			presets := NewPresetStore(db)
 
-			// 默认值：构造时给出，Create 后必须一致。
+			// Defaults: supplied at construction and must match after Create.
 			p := NewPreset(owner, "Default")
 			if err := presets.Create(ctx, &p); err != nil {
 				t.Fatalf("Create() error = %v", err)
@@ -52,7 +52,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 				t.Errorf("weights_json = %v, want nil (default weights)", *got.WeightsJSON)
 			}
 
-			// 往返：每个参数改成非默认值（含把 fuzz 关掉）后读回必须一致。
+			// Round trip: after each parameter is set to a non-default value (fuzz turned off included), reading back must match.
 			got.DesiredRetention = 0.85
 			got.LearningSteps = "2m,20m"
 			got.RelearningSteps = "15m"
@@ -70,7 +70,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 				t.Errorf("round-trip mismatch: %+v", again)
 			}
 
-			// 空 learning_steps 是有意义的取值（关闭学习步骤），必须原样保留。
+			// An empty learning_steps is a meaningful value (learning steps disabled) and must be preserved as is.
 			empty := NewPreset(owner, "NoSteps")
 			empty.LearningSteps = ""
 			if err := presets.Create(ctx, &empty); err != nil {
@@ -84,7 +84,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 				t.Errorf("learning_steps = %q, want empty (learning steps disabled)", gotEmpty.LearningSteps)
 			}
 
-			// 列表按 owner 过滤。
+			// The list is filtered by owner.
 			listed, err := presets.ListByOwner(ctx, owner)
 			if err != nil {
 				t.Fatalf("ListByOwner() error = %v", err)
@@ -96,7 +96,7 @@ func TestPresetDefaultsAppliedAndRoundTrip(t *testing.T) {
 	}
 }
 
-// TestPresetNonOwnerCannotModify 断言非 owner 不能改预设。
+// TestPresetNonOwnerCannotModify asserts a non-owner cannot modify a preset.
 func TestPresetNonOwnerCannotModify(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -128,7 +128,7 @@ func TestPresetNonOwnerCannotModify(t *testing.T) {
 	}
 }
 
-// TestPresetValidationRejectsZeroValues 断言直接构造的零值预设不会被静默写库。
+// TestPresetValidationRejectsZeroValues asserts a directly constructed zero-value preset is not silently persisted.
 func TestPresetValidationRejectsZeroValues(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -164,11 +164,11 @@ func TestPresetValidationRejectsZeroValues(t *testing.T) {
 	}
 }
 
-// TestEnsureDefaultPresetIdempotentAndConcurrent 是默认预设补齐的验收：
-// 重复调用与并发调用都只能得到一条默认预设，且都不报错。
+// TestEnsureDefaultPresetIdempotentAndConcurrent is the acceptance for the default-preset backfill:
+// repeated and concurrent calls must both yield exactly one default preset, and neither may error.
 //
-// 并发部分覆盖「两个请求同时为同一用户补齐」：presets 表没有 (owner_user_id, name) 唯一约束，
-// EnsureDefaultPreset 用进程内互斥 + 事务内再查保证只落一条（见 store/preset.go 的说明）。
+// The concurrent part covers "two requests backfilling for the same user at once": the presets table has no (owner_user_id, name) unique constraint,
+// so EnsureDefaultPreset relies on an in-process mutex plus a re-query inside the transaction to land exactly one row (see the notes in store/preset.go).
 func TestEnsureDefaultPresetIdempotentAndConcurrent(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -178,7 +178,7 @@ func TestEnsureDefaultPresetIdempotentAndConcurrent(t *testing.T) {
 			ctx := context.Background()
 			owner := seedUsers(t, db, "preset_ensure_owner")[0]
 
-			// 顺序重复：第二次必须复用第一条，不新增。
+			// Sequential repeat: the second call must reuse the first row and add nothing.
 			first, err := EnsureDefaultPreset(ctx, db, owner)
 			if err != nil {
 				t.Fatalf("EnsureDefaultPreset() error = %v", err)
@@ -194,7 +194,7 @@ func TestEnsureDefaultPresetIdempotentAndConcurrent(t *testing.T) {
 				t.Fatalf("second ensure = %v, want the same single preset id %d", presetNames(second), first[0].ID)
 			}
 
-			// 并发：同一用户的 N 个补齐同时进行，不得报错也不得建出两条。
+			// Concurrent: N backfills for the same user run at once; none may error and no two rows may appear.
 			other := seedUsers(t, db, "preset_ensure_concurrent")[0]
 			const n = 8
 			errs := make([]error, n)
@@ -220,7 +220,7 @@ func TestEnsureDefaultPresetIdempotentAndConcurrent(t *testing.T) {
 	}
 }
 
-// mustListPresets 读某用户的全部预设，失败即 Fatal。
+// mustListPresets reads all of a user's presets and fails the test on error.
 func mustListPresets(t *testing.T, db *gorm.DB, ownerID uint64) []Preset {
 	t.Helper()
 	presets, err := NewPresetStore(db).ListByOwner(context.Background(), ownerID)
@@ -247,23 +247,23 @@ func TestPresetStoreDelete(t *testing.T) {
 			}
 			defaultP := defaultPresets[0]
 
-			// 1. 默认预设保护
+			// 1. Default preset protection
 			if err := presets.Delete(ctx, ownerA, defaultP.ID); !errors.Is(err, ErrDefaultPresetCannotDelete) {
 				t.Errorf("Delete(default) error = %v, want ErrDefaultPresetCannotDelete", err)
 			}
 
-			// 自定义预设
+			// A custom preset
 			custom := NewPreset(ownerA, "Custom Preset")
 			if err := presets.Create(ctx, &custom); err != nil {
 				t.Fatalf("Create() custom preset error = %v", err)
 			}
 
-			// 2. 他人不能删除
+			// 2. Someone else cannot delete it
 			if err := presets.Delete(ctx, ownerB, custom.ID); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("Delete() by non-owner error = %v, want ErrNotOwner", err)
 			}
 
-			// 3. 被卡组引用的预设不能删除
+			// 3. A preset referenced by a deck cannot be deleted
 			decks := NewDeckStore(db)
 			d := &Deck{OwnerUserID: ownerA, Name: "Deck using custom", PresetID: custom.ID}
 			if err := decks.Create(ctx, d); err != nil {
@@ -273,7 +273,7 @@ func TestPresetStoreDelete(t *testing.T) {
 				t.Errorf("Delete() in-use preset error = %v, want ErrPresetInUse", err)
 			}
 
-			// 删除该卡组后，该预设即可成功删除
+			// Once that deck is deleted, the preset can be deleted successfully
 			if err := decks.Delete(ctx, ownerA, d.ID); err != nil {
 				t.Fatalf("Delete deck error = %v", err)
 			}
@@ -287,7 +287,7 @@ func TestPresetStoreDelete(t *testing.T) {
 	}
 }
 
-// presetNames 取预设名列表，仅用于失败信息。
+// presetNames extracts the preset names, used only in failure messages.
 func presetNames(presets []Preset) []string {
 	names := make([]string, 0, len(presets))
 	for i := range presets {
@@ -296,8 +296,8 @@ func presetNames(presets []Preset) []string {
 	return names
 }
 
-// TestPresetDefaultCannotBeRenamed 断言默认预设可以改调度参数、但改名被拒：
-// 它的身份就是 DefaultPresetName 这个字面量，改名会让后续补齐再建一条同名预设。
+// TestPresetDefaultCannotBeRenamed asserts the default preset's scheduling parameters may change but renaming is rejected:
+// its identity is the DefaultPresetName literal, and renaming would make a later backfill create another preset under that name.
 func TestPresetDefaultCannotBeRenamed(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -317,7 +317,7 @@ func TestPresetDefaultCannotBeRenamed(t *testing.T) {
 				t.Fatalf("no default preset after EnsureDefaultPreset (names %v)", presetNames(list))
 			}
 
-			// 改名被拒，且库里的名字没变。
+			// The rename is rejected and the name in the database is unchanged.
 			renamed := *def
 			renamed.Name = "Mine"
 			if err := presets.Update(ctx, owner, &renamed); !errors.Is(err, ErrDefaultPresetCannotRename) {
@@ -331,7 +331,7 @@ func TestPresetDefaultCannotBeRenamed(t *testing.T) {
 				t.Errorf("default preset name after rejected rename = %q, want %q", after.Name, DefaultPresetName)
 			}
 
-			// 名字原样回传时，参数仍然可改。
+			// With the name passed back unchanged, the parameters are still editable.
 			edited := *def
 			edited.DesiredRetention = 0.8
 			if err := presets.Update(ctx, owner, &edited); err != nil {

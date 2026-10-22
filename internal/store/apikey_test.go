@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// TestAPIKeyCreateStoresHashOnly 是验收用例之一：明文绝不落库。
-// 库里只允许出现 sha256 摘要与展示前缀。
+// TestAPIKeyCreateStoresHashOnly is one of the acceptance cases: plaintext never reaches the DB.
+// Only the sha256 digest and the display prefix may appear in the DB.
 func TestAPIKeyCreateStoresHashOnly(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -54,7 +54,7 @@ func TestAPIKeyCreateStoresHashOnly(t *testing.T) {
 			if !strings.HasPrefix(created.Plaintext, stored.Prefix) {
 				t.Errorf("prefix %q is not a prefix of the plaintext", stored.Prefix)
 			}
-			// 整行序列化后也不得出现明文（覆盖 prefix/name/scopes 等所有列）。
+			// nor appear after serializing the whole row (covering prefix/name/scopes and every other column).
 			raw, err := json.Marshal(stored)
 			if err != nil {
 				t.Fatalf("marshal stored key: %v", err)
@@ -62,7 +62,7 @@ func TestAPIKeyCreateStoresHashOnly(t *testing.T) {
 			if strings.Contains(string(raw), created.Plaintext) {
 				t.Errorf("plaintext persisted in a column: %s", raw)
 			}
-			// scopes 归一化为规范顺序并去重。
+			// scopes are normalized to canonical order and deduped.
 			if stored.Scopes != "read,write" {
 				t.Errorf("stored scopes = %q, want %q", stored.Scopes, "read,write")
 			}
@@ -70,8 +70,8 @@ func TestAPIKeyCreateStoresHashOnly(t *testing.T) {
 	}
 }
 
-// TestAPIKeyAuthenticateAndRevokeIsImmediate 是另一个验收用例：
-// 正常 key 能通过验证并刷新 last_used_at；撤销后同一明文立即被拒。
+// TestAPIKeyAuthenticateAndRevokeIsImmediate is another acceptance case:
+// a live key verifies and refreshes last_used_at; after revoke the same plaintext is rejected immediately.
 func TestAPIKeyAuthenticateAndRevokeIsImmediate(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -106,19 +106,19 @@ func TestAPIKeyAuthenticateAndRevokeIsImmediate(t *testing.T) {
 				t.Error("last_used_at was not persisted")
 			}
 
-			// 未注册的明文按不存在处理。
+			// an unregistered plaintext is treated as not found.
 			if _, err := keys.Authenticate(ctx, APIKeyPlaintextPrefix+"unknown", now); !errors.Is(err, ErrAPIKeyNotFound) {
 				t.Errorf("Authenticate(unknown) error = %v, want ErrAPIKeyNotFound", err)
 			}
 
-			// 撤销后同一明文立即无法通过验证。
+			// after revocation the same plaintext immediately fails verification.
 			if err := keys.Revoke(ctx, user, created.Key.ID, now); err != nil {
 				t.Fatalf("Revoke() error = %v", err)
 			}
 			if _, err := keys.Authenticate(ctx, created.Plaintext, now); !errors.Is(err, ErrAPIKeyRevoked) {
 				t.Errorf("Authenticate(revoked) error = %v, want ErrAPIKeyRevoked", err)
 			}
-			// 重复撤销幂等。
+			// repeated revocation is idempotent.
 			if err := keys.Revoke(ctx, user, created.Key.ID, now); err != nil {
 				t.Errorf("second Revoke() error = %v, want idempotent nil", err)
 			}
@@ -126,7 +126,7 @@ func TestAPIKeyAuthenticateAndRevokeIsImmediate(t *testing.T) {
 	}
 }
 
-// TestAPIKeyExpiry 断言过期 key 立即被拒。
+// TestAPIKeyExpiry asserts an expired key is rejected immediately.
 func TestAPIKeyExpiry(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -150,7 +150,7 @@ func TestAPIKeyExpiry(t *testing.T) {
 	}
 }
 
-// TestAPIKeyCreateValidation 覆盖创建时的三类拒绝路径。
+// TestAPIKeyCreateValidation covers the three rejection paths at creation.
 func TestAPIKeyCreateValidation(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -174,7 +174,7 @@ func TestAPIKeyCreateValidation(t *testing.T) {
 	}
 }
 
-// TestAPIKeyRevokeRequiresOwner 断言非 owner 无法撤销他人 key，且不泄露其存在性。
+// TestAPIKeyRevokeRequiresOwner asserts a non-owner cannot revoke another's key and that its existence does not leak.
 func TestAPIKeyRevokeRequiresOwner(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -207,7 +207,7 @@ func TestAPIKeyRevokeRequiresOwner(t *testing.T) {
 	}
 }
 
-// TestAPIKeyScopeHelpers 表驱动覆盖四档 scope 的判定与归一化。
+// TestAPIKeyScopeHelpers table-drives the checks and normalization of the four scope tiers.
 func TestAPIKeyScopeHelpers(t *testing.T) {
 	cases := []struct {
 		name string

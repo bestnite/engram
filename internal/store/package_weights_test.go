@@ -11,9 +11,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// ---- FSRS 权重的导出 / 导入开关 ----
+// ---- FSRS weights export / import switches ----
 
-// packageTestWeights 是一组 21 维的非默认权重，只用来判断「带出去了没有」。
+// packageTestWeights is a 21-dimensional non-default weight vector, used only to tell whether it travelled or not.
 func packageTestWeights() []float64 {
 	w := make([]float64, 21)
 	for i := range w {
@@ -22,7 +22,7 @@ func packageTestWeights() []float64 {
 	return w
 }
 
-// seedWeightedPackageDeck 建一个源卡组，并把它的预设改成带权重与优化元数据的状态。
+// seedWeightedPackageDeck builds a source deck and puts its preset into the state that has weights and optimization metadata.
 func seedWeightedPackageDeck(t *testing.T, db *gorm.DB, owner uint64) uint64 {
 	t.Helper()
 	deckID, _ := seedPackageDeck(t, db, owner)
@@ -45,7 +45,7 @@ func seedWeightedPackageDeck(t *testing.T, db *gorm.DB, owner uint64) uint64 {
 	return deckID
 }
 
-// deckPreset 读出卡组当前绑定的预设。
+// deckPreset reads the preset currently bound to the deck.
 func deckPreset(t *testing.T, db *gorm.DB, deckID uint64) Preset {
 	t.Helper()
 	var d Deck
@@ -59,7 +59,7 @@ func deckPreset(t *testing.T, db *gorm.DB, deckID uint64) Preset {
 	return p
 }
 
-// TestExportPackageWeightsOption 断言权重默认不导出，且关闭时三项权重字段一起为 null。
+// TestExportPackageWeightsOption asserts weights are not exported by default, and that when off the three weight fields are null together.
 func TestExportPackageWeightsOption(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -87,7 +87,7 @@ func TestExportPackageWeightsOption(t *testing.T) {
 					if pkg.Manifest.IncludeWeights != tc.wantWeights {
 						t.Fatalf("manifest.include_weights = %v, want %v", pkg.Manifest.IncludeWeights, tc.wantWeights)
 					}
-					// 其余调度参数不受开关影响，始终随包。
+					// The other scheduling parameters are unaffected by the switch and always travel with the package.
 					if p.DesiredRetention <= 0 || p.LearningSteps == "" {
 						t.Fatalf("scheduling parameters missing: %+v", p)
 					}
@@ -112,8 +112,8 @@ func TestExportPackageWeightsOption(t *testing.T) {
 	}
 }
 
-// TestImportPackageApplyWeights 断言包内权重默认不采用，只有 new_deck + apply_weights 才写进新预设，
-// 合并到已有卡组时目标预设保持不变。
+// TestImportPackageApplyWeights asserts the package's weights are not adopted by default, that only new_deck + apply_weights writes them into the new preset,
+// and that merging into an existing deck leaves the target preset unchanged.
 func TestImportPackageApplyWeights(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -156,7 +156,7 @@ func TestImportPackageApplyWeights(t *testing.T) {
 					}
 					got := deckPreset(t, dst, report.DeckID)
 					if tc.target != PackageTargetNewDeck {
-						// 按 JSON 比较：EnableFuzz 是指针，直接打印比的是地址。
+						// Compared as JSON: EnableFuzz is a pointer, and printing it directly compares addresses.
 						before, _ := json.Marshal(existingBefore)
 						after, _ := json.Marshal(got)
 						if !bytes.Equal(before, after) {

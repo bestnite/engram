@@ -8,11 +8,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// TestStudySettingsArePerUser 覆盖成员学习设置的完整生命周期（两库）：
-//   - 属主读卡组列；授权写入时成员得到自己的默认预设与默认上限，而不是属主的；
-//   - 成员改设置只改自己的行，卡组列（属主的设置）不动；属主改设置不影响成员；
-//   - 成员不能挂别人的预设（反面）；
-//   - 撤销授权删除成员行；行缺失时回落到成员自己的默认值，而不是属主的设置。
+// TestStudySettingsArePerUser covers the whole lifecycle of member study settings (both databases):
+//   - the owner reads the deck columns; when a grant is written a member gets their own default preset and caps, not the owner's;
+//   - a member changing settings touches only their own row, not the deck columns (the owner's settings); the owner changing settings does not affect members;
+//   - a member cannot attach someone else's preset (counter-case);
+//   - revoking a grant deletes the member row; when the row is missing it falls back to the member's own defaults, not the owner's settings.
 func TestStudySettingsArePerUser(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -57,7 +57,7 @@ func TestStudySettingsArePerUser(t *testing.T) {
 				t.Fatalf("owner settings = %+v, want deck columns", got)
 			}
 
-			// 成员改自己的设置：属主的不变。
+			// a member changes their own settings: the owner's stay unchanged.
 			memberCaps := DeckCaps{NewPerDay: 0, ReviewsPerDay: 7}
 			d, _ := decks.ByID(ctx, deckID)
 			if err := decks.SetStudySettings(ctx, member, d, nil, &memberCaps); err != nil {
@@ -70,12 +70,12 @@ func TestStudySettingsArePerUser(t *testing.T) {
 				t.Errorf("owner caps changed to %+v by the member's update", got)
 			}
 
-			// 反面：成员挂属主的预设被拒。
+			// counter-case: a member attaching the owner's preset is rejected.
 			if err := decks.SetStudySettings(ctx, member, d, &ownerPreset, nil); !errors.Is(err, ErrDeckPresetInvalid) {
 				t.Errorf("member attaching the owner's preset error = %v, want ErrDeckPresetInvalid", err)
 			}
 
-			// 属主改设置：成员的不变。
+			// the owner changes settings: members' stay unchanged.
 			ownerCaps := DeckCaps{NewPerDay: 1, ReviewsPerDay: 1}
 			if err := decks.SetStudySettings(ctx, owner, d, nil, &ownerCaps); err != nil {
 				t.Fatalf("owner SetStudySettings() error = %v", err)
@@ -84,7 +84,7 @@ func TestStudySettingsArePerUser(t *testing.T) {
 				t.Errorf("member caps changed to %+v by the owner's update", got)
 			}
 
-			// 撤销授权删除成员行；行缺失时回落到成员自己的默认值。
+			// revoking the grant deletes the member row; when missing it falls back to the member's own defaults.
 			if err := NewGrantStore(db).Revoke(ctx, deckID, member); err != nil {
 				t.Fatalf("Revoke() error = %v", err)
 			}
@@ -97,7 +97,7 @@ func TestStudySettingsArePerUser(t *testing.T) {
 				t.Errorf("fallback preset = %d, want the member's own default %d", got.PresetID, memberDefault.ID)
 			}
 
-			// 预设被成员设置引用时不可删。
+			// a preset referenced by a member's settings cannot be deleted.
 			extra := Preset{OwnerUserID: member, Name: "mine", DesiredRetention: 0.8, LearningSteps: "1m", RelearningSteps: "10m", MaximumIntervalDays: 100, EnableFuzz: Ptr(true)}
 			if err := NewPresetStore(db).Create(ctx, &extra); err != nil {
 				t.Fatalf("create preset: %v", err)

@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// TestWhereNoteTagsAny 断言标签匹配按数组元素精确命中（大小写不敏感），不做前缀或子串匹配，
-// 且含引号、反斜杠、<>& 与 LIKE 通配符的标签也能命中——这些字符在 tags_json 里以 JSON 转义形式存放。
+// TestWhereNoteTagsAny asserts a tag hits an array element exactly (case-insensitively), with no prefix or substring match,
+// and that tags containing quotes, backslashes, <>& and LIKE wildcards also hit -- those characters are stored JSON-escaped in tags_json.
 func TestWhereNoteTagsAny(t *testing.T) {
 	tagSets := map[string][]string{
 		"plain":   {"文化传承"},
@@ -77,8 +77,8 @@ func TestWhereNoteTagsAny(t *testing.T) {
 	}
 }
 
-// TestDeckTagCounts 断言卡组标签汇总：只算本卡组未删除的 note，同一 note 的重复标签只计一次，
-// 坏数据按无标签处理，结果按标签名升序。
+// TestDeckTagCounts asserts the deck tag summary: only non-deleted notes of this deck count, a repeated tag within one note counts once,
+// corrupt data counts as untagged, and the result is ordered by tag name ascending.
 func TestDeckTagCounts(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

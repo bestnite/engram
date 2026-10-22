@@ -9,38 +9,38 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 分享会话授权（L3）：登录用户通过分享链接打开的卡组计入其会话级可见集合，
-// 媒体读取（mediaReadableByUser 的第三支）据此放行。
+// Share session grant (L3): decks a signed-in user opens through a share link join their session-level visible set,
+// and media reads (the third branch of mediaReadableByUser) are allowed on that basis.
 //
-// 为什么记在服务端会话而不是 cookie：会话是服务端状态（sessions 表），登出/改密码/禁用都会
-// 作废它，授权必须随之消失；写进签名 cookie 反而无法即时撤销。
+// Why it is recorded on the server-side session rather than in a cookie: a session is server-side state (the sessions table), and logout/password change/disabling all
+// revoke it, so the grant must vanish with it; a signed cookie could not be revoked immediately.
 //
-// 为什么键是 (session_id, deck_id) 而不是 (user_id, deck_id)：分享链接的可见性只属于「打开过
-// 它的那个会话」，同一用户换一个会话（另一台设备、另一个浏览器）不该继承；会话隔离由主键天然强制。
+// Why the key is (session_id, deck_id) and not (user_id, deck_id): a share link's visibility belongs only to "the session that opened
+// it"; the same user on another session (another device, another browser) must not inherit it, and the primary key enforces session isolation by construction.
 //
-// 授权行只镜像「这个会话打开过这个卡组」，本身不携带 token：读取时还会要求该卡组当前仍有一条
-// 有效分享链接（见 shareSessionDeckIDsQuery），所以链接一旦被撤销或过期，读取立即失效
-// （「可即时撤销」「撤销/过期即时生效」）。
+// The grant row only mirrors "this session opened this deck" and carries no token itself: a read also requires that the deck still has one
+// active share link (see shareSessionDeckIDsQuery), so once the link is revoked or expires, reading stops working at once
+// ("can be revoked immediately", "revocation/expiry takes effect immediately").
 
-// ShareSessionGrantMaxTTL 是分享会话授权在「链接与会话都没有给出过期时刻」时的兜底上限。
+// ShareSessionGrantMaxTTL is the fallback cap for a share session grant when neither the link nor the session supplies an expiry.
 //
-// 理由：任何授权都不该永不过期。这个上限等于会话默认 TTL（auth.DefaultSessionTTL = 30 天），
-// 也就是单个会话最长能活的时长；即使两处时间戳都缺失（防御性分支，正常路径走不到），
-// 授权也不可能比创建它的会话活得更久。
+// Rationale: no grant should live forever. This cap equals the default session TTL (auth.DefaultSessionTTL = 30 days),
+// that is, the longest a single session can live; even if both timestamps are missing (a defensive branch the normal path never reaches),
+// a grant cannot outlive the session that created it.
 const ShareSessionGrantMaxTTL = 30 * 24 * time.Hour
 
-// ShareSessionStore 封装 share_session_decks：登记授权、过期回收。
+// ShareSessionStore wraps share_session_decks: registering grants and reclaiming expired ones.
 type ShareSessionStore struct {
 	db *gorm.DB
 }
 
-// NewShareSessionStore 构造分享会话授权存储。
+// NewShareSessionStore builds the share session grant store.
 func NewShareSessionStore(db *gorm.DB) *ShareSessionStore { return &ShareSessionStore{db: db} }
 
-// Grant 登记 sessionID 通过分享链接打开过 deckID；过期时刻取链接过期与会话过期的较早者。
+// Grant records that sessionID opened deckID through a share link; the expiry is the earlier of the link expiry and the session expiry.
 //
-// 写入前顺手清掉已过期的行：过期的授权再也无法放行任何请求，是纯垃圾；清理挂在这个相对冷、
-// 但一定会被触发的写入点上，避免再引入一个「永远不会跑」的后台任务。
+// Expired rows are cleaned up along the way before the write: an expired grant can never let a request through again and is pure garbage; the cleanup hangs off this relatively cold
+// but always triggered write point, avoiding yet another background job that would "never run".
 func (s *ShareSessionStore) Grant(ctx context.Context, sessionID string, deckID uint64, linkExpiresAt *time.Time, sessionExpiresAt time.Time) error {
 	if s == nil || s.db == nil || sessionID == "" || deckID == 0 {
 		return nil
@@ -51,7 +51,7 @@ func (s *ShareSessionStore) Grant(ctx context.Context, sessionID string, deckID 
 	}
 	expiry := ShareSessionGrantExpiry(linkExpiresAt, sessionExpiresAt, now)
 	row := ShareSessionDeck{SessionID: sessionID, DeckID: deckID, ExpiresAt: expiry}
-	// 重复打开同一链接是常态（刷新页面）：按主键 upsert，不建第二行、不报错。
+	// Opening the same link repeatedly is normal (a page refresh): upsert on the primary key, no second row, no error.
 	if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "session_id"}, {Name: "deck_id"}},
 		DoUpdates: clause.Assignments(map[string]any{"expires_at": expiry}),
@@ -61,7 +61,7 @@ func (s *ShareSessionStore) Grant(ctx context.Context, sessionID string, deckID 
 	return nil
 }
 
-// RemoveExpired 删除全部已过期的授权行，返回删除条数。
+// RemoveExpired deletes every expired grant row and returns the number deleted.
 func (s *ShareSessionStore) RemoveExpired(ctx context.Context, now time.Time) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, nil
@@ -73,11 +73,11 @@ func (s *ShareSessionStore) RemoveExpired(ctx context.Context, now time.Time) (i
 	return res.RowsAffected, nil
 }
 
-// ShareSessionGrantExpiry 计算一条分享授权行的过期时刻。
+// ShareSessionGrantExpiry computes the expiry of one share grant row.
 //
-// 规则：链接过期与会话过期取较早者——任一失效，授权都失效。
-// 两者都可能为空/为零（正常路径下会话过期总是存在）：此时用调用时刻加 ShareSessionGrantMaxTTL
-// 兜底，保证不会写出永不过期的行。
+// Rule: the earlier of the link expiry and the session expiry -- when either lapses, the grant lapses.
+// Both may be empty/zero (on the normal path the session expiry always exists): then the call time plus ShareSessionGrantMaxTTL
+// is used as the fallback, so a row that never expires is never written.
 func ShareSessionGrantExpiry(linkExpiresAt *time.Time, sessionExpiresAt, now time.Time) time.Time {
 	expiry := now.Add(ShareSessionGrantMaxTTL)
 	if linkExpiresAt != nil && !linkExpiresAt.IsZero() && linkExpiresAt.Before(expiry) {
@@ -89,14 +89,14 @@ func ShareSessionGrantExpiry(linkExpiresAt *time.Time, sessionExpiresAt, now tim
 	return expiry
 }
 
-// shareSessionDeckIDsQuery 返回「某会话通过分享链接拿到未过期访问权」的卡组 id 子查询。
+// shareSessionDeckIDsQuery returns the deck-id subquery for "this session holds unexpired access through a share link".
 //
-// 两个条件缺一不可：
-//   - 该会话在该卡组上有一条未过期的授权行（由 Grant 写入）；
-//   - 该卡组当前仍有一条有效分享链接（未撤销、未过期）。
+// Both conditions are required:
+//   - the session has an unexpired grant row on that deck (written by Grant);
+//   - the deck still has an active share link (not revoked, not expired).
 //
-// 第二条让「撤销/过期即时生效」成立：授权行不携带 token，只镜像「打开过这个卡组」；
-// 若该卡组不再有活着的链接，读取立即失效，即使该会话之前成功打开过。
+// The second makes "revocation/expiry takes effect immediately" hold: the grant row carries no token and only mirrors "opened this deck";
+// if the deck has no live link any more, reading fails at once, even if that session opened it successfully before.
 func shareSessionDeckIDsQuery(db *gorm.DB, sessionID string, now time.Time) *gorm.DB {
 	active := db.Model(&ShareLink{}).Select("deck_id").
 		Where("revoked_at IS NULL").
@@ -106,7 +106,7 @@ func shareSessionDeckIDsQuery(db *gorm.DB, sessionID string, now time.Time) *gor
 		Where("deck_id IN (?)", active)
 }
 
-// removeShareGrantsForSessionTx 删除一个会话的全部授权行（会话作废时调用，见 session.go）。
+// removeShareGrantsForSessionTx deletes all grant rows of one session (called when a session is revoked, see session.go).
 func removeShareGrantsForSessionTx(ctx context.Context, tx *gorm.DB, sessionID string) error {
 	if tx == nil || sessionID == "" {
 		return nil
@@ -117,7 +117,7 @@ func removeShareGrantsForSessionTx(ctx context.Context, tx *gorm.DB, sessionID s
 	return nil
 }
 
-// removeShareGrantsForUserTx 删除某用户全部会话的授权行；keepSessionID 非空时保留该会话的行。
+// removeShareGrantsForUserTx deletes the grant rows of all of a user's sessions; when keepSessionID is non-empty that session's rows are kept.
 func removeShareGrantsForUserTx(ctx context.Context, tx *gorm.DB, userID uint64, keepSessionID string) error {
 	if tx == nil || userID == 0 {
 		return nil

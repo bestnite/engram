@@ -21,41 +21,41 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组包（.edeck）导出/导入。
+// Deck package (.edeck) export/import.
 //
-// 格式：单个 zip，含 manifest.json / notes.json / cards.json / preset.json，
-// 可选 progress.json 与 media/ + media.json。它把\"一个卡组\"变成自包含文件，
-// 用于备份、跨实例迁移与离线转交；与克隆（同实例复制）语义一致：内容走、进度不跟随。
+// Format: one zip holding manifest.json / notes.json / cards.json / preset.json,
+// optionally progress.json and media/ + media.json. It turns \"one deck\" into a self-contained file,
+// for backup, migration between instances and offline handover; the semantics match clone (copy within one instance): content travels, progress does not follow.
 
-// PackageFormatVersion 是当前包格式版本；导入端至少兼容 N-1。
+// PackageFormatVersion is the current package format version; the import side is compatible with at least N-1.
 const PackageFormatVersion = 1
 
-// 稳定的导入错误 code（英文标识符，供调用方程序化判断；AGENTS.md §2.1）。
+// Stable import error codes (English identifiers so callers can branch programmatically; AGENTS.md §2.1).
 const (
 	CodePackageUnsafeEntry = "package_unsafe_entry"
 	CodePackageTooLarge    = "package_too_large"
 	CodePackageBadFormat   = "package_bad_format"
-	// CodePackageUnknownKind 表示包里有本实例不认识（或未注册）的题型；必须报错并逐条列出。
+	// CodePackageUnknownKind means the package holds a kind this instance does not know (or has not registered); it must error and list every one.
 	CodePackageUnknownKind = "package_unknown_kind"
-	// CodePackageUnsafeMedia 表示包内媒体的真实字节不在白名单内，或与 media.json 的声明不符；逐条列出。
+	// CodePackageUnsafeMedia means the real bytes of package media are not in the allowlist or disagree with the media.json declaration; listed one by one.
 	CodePackageUnsafeMedia = "package_unsafe_media"
-	// CodePackageDeckMetaInvalid 表示 manifest 的卡组名/描述越过界限（长度、控制字符或非法 UTF-8）；
-	// 逐条列出出错的字段与原因。
+	// CodePackageDeckMetaInvalid means the manifest's deck name/description crosses a bound (length, control characters or invalid UTF-8);
+	// the offending fields and reasons are listed one by one.
 	CodePackageDeckMetaInvalid = "package_deck_meta_invalid"
-	// CodePackageQuotaExceeded 表示导入新增媒体会超出导入者配额；沿用上传链的稳定 code
-	// media_quota_exceeded（internal/media.CodeQuotaExceeded 同值），四条导入入口统一用它。
+	// CodePackageQuotaExceeded means the imported media would exceed the importer's quota; it reuses the upload chain's stable code
+	// media_quota_exceeded (the same value as internal/media.CodeQuotaExceeded), and all four import entry points use it.
 	CodePackageQuotaExceeded = "media_quota_exceeded"
-	// CodePackageMediaForbidden 表示包内 note 引用了导入者无法读取的媒体（写前校验拒绝）；
-	// 逐条列出被拒的引用。它与单卡写入的 media_not_readable 是同一规则在
-	// 包导入链上的稳定 code。
+	// CodePackageMediaForbidden means a note in the package references media the importer cannot read (rejected by pre-write validation);
+	// the rejected references are listed one by one. It is the same rule as media_not_readable on single-card writes,
+	// carried as a stable code on the package import chain.
 	CodePackageMediaForbidden = "package_media_forbidden"
 )
 
-// PackageError 是带稳定 code 的卡组包错误。
+// PackageError is a deck package error carrying a stable code.
 type PackageError struct {
 	Code    string
 	Message string
-	// Entries 列出出错的包内条目（如未知题型的 note 下标），可空。
+	// Entries lists the offending entries in the package (e.g. the note indexes of unknown kinds); may be empty.
 	Entries []string
 }
 
@@ -66,28 +66,28 @@ func (e *PackageError) Error() string {
 	return e.Code + ": " + e.Message + ": " + strings.Join(e.Entries, ", ")
 }
 
-// PackageOptions 控制一次导出的内容（四个开关）。
+// PackageOptions controls what one export contains (four switches).
 type PackageOptions struct {
-	// IncludeProgress 默认 off：卡组包主要用途是把内容给别人/搬到别的实例。
+	// IncludeProgress defaults to off: the main use of a deck package is giving content to someone else or moving it to another instance.
 	IncludeProgress bool
-	// IncludeMedia 默认 on。
+	// IncludeMedia defaults to on.
 	IncludeMedia bool
-	// IncludeReviews 依赖 IncludeProgress；仅当两者都为真才写出复习日志。
+	// IncludeReviews depends on IncludeProgress; the review log is written only when both are true.
 	IncludeReviews bool
-	// IncludeWeights 默认 off：FSRS 权重是用导出者本人的复习日志拟合出来的，描述的是这个人的
-	// 记忆曲线，不属于卡组内容。关闭时 preset.json 的 weights、weights_optimized_at、
-	// weights_review_count 三项一起写 null，否则导入端会留下「基于 N 次复习优化」却查不到
-	// 那些复习的预设。它不依赖 IncludeProgress。
+	// IncludeWeights defaults to off: FSRS weights are fitted from the exporter's own review log and describe that person's
+	// memory curve, which is not part of the deck content. When off, the weights, weights_optimized_at and
+	// weights_review_count fields of preset.json are all written as null; otherwise the import side keeps a preset claiming "optimized from N reviews" whose
+	// reviews cannot be found. It does not depend on IncludeProgress.
 	IncludeWeights bool
-	// MediaRoot 是媒体字节的本地根目录（media.Store.Root()）；为空表示无法内联媒体。
+	// MediaRoot is the local root of media bytes (media.Store.Root()); empty means media cannot be inlined.
 	MediaRoot string
-	// AppVersion 写入 manifest.app_version，仅作提示。
+	// AppVersion is written into manifest.app_version as a hint only.
 	AppVersion string
-	// Now 可注入时钟；零值时用系统 UTC 时间。
+	// Now is an injectable clock; the zero value uses the system UTC time.
 	Now func() time.Time
 }
 
-// PackageManifest 是包内 manifest.json（字段名已冻结）。
+// PackageManifest is the in-package manifest.json (field names are frozen).
 type PackageManifest struct {
 	FormatVersion   int          `json:"format_version"`
 	ExportedAt      string       `json:"exported_at"`
@@ -97,28 +97,28 @@ type PackageManifest struct {
 	IncludeMedia    bool         `json:"include_media"`
 	IncludeReviews  bool         `json:"include_reviews"`
 	Counts          PackageCount `json:"counts"`
-	// ExportedBy 是导出者的不透明标识（用登录名，不是数据库 id），
-	// 导入端据此判断包内进度是否属于导入者本人（「进度归属判定」）。
+	// ExportedBy is the exporter's opaque identifier (the login name, not the database id),
+	// which the import side uses to decide whether the progress in the package belongs to the importer ("progress ownership check").
 	ExportedBy string `json:"exported_by,omitempty"`
-	// IncludeWeights 声明 preset.json 是否带非 null 的权重；早于这个字段的包里没有它。
-	// 导入端判断时只看 preset.json 的 weights 本身，这里仅作声明，供界面提前提示。
+	// IncludeWeights declares whether preset.json carries non-null weights; packages older than this field lack it.
+	// The import side judges only by the weights in preset.json itself; this is a declaration so the UI can warn ahead of time.
 	IncludeWeights bool `json:"include_weights"`
 }
 
-// PackageDeck 是随包走的卡组元信息；授权、审计等实例内状态一概不导出。
+// PackageDeck is the deck metadata that travels with the package; instance-local state such as authorization and audit is never exported.
 type PackageDeck struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 }
 
-// PackageCount 是 manifest 的条目计数。
+// PackageCount holds the manifest's entry counts.
 type PackageCount struct {
 	Notes int `json:"notes"`
 	Cards int `json:"cards"`
 	Media int `json:"media,omitempty"`
 }
 
-// PackageNote 是 notes.json 的一条；形状与批量导入体一致。
+// PackageNote is one entry of notes.json; its shape matches the bulk import body.
 type PackageNote struct {
 	Kind        string         `json:"kind"`
 	Fields      map[string]any `json:"fields"`
@@ -128,14 +128,14 @@ type PackageNote struct {
 	SourceURL   string         `json:"source_url,omitempty"`
 }
 
-// PackageCard 用 note_index（指向 notes[] 的下标）而非 ID，避免导出/导入之间的 ID 语义纠缠。
+// PackageCard uses note_index (an index into notes[]) instead of an ID, so ID semantics do not entangle export and import.
 type PackageCard struct {
 	NoteIndex int    `json:"note_index"`
 	Template  string `json:"template"`
 	Ordinal   int    `json:"ordinal"`
 }
 
-// PackagePreset 是随包走的调度参数；weights 为 21 个数字或 null（null = 用默认权重）。
+// PackagePreset is the scheduling parameters that travel with the package; weights are 21 numbers or null (null = use the default weights).
 type PackagePreset struct {
 	Name                string    `json:"name,omitempty"`
 	DesiredRetention    float64   `json:"desired_retention"`
@@ -148,7 +148,7 @@ type PackagePreset struct {
 	WeightsReviewCount  *int      `json:"weights_review_count"`
 }
 
-// PackageCardState 是 progress.json 里的一条进度；用 note_index 或 external_ref 定位 note。
+// PackageCardState is one progress entry in progress.json; the note is located by note_index or external_ref.
 type PackageCardState struct {
 	NoteIndex     *int     `json:"note_index,omitempty"`
 	ExternalRef   string   `json:"external_ref,omitempty"`
@@ -166,13 +166,13 @@ type PackageCardState struct {
 	Version       int      `json:"version"`
 }
 
-// PackageProgress 只含导出者本人的进度；导入他人包时默认丢弃。
+// PackageProgress holds only the exporter's own progress; it is discarded by default when someone else's package is imported.
 type PackageProgress struct {
 	CardStates []PackageCardState `json:"card_states"`
 	Reviews    []PackageReview    `json:"reviews,omitempty"`
 }
 
-// PackageReview 是 progress.json 里可选的一条复习日志。
+// PackageReview is one optional review-log entry in progress.json.
 type PackageReview struct {
 	NoteIndex    *int     `json:"note_index,omitempty"`
 	ExternalRef  string   `json:"external_ref,omitempty"`
@@ -184,9 +184,9 @@ type PackageReview struct {
 	ElapsedMS    *int     `json:"elapsed_ms"`
 	DurationDays *float64 `json:"duration_days"`
 	StateBefore  int      `json:"state_before"`
-	// StepIndexBefore / DueBefore 是评分前的状态快照（剩余学习步骤游标、到期日）。
-	// 撤销只能靠它们精确还原评分前的状态：due_at 会被埋藏改动却不写日志，step_index 没有别的来源。
-	// 可空：旧包与旧行没有它们，撤销遇到 NULL 时退回上一条日志的推算。
+	// StepIndexBefore / DueBefore are the state snapshot from before the rating (remaining learning-step cursor, due date).
+	// Undo can restore the pre-rating state exactly only through them: due_at is changed by burying without a log entry, and step_index has no other source.
+	// Nullable: old packages and old rows lack them, and undo falls back to deriving from the previous log entry when it meets NULL.
 	StepIndexBefore *int     `json:"step_index_before,omitempty"`
 	DueBefore       *string  `json:"due_before,omitempty"`
 	IntervalDays    *float64 `json:"interval_days"`
@@ -194,7 +194,7 @@ type PackageReview struct {
 	Difficulty      *float64 `json:"difficulty"`
 }
 
-// PackageMediaEntry 是 media.json 的一条：sha256 → 包内相对路径 + mime。
+// PackageMediaEntry is one entry of media.json: sha256 -> in-package relative path + mime.
 type PackageMediaEntry struct {
 	Path   string `json:"path"`
 	Mime   string `json:"mime"`
@@ -203,37 +203,37 @@ type PackageMediaEntry struct {
 	Height *int   `json:"height,omitempty"`
 }
 
-// DeckPackage 是一个已装配好的卡组包（内存形态）。媒体字节按 sha256 索引，
-// 便于导出时写入 zip、或把整包渲染成一个 JSON 文档做 schema 校验。
+// DeckPackage is an assembled deck package (in-memory form). Media bytes are indexed by sha256,
+// which makes writing them into the zip on export easy, or rendering the whole package as one JSON document for schema validation.
 type DeckPackage struct {
 	Manifest PackageManifest
 	Notes    []PackageNote
 	Cards    []PackageCard
 	Preset   PackagePreset
 	Progress *PackageProgress
-	// Media 是 sha256 → 条目；MediaBytes 是同一 sha256 → 字节。
+	// Media is sha256 -> entry; MediaBytes is the same sha256 -> bytes.
 	Media      map[string]PackageMediaEntry
 	MediaBytes map[string][]byte
 }
 
 var (
-	// ErrPackageDeckRequired 表示导出未指定卡组。
+	// ErrPackageDeckRequired means the export named no deck.
 	ErrPackageDeckRequired = errors.New("deck package: deck id is required")
-	// ErrPackageProgressRequiresReviews 表示只要求复习日志却没有开进度。
+	// ErrPackageProgressRequiresReviews means the review log was requested without progress enabled.
 	ErrPackageProgressRequiresReviews = errors.New("deck package: include_reviews requires include_progress")
-	// ErrPackageMediaMissing 表示包内引用了媒体但字节不可得。
+	// ErrPackageMediaMissing means the package references media whose bytes are unavailable.
 	ErrPackageMediaMissing = errors.New("deck package: media bytes are unavailable")
 )
 
-// mediaRefRE 匹配 note 字段里形如 media/<sha256>.<ext> 的媒体引用（示例）。
+// mediaRefRE matches media references of the form media/<sha256>.<ext> in note fields (example).
 var mediaRefRE = regexp.MustCompile(`^media/([a-f0-9]{64})\.([A-Za-z0-9]+)$`)
 
-// ExportPackage 装配一个卡组包。
+// ExportPackage assembles a deck package.
 //
-// 边界（内容与进度分离）：
-//   - 进度只取 actorUserID 本人的 card_states；导出他人共享的卡组时，包里绝不含他人进度。
-//   - 授权、审计等实例内状态一概不导出。
-//   - include_media=0 时 Media 为空、manifest.include_media=false，如实声明。
+// Boundaries (content and progress kept apart):
+//   - progress comes only from actorUserID's own card_states; when exporting a deck someone else shared, the package never contains their progress.
+//   - instance-local state such as authorization and audit is never exported.
+//   - with include_media=0, Media is empty and manifest.include_media=false, declaring it honestly.
 func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint64, opts PackageOptions) (*DeckPackage, error) {
 	if deckID == 0 {
 		return nil, ErrPackageDeckRequired
@@ -248,7 +248,7 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 	if err != nil {
 		return nil, fmt.Errorf("export package: load deck: %w", err)
 	}
-	// 包里带的是导出者自己在这个卡组上生效的预设：成员导出共享卡组时不带出属主的参数。
+	// The package carries the preset in effect for the exporter on this deck: a member exporting a shared deck does not carry out the owner's parameters.
 	settings, err := s.StudySettings(ctx, actorUserID, deck)
 	if err != nil {
 		return nil, fmt.Errorf("export package: load study settings: %w", err)
@@ -258,7 +258,7 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 		return nil, fmt.Errorf("export package: load preset: %w", err)
 	}
 
-	// 只导出未软删除的 note（GORM 默认作用域）；cards 一并按 note 收集。
+	// Only notes that are not soft-deleted are exported (GORM's default scope); cards are collected by note along the way.
 	var notes []Note
 	if err := s.db.WithContext(ctx).Where("deck_id = ?", deckID).Order("id ASC").Find(&notes).Error; err != nil {
 		return nil, fmt.Errorf("export package: list notes: %w", err)
@@ -274,9 +274,9 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 		pkg.MediaBytes = map[string][]byte{}
 	}
 
-	// note_index → note id，供进度映射使用。
+	// note_index -> note id, used by the progress mapping.
 	noteIDByIndex := make([]uint64, 0, len(notes))
-	refs := map[string]bool{} // 引用到的媒体 sha256 → 首次出现
+	refs := map[string]bool{} // referenced media sha256 -> first appearance
 	for i := range notes {
 		n := &notes[i]
 		fields, err := ParseFields(n.FieldsJSON)
@@ -307,7 +307,7 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 		}
 	}
 
-	// 媒体：按 sha256 去重后内联；字节来自本地媒体根目录。
+	// Media: de-duplicated by sha256 and then inlined; the bytes come from the local media root.
 	if opts.IncludeMedia && len(refs) > 0 {
 		mstore := NewMediaStore(s.db)
 		for sha := range refs {
@@ -354,8 +354,8 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 	return pkg, nil
 }
 
-// exportProgress 只导出 actorUserID 本人的 card_states（+ 可选 reviews）。
-// 这是"绝不包含他人进度"的实现点：查询条件写死 user_id = actorUserID。
+// exportProgress exports only actorUserID's own card_states (+ optional reviews).
+// This is where "never include someone else's progress" is implemented: the query hard-codes user_id = actorUserID.
 func (s *DeckStore) exportProgress(ctx context.Context, actorUserID uint64, noteIDs []uint64, withReviews bool) (*PackageProgress, error) {
 	indexByNoteID := make(map[uint64]int, len(noteIDs))
 	for i, id := range noteIDs {
@@ -363,7 +363,7 @@ func (s *DeckStore) exportProgress(ctx context.Context, actorUserID uint64, note
 	}
 	prog := &PackageProgress{CardStates: []PackageCardState{}}
 
-	// 通过 cards join 限定在本卡组的 note 上。
+	// The cards join restricts it to this note's deck.
 	type row struct {
 		CardState
 		NoteID   uint64
@@ -393,7 +393,7 @@ func (s *DeckStore) exportProgress(ctx context.Context, actorUserID uint64, note
 			Order("id ASC").Find(&reviews).Error; err != nil {
 			return nil, fmt.Errorf("export package: list reviews: %w", err)
 		}
-		// card_id → note_index/template（复用上面的状态映射）。
+		// card_id -> note_index/template (reusing the state mapping above).
 		cardIndex := map[uint64]int{}
 		cardTemplate := map[uint64]string{}
 		for _, r := range rows {
@@ -414,7 +414,7 @@ func (s *DeckStore) exportProgress(ctx context.Context, actorUserID uint64, note
 				ElapsedMS:    rv.ElapsedMS,
 				DurationDays: rv.DurationDays,
 				StateBefore:  rv.StateBefore,
-				// 评分前的快照必须随包走：恢复备份后撤销才能精确还原，否则会还原成 NULL 或错误值。
+				// The pre-rating snapshot must travel with the package: only then can undo restore exactly after a backup is restored, otherwise it restores NULL or a wrong value.
 				StepIndexBefore: rv.StepIndexBefore,
 				DueBefore:       formatTimePtr(rv.DueBefore),
 				IntervalDays:    rv.IntervalDays,
@@ -434,7 +434,7 @@ func (s *DeckStore) lookupUsername(ctx context.Context, userID uint64) (string, 
 	return u.Username, nil
 }
 
-// WriteZip 把包写成 .edeck zip；entries 顺序固定，便于 diff 与校验。
+// WriteZip writes the package as an .edeck zip; the entry order is fixed, which makes diffing and verification easy.
 func (p *DeckPackage) WriteZip(w io.Writer) error {
 	zw := zip.NewWriter(w)
 	write := func(name string, v any) error {
@@ -489,8 +489,8 @@ func (p *DeckPackage) WriteZip(w io.Writer) error {
 	return zw.Close()
 }
 
-// Document 把整包渲染成一个 JSON 文档，键为包内条目名（media/ 条目为 base64 字符串），
-// 形状与 schema/deck-package.schema.json 描述的逻辑内容一致，供 schema 校验使用。
+// Document renders the whole package as one JSON document keyed by in-package entry name (media/ entries are base64 strings),
+// with a shape matching the logical content described by schema/deck-package.schema.json, for use by schema validation.
 func (p *DeckPackage) Document() map[string]any {
 	doc := map[string]any{
 		"manifest.json": p.Manifest,
@@ -515,8 +515,8 @@ func (p *DeckPackage) Document() map[string]any {
 	return doc
 }
 
-// presetToPackage 把 store.Preset 转成包内 preset（weights_json → []float64 或 null）。
-// withWeights 为 false 时权重及其两项元数据都留 null：三者描述的是同一次优化，只带一部分会自相矛盾。
+// presetToPackage turns a store.Preset into the in-package preset (weights_json -> []float64 or null).
+// When withWeights is false the weights and their two metadata fields all stay null: the three describe the same optimization, and carrying only some of them would contradict itself.
 func presetToPackage(p *Preset, withWeights bool) PackagePreset {
 	out := PackagePreset{
 		Name:                p.Name,
@@ -531,7 +531,7 @@ func presetToPackage(p *Preset, withWeights bool) PackagePreset {
 	}
 	var w []float64
 	if json.Unmarshal([]byte(*p.WeightsJSON), &w) != nil || w == nil {
-		// 解不出权重（含存的就是 "null"）等同于用默认权重：元数据同样不带，理由同上。
+		// Undecodable weights (including a stored "null") count as using the default weights: the metadata is left out too, for the reason above.
 		return out
 	}
 	out.Weights = w
@@ -570,7 +570,7 @@ func formatTimePtr(t *time.Time) *string {
 	return &s
 }
 
-// collectMediaRefs 递归扫描 note 字段里形如 media/<sha256>.<ext> 的引用（示例约定）。
+// collectMediaRefs recursively scans note fields for references of the form media/<sha256>.<ext> (example convention).
 func collectMediaRefs(v any, out map[string]bool) {
 	switch x := v.(type) {
 	case string:
@@ -588,16 +588,16 @@ func collectMediaRefs(v any, out map[string]bool) {
 	}
 }
 
-// NoteFingerprint 是 note 的内容指纹：kind + 规范化字段的 sha256（去重规则）。
-// 规范化 = 解析 fields_json 后重新序列化（encoding/json 对 map 键排序），
-// 因此同一份内容在不同导出/导入之间得到同一个指纹。
+// NoteFingerprint is the content fingerprint of a note: sha256 over kind + canonicalized fields (the de-duplication rule).
+// Canonicalization = parse fields_json and re-serialize (encoding/json sorts map keys),
+// so the same content yields the same fingerprint across different exports/imports.
 func NoteFingerprint(kind, fieldsJSON string) string {
 	canonical := CanonicalFieldsJSON(fieldsJSON)
 	sum := sha256.Sum256([]byte(kind + "\n" + canonical))
 	return hex.EncodeToString(sum[:])
 }
 
-// CanonicalFieldsJSON 把 fields_json 归一成键有序的紧凑 JSON；解析失败时原样返回。
+// CanonicalFieldsJSON normalizes fields_json into compact JSON with ordered keys; on a parse failure it returns the input unchanged.
 func CanonicalFieldsJSON(fieldsJSON string) string {
 	fields, err := ParseFields(fieldsJSON)
 	if err != nil {
@@ -610,13 +610,13 @@ func CanonicalFieldsJSON(fieldsJSON string) string {
 	return string(raw)
 }
 
-// NewMediaStore 构造媒体元数据存储（只用到按 sha256 查行，供卡组包导出/导入）。
+// NewMediaStore builds the media metadata store (only row lookup by sha256 is used, for deck package export/import).
 func NewMediaStore(db *gorm.DB) *MediaStore { return &MediaStore{db: db} }
 
-// MediaStore 封装 media 表的元数据访问；字节仍在本地文件系统。
+// MediaStore wraps metadata access to the media table; the bytes stay on the local filesystem.
 type MediaStore struct{ db *gorm.DB }
 
-// BySha256 按内容寻址取媒体元数据；不存在返回 (nil, nil)。
+// BySha256 fetches media metadata by content address; absent returns (nil, nil).
 func (s *MediaStore) BySha256(ctx context.Context, sha string) (*Media, error) {
 	var m Media
 	err := s.db.WithContext(ctx).Where("sha256 = ?", sha).First(&m).Error
@@ -629,25 +629,25 @@ func (s *MediaStore) BySha256(ctx context.Context, sha string) (*Media, error) {
 	return nil, err
 }
 
-// SaveBytes 以内容寻址落盘一份媒体并写元数据；已存在（同 sha256）时幂等返回已有行。
+// SaveBytes writes one piece of media to disk content-addressed and records its metadata; when it already exists (same sha256) it returns the existing row idempotently.
 func (s *MediaStore) SaveBytes(ctx context.Context, root, mime string, raw []byte, createdBy *uint64) (*Media, error) {
 	m, _, err := s.SaveBytesTracked(ctx, root, mime, raw, createdBy)
 	return m, err
 }
 
-// SaveBytesTracked 与 SaveBytes 相同，但额外返回本次调用**实际新写入**的文件绝对路径；
-// 命中已有元数据（去重）或未落盘时返回空串。
+// SaveBytesTracked is the same as SaveBytes but additionally returns the absolute path of the file **actually newly written** by this call;
+// it returns an empty string when it hits existing metadata (de-duplication) or nothing was written.
 //
-// 卡组包导入用它登记“这次写了哪些文件”，事务随后失败回滚时据此清理——否则元数据行
-// 回滚而字节留在磁盘上，形成无人引用的孤儿文件。
+// Package import uses it to register "which files this run wrote" so a later failed transaction can clean them up -- otherwise the metadata row
+// rolls back while the bytes stay on disk, leaving an orphan file nobody references.
 func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, raw []byte, createdBy *uint64) (*Media, string, error) {
 	sum := sha256.Sum256(raw)
 	sha := hex.EncodeToString(sum[:])
 	if existing, err := s.BySha256(ctx, sha); err != nil {
 		return nil, "", err
 	} else if existing != nil {
-		// 去重命中：字节已在库里，但「本次提供者」仍需登记归属（否则 B 上传与 C 相同的字节时
-		// B 拿不到 media_uploaders 记录，A 撤销共享后 B 读不到自己提供的文件）。
+		// De-duplication hit: the bytes are already stored, but the "provider this time" still needs its ownership recorded (otherwise, when B uploads the same bytes as C,
+		// B gets no media_uploaders record, and B cannot read the file it provided once A revokes sharing).
 		if createdBy != nil {
 			if err := RecordMediaUploader(ctx, s.db, sha, *createdBy); err != nil {
 				return nil, "", err
@@ -667,7 +667,7 @@ func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, ra
 	row := &Media{Sha256: sha, RelPath: rel, Mime: mime, Bytes: int64(len(raw)), CreatedBy: createdBy, CreatedAt: time.Now().UTC()}
 	if err := s.db.WithContext(ctx).Create(row).Error; err != nil {
 		if existing, rerr := s.BySha256(ctx, sha); rerr == nil && existing != nil {
-			// 并发下另一请求已提交同一 sha：文件被它引用，不算本次新写。归属照记。
+			// Under concurrency another request already committed the same sha: the file is referenced by it and does not count as newly written here. Ownership is still recorded.
 			if createdBy != nil {
 				if rerr2 := RecordMediaUploader(ctx, s.db, sha, *createdBy); rerr2 != nil {
 					return nil, "", rerr2
@@ -675,7 +675,7 @@ func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, ra
 			}
 			return existing, "", nil
 		}
-		// 元数据写入失败：本次写下的文件没有行引用它，把路径交给调用方按失败路径清理。
+		// Metadata write failed: no row references the file written by this call, so the path goes to the caller to clean up on the failure path.
 		return nil, abs, fmt.Errorf("media: record metadata: %w", err)
 	}
 	if createdBy != nil {
@@ -686,7 +686,7 @@ func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, ra
 	return row, abs, nil
 }
 
-// mimeExt 把白名单 mime 映射成扩展名；未知类型回退 bin。
+// mimeExt maps an allowlisted mime to a file extension; unknown types fall back to bin.
 func mimeExt(mime string) string {
 	switch strings.ToLower(strings.TrimSpace(mime)) {
 	case "image/png":
@@ -708,7 +708,7 @@ func mimeExt(mime string) string {
 	}
 }
 
-// readZipEntry 读取 zip 条目内容（带体积上限，见 package_import.go）。
+// readZipEntry reads the content of a zip entry (with a size cap, see package_import.go).
 func readZipEntry(f *zip.File, limit int64) ([]byte, error) {
 	rc, err := f.Open()
 	if err != nil {
@@ -725,5 +725,5 @@ func readZipEntry(f *zip.File, limit int64) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// ErrPackageTooLargeSentinel 是 readZipEntry 的体积超限哨兵；由 ReadPackageArchive 包装成 PackageError。
+// ErrPackageTooLargeSentinel is readZipEntry's size-limit sentinel; ReadPackageArchive wraps it into a PackageError.
 var ErrPackageTooLargeSentinel = errors.New("package entry exceeds the size limit")

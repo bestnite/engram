@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TestNormalizeNoteListOptionsClampsBounds 断言分页归一化的上下界：非正页码/条数取默认，
-// 超大条数被夹到 MaxNotePageSize，超大页码被夹到 MaxNotePage（避免偏移量溢出）。
+// TestNormalizeNoteListOptionsClampsBounds asserts the bounds of paging normalization: a non-positive page/size takes the default,
+// an oversized per-page is clamped to MaxNotePageSize and an oversized page to MaxNotePage (so the offset cannot overflow).
 func TestNormalizeNoteListOptionsClampsBounds(t *testing.T) {
 	cases := []struct {
 		name string
@@ -31,8 +31,8 @@ func TestNormalizeNoteListOptionsClampsBounds(t *testing.T) {
 	}
 }
 
-// TestNoteListHugePageAndSizeIsSafe 是 AUDIT-06 的验收：极大 per_page 不会一次拉走整库
-// （结果不超过单页上限），极大 page 不会因偏移量溢出报错或返回错乱数据。
+// TestNoteListHugePageAndSizeIsSafe is the acceptance for AUDIT-06: a huge per_page cannot drain the whole database in one go
+// (the result stays within the per-page cap), and a huge page neither errors on an overflowing offset nor returns scrambled data.
 func TestNoteListHugePageAndSizeIsSafe(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -43,7 +43,7 @@ func TestNoteListHugePageAndSizeIsSafe(t *testing.T) {
 			owner := seedUsers(t, db, "note_paging_owner")[0]
 			deckID := seedDeck(t, db, owner)
 			notes := NewNoteStore(db)
-			// 造出比单页上限还多一条的卡片，让「上限」是可观察的。
+			// Build one card more than the per-page cap, so the "cap" is observable.
 			for i := 0; i < MaxNotePageSize+1; i++ {
 				n := &Note{DeckID: deckID, Kind: "basic"}
 				if _, err := notes.Create(ctx, n, map[string]any{"front": "q", "back": "a"}); err != nil {
@@ -62,7 +62,7 @@ func TestNoteListHugePageAndSizeIsSafe(t *testing.T) {
 				t.Errorf("List total = %d, want %d", total, MaxNotePageSize+1)
 			}
 
-			// 极大页码：偏移量被夹住，不报错，返回空页。
+			// Huge page number: the offset is clamped, no error, an empty page comes back.
 			got, _, err = notes.List(ctx, NoteListOptions{DeckID: deckID, Page: math.MaxInt, PerPage: 50})
 			if err != nil {
 				t.Fatalf("List(huge page) error = %v", err)

@@ -11,15 +11,15 @@ import (
 	"gorm.io/gorm"
 )
 
-// manifest 卡组名/描述界限
+// manifest deck name/description bounds
 //
-// 界限（用户拍板，2026-10-06）：卡组名 ≤ 200 字符、描述 ≤ 2000 字符，按 Unicode 字符
-// （rune）而非字节计数；拒一切 C0 控制字符（U+0000–U+001F，含 \n \t \r，不开口子）；
-// 拒非法 UTF-8。超限或含法外字符一律拒绝整包，并报条目级错误。
-// 卡组名的同一套规则现在也约束 store 层的创建/改名（见 deck.go 的 validateDeckName），
-// 保证导出端能产出的名字导入端一定收得下。
+// Bounds (decided by the user, 2026-10-06): deck name ≤ 200 characters, description ≤ 2000 characters, counted in Unicode characters
+// (runes) rather than bytes; every C0 control character is rejected (U+0000–U+001F, including \n \t \r, no exceptions);
+// invalid UTF-8 is rejected. Going over a bound or carrying a forbidden character rejects the whole package with an entry-level error.
+// The same rule set for deck names now also constrains creation/rename in the store layer (see validateDeckName in deck.go),
+// guaranteeing that any name the export side can produce the import side can take.
 
-// jsonQuote 把字符串编码成 JSON 字符串字面量（控制字符会转义成 \u00XX，仍是合法 JSON）。
+// jsonQuote encodes a string as a JSON string literal (control characters escape to \u00XX, which is still valid JSON).
 func jsonQuote(t *testing.T, s string) string {
 	t.Helper()
 	raw, err := json.Marshal(s)
@@ -29,7 +29,7 @@ func jsonQuote(t *testing.T, s string) string {
 	return string(raw)
 }
 
-// manifestZip 构造一个最小但完整的卡组包 zip；deck.name/description 原样进 manifest.json。
+// manifestZip builds a minimal but complete deck package zip; deck.name/description go into manifest.json verbatim.
 func manifestZip(t *testing.T, name, description string) []byte {
 	t.Helper()
 	manifest := `{"format_version":1,"exported_at":"2026-10-06T00:00:00Z","app_version":"test",` +
@@ -43,7 +43,7 @@ func manifestZip(t *testing.T, name, description string) []byte {
 	})
 }
 
-// importPackageOK 断言导入成功并返回报告。
+// importPackageOK asserts the import succeeds and returns the report.
 func importPackageOK(t *testing.T, db *gorm.DB, user uint64, raw []byte, opts PackageImportOptions) *PackageImportReport {
 	t.Helper()
 	report, err := NewDeckStore(db).ImportPackage(context.Background(), user, bytes.NewReader(raw), opts)
@@ -53,7 +53,7 @@ func importPackageOK(t *testing.T, db *gorm.DB, user uint64, raw []byte, opts Pa
 	return report
 }
 
-// importPackageRejected 断言导入被拒并返回 PackageError。
+// importPackageRejected asserts the import is rejected and returns the PackageError.
 func importPackageRejected(t *testing.T, db *gorm.DB, user uint64, raw []byte, opts PackageImportOptions) *PackageError {
 	t.Helper()
 	_, err := NewDeckStore(db).ImportPackage(context.Background(), user, bytes.NewReader(raw), opts)
@@ -64,7 +64,7 @@ func importPackageRejected(t *testing.T, db *gorm.DB, user uint64, raw []byte, o
 	return pe
 }
 
-// deckNameOf 读回某卡组的名字，断言被接受的包确实按预期建了卡组。
+// deckNameOf reads a deck's name back, asserting an accepted package really created the deck as expected.
 func deckNameOf(t *testing.T, db *gorm.DB, deckID uint64) string {
 	t.Helper()
 	var d Deck
@@ -74,7 +74,7 @@ func deckNameOf(t *testing.T, db *gorm.DB, deckID uint64) string {
 	return d.Name
 }
 
-// TestImportManifestDeckNameLengthLimit 断言卡组名按字符计：200 通过、201 拒绝。
+// TestImportManifestDeckNameLengthLimit asserts the deck name counts characters: 200 passes, 201 is rejected.
 func TestImportManifestDeckNameLengthLimit(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestImportManifestDeckNameLengthLimit(t *testing.T) {
 	}
 }
 
-// TestImportManifestDeckDescriptionLengthLimit 断言描述按字符计：2000 通过、2001 拒绝。
+// TestImportManifestDeckDescriptionLengthLimit asserts the description counts characters: 2000 passes, 2001 is rejected.
 func TestImportManifestDeckDescriptionLengthLimit(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -132,8 +132,8 @@ func TestImportManifestDeckDescriptionLengthLimit(t *testing.T) {
 	}
 }
 
-// TestImportManifestDeckUnicodeCountedByCharacter 断言长度按 Unicode 字符而非字节：
-// 200 个汉字（600 字节）与 200 个 emoji 通过，201 个汉字被拒。
+// TestImportManifestDeckUnicodeCountedByCharacter asserts the length counts Unicode characters, not bytes:
+// 200 CJK characters (600 bytes) and 200 emoji pass, 201 CJK characters are rejected.
 func TestImportManifestDeckUnicodeCountedByCharacter(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -159,8 +159,8 @@ func TestImportManifestDeckUnicodeCountedByCharacter(t *testing.T) {
 					}
 					opts := PackageImportOptions{}
 					if i > 0 {
-						// 同一卡组名重复导入时 uniqueDeckName 会加后缀，用独立名字避免歧义：
-						// 这里只关心长度判定通过，名字本身不比对。
+						// Re-importing the same deck name makes uniqueDeckName add a suffix, so an independent name avoids ambiguity:
+						// here only the length verdict matters, the name itself is not compared.
 						opts.NewDeckName = tc.deckName
 					}
 					report := importPackageOK(t, db, user, raw, opts)
@@ -173,7 +173,7 @@ func TestImportManifestDeckUnicodeCountedByCharacter(t *testing.T) {
 	}
 }
 
-// TestImportManifestDeckControlCharacters 断言一切 C0 控制字符都被拒（含换行与制表符）。
+// TestImportManifestDeckControlCharacters asserts every C0 control character is rejected (newline and tab included).
 func TestImportManifestDeckControlCharacters(t *testing.T) {
 	cases := []struct {
 		name string
@@ -201,7 +201,7 @@ func TestImportManifestDeckControlCharacters(t *testing.T) {
 					}
 				})
 			}
-			// 描述同样受控字符规则约束。
+			// The description is subject to the same control-character rule.
 			pe := importPackageRejected(t, db, user, manifestZip(t, "ok", "bad\x07desc"), PackageImportOptions{})
 			if pe.Code != CodePackageDeckMetaInvalid || len(pe.Entries) != 1 || !strings.Contains(pe.Entries[0], "deck.description") {
 				t.Fatalf("description control char: err = %v, want one entry naming deck.description", pe)
@@ -210,11 +210,11 @@ func TestImportManifestDeckControlCharacters(t *testing.T) {
 	}
 }
 
-// TestImportManifestRejectsInvalidUTF8 断言 manifest.json 里的非法 UTF-8 字节被拒。
+// TestImportManifestRejectsInvalidUTF8 asserts invalid UTF-8 bytes in manifest.json are rejected.
 //
-// 注意：非法字节必须绕过 json.Marshal 直写原始字节——encoding/json 会把非法 UTF-8
-// 静默替换成 U+FFFD（“不是错误”），若只看解码后的字符串就永远抓不到它，只能先校验
-// manifest.json 的原始字节。
+// Note: the invalid bytes have to be written raw, bypassing json.Marshal -- encoding/json turns invalid UTF-8
+// into U+FFFD silently ("not an error"), and looking only at the decoded string never catches it, so one must first validate
+// the raw bytes of manifest.json.
 func TestImportManifestRejectsInvalidUTF8(t *testing.T) {
 	manifest := "{\"format_version\":1,\"exported_at\":\"2026-10-06T00:00:00Z\"," +
 		"\"deck\":{\"name\":\"bad\xffname\",\"description\":\"\"}," +
@@ -239,8 +239,8 @@ func TestImportManifestRejectsInvalidUTF8(t *testing.T) {
 	}
 }
 
-// TestImportManifestNewDeckNameOverrideAlsoLimited 断言 opts.NewDeckName 覆盖同样受
-// 卡组名界限约束（它写进的是同一列，绕过校验等于留后门）。
+// TestImportManifestNewDeckNameOverrideAlsoLimited asserts the opts.NewDeckName override is bound by the
+// deck name bounds as well (it is written into the same column; bypassing validation would leave a back door).
 func TestImportManifestNewDeckNameOverrideAlsoLimited(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -257,7 +257,7 @@ func TestImportManifestNewDeckNameOverrideAlsoLimited(t *testing.T) {
 	}
 }
 
-// TestImportManifestEmptyNameFallsBack 断言空卡组名仍回退为 Imported deck 并通过。
+// TestImportManifestEmptyNameFallsBack asserts an empty deck name still falls back to Imported deck and passes.
 func TestImportManifestEmptyNameFallsBack(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

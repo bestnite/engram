@@ -10,90 +10,90 @@ import (
 	"gorm.io/gorm"
 )
 
-// 审计动作常量集中定义。值一律英文点分、保持稳定：
-// action 是审计检索的键，调用点写裸字符串会让历史数据无法按动作聚合。
-// 新增写操作时在这里加常量，不要另起一套命名。
+// Audit action constants are defined in one place. Values are always English, dot-separated and stable:
+// action is the key for audit search, and bare strings at call sites would make history unaggregatable by action.
+// Add a constant here when adding a write operation; do not start a second naming scheme.
 const (
 	ActionUserCreate         = "user.create"
 	ActionUserLoginSucceeded = "user.login_succeeded"
 	ActionUserLoginFailed    = "user.login_failed"
 	ActionUserLogout         = "user.logout"
-	// 卡片列表/编辑页的写操作。
+	// write operations on the card list / edit page.
 	ActionNoteUpdate = "note.update"
 	ActionNoteDelete = "note.delete"
 	ActionNoteTagAdd = "note.tag_add"
-	// 批量标签动作：移除与整体设置标签。与 ActionNoteTagAdd 并列，
-	// 三条动作名各自稳定，便于按动作聚合历史审计。
+	// Bulk tag actions: remove tags, and set tags wholesale. Side by side with ActionNoteTagAdd,
+	// the three action names are each stable so history can be aggregated by action.
 	ActionNoteTagRemove = "note.tag_remove"
 	ActionNoteTagSet    = "note.tag_set"
-	// 新建卡组。
+	// creating a deck.
 	ActionDeckCreate = "deck.create"
-	// ActionDeckUpdate 是修改卡组名称与描述时写入的审计动作。
+	// ActionDeckUpdate is the audit action written when a deck's name and description are changed.
 	ActionDeckUpdate = "deck.update"
-	// 上传媒体。
+	// uploading media.
 	ActionMediaUpload = "media.upload"
 
-	// ActionSettingUpdate 是管理面板修改系统设置时写入的审计动作。
+	// ActionSettingUpdate is the audit action written when the admin panel changes system settings.
 	ActionSettingUpdate = "setting.update"
-	// ActionMailTemplateUpdate 是管理面板保存或删除邮件模板时写入的
-	// 审计动作。模板决定所有用户收到的邮件长什么样，与系统设置同级。
+	// ActionMailTemplateUpdate is the audit action written when the admin panel saves or deletes a
+	// mail template. The template decides what the mail every user receives looks like, same tier as system settings.
 	ActionMailTemplateUpdate = "mail.template_update"
 
-	// ActionInviteCreate 是管理面板创建邀请码时写入的审计动作。
+	// ActionInviteCreate is the audit action written when the admin panel creates an invite code.
 	ActionInviteCreate = "invite.create"
-	// ActionInviteRevoke 是管理面板撤销邀请码时写入的审计动作。
+	// ActionInviteRevoke is the audit action written when the admin panel revokes an invite code.
 	ActionInviteRevoke = "invite.revoke"
-	// 撤销评分。
+	// revoking a review.
 	ActionReviewUndo = "review.undo"
-	// ActionCardSuspend / ActionCardUnsuspend 是用户暂停 / 恢复自己的一张卡（只影响本人）。
+	// ActionCardSuspend / ActionCardUnsuspend is a user suspending / resuming one of their own cards (affects only them).
 	ActionCardSuspend   = "card.suspend"
 	ActionCardUnsuspend = "card.unsuspend"
-	// 卡组共享：越权请求被拒（谁在什么时候试图做什么被挡下）。
+	// Deck sharing: an unauthorized request was rejected (who tried to do what, and when, got blocked).
 	ActionPermissionDenied = "permission.denied"
-	// 首次 OIDC 登录时自动绑定外部身份（写一条 identities）。
+	// automatically linking an external identity on first OIDC login (writes one identities row).
 	ActionIdentityLink = "identity.link"
-	// 管理面板解绑外部身份。
+	// the admin panel unlinking an external identity.
 	ActionIdentityUnlink = "identity.unlink"
-	// 授权变更（共享页面）：授予 / 改角色 / 撤销。
+	// Grant changes (sharing page): grant / change role / revoke.
 	ActionDeckRoleChange = "deck.role_change"
 	ActionDeckRevoke     = "deck.revoke"
-	// L3 分享同意制：邀请、接受、拒绝各一条，以及用户改自己的接收策略。
+	// L3 share consent model: one each for invite, accept and decline, plus a user changing their own receive policy.
 	ActionDeckShareInvite   = "deck.share_invite"
 	ActionDeckShareAccept   = "deck.share_accept"
 	ActionDeckShareReject   = "deck.share_reject"
 	ActionSharePolicyUpdate = "share.policy_update"
-	// 克隆卡组（内容复制到调用者账号）。不是严格意义的共享变更，但同样留痕。
+	// cloning a deck (content copied into the caller's account). Not strictly a sharing change, but recorded all the same.
 	ActionDeckClone = "deck.clone"
-	// 分享链接：创建 / 单个撤销 / 一次撤销全部。
+	// share links: create / revoke one / revoke all at once.
 	ActionShareLinkCreate    = "share_link.create"
 	ActionShareLinkRevoke    = "share_link.revoke"
 	ActionShareLinkRevokeAll = "share_link.revoke_all"
-	// 持链接的登录用户按「加入我的卡组」把该卡组加进自己的列表（share_link.join）。
-	// 它是一次自助授权：token 是属主主动发出的凭据，按按钮是接收方本人的同意，
-	// 因此不需要邀请/接受两步。入伙后这条授权与链接无关，撤销链接不回收它。
+	// a logged-in user holding the link adds that deck to their own list via 'join my decks' (share_link.join).
+	// It is a self-service grant: the token is a credential the owner actively sent out, pressing the button is the
+	// recipient's own consent, so no invite/accept two-step is needed. Once joined, the grant is independent of the link; revoking the link does not reclaim it.
 	ActionShareLinkJoin = "share_link.join"
-	// 卡组每日额度变更（new_per_day / reviews_per_day）。改的是「这个卡组今天还放多少
-	// 张出来」，与其他卡组变更一样要留痕。
+	// Deck daily quota change (new_per_day / reviews_per_day). What changes is 'how many cards this deck
+	// still releases today', which must be recorded like any other deck change.
 	ActionDeckCaps = "deck.caps_change"
-	// 「再来一组」：只为今天、只为调用者自己追加这个卡组的新卡额度，与每日额度变更同级留痕。
+	// 'one more round': append new-card quota for this deck today, for the caller only, recorded at the same tier as daily quota changes.
 	ActionDeckExtraNew = "deck.extra_new"
-	// 预设参数优化：触发优化作业与一键回退默认权重。
+	// preset parameter optimization: trigger the optimization job and one-click rollback to the default weights.
 	ActionPresetOptimize       = "preset.optimize"
 	ActionPresetOptimizeRevert = "preset.optimize.revert"
-	// ActionPresetCreate / ActionPresetUpdate 是预设页新建与编辑预设时写入的审计动作。
+	// ActionPresetCreate / ActionPresetUpdate is the audit action written when creating and editing a preset on the presets page.
 	ActionPresetCreate = "preset.create"
 	ActionPresetUpdate = "preset.update"
-	// 卡组与预设删除。
+	// deck and preset deletion.
 	ActionDeckDelete   = "deck.delete"
 	ActionPresetDelete = "preset.delete"
-	// ActionDeckPreset 是卡组切换调度预设时写入的审计动作：它决定这个卡组按哪套
-	// FSRS 参数排程，与每日额度同级，必须留痕。
+	// ActionDeckPreset is the audit action written when a deck switches scheduling preset: it decides which
+	// FSRS parameters schedule this deck, same tier as the daily quota, and must be recorded.
 	ActionDeckPreset = "deck.preset_change"
-	// ActionJobCancel 是管理面板取消后台作业时写入的审计动作。
+	// ActionJobCancel is the audit action written when the admin panel cancels a background job.
 	ActionJobCancel = "job.cancel"
 
-	// TOTP 二次验证：绑定开始 / 启用 / 关闭 / 重新生成恢复码 / 恢复码被消费 / 第二步失败。
-	// 恢复码明文永不入审计（detail 只记数量与来源 IP）。
+	// TOTP second factor: binding started / enabled / disabled / recovery codes regenerated / recovery code consumed / second step failed.
+	// Recovery code plaintext never enters the audit (detail records only the count and the source IP).
 	ActionTOTPBegin              = "totp.begin"
 	ActionTOTPEnable             = "totp.enable"
 	ActionTOTPDisable            = "totp.disable"
@@ -101,45 +101,45 @@ const (
 	ActionTOTPRecoveryUsed       = "totp.recovery_used"
 	ActionTOTPVerifyFailed       = "totp.verify_failed"
 
-	// 邮件偏好：用户保存可选邮件类型的开关时留痕（detail 只记变更的类型与开关）。
+	// Mail preferences: recorded when a user saves the toggles for optional mail types (detail records only the changed types and toggles).
 	ActionUserEmailPrefsUpdate = "user.email_prefs_update"
 
-	// 一键退订：用户凭免登录令牌关掉某个可选邮件类型时留痕。
+	// One-click unsubscribe: recorded when a user turns an optional mail type off with a no-login token.
 	ActionUserEmailUnsubscribe = "user.email_unsubscribe"
 
-	// OIDC「测试连接」与 SMTP「测试连接」。
-	// 两者都是高影响动作：两次「测试连接」会发起管理员指定的出站连接。
-	// 成功与失败都要有行——失败同样留下「谁在何时试图连到哪里」的取证线索。
-	// 审计行只记动作与目标元信息（测试连接记 host / issuer），
-	// 绝不记凭据、口令、token 或邮件正文。
+	// OIDC 'test connection' and SMTP 'test connection'.
+	// Both are high-impact actions: two 'test connection' clicks open outbound connections an admin specified.
+	// Success and failure both need a row — failure also leaves the forensic trail of who tried to connect where, and when.
+	// Audit rows record only the action and target metadata (test connection records host / issuer),
+	// never credentials, passwords, tokens or mail bodies.
 	ActionAdminOIDCTest = "admin.oidc_test"
 	ActionAdminSMTPTest = "admin.smtp_test"
 )
 
-// AuditEntry 是一次审计写入的入参。
-// UserID / APIKeyID / TargetID 可空（nil 落库为 NULL）：未登录的失败登录没有 user_id，
-// 系统自动动作没有 api_key_id —— 用 0 冒充会污染“按用户检索”的结果。
+// AuditEntry is the input for one audit write.
+// UserID / APIKeyID / TargetID may be null (nil lands in the DB as NULL): an unauthenticated failed login has no user_id,
+// a system-initiated action has no api_key_id — faking them with 0 would pollute 'search by user' results.
 type AuditEntry struct {
 	UserID   *uint64
 	APIKeyID *uint64
 	Action   string
-	// TargetType 为空表示该动作没有目标对象；此时 TargetID 被忽略。
+	// An empty TargetType means the action has no target object; TargetID is ignored in that case.
 	TargetType string
 	TargetID   *uint64
-	// Detail 会被序列化成 JSON 存进 detail_json；nil 时该列留空。
+	// Detail is serialized into JSON and stored in detail_json; nil leaves that column empty.
 	Detail any
 }
 
-// AuditStore 封装 audit_log 表；Write 是全部写操作留痕的唯一入口。
+// AuditStore wraps the audit_log table; Write is the single entry point where every write operation is recorded.
 type AuditStore struct {
 	db *gorm.DB
 }
 
-// NewAuditStore 构造审计存储。
+// NewAuditStore constructs the audit store.
 func NewAuditStore(db *gorm.DB) *AuditStore { return &AuditStore{db: db} }
 
-// Write 写一行审计。
-// action 为空直接拒绝：没有动作名的行无法被检索，属于调用方 bug，不能静默落库。
+// Write writes one audit row.
+// An empty action is rejected outright: a row with no action name cannot be searched, that is a caller bug and must not land silently.
 func (s *AuditStore) Write(ctx context.Context, e AuditEntry) error {
 	if e.Action == "" {
 		return errors.New("audit action must not be empty")
@@ -169,7 +169,7 @@ func (s *AuditStore) Write(ctx context.Context, e AuditEntry) error {
 	return nil
 }
 
-// List 按写入顺序倒序返回最近 limit 条审计；供管理面板（M6）与测试查看。
+// List returns the most recent limit audit rows in reverse write order; used by the admin panel (M6) and by tests.
 func (s *AuditStore) List(ctx context.Context, limit int) ([]AuditLog, error) {
 	if limit <= 0 {
 		limit = 50
@@ -181,7 +181,7 @@ func (s *AuditStore) List(ctx context.Context, limit int) ([]AuditLog, error) {
 	return rows, nil
 }
 
-// CountByAction 返回某动作的审计行数；测试用它断言“每次变更恰好一行”。
+// CountByAction returns the number of audit rows for an action; tests use it to assert 'exactly one row per change'.
 func (s *AuditStore) CountByAction(ctx context.Context, action string) (int64, error) {
 	var n int64
 	if err := s.db.WithContext(ctx).Model(&AuditLog{}).
@@ -191,37 +191,37 @@ func (s *AuditStore) CountByAction(ctx context.Context, action string) (int64, e
 	return n, nil
 }
 
-// AuditFilter 是审计检索的过滤条件；每个字段的零值都表示「不按该维度过滤」。
+// AuditFilter is the filter for audit search; the zero value of every field means 'do not filter on that dimension'.
 //
-// 时间口径：created_at 一律以 UTC 存储；From 是下界（含），To 是上界（不含）。
-// 调用方负责把用户时区的自然日边界换算成这两个 UTC 瞬时值——store 层不猜时区。
+// Time semantics: created_at is always stored in UTC; From is the lower bound (inclusive), To the upper bound (exclusive).
+// Callers convert the user's timezone calendar-day boundaries into these two UTC instants — the store layer does not guess timezones.
 type AuditFilter struct {
-	// UserID 非零时只返回该用户的审计行；系统动作（user_id 为 NULL）不会被命中。
+	// A non-zero UserID restricts the result to that user's rows; system actions (user_id NULL) will not match.
 	UserID uint64
-	// Action 非空时精确匹配动作名（取值来自本包的 Action* 常量）。
+	// A non-empty Action matches the action name exactly (values come from this package's Action* constants).
 	Action string
-	// TargetType 非空时精确匹配目标类型。
+	// A non-empty TargetType matches the target type exactly.
 	TargetType string
-	// TargetID 非零时精确匹配目标 ID。
+	// A non-zero TargetID matches the target ID exactly.
 	TargetID uint64
-	// From 是时间下界（含）；零值表示不限。
+	// From is the lower time bound (inclusive); zero means unlimited.
 	From time.Time
-	// To 是时间上界（不含）；零值表示不限。
+	// To is the upper time bound (exclusive); zero means unlimited.
 	To time.Time
-	// Limit 是每页行数；<=0 时回退默认值，超过上限时截到上限。
+	// Limit is the rows per page; <=0 falls back to the default, above the cap is clamped to the cap.
 	Limit int
-	// Offset 是跳过的行数；负数按 0 处理。
+	// Offset is the number of rows to skip; negative values are treated as 0.
 	Offset int
 }
 
 const (
-	// auditSearchDefaultLimit 是审计检索的默认每页行数。
+	// auditSearchDefaultLimit is the default rows per page for audit search.
 	auditSearchDefaultLimit = 50
-	// auditSearchMaxLimit 是审计检索的硬上限：审计表增长很快，任何调用方都不能一次拉全表。
+	// auditSearchMaxLimit is the hard cap for audit search: the audit table grows fast, and no caller may pull the whole table at once.
 	auditSearchMaxLimit = 200
 )
 
-// auditQuery 按过滤条件构造查询；Count 与 Find 各调一次，避免复用同一 *gorm.DB 会话。
+// auditQuery builds the query from the filters; Count and Find each call it once so they never reuse one *gorm.DB session.
 func (s *AuditStore) auditQuery(ctx context.Context, f AuditFilter) *gorm.DB {
 	q := s.db.WithContext(ctx).Model(&AuditLog{})
 	if f.UserID != 0 {
@@ -245,8 +245,8 @@ func (s *AuditStore) auditQuery(ctx context.Context, f AuditFilter) *gorm.DB {
 	return q
 }
 
-// Search 按过滤条件分页返回审计行与命中总数，按 id 倒序（最新在前）。
-// 结果行数受 auditSearchMaxLimit 限制，分页用 LIMIT/OFFSET。
+// Search returns a page of audit rows and the total match count, ordered by id descending (newest first).
+// The row count is bounded by auditSearchMaxLimit; paging uses LIMIT/OFFSET.
 func (s *AuditStore) Search(ctx context.Context, f AuditFilter) ([]AuditLog, int64, error) {
 	var total int64
 	if err := s.auditQuery(ctx, f).Count(&total).Error; err != nil {
@@ -270,7 +270,7 @@ func (s *AuditStore) Search(ctx context.Context, f AuditFilter) ([]AuditLog, int
 	return rows, total, nil
 }
 
-// DistinctActions 返回库中出现过的动作名（升序），供检索页的动作下拉使用。
+// DistinctActions returns the action names present in the DB (ascending), for the action dropdown on the search page.
 func (s *AuditStore) DistinctActions(ctx context.Context) ([]string, error) {
 	var actions []string
 	if err := s.db.WithContext(ctx).Model(&AuditLog{}).Distinct().Order("action ASC").
@@ -280,5 +280,5 @@ func (s *AuditStore) DistinctActions(ctx context.Context) ([]string, error) {
 	return actions, nil
 }
 
-// Ptr 返回 v 的地址，用于填充可空字段（user_id / api_key_id / target_id）。
+// Ptr returns the address of v, used to populate nullable fields (user_id / api_key_id / target_id).
 func Ptr[T any](v T) *T { return &v }

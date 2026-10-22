@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// testCodec 用程序化生成的占位密钥（32 个相同字节的 base64）构造编解码器，
-// 不在仓库里放任何真实密钥字面量（AGENTS.md §2.2 脱敏要求）。
+// testCodec builds a codec from a programmatically generated placeholder key (base64 of 32 identical bytes),
+// putting no real key literal in the repo (the redaction requirement in AGENTS.md §2.2).
 func testCodec(t *testing.T, fill byte) *SecretCodec {
 	t.Helper()
 	key := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{fill}, secretKeyBytes))
@@ -23,7 +23,7 @@ func testCodec(t *testing.T, fill byte) *SecretCodec {
 	return codec
 }
 
-// TestSecretRoundTrip 是第一条验收：加密值能正确往返，且密文带算法版本前缀。
+// TestSecretRoundTrip is the first acceptance: an encrypted value round-trips correctly and the ciphertext carries the algorithm version prefix.
 func TestSecretRoundTrip(t *testing.T) {
 	codec := testCodec(t, 0x2a)
 	const plaintext = "oidc-client-secret-value"
@@ -47,10 +47,10 @@ func TestSecretRoundTrip(t *testing.T) {
 	t.Logf("round-trip ok: plaintext=%q ciphertext=%s", plaintext, ciphertext)
 }
 
-// TestSecretWrongKeyFailsLoudly 是第二条验收：用错主密钥解密必须报错，不得返回空值。
+// TestSecretWrongKeyFailsLoudly is the second acceptance: decrypting with the wrong master key must error and must not return an empty value.
 func TestSecretWrongKeyFailsLoudly(t *testing.T) {
 	encryptor := testCodec(t, 0x2a)
-	decryptor := testCodec(t, 0x2b) // 不同的主密钥
+	decryptor := testCodec(t, 0x2b) // a different master key
 	ciphertext, err := encryptor.Encrypt("llm-api-key-value")
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
@@ -68,7 +68,7 @@ func TestSecretWrongKeyFailsLoudly(t *testing.T) {
 	t.Logf("wrong key -> error: %v", err)
 }
 
-// TestSecretFormatAndVersionErrors 覆盖版本前缀与格式错误：都必须报错而不是空值。
+// TestSecretFormatAndVersionErrors covers version-prefix and format errors: both must error rather than yield an empty value.
 func TestSecretFormatAndVersionErrors(t *testing.T) {
 	codec := testCodec(t, 0x2a)
 	ciphertext, err := codec.Encrypt("x")
@@ -98,7 +98,7 @@ func TestSecretFormatAndVersionErrors(t *testing.T) {
 	}
 }
 
-// TestSecretKeyValidation 覆盖主密钥格式校验：空值与非 32 字节都必须在构造期大声失败。
+// TestSecretKeyValidation covers master key format validation: an empty value and anything not 32 bytes must fail loudly at construction.
 func TestSecretKeyValidation(t *testing.T) {
 	for _, bad := range []string{"", "   ", "CHANGE_ME_BASE64_32_BYTES", base64.StdEncoding.EncodeToString([]byte("short"))} {
 		if _, err := NewSecretCodec(bad); !errors.Is(err, ErrSecretKeyInvalid) {
@@ -107,7 +107,7 @@ func TestSecretKeyValidation(t *testing.T) {
 	}
 }
 
-// TestIsSensitiveSettingKey 覆盖敏感键的命名约定判定。
+// TestIsSensitiveSettingKey covers the naming-convention check for sensitive keys.
 func TestIsSensitiveSettingKey(t *testing.T) {
 	sensitive := []string{"oidc_client_secret", "llm_api_key", "smtp_password", "webhook_token"}
 	for _, key := range sensitive {
@@ -122,8 +122,8 @@ func TestIsSensitiveSettingKey(t *testing.T) {
 	}
 }
 
-// TestSecretSettingChannel 覆盖 settings 表上的加密通道：写入即密文、读回即明文、
-// 以及只暴露「已配置/未配置」的查询。
+// TestSecretSettingChannel covers the encrypted channel over the settings table: ciphertext on write, plaintext on read back,
+// and a query that only exposes "configured/not configured".
 func TestSecretSettingChannel(t *testing.T) {
 	db, err := Open("sqlite", filepath.Join(t.TempDir(), "settings.db"))
 	if err != nil {
@@ -148,7 +148,7 @@ func TestSecretSettingChannel(t *testing.T) {
 		t.Fatalf("PutSecret: %v", err)
 	}
 
-	// 落库的必须是密文：直接读原始行，确认不含明文。
+	// What is stored must be ciphertext: read the raw row directly and confirm it holds no plaintext.
 	var row Setting
 	if err := db.WithContext(ctx).First(&row, "key = ?", "oidc_client_secret").Error; err != nil {
 		t.Fatalf("load raw row: %v", err)
@@ -172,7 +172,7 @@ func TestSecretSettingChannel(t *testing.T) {
 		t.Fatalf("SecretConfigured(after) = false, want true")
 	}
 
-	// upsert 必须覆盖而不是重复插入。
+	// The upsert must overwrite rather than insert a duplicate.
 	if err := PutSecret(ctx, db, codec, "oidc_client_secret", "rotated-value", nil, time.Now()); err != nil {
 		t.Fatalf("PutSecret(update): %v", err)
 	}
@@ -181,7 +181,7 @@ func TestSecretSettingChannel(t *testing.T) {
 		t.Fatalf("GetSecret after update = (%q, %v, %v), want (rotated-value, true, nil)", got, ok, err)
 	}
 
-	// 换错主密钥读取存储值：必须报错，绝不返回空值。
+	// Reading the stored value with the wrong master key: it must error and never return an empty value.
 	wrong := testCodec(t, 0x2b)
 	if _, _, err := GetSecret(ctx, db, wrong, "oidc_client_secret"); !errors.Is(err, ErrSecretDecrypt) {
 		t.Fatalf("GetSecret with wrong codec error = %v, want ErrSecretDecrypt", err)

@@ -15,55 +15,55 @@ import (
 )
 
 var (
-	// ErrNoteDeckRequired 表示 note 未指定所属卡组。
+	// ErrNoteDeckRequired means the note names no owning deck.
 	ErrNoteDeckRequired = errors.New("note deck is required")
-	// ErrNoteKindRequired 表示 note 未指定题型。
+	// ErrNoteKindRequired means the note names no kind.
 	ErrNoteKindRequired = errors.New("note kind is required")
-	// ErrNoteTagRequired 表示批量加标签时未给出标签名。
+	// ErrNoteTagRequired means a bulk tag operation was given no tag name.
 	ErrNoteTagRequired = errors.New("note tag is required")
 )
 
-// 列表状态取值：active 是默认（排除软删除），deleted 只看已软删除，
-// all 两者都看。用稳定英文常量，避免在 handler 里散落裸字符串。
+// List status values: active is the default (excludes soft-deleted rows), deleted sees only soft-deleted rows,
+// all sees both. Stable English constants, so bare strings do not scatter across handlers.
 const (
 	NoteStatusActive  = "active"
 	NoteStatusDeleted = "deleted"
 	NoteStatusAll     = "all"
 )
 
-// DefaultNotePageSize 是卡片列表的每页条数；设计只要求分页可用，不暴露给用户配置。
+// DefaultNotePageSize is the per-page row count of the card list; the design only requires pagination to work, it is not user-configurable.
 const DefaultNotePageSize = 50
 
-// MaxNotePageSize 是单页条数上限：客户端可任意给 per_page，但不设上限就能一次拉走整库内容
-// （限制请求频率管不了一次请求的内存占用）。上限在共享的 NormalizeNoteListOptions 里执行，
-// REST、MCP 与 store.List 因此一致。
+// MaxNotePageSize caps the rows per page: clients may send any per_page, but without a cap one request can drain the whole database
+// (rate limiting does not cover the memory of a single request). The cap is enforced in the shared NormalizeNoteListOptions,
+// so REST, MCP and store.List agree.
 const MaxNotePageSize = 200
 
-// MaxNotePage 是页码上限：page 极大时 (page-1)*perPage 会溢出 int 变成负偏移，
-// 让 LIMIT/OFFSET 拿到非法值；超过上界的页码按「最后一页之外」处理（结果为空）。
+// MaxNotePage caps the page number: with a huge page, (page-1)*perPage overflows int into a negative offset,
+// handing LIMIT/OFFSET an illegal value; pages beyond the bound are treated as "past the last page" (empty result).
 const MaxNotePage = 1_000_000
 
-// NoteListOptions 是卡片列表的查询条件（分页、搜索、标签与题型筛选）。
+// NoteListOptions holds the card list query criteria (paging, search, tag and kind filters).
 type NoteListOptions struct {
 	DeckID uint64
-	// Page 从 1 起；小于 1 时按 1 处理。
+	// Page starts at 1; values below 1 are treated as 1.
 	Page int
-	// PerPage 为 0 时用 DefaultNotePageSize。
+	// PerPage 0 falls back to DefaultNotePageSize.
 	PerPage int
-	// Query 搜索 note 的字段内容（正面/背面等所有字段文本），大小写不敏感。
+	// Query searches the note's field content (the text of every field, front/back alike), case-insensitively.
 	Query string
-	// Tag 按 tags_json 里的标签精确匹配（带引号边界，避免前缀误匹配）。
+	// Tag matches a tag in tags_json exactly (quoted boundaries, so a prefix does not match).
 	Tag string
-	// Kind 按题型过滤；空串表示不过滤。
+	// Kind filters by kind; an empty string means no filter.
 	Kind string
-	// Status 取值见上方常量；空串等同 NoteStatusActive。
+	// Status takes the constants above; an empty string equals NoteStatusActive.
 	Status string
 }
 
-// NormalizeNoteListOptions 把分页默认值与上下界收敛成一处：Page 小于 1 按 1、大于 MaxNotePage
-// 按 MaxNotePage，PerPage 非正按 DefaultNotePageSize、大于 MaxNotePageSize 按 MaxNotePageSize。
-// REST handler、MCP 工具、service 与 store.List 四条入口都先过这里，避免同一规则在多处各写一遍
-// （写多了必然漂移）。
+// NormalizeNoteListOptions funnels the paging defaults and bounds into one place: Page below 1 becomes 1, above MaxNotePage
+// becomes MaxNotePage, PerPage non-positive becomes DefaultNotePageSize, above MaxNotePageSize becomes MaxNotePageSize.
+// All four entry points - REST handler, MCP tool, service and store.List - go through here first, so the same rule is not written
+// out in several places (write it more than once and it will drift).
 func NormalizeNoteListOptions(opts NoteListOptions) NoteListOptions {
 	if opts.Page < 1 {
 		opts.Page = 1
@@ -80,23 +80,23 @@ func NormalizeNoteListOptions(opts NoteListOptions) NoteListOptions {
 	return opts
 }
 
-// NoteStore 封装 notes 表，并实现\"由题型生成 cards\"的管线。
+// NoteStore wraps the notes table and implements the \"generate cards from the kind\" pipeline.
 //
-// 内容与进度分离是本项目最重要的一条设计原则：note/card 只描述内容，
-// 用户的 FSRS 进度挂在 card 上。因此更新内容时绝不能重建（删旧插新）card，
-// 否则会连带丢失进度 —— 详见 syncCards 的不变量说明。
+// Separating content from progress is the most important design principle of this project: note/card describe content only,
+// the user's FSRS progress hangs off the card. So updating content must never rebuild a card (delete the old, insert a new one),
+// or the progress is lost with it -- see the invariant notes on syncCards.
 type NoteStore struct {
 	db       *gorm.DB
 	registry *cardtype.Registry
 }
 
-// NewNoteStore 构造笔记存储；题型来自内置注册表（cardtype.Default）。
+// NewNoteStore builds the note store; kinds come from the built-in registry (cardtype.Default).
 func NewNoteStore(db *gorm.DB) *NoteStore {
 	return &NoteStore{db: db, registry: cardtype.Default}
 }
 
-// prepareNoteFields 校验题型字段、把 fields 序列化进 n.FieldsJSON，并返回该 note 应产出的 cards。
-// 校验在写库之前完成，避免把非法内容落库；返回的 error 是可读英文并点名字段。
+// prepareNoteFields validates the kind's fields, serializes fields into n.FieldsJSON and returns the cards this note should produce.
+// Validation completes before the write so illegal content never lands in the database; the returned error is readable English naming the field.
 func (s *NoteStore) prepareNoteFields(n *Note, fields map[string]any) ([]cardtype.Card, error) {
 	if n.Kind == "" {
 		return nil, ErrNoteKindRequired
@@ -116,29 +116,29 @@ func (s *NoteStore) prepareNoteFields(n *Note, fields map[string]any) ([]cardtyp
 	return wanted, nil
 }
 
-// actorKey 是 note 写入校验用的 context 键：本次写入的执行者用户 id。
+// actorKey is the context key used by note write validation: the acting user id of this write.
 type actorKey struct{}
 
-// WithActor 标注本次 note 写入的执行者，供写前校验判定「新引入的引用是否我可读」。
+// WithActor marks the actor of this note write so pre-write validation can decide "is a newly introduced reference readable by me".
 //
-// 为什么不把 actor 做成写入方法的显式参数：note 写入被 web / REST / MCP / 包导入 / 克隆 / CLI
-// 以多种形态调用，actor 走 context 能保持写入方法签名不变，同时让「写前校验」与「映射重建」这对
-// 规则只有一处实现。**所有对外写入入口都必须先 WithActor**——否则校验会被静默跳过（逐入口的
-// 越权注入用例正是守着这一点）。actor 为 0（未标注）表示服务端自身写入，跳过校验。
+// Why actor is not an explicit parameter of the write methods: note writes are called by web / REST / MCP / package import / clone / CLI
+// in many shapes, so passing actor through context keeps the write method signatures unchanged and lets the "pre-write validation" and "mapping rebuild" pair
+// live in a single implementation. **Every external write entry point must call WithActor first** -- otherwise validation is silently skipped (the per-entry point
+// privilege-escalation injection cases are exactly what guards this). actor 0 (unmarked) means the server itself is writing and validation is skipped.
 func WithActor(ctx context.Context, userID uint64) context.Context {
 	return context.WithValue(ctx, actorKey{}, userID)
 }
 
-// actorFromContext 取本次写入的执行者；未标注时返回 0（服务端自身写入）。
+// actorFromContext returns the actor of this write; 0 (the server writing on its own behalf) when unmarked.
 func actorFromContext(ctx context.Context) uint64 {
 	v, _ := ctx.Value(actorKey{}).(uint64)
 	return v
 }
 
-// Save 是 note 写入的唯一入口：在同一事务内完成写前校验、写入（新建或更新）与映射重建。
+// Save is the single entry point for note writes: pre-write validation, the write (create or update) and the mapping rebuild in one transaction.
 //
-// n.ID == 0 表示新建，否则表示更新。写前校验与 media_notes 重建都收敛在这里，因此
-// web 编辑器 / REST / MCP / 包导入 / 克隆 / CLI 只要调用它（或它的 InTx 形态），规则就不会漂移。
+// n.ID == 0 means create, otherwise update. Pre-write validation and the media_notes rebuild both converge here, so
+// as long as the web editor / REST / MCP / package import / clone / CLI call it (or its InTx form), the rules do not drift.
 func (s *NoteStore) Save(ctx context.Context, n *Note, fields map[string]any) ([]Card, error) {
 	var cards []Card
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -152,8 +152,8 @@ func (s *NoteStore) Save(ctx context.Context, n *Note, fields map[string]any) ([
 	return cards, nil
 }
 
-// SaveInTx 在调用方给定的事务里执行 note 写入（新建或更新），复用外部事务。
-// 与 Save 的差别只是事务归属：批量导入把多条 note 放进同一事务，由调用方决定何时提交/回滚。
+// SaveInTx performs the note write (create or update) in the transaction given by the caller, reusing the outer transaction.
+// The only difference from Save is who owns the transaction: bulk import puts several notes in one transaction and the caller decides when to commit/roll back.
 func (s *NoteStore) SaveInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	if n == nil {
 		return nil, errors.New("save note: note is required")
@@ -164,19 +164,19 @@ func (s *NoteStore) SaveInTx(ctx context.Context, tx *gorm.DB, n *Note, fields m
 	return s.updateInTx(ctx, tx, n, fields)
 }
 
-// Create 新建一条 note；等价于 Save（n.ID 为 0）。保留它是为了让「建 note」的调用点读起来明确。
+// Create makes a new note; equivalent to Save (n.ID is 0). It is kept so "create a note" call sites read explicitly.
 func (s *NoteStore) Create(ctx context.Context, n *Note, fields map[string]any) ([]Card, error) {
 	return s.Save(ctx, n, fields)
 }
 
-// CreateInTx 在调用方给定的事务里新建一条 note（批量导入按批提交用）；等价于 SaveInTx。
+// CreateInTx makes a new note in the transaction given by the caller (bulk import commits per batch); equivalent to SaveInTx.
 func (s *NoteStore) CreateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	return s.SaveInTx(ctx, tx, n, fields)
 }
 
-// createInTx 在一个事务里写入一条新 note：先做写前校验（本次新引入的引用必须可读），
-// 写入 note 与 cards，最后重建它的 media_notes 映射。
-// 任一步失败则整体回滚，不会留下「有 note 无 card」或「映射与字段不一致」的半截状态。
+// createInTx writes one new note in a transaction: pre-write validation first (references newly introduced by this write must be readable),
+// then the note and its cards, and finally the rebuild of its media_notes mapping.
+// If any step fails the whole thing rolls back, leaving no half state such as "a note without cards" or "a mapping inconsistent with the fields".
 func (s *NoteStore) createInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	if n.DeckID == 0 {
 		return nil, ErrNoteDeckRequired
@@ -185,12 +185,12 @@ func (s *NoteStore) createInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if err != nil {
 		return nil, err
 	}
-	// 写前校验：对写入之前的状态求值（新建时旧引用集为空）。
+	// Pre-write validation: evaluate against the pre-write state (on create the old reference set is empty).
 	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), nil, fields); err != nil {
 		return nil, err
 	}
 	if n.TagsJSON == "" {
-		// 字符串默认值由 store 层在 Go 侧显式给出（models.go 包注释）。
+		// String defaults are given explicitly on the Go side by the store layer (models.go package comment).
 		n.TagsJSON = "[]"
 	}
 	now := time.Now().UTC()
@@ -212,12 +212,12 @@ func (s *NoteStore) createInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	return created, nil
 }
 
-// ByID 取一个未软删除的 note；已删除的 note 视为不存在（用 Restore 恢复）。
+// ByID loads a note that is not soft-deleted; a deleted note counts as absent (use Restore to bring it back).
 func (s *NoteStore) ByID(ctx context.Context, id uint64) (*Note, error) {
 	return s.byIDTx(ctx, s.db, id)
 }
 
-// byIDTx 在给定事务/连接上取一个未软删除的 note；供 UpdateInTx 在同一事务内读取现有内容。
+// byIDTx loads a note that is not soft-deleted on the given transaction/connection; UpdateInTx uses it to read the current content in the same transaction.
 func (s *NoteStore) byIDTx(ctx context.Context, tx *gorm.DB, id uint64) (*Note, error) {
 	var n Note
 	if err := tx.WithContext(ctx).First(&n, "id = ?", id).Error; err != nil {
@@ -226,22 +226,22 @@ func (s *NoteStore) byIDTx(ctx context.Context, tx *gorm.DB, id uint64) (*Note, 
 	return &n, nil
 }
 
-// Update 更新 note 的内容并同步它的 cards。
+// Update changes a note's content and syncs its cards.
 //
-// 验收关键：更新后已存在的 card 与其 id 保持不变。同步只复用旧 card（按 template 匹配，
-// id 不变）、补插新出现的 template，绝不删除已有行（见 syncCards）。
+// The acceptance point: existing cards and their ids stay unchanged after an update. Sync only reuses old cards (matched by template,
+// id unchanged) and inserts newly appearing templates, never deleting an existing row (see syncCards).
 func (s *NoteStore) Update(ctx context.Context, n *Note, fields map[string]any) ([]Card, error) {
 	return s.Save(ctx, n, fields)
 }
 
-// UpdateInTx 在调用方给定的事务里更新 note 与它的 cards（批量导入按批提交用）。
-// 与 Update 语义一致，只是复用外部事务；现有 card 的 id 与用户进度保持不变。
+// UpdateInTx updates the note and its cards in the transaction given by the caller (bulk import commits per batch).
+// Same semantics as Update, only reusing the outer transaction; existing card ids and user progress stay unchanged.
 func (s *NoteStore) UpdateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	return s.SaveInTx(ctx, tx, n, fields)
 }
 
-// updateInTx 在一个事务里更新 note：先读旧内容算「旧引用集」，对写入之前的状态做写前校验
-// （本次新引入的引用必须可读），写入 note 与 cards，最后**重建**它的 media_notes 映射。
+// updateInTx updates a note in a transaction: read the old content to compute the "old reference set", run pre-write validation
+// against the pre-write state (references newly introduced by this write must be readable), write the note and cards, then **rebuild** its media_notes mapping.
 func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]Card, error) {
 	if n.ID == 0 {
 		return nil, errors.New("update note: id is required")
@@ -257,10 +257,10 @@ func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if err != nil {
 		return nil, err
 	}
-	// 写前校验：对写入之前的状态求值——旧引用集来自库里现有的字段，校验通过才写库。
+	// Pre-write validation: evaluate against the pre-write state -- the old reference set comes from the fields currently in the database, and the write only happens once it passes.
 	oldFields, perr := ParseFields(existing.FieldsJSON)
 	if perr != nil {
-		// 坏字段按空集处理：不因此放行新引用，也不因既有脏数据阻断编辑。
+		// Corrupt fields count as an empty set: that neither waves new references through nor blocks editing because of pre-existing dirty data.
 		oldFields = nil
 	}
 	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), oldFields, fields); err != nil {
@@ -291,9 +291,9 @@ func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	return synced, nil
 }
 
-// Delete 软删除 note：只写 notes.deleted_at，不碰任何 cards 行。
-// card 上的进度必须保留，所以 cards 的不可见由查询层（CardStore）过滤实现，而不是级联写 cards。
-// 已删除或不存在时返回 gorm.ErrRecordNotFound。
+// Delete soft-deletes a note: it writes notes.deleted_at only and touches no cards row.
+// Progress on the cards must survive, so card invisibility is implemented by filtering in the query layer (CardStore), not by cascading writes to cards.
+// Returns gorm.ErrRecordNotFound when the note is already deleted or absent.
 func (s *NoteStore) Delete(ctx context.Context, id uint64) error {
 	res := s.db.WithContext(ctx).Where("id = ?", id).Delete(&Note{})
 	if res.Error != nil {
@@ -305,14 +305,14 @@ func (s *NoteStore) Delete(ctx context.Context, id uint64) error {
 	return nil
 }
 
-// Restore 清除 notes.deleted_at；card 行与 id 自始至终未变，故恢复后重新可见。
-// note 不存在时返回 gorm.ErrRecordNotFound。
+// Restore clears notes.deleted_at; the cards rows and ids never changed, so they are visible again afterwards.
+// Returns gorm.ErrRecordNotFound when the note does not exist.
 func (s *NoteStore) Restore(ctx context.Context, id uint64) error {
 	return s.RestoreInTx(ctx, s.db, id)
 }
 
-// RestoreInTx 在调用方给定的事务里恢复软删除的 note（批量导入按批提交用：
-// 命中已软删除的 external_ref 时先恢复，再 Update 才能生效）。
+// RestoreInTx restores a soft-deleted note in the transaction given by the caller (bulk import commits per batch:
+// when a soft-deleted external_ref is hit, restore it first, otherwise the following Update has no effect).
 func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) error {
 	res := tx.WithContext(ctx).Unscoped().Model(&Note{}).Where("id = ?", id).
 		Updates(map[string]any{"deleted_at": nil})
@@ -325,18 +325,18 @@ func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) err
 	return nil
 }
 
-// List 按条件分页列出卡组的 notes，返回当页行与符合条件的总数。
+// List pages through a deck's notes by criteria, returning the rows of this page and the total number of matches.
 //
-// 查询约定：分页统一 LIMIT/OFFSET；模糊匹配用 LOWER(col) LIKE，
-// 不使用任何 PG 专有的 ILIKE 或表达式索引。搜索覆盖 fields_json 的全部字段文本，
-// 因此正面与背面都能命中；标签用带引号边界的 LIKE 精确匹配数组元素。
+// Query conventions: paging is always LIMIT/OFFSET; fuzzy matching uses LOWER(col) LIKE,
+// never PG-only ILIKE or an expression index. Search covers the text of every field in fields_json,
+// so front and back both hit; tags use a LIKE with quoted boundaries to match an array element exactly.
 func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int64, error) {
 	opts = NormalizeNoteListOptions(opts)
 	perPage := opts.PerPage
 	page := opts.Page
 	offset := (page - 1) * perPage
 
-	// 每次调用都重新构造查询，避免复用同一个 *gorm.DB 时把 Count 的语句状态带到 Find。
+	// The query is rebuilt on every call, so reusing one *gorm.DB does not carry Count's statement state into Find.
 	build := func() *gorm.DB {
 		q := s.db.WithContext(ctx).Model(&Note{})
 		switch opts.Status {
@@ -345,14 +345,14 @@ func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int
 		case NoteStatusAll:
 			q = q.Unscoped()
 		default:
-			// 默认由 GORM 的软删除作用域排除 deleted_at 非空的行。
+			// By default GORM's soft-delete scope excludes rows whose deleted_at is not null.
 		}
 		q = q.Where("notes.deck_id = ?", opts.DeckID)
 		if v := strings.TrimSpace(opts.Kind); v != "" {
 			q = q.Where("notes.kind = ?", v)
 		}
 		if v := strings.TrimSpace(opts.Query); v != "" {
-			// LOWER 与 LIKE 两库语义一致；通配符转义后按字面匹配。
+			// LOWER and LIKE mean the same thing on both databases; wildcards are escaped so the value matches literally.
 			q = q.Where("LOWER(notes.fields_json) LIKE ? ESCAPE '\\'",
 				"%"+strings.ToLower(escapeLike(v))+"%")
 		}
@@ -374,9 +374,9 @@ func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int
 	return notes, total, nil
 }
 
-// DeleteMany 软删除一组 note（只写 notes.deleted_at，不碰 cards 行）。
-// 已删除或不存在的 id 不计入返回的条数；ids 为空时直接返回 (0, nil)。
-// dryRun 只统计「会被删除的行数」，不执行任何写操作。
+// DeleteMany soft-deletes a set of notes (writes notes.deleted_at only, touches no cards row).
+// Already-deleted or absent ids are not counted in the returned number; an empty ids slice returns (0, nil) right away.
+// dryRun only counts "the rows that would be deleted" and performs no write at all.
 func (s *NoteStore) DeleteMany(ctx context.Context, ids []uint64, dryRun bool) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
@@ -403,7 +403,7 @@ func (s *NoteStore) DeleteMany(ctx context.Context, ids []uint64, dryRun bool) (
 	return affected, nil
 }
 
-// tagOp 选择标签原语的合并方式；三个原语都收敛到 applyTags 一处实现。
+// tagOp selects how the tag primitive merges; all three primitives converge on the single implementation applyTags.
 type tagOp int
 
 const (
@@ -412,27 +412,27 @@ const (
 	tagOpSet
 )
 
-// AddTags 给一组 note 追加标签（并集），跳过结果与旧值相同的行（幂等）。
-// 返回实际发生变化的行数；只改 tags_json 与 updated_at，不触碰字段与 cards。
+// AddTags appends tags to a set of notes (union), skipping rows whose result equals the old value (idempotent).
+// Returns the number of rows that actually changed; only tags_json and updated_at are written, fields and cards are untouched.
 func (s *NoteStore) AddTags(ctx context.Context, ids []uint64, tags []string, dryRun bool) (int64, error) {
 	return s.applyTags(ctx, ids, tags, tagOpAdd, dryRun)
 }
 
-// RemoveTags 从一组 note 移除给定标签（差集，保持原有顺序）。
-// 返回实际发生变化的行数；只改 tags_json 与 updated_at，不触碰字段与 cards。
+// RemoveTags drops the given tags from a set of notes (difference, preserving the original order).
+// Returns the number of rows that actually changed; only tags_json and updated_at are written, fields and cards are untouched.
 func (s *NoteStore) RemoveTags(ctx context.Context, ids []uint64, tags []string, dryRun bool) (int64, error) {
 	return s.applyTags(ctx, ids, tags, tagOpRemove, dryRun)
 }
 
-// SetTags 用给定列表整体替换一组 note 的标签（保持列表顺序）。
-// 返回实际发生变化的行数；只改 tags_json 与 updated_at，不触碰字段与 cards。
+// SetTags replaces the tags of a set of notes with the given list as a whole (preserving the list order).
+// Returns the number of rows that actually changed; only tags_json and updated_at are written, fields and cards are untouched.
 func (s *NoteStore) SetTags(ctx context.Context, ids []uint64, tags []string, dryRun bool) (int64, error) {
 	return s.applyTags(ctx, ids, tags, tagOpSet, dryRun)
 }
 
-// applyTags 是三个标签原语的唯一实现。先把 tags 规范化（见 NormalizeTags），
-// 再逐行算出新值：与旧值相同则跳过（不写库、不计入返回值），不同才写 tags_json + updated_at。
-// 所有写操作在同一个事务里，任一行失败整体回滚；dryRun 时只计数、不执行任何 UPDATE。
+// applyTags is the sole implementation of the three tag primitives. Tags are normalized first (see NormalizeTags),
+// then the new value is computed row by row: an unchanged value is skipped (no write, not counted in the return), only a different one writes tags_json + updated_at.
+// Every write shares one transaction and a single failing row rolls it all back; under dryRun it only counts and runs no UPDATE.
 func (s *NoteStore) applyTags(ctx context.Context, ids []uint64, tags []string, op tagOp, dryRun bool) (int64, error) {
 	clean := NormalizeTags(tags)
 	if len(clean) == 0 {
@@ -492,9 +492,9 @@ func (s *NoteStore) applyTags(ctx context.Context, ids []uint64, tags []string, 
 	return int64(len(changes)), nil
 }
 
-// NormalizeTags 规范化标签列表：去掉首尾空白、丢弃空串、按首次出现去重并保持顺序。
-// store 的三个标签原语与 REST/MCP 的批量服务共用它，保证「加/减/设」与请求校验对同一
-// 标签的判定完全一致（同一条规则只改一处）。
+// NormalizeTags normalizes a tag list: trims surrounding whitespace, drops empty strings, de-duplicates by first occurrence and keeps the order.
+// The store's three tag primitives and the REST/MCP bulk service share it, so "add/remove/set" and request validation judge the same
+// tag identically (one rule, one place to change).
 func NormalizeTags(tags []string) []string {
 	out := make([]string, 0, len(tags))
 	for _, t := range tags {
@@ -507,7 +507,7 @@ func NormalizeTags(tags []string) []string {
 	return out
 }
 
-// addTags 返回 old 与 add 的并集：保留 old 的顺序，再按 add 的顺序追加未见过的标签。
+// addTags returns the union of old and add: keep old's order, then append unseen tags in add's order.
 func addTags(old, add []string) []string {
 	out := append([]string{}, old...)
 	for _, t := range add {
@@ -518,7 +518,7 @@ func addTags(old, add []string) []string {
 	return out
 }
 
-// removeTags 返回 old 去掉 remove 中标签后的结果，保持 old 的顺序。
+// removeTags returns old with the tags in remove dropped, keeping old's order.
 func removeTags(old, remove []string) []string {
 	out := make([]string, 0, len(old))
 	for _, t := range old {
@@ -529,7 +529,7 @@ func removeTags(old, remove []string) []string {
 	return out
 }
 
-// equalTags 判断两个标签列表是否完全相同（顺序敏感）；nil 与空列表视为相等。
+// equalTags reports whether two tag lists are exactly equal (order-sensitive); nil and an empty list count as equal.
 func equalTags(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -542,7 +542,7 @@ func equalTags(a, b []string) bool {
 	return true
 }
 
-// ParseTags 解码 tags_json；空串按空数组处理，坏数据返回可读英文错误。
+// ParseTags decodes tags_json; an empty string counts as an empty array and corrupt data returns a readable English error.
 func ParseTags(raw string) ([]string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -555,7 +555,7 @@ func ParseTags(raw string) ([]string, error) {
 	return tags, nil
 }
 
-// ParseFields 解码 fields_json 成字段映射，供列表摘要与编辑页回填使用。
+// ParseFields decodes fields_json into a field map, used by the list summary and to prefill the edit page.
 func ParseFields(raw string) (map[string]any, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -568,8 +568,8 @@ func ParseFields(raw string) (map[string]any, error) {
 	return fields, nil
 }
 
-// TagsJSON 把标签切片序列化成 notes.tags_json；nil 落成 "[]"，避免列里出现空串。
-// 这是唯一的序列化入口，卡组包导出与 REST 写入共用（输出与逐处手写一致）。
+// TagsJSON serializes a tag slice into notes.tags_json; nil becomes "[]", so the column never holds an empty string.
+// This is the only serialization entry point, shared by deck package export and REST writes (the output matches what writing it by hand at each site produced).
 func TagsJSON(tags []string) string {
 	if tags == nil {
 		tags = []string{}
@@ -581,8 +581,8 @@ func TagsJSON(tags []string) string {
 	return string(raw)
 }
 
-// FieldsOrEmpty 解码 fields_json；坏数据或 null 收敛成空对象，避免响应里出现 null。
-// 列表、到期卡与导出三条读取路径共用，保证同一行在不同出口产出同一形态。
+// FieldsOrEmpty decodes fields_json; corrupt data or null collapses into an empty object, so a response never carries null.
+// The list, due-card and export read paths share it, so the same row yields the same shape at every exit.
 func FieldsOrEmpty(raw string) map[string]any {
 	fields, err := ParseFields(raw)
 	if err != nil || fields == nil {
@@ -591,7 +591,7 @@ func FieldsOrEmpty(raw string) map[string]any {
 	return fields
 }
 
-// TagsOrEmpty 解码 tags_json；坏数据或 null 收敛成空数组。
+// TagsOrEmpty decodes tags_json; corrupt data or null collapses into an empty array.
 func TagsOrEmpty(raw string) []string {
 	tags, err := ParseTags(raw)
 	if err != nil || tags == nil {
@@ -600,14 +600,14 @@ func TagsOrEmpty(raw string) []string {
 	return tags
 }
 
-// WhereNoteTagsAny 限定为带有 tags 中任一标签的 note（并集）；tags 为空时不加条件。
-// 查询必须已把 notes 表以 notes 为名引入（直接查 notes 或 JOIN notes AS notes）。
+// WhereNoteTagsAny restricts to notes carrying any of the tags (union); no condition is added when tags is empty.
+// The query must already bring in the notes table under the name notes (query notes directly or JOIN notes AS notes).
 //
-// tags_json 是 TEXT（双库兼容约定禁止 jsonb/array），SQL 无法跨库解析 JSON，所以按数组元素的
-// JSON 编码做带引号边界的 LIKE：元素内部的引号一律被转义成 \"，裸引号只出现在元素边界，
-// 因此不会把 "ab" 当成 "a" 命中。匹配模式用写入 tags_json 的同一套 JSON 编码生成（含引号、
-// 反斜杠与 <>& 的转义），手拼 "tag" 会让含这些字符的标签永远匹配不上。
-// 大小写不敏感（两侧都 LOWER），笔记列表筛选与按标签复习共用这一条规则。
+// tags_json is TEXT (the two-database compatibility convention forbids jsonb/array) and SQL cannot parse JSON across databases, so an array element is matched
+// with a LIKE on its JSON encoding that has quoted boundaries: quotes inside an element are always escaped to \", bare quotes only appear at the boundaries,
+// so "a" never hits inside "ab". The pattern is generated with the same JSON encoding used to write tags_json (covering quotes,
+// backslashes and the <>& escapes); hand-assembling "tag" would make tags containing those characters unmatchable forever.
+// Case-insensitive (LOWER on both sides); note list filtering and study-by-tag share this one rule.
 func WhereNoteTagsAny(q *gorm.DB, tags []string) *gorm.DB {
 	if len(tags) == 0 {
 		return q
@@ -618,29 +618,29 @@ func WhereNoteTagsAny(q *gorm.DB, tags []string) *gorm.DB {
 		conds = append(conds, "LOWER(notes.tags_json) LIKE ? ESCAPE '\\'")
 		args = append(args, tagLikePattern(tag))
 	}
-	// 显式加括号：OR 与外层的 AND 条件拼接时不能依赖 GORM 是否自动包裹。
+	// Parentheses are explicit: when the OR is combined with outer AND conditions we cannot rely on GORM wrapping it automatically.
 	return q.Where("("+strings.Join(conds, " OR ")+")", args...)
 }
 
-// tagLikePattern 生成匹配 tags_json 里某个数组元素的 LIKE 模式（已转小写、已转义通配符）。
+// tagLikePattern builds the LIKE pattern matching one array element in tags_json (already lowercased, wildcards escaped).
 func tagLikePattern(tag string) string {
 	raw, err := json.Marshal(tag)
 	if err != nil {
-		// string 的 JSON 编码不会失败；保底按字面拼，行为与旧实现一致。
+		// JSON encoding of a string cannot fail; the fallback assembles it literally, matching the old implementation's behaviour.
 		raw = []byte(`"` + tag + `"`)
 	}
 	return "%" + escapeLike(strings.ToLower(string(raw))) + "%"
 }
 
-// TagCount 是卡组里一个标签及带有它的 note 数。
+// TagCount is one tag in a deck together with the number of notes carrying it.
 type TagCount struct {
 	Tag   string `json:"tag"`
 	Notes int    `json:"notes"`
 }
 
-// DeckTagCounts 汇总卡组内未删除 note 的标签及各自的 note 数，按标签名升序。
-// 标签在 Go 里解码汇总：tags_json 是 TEXT，跨库无法在 SQL 里展开 JSON 数组。
-// 坏数据行按无标签处理（TagsOrEmpty），不让一行脏数据拖垮整个列表。
+// DeckTagCounts aggregates the tags of the non-deleted notes in a deck with their note counts, ordered by tag name ascending.
+// Tags are decoded and aggregated in Go: tags_json is TEXT and a JSON array cannot be expanded in SQL across databases.
+// Rows with corrupt data count as untagged (TagsOrEmpty), so one dirty row does not drag down the whole list.
 func (s *NoteStore) DeckTagCounts(ctx context.Context, deckID uint64) ([]TagCount, error) {
 	var raws []string
 	if err := s.db.WithContext(ctx).Model(&Note{}).
@@ -650,7 +650,7 @@ func (s *NoteStore) DeckTagCounts(ctx context.Context, deckID uint64) ([]TagCoun
 	}
 	counts := map[string]int{}
 	for _, raw := range raws {
-		// 同一 note 内的重复标签只计一次。
+		// Repeated tags within one note are counted once.
 		for _, tag := range NormalizeTags(TagsOrEmpty(raw)) {
 			counts[tag]++
 		}
@@ -663,13 +663,13 @@ func (s *NoteStore) DeckTagCounts(ctx context.Context, deckID uint64) ([]TagCoun
 	return out, nil
 }
 
-// escapeLike 转义 LIKE 模式里的通配符，让用户输入按字面匹配（配合 ESCAPE '\\'）。
+// escapeLike escapes the wildcards in a LIKE pattern so user input matches literally (together with ESCAPE '\\').
 func escapeLike(s string) string {
 	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return r.Replace(s)
 }
 
-// containsString 判断字符串切片是否含目标值。
+// containsString reports whether a string slice contains the wanted value.
 func containsString(xs []string, want string) bool {
 	for _, x := range xs {
 		if x == want {

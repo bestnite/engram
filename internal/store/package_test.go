@@ -14,11 +14,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// ---- 测试夹具 ----
+// ---- test fixtures ----
 
-// packageDatabases 返回本机可用的、已建表的全新测试库：SQLite 临时库 + 门控的 PostgreSQL。
-// 卡组包用例在两种驱动上跑同一套断言——PG 侧经 internal/pgtest 每次拿独立 schema，
-// 与 SQLite 的临时库隔离程度等价（要求 PG 分支真正跑起来，而不是只在 SQLite 上过）。
+// packageDatabases returns fresh test databases on this machine with the tables created: a temporary SQLite database + a gated PostgreSQL one.
+// The deck package cases run the same assertions on both drivers -- the PG side gets an independent schema per run via internal/pgtest,
+// equivalent in isolation to the temporary SQLite database (the PG branch has to really run, not just pass on SQLite).
 func packageDatabases(t *testing.T) map[string]*gorm.DB {
 	t.Helper()
 	out := testDatabases(t)
@@ -30,7 +30,7 @@ func packageDatabases(t *testing.T) map[string]*gorm.DB {
 	return out
 }
 
-// seedPackageDeck 建一个含多题型 note 的源卡组，并写入一条属于 owner 的进度。
+// seedPackageDeck builds a source deck holding notes of several kinds and writes one progress row belonging to owner.
 func seedPackageDeck(t *testing.T, db *gorm.DB, owner uint64) (deckID uint64, noteIDs []uint64) {
 	t.Helper()
 	ctx := context.Background()
@@ -71,7 +71,7 @@ func seedPackageDeck(t *testing.T, db *gorm.DB, owner uint64) (deckID uint64, no
 	return d.ID, noteIDs
 }
 
-// seedPresetDeck 建一个空卡组（无 note），供媒体用例使用。
+// seedPresetDeck builds an empty deck (no notes) for the media cases to use.
 func seedPresetDeck(t *testing.T, db *gorm.DB, owner uint64) uint64 {
 	t.Helper()
 	presetID := seedPresetRow(t, db, owner)
@@ -82,7 +82,7 @@ func seedPresetDeck(t *testing.T, db *gorm.DB, owner uint64) uint64 {
 	return d.ID
 }
 
-// exportZip 导出并序列化成 zip 字节。
+// exportZip exports and serializes the result into zip bytes.
 func exportZip(t *testing.T, db *gorm.DB, owner, deckID uint64, opts PackageOptions) []byte {
 	t.Helper()
 	pkg, err := NewDeckStore(db).ExportPackage(context.Background(), owner, deckID, opts)
@@ -96,9 +96,9 @@ func exportZip(t *testing.T, db *gorm.DB, owner, deckID uint64, opts PackageOpti
 	return buf.Bytes()
 }
 
-// ---- 导出 ----
+// ---- export ----
 
-// TestExportPackageValidatesAgainstSchema 断言导出包通过 schema/deck-package.schema.json（SQLite + PG）。
+// TestExportPackageValidatesAgainstSchema asserts the exported package validates against schema/deck-package.schema.json (SQLite + PG).
 func TestExportPackageValidatesAgainstSchema(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -110,7 +110,7 @@ func TestExportPackageValidatesAgainstSchema(t *testing.T) {
 				t.Fatalf("ExportPackage: %v", err)
 			}
 			doc := pkg.Document()
-			// JSON 往返统一数字类型，再交给真库（draft 2020-12）对照仓库 schema 校验。
+			// A JSON round trip unifies the numeric types, then the real library (draft 2020-12) validates it against the repo schema.
 			encoded, _ := json.Marshal(doc)
 			var instance any
 			if err := json.Unmarshal(encoded, &instance); err != nil {
@@ -123,7 +123,7 @@ func TestExportPackageValidatesAgainstSchema(t *testing.T) {
 	}
 }
 
-// TestExportProgressIsolatedPerUser 断言包里绝不包含导出者以外任何人的进度
+// TestExportProgressIsolatedPerUser asserts the package never contains anyone's progress but the exporter's
 func TestExportProgressIsolatedPerUser(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestExportProgressIsolatedPerUser(t *testing.T) {
 			owner, reader := users[0], users[1]
 			deckID, noteIDs := seedPackageDeck(t, db, owner)
 
-			// reader 在同一卡组的首张卡上也有自己的进度。
+			// reader also has its own progress on the first card of the same deck.
 			cards, err := NewCardStore(db).ByNote(context.Background(), noteIDs[0])
 			if err != nil || len(cards) == 0 {
 				t.Fatalf("load cards: %v", err)
@@ -159,13 +159,13 @@ func TestExportProgressIsolatedPerUser(t *testing.T) {
 	}
 }
 
-// TestExportMediaOffDeclaresHonestly 断言 include_media=0 时无媒体条目且 manifest 如实声明
+// TestExportMediaOffDeclaresHonestly asserts include_media=0 yields no media entries and the manifest declares it honestly
 func TestExportMediaOffDeclaresHonestly(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			owner := seedUsers(t, db, "pkg_media_owner")[0]
 			deckID := seedPresetDeck(t, db, owner)
-			// 一条引用媒体的 note，确保"关闭媒体"路径确实被走到。
+			// One note referencing media, so the "media off" path is really exercised.
 			n := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(owner)}
 			if _, err := NewNoteStore(db).Create(context.Background(), &n, map[string]any{
 				"front": "img?", "back": "media/0000000000000000000000000000000000000000000000000000000000000000.png",
@@ -192,9 +192,9 @@ func TestExportMediaOffDeclaresHonestly(t *testing.T) {
 	}
 }
 
-// ---- 打包与 schema 校验辅助 ----
+// ---- zip building and schema validation helpers ----
 
-// buildZip 把一组条目打成 zip；条目名保持原样，供安全拒绝用例构造恶意归档。
+// buildZip packs a set of entries into a zip; entry names are kept as given, so the security-rejection cases can build malicious archives.
 func buildZip(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -214,7 +214,7 @@ func buildZip(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// buildSymlinkZip 构造一个含软链条目的 zip，用于安全拒绝用例。
+// buildSymlinkZip builds a zip containing a symlink entry, for the security-rejection cases.
 func buildSymlinkZip(t *testing.T) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -234,8 +234,8 @@ func buildSymlinkZip(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-// validateAgainstSchema 用真库（santhosh-tekuri/jsonschema v6，draft 2020-12）校验一份文档，
-// 对照仓库里的 schema 文件；用它替换手写的子集校验器，关键字覆盖与规范一致。
+// validateAgainstSchema validates a document with the real library (santhosh-tekuri/jsonschema v6, draft 2020-12)
+// against the schema file in the repo; it replaced a hand-written subset validator, so keyword coverage matches the spec.
 func validateAgainstSchema(t *testing.T, instance any, schemaPath string) error {
 	t.Helper()
 	raw, err := os.ReadFile(schemaPath)
@@ -247,7 +247,7 @@ func validateAgainstSchema(t *testing.T, instance any, schemaPath string) error 
 		return fmt.Errorf("decode schema: %w", err)
 	}
 	c := jsonschema.NewCompiler()
-	// 用 schema 的 $id 作为资源 URL，$ref 才能解析到文件内部的定义。
+	// The schema's $id is used as the resource URL so $ref can resolve to definitions inside the file.
 	if err := c.AddResource("https://example.com/schema/deck-package.schema.json", doc); err != nil {
 		return fmt.Errorf("add schema resource: %w", err)
 	}

@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// TestPackageRoundTripKeepsReviewUndoSnapshots 是 AUDIT 回归：卡组包必须带上 reviews 的
-// 评分前快照（step_index_before / due_before）。修复前导出与导入都不带它们，于是「导出备份、
-// 恢复回来」之后撤销会还原成 NULL 或错误值。
+// TestPackageRoundTripKeepsReviewUndoSnapshots is an AUDIT regression: a deck package must carry the reviews'
+// pre-rating snapshots (step_index_before / due_before). Before the fix neither export nor import carried them, so after "export a backup,
+// restore it" undo restored NULL or a wrong value.
 func TestPackageRoundTripKeepsReviewUndoSnapshots(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)
@@ -36,7 +36,7 @@ func TestPackageRoundTripKeepsReviewUndoSnapshots(t *testing.T) {
 
 			raw := exportZip(t, src, owner, deckID, PackageOptions{IncludeProgress: true, IncludeMedia: false, IncludeReviews: true})
 
-			// 导出的包本身就要带上快照。
+			// The exported package itself must carry the snapshots.
 			pkg, err := NewDeckStore(src).ExportPackage(context.Background(), owner, deckID,
 				PackageOptions{IncludeProgress: true, IncludeMedia: false, IncludeReviews: true})
 			if err != nil {
@@ -53,7 +53,7 @@ func TestPackageRoundTripKeepsReviewUndoSnapshots(t *testing.T) {
 				t.Errorf("exported due_before = %v, want %s", exported.DueBefore, dueBefore.Format(time.RFC3339))
 			}
 
-			// 同一用户名导入自己的包：进度被应用，快照随之落库。
+			// The same user importing their own package: the progress is applied and the snapshots land in the database with it.
 			self := seedUsers(t, dst, "pkg_snap_owner")[0]
 			if _, err := NewDeckStore(dst).ImportPackage(context.Background(), self, bytes.NewReader(raw),
 				PackageImportOptions{Target: PackageTargetNewDeck}); err != nil {

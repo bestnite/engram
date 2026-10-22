@@ -17,43 +17,43 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 敏感配置的加密通道。
+// The encryption channel for sensitive configuration.
 //
-// 约定：
-//   - 主密钥来自环境变量 ENCRYPTION_KEY（internal/config 的 KeyEncryptionKey），
-//     按 .env.example 的说明是 base64 编码的 32 字节（生成：openssl rand -base64 32）。
-//   - 密文带算法版本前缀，形如 `v1:` + base64(nonce || AES-256-GCM 密文与认证标签)。
-//     版本前缀是日后迁移/轮换唯一的挂钩：解密端先读前缀再选算法，将来上 v2
-//     （换算法或加 KDF 参数）时调用方无需改动。
-//   - 解密失败（换错主密钥、密文损坏）必须大声报错，绝不返回空值：
-//     静默返回空串会让调用方把「解不开」误读成「没配置」。
+// Conventions:
+//   - the master key comes from the ENCRYPTION_KEY environment variable (KeyEncryptionKey in internal/config),
+//     which per .env.example is 32 bytes base64-encoded (generate with: openssl rand -base64 32).
+//   - the ciphertext carries an algorithm version prefix, of the form `v1:` + base64(nonce || AES-256-GCM ciphertext and auth tag).
+//     The version prefix is the only hook for a future migration/rotation: the decryptor reads the prefix first and then picks the algorithm, so when v2 arrives
+//     (a different algorithm or added KDF parameters) callers need no change.
+//   - a decryption failure (wrong master key, corrupt ciphertext) must error loudly and never return an empty value:
+//     silently returning an empty string would let the caller misread "cannot decrypt" as "not configured".
 const (
-	// secretVersionPrefixV1 是当前密文格式的版本前缀。
+	// secretVersionPrefixV1 is the version prefix of the current ciphertext format.
 	secretVersionPrefixV1 = "v1"
-	// secretKeyBytes 是 AES-256 要求的密钥长度。
+	// secretKeyBytes is the key length AES-256 requires.
 	secretKeyBytes = 32
-	// secretKeyEnv 是主密钥的环境变量名，报错信息里点名便于运维定位。
+	// secretKeyEnv is the master key's environment variable name, spelled out in error messages so operators can find it.
 	secretKeyEnv = "ENCRYPTION_KEY"
 )
 
 var (
-	// ErrSecretKeyInvalid 表示主密钥不是合法的 base64(32 字节)。
+	// ErrSecretKeyInvalid means the master key is not valid base64(32 bytes).
 	ErrSecretKeyInvalid = errors.New("invalid secret master key")
-	// ErrSecretFormat 表示密文缺少版本前缀或 base64 载荷无法解析。
+	// ErrSecretFormat means the ciphertext lacks its version prefix or the base64 payload does not parse.
 	ErrSecretFormat = errors.New("malformed secret ciphertext")
-	// ErrSecretVersion 表示密文的算法版本前缀不被当前代码支持。
+	// ErrSecretVersion means the ciphertext's algorithm version prefix is not supported by this code.
 	ErrSecretVersion = errors.New("unsupported secret ciphertext version")
-	// ErrSecretDecrypt 表示 GCM 认证失败（主密钥不匹配或密文被篡改）。
+	// ErrSecretDecrypt means GCM authentication failed (master key mismatch or tampered ciphertext).
 	ErrSecretDecrypt = errors.New("secret decryption failed")
 )
 
-// SecretCodec 用 AES-256-GCM 加解密敏感设置值。
+// SecretCodec encrypts and decrypts sensitive setting values with AES-256-GCM.
 type SecretCodec struct {
 	aead cipher.AEAD
 }
 
-// NewSecretCodec 从 ENCRYPTION_KEY 的字符串值构造编解码器。
-// 密钥格式非法时返回 ErrSecretKeyInvalid（启动期大声失败，而不是用弱密钥静默加密）。
+// NewSecretCodec builds the codec from the string value of ENCRYPTION_KEY.
+// An illegal key format returns ErrSecretKeyInvalid (fail loudly at startup instead of silently encrypting with a weak key).
 func NewSecretCodec(masterKey string) (*SecretCodec, error) {
 	raw, err := decodeMasterKey(masterKey)
 	if err != nil {
@@ -70,7 +70,7 @@ func NewSecretCodec(masterKey string) (*SecretCodec, error) {
 	return &SecretCodec{aead: aead}, nil
 }
 
-// decodeMasterKey 把配置值解码成 32 字节密钥：优先标准 base64，兼容无填充的 raw base64。
+// decodeMasterKey decodes the configured value into a 32-byte key: standard base64 first, unpadded raw base64 accepted too.
 func decodeMasterKey(masterKey string) ([]byte, error) {
 	trimmed := strings.TrimSpace(masterKey)
 	if trimmed == "" {
@@ -87,7 +87,7 @@ func decodeMasterKey(masterKey string) ([]byte, error) {
 	return raw, nil
 }
 
-// Encrypt 加密明文，返回带版本前缀的密文。
+// Encrypt encrypts the plaintext and returns ciphertext carrying the version prefix.
 func (c *SecretCodec) Encrypt(plaintext string) (string, error) {
 	nonce := make([]byte, c.aead.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
@@ -98,8 +98,8 @@ func (c *SecretCodec) Encrypt(plaintext string) (string, error) {
 	return secretVersionPrefixV1 + ":" + base64.StdEncoding.EncodeToString(payload), nil
 }
 
-// Decrypt 解密带版本前缀的密文。
-// 主密钥不对时 GCM 认证失败 → 返回 ErrSecretDecrypt，绝不返回空值
+// Decrypt decrypts ciphertext carrying the version prefix.
+// With a wrong master key GCM authentication fails -> ErrSecretDecrypt is returned, never an empty value
 func (c *SecretCodec) Decrypt(ciphertext string) (string, error) {
 	version, payload, ok := strings.Cut(ciphertext, ":")
 	if !ok {
@@ -123,12 +123,12 @@ func (c *SecretCodec) Decrypt(ciphertext string) (string, error) {
 	return string(plaintext), nil
 }
 
-// sensitiveKeySuffixes 判定哪些 settings 键必须走加密通道：OIDC client secret、未来 LLM key 等。
-// 用后缀约定而不是硬编码键名列表，新增服务商只需按约定命名（例：`llm_api_key`）。
+// sensitiveKeySuffixes decides which settings keys must go through the encrypted channel: the OIDC client secret, future LLM keys, etc.
+// A suffix convention rather than a hard-coded list of key names, so a new provider only has to name its key by the convention (e.g. `llm_api_key`).
 var sensitiveKeySuffixes = []string{"_secret", "_key", "_password", "_token"}
 
-// IsSensitiveSettingKey 报告一个 settings 键是否属于敏感值，管理面板据此决定是否加密存储、
-// 以及是否只显示「已配置/未配置」。
+// IsSensitiveSettingKey reports whether a settings key holds a sensitive value; the admin panel uses it to decide whether to store the value encrypted
+// and whether to show only "configured/not configured".
 func IsSensitiveSettingKey(key string) bool {
 	k := strings.ToLower(strings.TrimSpace(key))
 	for _, suffix := range sensitiveKeySuffixes {
@@ -139,8 +139,8 @@ func IsSensitiveSettingKey(key string) bool {
 	return false
 }
 
-// PutSecret 把敏感明文加密后写入 settings 表（upsert，含 updated_by/updated_at）。
-// 密文以 JSON 字符串落库，与 LoadSettings 的解码约定一致（models.go 的 Setting.Value 注释）。
+// PutSecret encrypts the sensitive plaintext and writes it into the settings table (upsert, including updated_by/updated_at).
+// The ciphertext is stored as a JSON string, matching LoadSettings' decoding convention (the Setting.Value comment in models.go).
 func PutSecret(ctx context.Context, db *gorm.DB, codec *SecretCodec, key, plaintext string, updatedBy *uint64, at time.Time) error {
 	if codec == nil {
 		return errors.New("store: SecretCodec is required")
@@ -166,8 +166,8 @@ func PutSecret(ctx context.Context, db *gorm.DB, codec *SecretCodec, key, plaint
 	return nil
 }
 
-// GetSecret 读取并解密敏感设置值，供服务端内部使用（例如 OIDC 换取 token）。
-// 未配置返回 ("", false, nil)；解密失败返回错误——绝不让「解不开」伪装成「未配置」。
+// GetSecret reads and decrypts a sensitive setting value for internal server use (exchanging an OIDC token, for example).
+// Unconfigured returns ("", false, nil); a decryption failure returns an error -- "cannot decrypt" must never masquerade as "not configured".
 func GetSecret(ctx context.Context, db *gorm.DB, codec *SecretCodec, key string) (string, bool, error) {
 	if codec == nil {
 		return "", false, errors.New("store: SecretCodec is required")
@@ -179,7 +179,7 @@ func GetSecret(ctx context.Context, db *gorm.DB, codec *SecretCodec, key string)
 		}
 		return "", false, fmt.Errorf("load setting %q: %w", key, err)
 	}
-	// 值可能是 JSON 字符串（PutSecret 的写法），也可能被手工写成裸密文。
+	// The value may be a JSON string (as PutSecret writes it) or hand-written as bare ciphertext.
 	ciphertext := row.Value
 	var decoded string
 	if err := json.Unmarshal([]byte(row.Value), &decoded); err == nil {
@@ -195,7 +195,7 @@ func GetSecret(ctx context.Context, db *gorm.DB, codec *SecretCodec, key string)
 	return plaintext, true, nil
 }
 
-// SecretConfigured 只报告「已配置/未配置」，不接触明文，供管理面板展示。
+// SecretConfigured only reports "configured/not configured" and never touches the plaintext, for the admin panel to display.
 func SecretConfigured(ctx context.Context, db *gorm.DB, key string) (bool, error) {
 	var row Setting
 	if err := db.WithContext(ctx).First(&row, "key = ?", key).Error; err != nil {

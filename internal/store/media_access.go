@@ -8,27 +8,27 @@ import (
 	"gorm.io/gorm"
 )
 
-// MediaAccessibleToUser 判定 sha256 为 mediaSha 的媒体是否可被 userID 读取（读取鉴权口径）。
+// MediaAccessibleToUser decides whether the media whose sha256 is mediaSha may be read by userID (the read authorization rule).
 //
-// sessionID 是发起请求的服务端会话 id（L3）：非空时额外放行「该会话通过分享链接
-// 打开过、且授权未过期」的卡组里的引用。会话 id 由 web 层从请求上下文取出后显式传入，不用包级全局、
-// 也不塞进 context——读取鉴权的输入必须在本函数签名里可见，隐藏状态会让「谁读到了什么」无法审计。
-// 匿名请求（未登录）根本到不了这里（mediaServe 先要求登录），传空串即可。
+// sessionID is the server-side session id that made the request (L3): when non-empty it additionally allows references in decks that session
+// opened through a share link and whose grant has not expired. The session id is taken from the request context by the web layer and passed explicitly, not as a package global and
+// not stuffed into context — the inputs to read authorization must be visible in this function's signature, since hidden state makes 'who read what' unauditable.
+// Anonymous requests (not logged in) never get here at all (mediaServe requires login first), so an empty string is fine.
 //
-// 允许读取的充要条件，三选一（判定本体是 mediaReadableByUser，读取与写入共用同一处定义）：
-//  1. media_uploaders 里存在指向 userID 的记录——他提供过这份字节（去重命中也算，且永久有效）；
-//  2. media_notes 映射里存在一条指向「userID 可见卡组内、未软删的 note」的记录；
-//  3. media_notes 映射里存在一条指向「该会话经分享链接打开过、且授权未过期的卡组内、未软删的 note」。
+// The necessary and sufficient conditions for allowing a read, one of three (the decision itself is mediaReadableByUser, shared by reads and writes):
+//  1. media_uploaders has a record pointing at userID — they supplied these bytes (a dedup hit counts too, and it is valid forever);
+//  2. the media_notes mapping has a record pointing at 'a non-soft-deleted note inside a deck visible to userID';
+//  3. the media_notes mapping has a record pointing at 'a non-soft-deleted note inside a deck this session opened via a share link whose grant is unexpired'.
 //
-// 不再扫 fields_json：映射是派生索引，由 note 写入路径维护，并用不变量测试锁住两者一致。
+// fields_json is no longer scanned: the mapping is a derived index maintained by the note write path, with an invariant test locking the two together.
 //
-// F2c（已修复，2026-10-06）：共享卡组的 editor 曾能编辑别人写的 note、把他人媒体引用注入进去，
-// 从而拿到读取权（映射建立即自我满足）。现在 note 写入前会对**写入之前的状态**校验本次新引入的
-// 引用是否可读，越权引用在写入时即被拒（见 checkNewMediaRefs），故注入不再成立。
-// 该修复依赖「所有 note 写入路径都经 NoteStore 的同一写入方法」，逐入口的越权注入用例守着它。
+// F2c (fixed, 2026-10-06): an editor of a shared deck used to be able to edit a note someone else wrote and inject their media references into it,
+// thereby gaining read access (creating the mapping satisfied itself). Now, before a note is written, the newly introduced references are
+// validated for readability against the **state before the write**, so an unauthorized reference is rejected at write time (see checkNewMediaRefs) and the injection no longer works.
+// That fix relies on 'every note write path goes through the same NoteStore write method', guarded by per-entry-point privilege-injection cases.
 //
-// 媒体不存在与无权限在调用方统一按 404 处理，这里只需回答「不可读」。
-// 不做权限缓存：授权撤销必须在下一个请求即生效，缓存会把「撤销」变成「等失效」。
+// A missing medium and a lack of permission are both mapped to 404 by the caller; here it only has to answer 'not readable'.
+// No permission caching: revoking a grant must take effect on the next request, caching would turn 'revoke' into 'wait for expiry'.
 func MediaAccessibleToUser(ctx context.Context, db *gorm.DB, userID uint64, sessionID, mediaSha string) (bool, error) {
 	if db == nil || userID == 0 || mediaSha == "" {
 		return false, nil

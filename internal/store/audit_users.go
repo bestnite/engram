@@ -1,9 +1,9 @@
 package store
 
-// 用户管理各写操作的审计动作常量。
+// Audit action constants for each user-management write operation.
 //
-// 单独一个文件而不是扩写 audit.go：audit.go 是共享热点，并行里程碑都可能往里加常量；
-// 常量在同包的任意文件里定义效果相同，拆开能避免无谓的改动冲突。
+// A separate file instead of extending audit.go: audit.go is a shared hotspot and parallel milestones may all
+// add constants to it; a constant has the same effect in any file of the package, so splitting avoids needless conflicts.
 const (
 	ActionUserDisable       = "user.disable"
 	ActionUserEnable        = "user.enable"

@@ -10,8 +10,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// legacyUserTOTP 是 user_totp 的旧形态（没有 last_used_step）。
-// 用它建表可以忠实模拟「已有数据的旧库」，验证 AutoMigrate 只加列、不重建、不丢行。
+// legacyUserTOTP is the old shape of user_totp (without last_used_step).
+// Creating the table with it faithfully simulates "an old database that already holds data", verifying AutoMigrate only adds a column, rebuilds nothing and loses no rows.
 type legacyUserTOTP struct {
 	UserID           uint64 `gorm:"primaryKey;column:user_id"`
 	SecretCiphertext string `gorm:"not null;column:secret_ciphertext"`
@@ -22,15 +22,15 @@ type legacyUserTOTP struct {
 
 func (legacyUserTOTP) TableName() string { return "user_totp" }
 
-// TestAutoMigrateAddsTOTPStepToExistingRows 断言新增的可空列能加在已有数据的库上：
-// 旧行保留、新列为 NULL（= 尚未接受过任何验证码），并且随后可用 AcceptStep 前移。
+// TestAutoMigrateAddsTOTPStepToExistingRows asserts the new nullable column can be added to a database that already holds data:
+// old rows are kept, the new column is NULL (= no code accepted yet), and AcceptStep can advance it afterwards.
 func TestAutoMigrateAddsTOTPStepToExistingRows(t *testing.T) {
 	ctx := context.Background()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "legacy.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	// 旧版本建表并写入一行。
+	// Create the table as the old version did and insert one row.
 	if err := db.AutoMigrate(&legacyUserTOTP{}); err != nil {
 		t.Fatalf("create legacy user_totp: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestAutoMigrateAddsTOTPStepToExistingRows(t *testing.T) {
 		t.Fatal("legacy table unexpectedly already has last_used_step")
 	}
 
-	// 新版本的 AutoMigrate：只允许加列（AGENTS.md §2.3 第 5 条）。
+	// The new version's AutoMigrate: it may only add columns (AGENTS.md §2.3 item 5).
 	if err := AutoMigrate(ctx, db); err != nil {
 		t.Fatalf("AutoMigrate() on a legacy database error = %v", err)
 	}
@@ -62,7 +62,7 @@ func TestAutoMigrateAddsTOTPStepToExistingRows(t *testing.T) {
 		t.Errorf("existing row got last_used_step = %v, want NULL (never accepted a code)", *got.LastUsedStep)
 	}
 
-	// 新列在旧行上立刻可用：第一次接受把 NULL 前移到具体步。
+	// The new column works on the old row right away: the first acceptance advances NULL to a concrete step.
 	ok, err := NewTOTPStore(db).AcceptStep(ctx, 7, 58500000)
 	if err != nil || !ok {
 		t.Fatalf("AcceptStep() on a legacy row = (%v, %v), want (true, nil)", ok, err)
@@ -75,8 +75,8 @@ func TestAutoMigrateAddsTOTPStepToExistingRows(t *testing.T) {
 	}
 }
 
-// TestAcceptStepRejectsStepsAtOrBelowTheRecordedOne 断言条件更新的严格单调语义：
-// 只有更大的步能写入，重复写入同一步或更小的步都拿不到 RowsAffected。
+// TestAcceptStepRejectsStepsAtOrBelowTheRecordedOne asserts the strictly monotonic semantics of the conditional update:
+// only a larger step can be written; writing the same step again or a smaller one yields no RowsAffected.
 func TestAcceptStepRejectsStepsAtOrBelowTheRecordedOne(t *testing.T) {
 	ctx := context.Background()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "steps.db")), &gorm.Config{})
@@ -96,9 +96,9 @@ func TestAcceptStepRejectsStepsAtOrBelowTheRecordedOne(t *testing.T) {
 		want bool
 	}{
 		{step: 100, want: true},  // NULL → 100
-		{step: 100, want: false}, // 相等：重放
-		{step: 99, want: false},  // 更早的旧步
-		{step: 101, want: true},  // 严格更大
+		{step: 100, want: false}, // equal: replay
+		{step: 99, want: false},  // an older, earlier step
+		{step: 101, want: true},  // strictly greater
 	} {
 		got, err := st.AcceptStep(ctx, 1, tc.step)
 		if err != nil {

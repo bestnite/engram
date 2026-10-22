@@ -10,21 +10,21 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Migration 是一次性的显式迁移，用于 AutoMigrate 做不到的破坏性变更
-// （改列类型、删列、新增非空约束，AGENTS.md §2.3 第 5 条）。
-// Name 是必填的稳定英文标识：没有名字的破坏性变更无法被追踪，必须被拒绝。
+// Migration is a one-off explicit migration for destructive changes AutoMigrate cannot perform
+// (changing a column type, dropping a column, adding a non-null constraint, AGENTS.md §2.3 item 5).
+// Name is a required stable English identifier: an unnamed destructive change cannot be tracked and must be rejected.
 type Migration struct {
 	Name string
 	Up   func(tx *gorm.DB) error
 }
 
-// BuiltinMigrations 是有序的迁移列表，顺序即版本号（第 i 项的版本是 i+1）。
-// 新增迁移只能追加到末尾，永远不要修改或重排已发布的条目。
+// BuiltinMigrations is the ordered migration list; the order is the version (the i-th entry is version i+1).
+// A new migration may only be appended at the end; never modify or reorder published entries.
 var BuiltinMigrations = []Migration{
-	// M0 阶段还没有破坏性变更；第一个真实迁移从这里往后追加。
+	// The M0 phase has no destructive changes yet; the first real migration is appended after this one.
 	{
-		// 媒体主键从自增 id 换成内容 sha256：删列不在 AutoMigrate
-		// 的加法范围内，必须显式迁移。这里只改主键，不迁移旧引用。
+		// The media primary key moves from an auto-increment id to the content sha256: dropping a column is outside
+		// AutoMigrate's additive scope and needs an explicit migration. Only the primary key changes here; old references are not migrated.
 		Name: "0001_media_primary_key_sha256",
 		Up:   mediaPrimaryKeySha256,
 	},
@@ -33,44 +33,44 @@ var BuiltinMigrations = []Migration{
 		Up:   nullableDayCutoff,
 	},
 	{
-		// 卡组可见性（private / unlisted / public）整体删除：卡组只对属主与被显式授权者可见。
-		// 删列不在 AutoMigrate 的加法范围内，必须显式迁移。存量 public/unlisted 行随之失去
-		// 那条隐式可见性——这正是本次变更的目的，因此不重写任何数据，只删列。
+		// Deck visibility (private / unlisted / public) is removed wholesale: a deck is visible only to its owner and to explicit grantees.
+		// Dropping a column is outside AutoMigrate's additive scope and needs an explicit migration. Existing public/unlisted rows lose
+		// that implicit visibility along with it — which is exactly the point of this change, so no data is rewritten, only the column dropped.
 		Name: "0003_drop_deck_visibility",
 		Up:   dropDeckVisibility,
 	},
 	{
-		// 对外 id 从自增主键迁到 public_id：为已有行回填 UUIDv7。
-		// 列本身由 AutoMigrate 加出（可空 + 唯一索引），这里只负责填值。
-		// SQLite 与 PostgreSQL 都没有生成 UUIDv7 的 SQL 函数，所以逐行在 Go 侧生成。
+		// Public ids move from the auto-increment primary key to public_id: backfill UUIDv7 for existing rows.
+		// The column itself is added by AutoMigrate (nullable + unique index); this only fills in the values.
+		// Neither SQLite nor PostgreSQL has a SQL function that generates UUIDv7, so they are generated row by row on the Go side.
 		Name: "0004_backfill_public_ids",
 		Up:   backfillPublicIDs,
 	},
 	{
-		// media_notes 映射表上线时没有为已有 note 回填：升级上来的实例里，旧 note 引用的媒体
-		// 在映射里查不到，共享卡组的成员因此读不到这些图片，媒体回收也会把它们当成无人引用。
-		// 这里扫一遍全部 note（含软删除的，它们可以被恢复）补齐映射，只加不删。
+		// The media_notes mapping table shipped without backfilling existing notes: on upgraded instances, media referenced by old notes
+		// cannot be found in the mapping, so shared-deck members cannot read those images, and media reclamation treats them as unreferenced.
+		// This scans every note (soft-deleted ones included, since they can be restored) and fills in the mapping, adding only.
 		Name: "0005_backfill_media_notes",
 		Up:   backfillMediaNotes,
 	},
 	{
-		// 共享卡组的成员改用自己的学习设置：为已有授权补上 deck_member_settings 行。
-		// 预设取成员自己的默认预设（这是本次变更的目的：不再沿用属主的预设）；每日上限
-		// 沿用卡组当前的值，成员升级后每天看到的卡量不变，之后可在卡组设置里自己改。
+		// Shared-deck members now use their own study settings: backfill deck_member_settings rows for existing grants.
+		// The preset is the member's own default preset (that is the point of this change: no longer inheriting the owner's); the daily caps
+		// keep the deck's current values, so a member sees the same daily card count after upgrading, and can change it later in deck settings.
 		Name: "0006_backfill_member_settings",
 		Up:   backfillMemberSettings,
 	},
 	{
-		// 暂停从卡片级（对所有人生效）改为每个用户自己的（card_states.suspended_at）。
-		// 已有的卡片级暂停只迁给卡组属主：暂停原本只有属主能做，它是属主的决定；
-		// 共享成员从此各自决定，不再继承。迁移后删除 cards.suspended_at，不留两处来源。
+		// Suspension moves from the card level (affecting everyone) to per user (card_states.suspended_at).
+		// Existing card-level suspensions are migrated only to the deck owner: suspension was only ever possible for the owner, so it was the owner's decision;
+		// shared members decide for themselves from now on and no longer inherit. After the migration cards.suspended_at is dropped, leaving no second source.
 		Name: "0007_per_user_suspension",
 		Up:   perUserSuspension,
 	},
 }
 
-// perUserSuspension 把 cards.suspended_at 搬到属主的 card_states 行上，再删掉该列。
-// 属主还没有状态行的卡建一行新卡状态；已有行只写 suspended_at，进度不动。
+// perUserSuspension moves cards.suspended_at onto the owner's card_states row, then drops that column.
+// Cards the owner has no state row for get a new card state row; existing rows only get suspended_at written, with progress untouched.
 func perUserSuspension(tx *gorm.DB) error {
 	m := tx.Migrator()
 	if !m.HasTable("cards") || !m.HasColumn("cards", "suspended_at") {
@@ -109,7 +109,7 @@ func perUserSuspension(tx *gorm.DB) error {
 	}
 }
 
-// backfillMemberSettings 为每条授权补一行成员设置；已存在的行（OnConflict）保持不动。
+// backfillMemberSettings adds one member settings row per grant; existing rows (OnConflict) are left alone.
 func backfillMemberSettings(tx *gorm.DB) error {
 	m := tx.Migrator()
 	if !m.HasTable("deck_grants") || !m.HasTable("deck_member_settings") {
@@ -150,8 +150,8 @@ func backfillMemberSettings(tx *gorm.DB) error {
 	return nil
 }
 
-// backfillMediaNotes 按 note 字段补齐 media_notes；已存在的映射行由 OnConflict 忽略。
-// 按主键分批读取，内存占用与 note 总数无关；字段解析失败的 note 跳过（与配额计量同一口径）。
+// backfillMediaNotes fills in media_notes from the note fields; existing mapping rows are ignored by OnConflict.
+// Rows are read in primary-key batches, so memory use is independent of the note count; notes whose fields fail to parse are skipped (same rule as quota accounting).
 func backfillMediaNotes(tx *gorm.DB) error {
 	m := tx.Migrator()
 	if !m.HasTable("notes") || !m.HasTable("media_notes") {
@@ -188,11 +188,11 @@ func backfillMediaNotes(tx *gorm.DB) error {
 	}
 }
 
-// dropDeckVisibility 删除 decks.visibility 列。
+// dropDeckVisibility drops the decks.visibility column.
 //
-// 两库都直接 DROP COLUMN：该列既不在主键上，也没有索引或约束，SQLite（≥3.35）与 PostgreSQL
-// 都支持原地删除，无需像 0001 那样重建表。已经是新形状的库（AutoMigrate 建出的 decks 没有
-// 该列）在此直接跳过。
+// Both databases use a plain DROP COLUMN: the column is not in the primary key and carries no index or constraint, so SQLite (≥3.35) and PostgreSQL
+// both support dropping it in place, with no need to rebuild the table the way 0001 does. A DB already in the new shape (AutoMigrate builds decks
+// without that column) is skipped here.
 func dropDeckVisibility(tx *gorm.DB) error {
 	m := tx.Migrator()
 	if !m.HasTable("decks") || !m.HasColumn("decks", "visibility") {
@@ -210,16 +210,16 @@ func dropDeckVisibility(tx *gorm.DB) error {
 	return tx.Exec(stmt).Error
 }
 
-// publicIDTables 是需要回填 public_id 的表，与对外可见实体一一对应。
-// 未对外暴露的表（sessions、outbox 等）不在此列，也不带 public_id 列。
-// 表名只来自这份固定清单、不含任何外部输入，因此可以安全地拼进 SQL。
+// publicIDTables are the tables that need public_id backfilled, one to one with externally visible entities.
+// Tables not exposed externally (sessions, outbox, etc.) are not listed here and carry no public_id column.
+// Table names come only from this fixed list and contain no external input, so they are safe to interpolate into SQL.
 var publicIDTables = []string{
 	"users", "identities", "invites", "presets", "decks",
 	"notes", "cards", "reviews", "api_keys", "jobs", "audit_log",
 }
 
-// backfillPublicIDs 给每个目标表里 public_id 为空的行补一个 UUIDv7。
-// 逐行更新是有意为之：两库都无法在 SQL 里生成 v7，行数也不足以让逐行成为瓶颈。
+// backfillPublicIDs gives a UUIDv7 to every row with an empty public_id in each target table.
+// Updating row by row is deliberate: neither database can generate v7 in SQL, and the row counts are not large enough for that to be a bottleneck.
 func backfillPublicIDs(tx *gorm.DB) error {
 	m := tx.Migrator()
 	for _, table := range publicIDTables {
@@ -227,7 +227,7 @@ func backfillPublicIDs(tx *gorm.DB) error {
 			continue
 		}
 		var ids []uint64
-		// 用 Table（而不是模型）取行，绕过软删除作用域：软删除的 note/card 同样需要 id。
+		// Rows are fetched with Table (not the model) to bypass the soft-delete scope: soft-deleted notes/cards need ids too.
 		if err := tx.Table(table).Where("public_id IS NULL OR public_id = ''").Pluck("id", &ids).Error; err != nil {
 			return fmt.Errorf("backfill public ids: scan %s: %w", table, err)
 		}
@@ -240,17 +240,17 @@ func backfillPublicIDs(tx *gorm.DB) error {
 	return nil
 }
 
-// mediaPrimaryKeySha256 把 media 的主键从自增 id 换成内容 sha256。
+// mediaPrimaryKeySha256 moves the media primary key from an auto-increment id to the content sha256.
 //
-// 两库写法不同：SQLite 不允许对主键列 DROP COLUMN，只能重建表；PostgreSQL 直接
-// DROP COLUMN（会连带删掉旧主键约束）再补主键。已经是目标形状的新库（AutoMigrate
-// 直接建出 sha 主键，没有 id 列）在此直接跳过。
+// The two databases differ: SQLite does not allow DROP COLUMN on a primary key column and can only rebuild the table; PostgreSQL
+// does a plain DROP COLUMN (removing the old primary key constraint along with it) and then adds the primary key. A new DB already in the
+// target shape (AutoMigrate creates the sha primary key directly, with no id column) is skipped here.
 func mediaPrimaryKeySha256(tx *gorm.DB) error {
 	m := tx.Migrator()
 	if !m.HasTable("media") {
 		return nil
 	}
-	// 没有 id 列说明表已经是 sha 主键形状，无需处理。
+	// no id column means the table is already in the sha primary key shape, so there is nothing to do.
 	if !m.HasColumn("media", "id") {
 		return nil
 	}
@@ -264,9 +264,9 @@ func mediaPrimaryKeySha256(tx *gorm.DB) error {
 	}
 }
 
-// rebuildMediaForShaPrimaryKey 用「建新表 → 搬数据 → 换名」重建 media，绕开 SQLite
-// 不能删主键列的限制。列定义与 GORM 为该模型生成的形状对齐（尤其 created_at 是 datetime：
-// 写成 TEXT 会让驱动无法把它扫回 time.Time）。列清单与 media 模型一致。
+// rebuildMediaForShaPrimaryKey rebuilds media with 'create new table → copy data → rename', sidestepping SQLite's
+// inability to drop a primary key column. The column definitions match the shape GORM generates for that model (in particular created_at is datetime:
+// writing it as TEXT would stop the driver scanning it back into time.Time). The column list matches the media model.
 func rebuildMediaForShaPrimaryKey(tx *gorm.DB) error {
 	stmts := []string{
 		`CREATE TABLE media_sha_pk (
@@ -292,8 +292,8 @@ func rebuildMediaForShaPrimaryKey(tx *gorm.DB) error {
 	return nil
 }
 
-// alterMediaForShaPrimaryKey 在 PostgreSQL 上原地改主键：删 id 列（其上的旧主键约束
-// 随列一起被 PG 删除）、删掉 AutoMigrate 建的 sha256 唯一索引、再把 sha256 设为主键。
+// alterMediaForShaPrimaryKey changes the primary key in place on PostgreSQL: drop the id column (the old primary key constraint
+// on it is dropped by PG together with the column), drop the sha256 unique index AutoMigrate created, then make sha256 the primary key.
 func alterMediaForShaPrimaryKey(tx *gorm.DB) error {
 	stmts := []string{
 		`ALTER TABLE media DROP COLUMN IF EXISTS id`,
@@ -308,15 +308,15 @@ func alterMediaForShaPrimaryKey(tx *gorm.DB) error {
 	return nil
 }
 
-// dayCutoffColumn 只供显式 DDL 使用；业务仍使用 User 同一模型。
-// 增量 DDL 专用形状屏蔽此列，避免 AutoMigrate 在版本化迁移前移除 NOT NULL/default。
+// dayCutoffColumn is used only by explicit DDL; the domain still uses the same User model.
+// The incremental-DDL-only shape masks this column so AutoMigrate does not remove NOT NULL/default before the versioned migration.
 type dayCutoffColumn struct {
 	DayCutoffHour *int `gorm:"column:day_cutoff_hour"`
 }
 
 func (dayCutoffColumn) TableName() string { return "users" }
 
-// 仅在增量 DDL 使用，不作为业务模型：其余用户字段仍直接嵌入唯一的 User 定义。
+// Used only in incremental DDL, not as a domain model: the remaining user fields still embed the single User definition directly.
 type additiveUserSchema struct {
 	User
 	DayCutoffHour *int `gorm:"column:day_cutoff_hour;-:migration"`
@@ -324,14 +324,14 @@ type additiveUserSchema struct {
 
 func (additiveUserSchema) TableName() string { return "users" }
 
-// nullableDayCutoff 只放宽列约束，不转换既有数值：旧 0 现在明确代表午夜，旧 4 保持不变。
+// nullableDayCutoff only relaxes the column constraint and converts no existing value: the old 0 now explicitly means midnight, and the old 4 stays as it is.
 func nullableDayCutoff(tx *gorm.DB) error {
 	if !tx.Migrator().HasTable("users") || !tx.Migrator().HasColumn("users", "day_cutoff_hour") {
 		return nil
 	}
 	switch tx.Dialector.Name() {
 	case "sqlite":
-		// 驱动重建表时不保留外置索引/触发器，先保存并在同一事务内恢复，避免唯一约束丢失。
+		// the driver does not keep external indexes/triggers when rebuilding a table, so save them and restore them in the same transaction, so no unique constraint is lost.
 		var objects []struct{ SQL string }
 		if err := tx.Raw("SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type IN ('index', 'trigger') AND sql IS NOT NULL", "users").Scan(&objects).Error; err != nil {
 			return err
@@ -355,9 +355,9 @@ func nullableDayCutoff(tx *gorm.DB) error {
 	}
 }
 
-// AutoMigrate 只做增量变更（加表/加列/加索引）。
-// 模型清单只有一处：AllModels()。原先这里曾把 TOTP 两表单独并进来，结果两处清单必然分叉，
-// 所以并回一处。
+// AutoMigrate makes only additive changes (add table/column/index).
+// The model list exists in one place only: AllModels(). This used to merge the two TOTP tables in separately, and two lists necessarily diverge,
+// so they were merged back into one.
 func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 	models := AllModels()
 	for i, model := range models {
@@ -368,7 +368,7 @@ func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 	if err := db.WithContext(ctx).AutoMigrate(models...); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}
-	// 新库补可空列是加法；旧列的约束只能交给 0002 显式迁移。
+	// Adding nullable columns on a new DB is additive; constraints on old columns can only be handled by the explicit migration 0002.
 	if !db.Migrator().HasColumn("users", "day_cutoff_hour") {
 		if err := db.WithContext(ctx).Migrator().AddColumn(&dayCutoffColumn{}, "DayCutoffHour"); err != nil {
 			return fmt.Errorf("add nullable day cutoff: %w", err)
@@ -377,7 +377,7 @@ func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 	return nil
 }
 
-// Sync 先跑增量 AutoMigrate，再按 schema 版本执行已注册的破坏性迁移，返回本次执行的迁移数。
+// Sync first runs the additive AutoMigrate, then applies the registered destructive migrations by schema version, returning the number of migrations run this time.
 func Sync(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error) {
 	if err := AutoMigrate(ctx, db); err != nil {
 		return 0, err
@@ -386,17 +386,17 @@ func Sync(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error)
 	if err != nil || applied == 0 {
 		return applied, err
 	}
-	// 显式迁移可能重建了表（例如 0001 在 SQLite 上按固定列清单重建 media），
-	// 把第一次 AutoMigrate 刚加上的新列一并丢掉；再跑一次增量迁移把它们补回来，
-	// 否则要等下次启动才有这些列。
+	// An explicit migration may have rebuilt a table (for example 0001 rebuilds media on SQLite from a fixed column list),
+	// dropping the new columns the first AutoMigrate had just added; a second additive pass adds them back,
+	// otherwise those columns would not exist until the next start.
 	if err := AutoMigrate(ctx, db); err != nil {
 		return applied, err
 	}
 	return applied, nil
 }
 
-// Apply 校验迁移列表并执行尚未应用的条目。每个迁移与其版本号在同一事务里提交，
-// 因此迁移成功后不可能出现"执行了但版本没记"的状态。
+// Apply validates the migration list and runs the entries not yet applied. Each migration commits together with its version number in one transaction,
+// so a successful migration can never end up in the state of \"ran, but the version was not recorded\".
 func Apply(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error) {
 	seen := make(map[string]int, len(migrations))
 	for i, m := range migrations {
@@ -439,7 +439,7 @@ func Apply(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error
 	return applied, nil
 }
 
-// CurrentVersion 返回已应用的 schema 版本；还没有任何记录时返回 0。
+// CurrentVersion returns the applied schema version; 0 when there is no record at all.
 func CurrentVersion(ctx context.Context, db *gorm.DB) (int, error) {
 	var row SchemaVersion
 	err := db.WithContext(ctx).Where("id = ?", 1).Take(&row).Error
@@ -452,7 +452,7 @@ func CurrentVersion(ctx context.Context, db *gorm.DB) (int, error) {
 	return row.Version, nil
 }
 
-// setVersion 用 Save 写单行版本表，两库都会生成正确的 upsert。
+// setVersion writes the single-row version table with Save, and both databases generate the correct upsert.
 func setVersion(tx *gorm.DB, version int) error {
 	row := SchemaVersion{ID: 1, Version: version, UpdatedAt: time.Now().UTC()}
 	if err := tx.Save(&row).Error; err != nil {

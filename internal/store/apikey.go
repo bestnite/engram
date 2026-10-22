@@ -14,50 +14,50 @@ import (
 	"gorm.io/gorm"
 )
 
-// API Key 的五档 scope；本项目的权限模型就是这五档，不再往细里做。
-// 取值用英文常量：scope 字符串会写进 api_keys.scopes 并被 REST/MCP 复用，必须稳定。
+// The five API key scopes; this project's permission model is exactly these five, with no finer grain.
+// Values are English constants: scope strings are written into api_keys.scopes and reused by REST/MCP, so they must be stable.
 const (
-	ScopeRead   = "read"   // 读卡组、卡片、统计
-	ScopeWrite  = "write"  // 建/改/删卡片与卡组
-	ScopeReview = "review" // 取到期卡、提交评分
-	// ScopeKeys 管理自己的 API Key（列出/新建/撤销）；网页端自管理不受它约束。
-	// 它只覆盖“自己的”key——管理他人 key 属于 admin。
+	ScopeRead   = "read"   // read decks, cards, stats
+	ScopeWrite  = "write"  // create / update / delete cards and decks
+	ScopeReview = "review" // fetch due cards, submit ratings
+	// ScopeKeys manages your own API keys (list / create / revoke); self-management in the web UI is not bound by it.
+	// It only covers 'your own' keys — managing someone else's keys is admin.
 	ScopeKeys  = "keys"
-	ScopeAdmin = "admin" // 管理全部 API Key、系统设置、用户；蕴含其余四档
+	ScopeAdmin = "admin" // manage all API keys, system settings and users; implies the other four
 )
 
 const (
-	// APIKeyPlaintextPrefix 是明文 key 的前缀（fcard_<base64url>）。
+	// APIKeyPlaintextPrefix is the prefix of the plaintext key (fcard_<base64url>).
 	APIKeyPlaintextPrefix = "fcard_"
-	// apiKeyDisplayChars 是展示前缀在 "fcard_" 之后保留的明文字符数，如 fcard_ab12cd34。
+	// apiKeyDisplayChars is how many plaintext chars the display prefix keeps after 'fcard_', e.g. fcard_ab12cd34.
 	apiKeyDisplayChars = 8
-	// apiKeyRandomBytes 是生成明文用的随机字节数（32 字节）。
+	// apiKeyRandomBytes is the number of random bytes used to build the plaintext (32 bytes).
 	apiKeyRandomBytes = 32
-	// defaultAPIKeyScope 是新 key 不给 scopes 时的默认值（默认只给 read）。
+	// defaultAPIKeyScope is the default when a new key is created without scopes (read only by default).
 	defaultAPIKeyScope = ScopeRead
 )
 
-// apiKeyScopeOrder 是 scope 的规范顺序；归一化时按它排序，让同一组 scope 只有一种存储形式。
+// apiKeyScopeOrder is the canonical scope order; normalization sorts by it so one scope set has exactly one stored form.
 var apiKeyScopeOrder = []string{ScopeRead, ScopeWrite, ScopeReview, ScopeKeys, ScopeAdmin}
 
 var (
-	// ErrAPIKeyNameRequired 表示创建 key 时 name 为空。
+	// ErrAPIKeyNameRequired means name was empty when creating the key.
 	ErrAPIKeyNameRequired = errors.New("api key name is required")
-	// ErrAPIKeyUserRequired 表示创建 key 时未给出 user_id。
+	// ErrAPIKeyUserRequired means user_id was not supplied when creating the key.
 	ErrAPIKeyUserRequired = errors.New("api key user is required")
-	// ErrAPIKeyInvalidScope 表示 scopes 里出现了四档之外的取值。
+	// ErrAPIKeyInvalidScope means scopes contained a value outside the five tiers.
 	ErrAPIKeyInvalidScope = errors.New("invalid api key scope")
-	// ErrAPIKeyNotFound 表示 key 不存在（按明文找不到，或不属于调用者）。
+	// ErrAPIKeyNotFound means the key does not exist (no match by plaintext, or it is not the caller's).
 	ErrAPIKeyNotFound = errors.New("api key not found")
-	// ErrAPIKeyRevoked 表示 key 已被撤销（revoked_at 非空）。
+	// ErrAPIKeyRevoked means the key has been revoked (revoked_at non-null).
 	ErrAPIKeyRevoked = errors.New("api key revoked")
-	// ErrAPIKeyExpired 表示 key 已过 expires_at。
+	// ErrAPIKeyExpired means the key is past expires_at.
 	ErrAPIKeyExpired = errors.New("api key expired")
-	// ErrAPIKeyPlaintextRequired 表示校验时明文字符串为空。
+	// ErrAPIKeyPlaintextRequired means the plaintext string was empty during verification.
 	ErrAPIKeyPlaintextRequired = errors.New("api key plaintext is required")
 )
 
-// IsValidScope 判断取值是否是五档之一。
+// IsValidScope reports whether a value is one of the five.
 func IsValidScope(scope string) bool {
 	for _, s := range apiKeyScopeOrder {
 		if s == scope {
@@ -67,7 +67,7 @@ func IsValidScope(scope string) bool {
 	return false
 }
 
-// ParseScopes 把逗号分隔的 scopes 列拆成切片，忽略空白项。
+// ParseScopes splits a comma-separated scopes column into a slice, ignoring blank entries.
 func ParseScopes(raw string) []string {
 	parts := strings.Split(raw, ",")
 	out := make([]string, 0, len(parts))
@@ -79,8 +79,8 @@ func ParseScopes(raw string) []string {
 	return out
 }
 
-// NormalizeScopes 校验并归一化一组 scope：去重、按规范顺序排序、逗号连接。
-// 空输入落到默认的 read；出现五档之外的取值返回 ErrAPIKeyInvalidScope。
+// NormalizeScopes validates and normalizes a set of scopes: dedupe, sort by canonical order, join with commas.
+// Empty input falls back to the default read; a value outside the five returns ErrAPIKeyInvalidScope.
 func NormalizeScopes(scopes []string) (string, error) {
 	if len(scopes) == 0 {
 		return defaultAPIKeyScope, nil
@@ -102,9 +102,9 @@ func NormalizeScopes(scopes []string) (string, error) {
 	return strings.Join(ordered, ","), nil
 }
 
-// ScopesIncludeAdmin 判断一组 scope 是否试图授予 admin（按请求原值匹配，未归一化）。
-// 取值合法性由 NormalizeScopes 负责，这里只回答「有没有 admin」。Web 表单与 REST
-// 建 key 两条入口共用同一判定（admin scope 只能发给管理员账号）。
+// ScopesIncludeAdmin reports whether a scope set tries to grant admin (matched against the raw request values, not normalized).
+// Value validity is NormalizeScopes' job; this only answers 'is admin in there'. The web form and the REST
+// key-creation entry point share this single check (admin scope may only be granted to admin accounts).
 func ScopesIncludeAdmin(scopes []string) bool {
 	for _, s := range scopes {
 		if strings.TrimSpace(s) == ScopeAdmin {
@@ -114,9 +114,9 @@ func ScopesIncludeAdmin(scopes []string) bool {
 	return false
 }
 
-// HasScope 判断 scopes 字符串是否覆盖 want。
-// admin 等价于管理员权限，因此它蕴含其余四档（含 keys）；反向不成立，
-// 其余各档之间互不蕴含。
+// HasScope reports whether the scopes string covers want.
+// admin is equivalent to administrator rights, so it implies the other four tiers (including keys); the reverse does not hold,
+// and no other two tiers imply each other.
 func HasScope(scopes, want string) bool {
 	for _, s := range ParseScopes(scopes) {
 		if s == want || s == ScopeAdmin {
@@ -126,7 +126,7 @@ func HasScope(scopes, want string) bool {
 	return false
 }
 
-// HasScope 是 HasScope(scopes, want) 的方法形式，便于直接从 *APIKey 判断。
+// HasScope is the method form of HasScope(scopes, want), handy for checking straight from an *APIKey.
 func (k *APIKey) HasScope(want string) bool {
 	if k == nil {
 		return false
@@ -134,13 +134,13 @@ func (k *APIKey) HasScope(want string) bool {
 	return HasScope(k.Scopes, want)
 }
 
-// HashAPIKey 返回明文的 sha256 十六进制摘要；库里只存这个值。
+// HashAPIKey returns the sha256 hex digest of the plaintext; this value is all the DB stores.
 func HashAPIKey(plaintext string) string {
 	sum := sha256.Sum256([]byte(plaintext))
 	return hex.EncodeToString(sum[:])
 }
 
-// displayPrefix 截出展示用前缀（如 fcard_ab12cd34）；明文不足时原样返回。
+// displayPrefix cuts out the display prefix (e.g. fcard_ab12cd34); it returns the plaintext unchanged when too short.
 func displayPrefix(plaintext string) string {
 	keep := len(APIKeyPlaintextPrefix) + apiKeyDisplayChars
 	if len(plaintext) <= keep {
@@ -149,7 +149,7 @@ func displayPrefix(plaintext string) string {
 	return plaintext[:keep]
 }
 
-// newAPIKeyPlaintext 生成 fcard_<base64url(32 随机字节)> 的明文。
+// newAPIKeyPlaintext builds the plaintext fcard_<base64url(32 random bytes)>.
 func newAPIKeyPlaintext() (string, error) {
 	buf := make([]byte, apiKeyRandomBytes)
 	if _, err := rand.Read(buf); err != nil {
@@ -158,7 +158,7 @@ func newAPIKeyPlaintext() (string, error) {
 	return APIKeyPlaintextPrefix + base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// ValidateAPIKey 是不依赖数据库的可用性判定，便于表驱动测试直接覆盖。
+// ValidateAPIKey is a DB-independent usability check, so table-driven tests can cover it directly.
 func ValidateAPIKey(k *APIKey, now time.Time) error {
 	if k == nil {
 		return ErrAPIKeyNotFound
@@ -172,15 +172,15 @@ func ValidateAPIKey(k *APIKey, now time.Time) error {
 	return nil
 }
 
-// APIKeyStore 封装 api_keys 表；明文只在 Create 的返回值里出现一次，之后库里只剩 sha256。
+// APIKeyStore wraps the api_keys table; the plaintext shows up only once, in Create's return value, after which only the sha256 remains.
 type APIKeyStore struct {
 	db *gorm.DB
 }
 
-// NewAPIKeyStore 构造 API Key 存储。
+// NewAPIKeyStore constructs the API key store.
 func NewAPIKeyStore(db *gorm.DB) *APIKeyStore { return &APIKeyStore{db: db} }
 
-// CreateAPIKeyParams 是创建 key 的入参；Scopes 为空时落到默认 read，ExpiresAt 为 nil 表示不过期。
+// CreateAPIKeyParams is the input for creating a key; empty Scopes falls back to the default read, ExpiresAt nil means no expiry.
 type CreateAPIKeyParams struct {
 	UserID    uint64
 	Name      string
@@ -188,13 +188,13 @@ type CreateAPIKeyParams struct {
 	ExpiresAt *time.Time
 }
 
-// CreatedAPIKey 是创建结果：Plaintext 只在这里返回一次，调用方必须立即展示给用户、绝不落库。
+// CreatedAPIKey is the creation result: Plaintext is returned only here, callers must show it to the user immediately and never persist it.
 type CreatedAPIKey struct {
 	Key       *APIKey
 	Plaintext string
 }
 
-// Create 生成一个新 key 并落库。库里只写 sha256 与展示前缀，明文通过返回值交给调用方。
+// Create generates a new key and stores it. Only the sha256 and the display prefix are written; the plaintext goes back to the caller via the return value.
 func (s *APIKeyStore) Create(ctx context.Context, p CreateAPIKeyParams) (*CreatedAPIKey, error) {
 	if p.UserID == 0 {
 		return nil, ErrAPIKeyUserRequired
@@ -225,7 +225,7 @@ func (s *APIKeyStore) Create(ctx context.Context, p CreateAPIKeyParams) (*Create
 	return &CreatedAPIKey{Key: &key, Plaintext: plaintext}, nil
 }
 
-// ByID 按主键取 key；不存在时返回 ErrAPIKeyNotFound。
+// ByID fetches a key by primary key; returns ErrAPIKeyNotFound when it does not exist.
 func (s *APIKeyStore) ByID(ctx context.Context, id uint64) (*APIKey, error) {
 	var k APIKey
 	if err := s.db.WithContext(ctx).First(&k, "id = ?", id).Error; err != nil {
@@ -237,7 +237,7 @@ func (s *APIKeyStore) ByID(ctx context.Context, id uint64) (*APIKey, error) {
 	return &k, nil
 }
 
-// ListByUser 列出某用户的全部 key（含已撤销），按创建时间倒序；供个人设置页与管理面板展示。
+// ListByUser lists all of a user's keys (revoked ones included), newest first; used by the personal settings page and the admin panel.
 func (s *APIKeyStore) ListByUser(ctx context.Context, userID uint64) ([]APIKey, error) {
 	var keys []APIKey
 	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).
@@ -247,8 +247,8 @@ func (s *APIKeyStore) ListByUser(ctx context.Context, userID uint64) ([]APIKey, 
 	return keys, nil
 }
 
-// Authenticate 用明文验证一个 key：命中、未过期、未撤销时返回该行并刷新 last_used_at。
-// 已撤销 / 已过期的 key 立即返回 ErrAPIKeyRevoked / ErrAPIKeyExpired，绝不放行。
+// Authenticate verifies a key from plaintext: on a hit that is unexpired and unrevoked it returns the row and refreshes last_used_at.
+// Revoked / expired keys return ErrAPIKeyRevoked / ErrAPIKeyExpired at once and are never let through.
 func (s *APIKeyStore) Authenticate(ctx context.Context, plaintext string, now time.Time) (*APIKey, error) {
 	plaintext = strings.TrimSpace(plaintext)
 	if plaintext == "" {
@@ -264,7 +264,7 @@ func (s *APIKeyStore) Authenticate(ctx context.Context, plaintext string, now ti
 	if err := ValidateAPIKey(&k, now); err != nil {
 		return nil, err
 	}
-	// last_used_at 的刷新是尽力而为：写失败不影响本次鉴权结论，但不能掩盖它。
+	// the last_used_at refresh is best effort: a failed write does not change this auth verdict, but must not hide it either.
 	if err := s.TouchLastUsed(ctx, k.ID, now); err == nil {
 		at := now.UTC()
 		k.LastUsedAt = &at
@@ -272,7 +272,7 @@ func (s *APIKeyStore) Authenticate(ctx context.Context, plaintext string, now ti
 	return &k, nil
 }
 
-// TouchLastUsed 更新 last_used_at；用于每次成功的 key 调用。
+// TouchLastUsed updates last_used_at; used on every successful key call.
 func (s *APIKeyStore) TouchLastUsed(ctx context.Context, id uint64, at time.Time) error {
 	if at.IsZero() {
 		at = time.Now().UTC()
@@ -284,9 +284,9 @@ func (s *APIKeyStore) TouchLastUsed(ctx context.Context, id uint64, at time.Time
 	return nil
 }
 
-// Revoke 撤销一个属于 actorUserID 的 key（写 revoked_at），撤销即时生效。
-// key 不存在或不属于该用户都返回 ErrAPIKeyNotFound，避免泄露他人 key 的存在性。
-// 重复撤销是幂等的（仍命中同一行）。
+// Revoke revokes a key owned by actorUserID (writes revoked_at); revocation takes effect immediately.
+// A missing key or one owned by someone else both return ErrAPIKeyNotFound, so another user's key existence never leaks.
+// Repeated revocation is idempotent (it still hits the same row).
 func (s *APIKeyStore) Revoke(ctx context.Context, actorUserID, keyID uint64, at time.Time) error {
 	if at.IsZero() {
 		at = time.Now().UTC()
@@ -303,15 +303,15 @@ func (s *APIKeyStore) Revoke(ctx context.Context, actorUserID, keyID uint64, at 
 	return nil
 }
 
-// API Key 的展示状态。取值英文、稳定：页面文案由语言包按状态映射。
+// Display state of an API key. Values are English and stable: page copy is mapped from the state by the language pack.
 const (
 	APIKeyStateActive  = "active"
 	APIKeyStateRevoked = "revoked"
 	APIKeyStateExpired = "expired"
 )
 
-// APIKeyState 返回一把 key 的可用状态，供管理面板总览展示。
-// 判定顺序先撤销后过期：已撤销的 key 不再关心是否过期，状态必须唯一。
+// APIKeyState returns the usability state of one key, for the admin panel overview.
+// Revoked is checked before expired: a revoked key no longer cares about expiry, and the state must be unique.
 func APIKeyState(k *APIKey, now time.Time) string {
 	switch {
 	case k == nil:
@@ -325,8 +325,8 @@ func APIKeyState(k *APIKey, now time.Time) string {
 	}
 }
 
-// ListAll 分页列出全部用户的 key（含已撤销 / 已过期），按创建时间倒序，返回总行数。
-// 仅供管理面板总览使用；返回值是元信息，库里没有明文，也没有可回显的明文列。
+// ListAll pages through every user's keys (revoked / expired included), newest first, returning the total row count.
+// Only for the admin panel overview; the return value is metadata, the DB has no plaintext and no plaintext column to echo back.
 func (s *APIKeyStore) ListAll(ctx context.Context, limit, offset int) ([]APIKey, int64, error) {
 	var total int64
 	if err := s.db.WithContext(ctx).Model(&APIKey{}).Count(&total).Error; err != nil {
@@ -340,8 +340,8 @@ func (s *APIKeyStore) ListAll(ctx context.Context, limit, offset int) ([]APIKey,
 	return keys, total, nil
 }
 
-// RevokeByID 按主键撤销任意用户的 key，供管理面板总览使用（撤销他人 key 是管理员动作）。
-// 个人设置页用 Revoke（限定本人）；这里不校验归属，调用方负责鉴权。
+// RevokeByID revokes any user's key by primary key, for the admin panel overview (revoking another's key is an admin action).
+// The personal settings page uses Revoke (scoped to the owner); ownership is not checked here, the caller handles authorization.
 func (s *APIKeyStore) RevokeByID(ctx context.Context, keyID uint64, at time.Time) error {
 	if at.IsZero() {
 		at = time.Now().UTC()
@@ -357,15 +357,15 @@ func (s *APIKeyStore) RevokeByID(ctx context.Context, keyID uint64, at time.Time
 	return nil
 }
 
-// RevokeAllForUser 作废某用户的全部有效 key（口令重置时调用）。
-// 用户主动改密不走这里：key 有独立于口令的生命周期。
+// RevokeAllForUser voids all of a user's live keys (called on password reset).
+// A user changing their own password does not come through here: keys have a lifecycle independent of the password.
 func (s *APIKeyStore) RevokeAllForUser(ctx context.Context, userID uint64, at time.Time) error {
 	return s.RevokeAllForUserTx(ctx, s.db, userID, at)
 }
 
-// RevokeAllForUserTx 在调用方给定的事务里批量吊销某用户的全部有效 key。
-// 只命中 revoked_at IS NULL 的行，重复调用幂等（与 sessions 的批量作废同构）；
-// 必须与密码写入共享同一事务句柄，否则失败会半吊销。
+// RevokeAllForUserTx bulk-revokes all of a user's live keys inside the transaction the caller provides.
+// It only hits revoked_at IS NULL rows and is idempotent on repeat (isomorphic to the batch session void);
+// it must share the same transaction handle as the password write, otherwise a failure leaves a half-revoke.
 func (s *APIKeyStore) RevokeAllForUserTx(ctx context.Context, tx *gorm.DB, userID uint64, at time.Time) error {
 	if at.IsZero() {
 		at = time.Now().UTC()

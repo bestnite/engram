@@ -13,24 +13,24 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrShareLinkNotFound 表示分享链接不存在、已撤销或已过期。
+// ErrShareLinkNotFound means the share link does not exist, is revoked or is expired.
 //
-// 三种情况故意合并成同一个哨兵：撤销/过期的链接必须与“从来没存在过”返回同样的结果
-// （安全要求、验收“撤销或过期后的链接返回 404”），
-// 否则调用方会泄漏“这个 token 曾经有效”这一事实。
+// The three cases are deliberately merged into one sentinel: a revoked/expired link must return the same result as "never existed"
+// (a security requirement; the acceptance "a revoked or expired link returns 404"),
+// otherwise the caller leaks the fact that "this token was once valid".
 var ErrShareLinkNotFound = errors.New("share link not found")
 
-// ShareLinkDigest 返回明文 token 的 sha256 十六进制摘要。
+// ShareLinkDigest returns the hex sha256 digest of a plaintext token.
 //
-// 库里只存摘要：即使数据库泄漏，攻击者也拿不到可用的链接。
-// 明文只在创建时返回一次，与 API Key 的处理方式一致。
+// Only the digest is stored: even if the database leaks, an attacker gets no usable link.
+// The plaintext is returned only once, at creation, the same way API keys are handled.
 func ShareLinkDigest(plaintext string) string {
 	sum := sha256.Sum256([]byte(plaintext))
 	return hex.EncodeToString(sum[:])
 }
 
-// NewShareLinkToken 生成分享链接的明文 token：32 字节密码学随机值的 URL 安全编码。
-// 用 RawURLEncoding 避免 '='、'+'、'/' 需要转义，token 可直接进 URL 路径。
+// NewShareLinkToken generates a share link's plaintext token: the URL-safe encoding of 32 bytes of cryptographic randomness.
+// RawURLEncoding avoids needing to escape '=', '+' and '/', so the token can go straight into a URL path.
 func NewShareLinkToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
@@ -39,9 +39,9 @@ func NewShareLinkToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// ShareLinkInput 是创建分享链接的入参。
-// PasswordHash 是已编码的 argon2id 哈希（由 auth 层生成），store 只负责落库，
-// 不引入对 internal/auth 的依赖（auth 依赖 store，反向会成环）。
+// ShareLinkInput is the input for creating a share link.
+// PasswordHash is an already encoded argon2id hash (produced by the auth layer); the store only persists it
+// and does not take a dependency on internal/auth (auth depends on store, so the reverse would make a cycle).
 type ShareLinkInput struct {
 	DeckID       uint64
 	PasswordHash *string
@@ -49,19 +49,19 @@ type ShareLinkInput struct {
 	CreatedBy    uint64
 }
 
-// ShareLinkStore 封装 share_links 表：创建（可选口令与过期）、列出、单个/批量撤销、按明文解析。
+// ShareLinkStore wraps the share_links table: create (optional password and expiry), list, revoke one/all, resolve by plaintext.
 //
-// 撤销写 revoked_at 而不是删除整行：分享链接保留历史便于审计“谁什么时候撤销了什么”。
-// 解析路径统一过滤 revoked_at / expires_at，所以撤销与过期一样即时生效。
+// Revoking writes revoked_at instead of deleting the row: keeping share link history makes it auditable "who revoked what and when".
+// The resolve path filters revoked_at / expires_at uniformly, so revocation takes effect as immediately as expiry.
 type ShareLinkStore struct {
 	db *gorm.DB
 }
 
-// NewShareLinkStore 构造分享链接存储。
+// NewShareLinkStore builds the share link store.
 func NewShareLinkStore(db *gorm.DB) *ShareLinkStore { return &ShareLinkStore{db: db} }
 
-// Create 生成明文 token、落库摘要并返回明文（明文只此一次机会，调用方必须立刻展示给用户）。
-// 分享链接恒为 reader：它只用于免注册只读浏览，不接受调用方自定义角色。
+// Create generates the plaintext token, stores the digest and returns the plaintext (the one and only chance at the plaintext; the caller must show it to the user at once).
+// A share link is always reader: it only serves registration-free read-only browsing and takes no caller-supplied role.
 func (s *ShareLinkStore) Create(ctx context.Context, in ShareLinkInput) (string, *ShareLink, error) {
 	if in.DeckID == 0 || in.CreatedBy == 0 {
 		return "", nil, errors.New("share link: deck_id and created_by are required")
@@ -85,7 +85,7 @@ func (s *ShareLinkStore) Create(ctx context.Context, in ShareLinkInput) (string,
 	return plaintext, link, nil
 }
 
-// ListByDeck 按创建时间倒序列出卡组的全部分享链接（含已撤销/已过期，便于展示状态差异）。
+// ListByDeck lists all of a deck's share links newest first (revoked/expired ones included, so the state differences can be shown).
 func (s *ShareLinkStore) ListByDeck(ctx context.Context, deckID uint64) ([]ShareLink, error) {
 	var links []ShareLink
 	if err := s.db.WithContext(ctx).
@@ -95,8 +95,8 @@ func (s *ShareLinkStore) ListByDeck(ctx context.Context, deckID uint64) ([]Share
 	return links, nil
 }
 
-// Revoke 撤销单个链接（按摘要定位）。已撤销或不存在时为幂等无操作。
-// 用 token 摘要作为标识是因为表没有自增 id 列，且摘要本身不是密钥（不可反推明文）。
+// Revoke revokes one link (located by digest). It is an idempotent no-op when already revoked or absent.
+// The token digest is used as the identifier because the table has no auto-increment id column, and the digest itself is not a secret (the plaintext cannot be derived from it).
 func (s *ShareLinkStore) Revoke(ctx context.Context, deckID uint64, digest string) error {
 	if digest == "" {
 		return errors.New("share link: token is required")
@@ -109,8 +109,8 @@ func (s *ShareLinkStore) Revoke(ctx context.Context, deckID uint64, digest strin
 	return nil
 }
 
-// RevokeAll 一次撤销该卡组的全部有效链接（「可一次撤销全部」）。
-// 返回实际撤销的条数，便于审计与测试断言。
+// RevokeAll revokes all of the deck's active links at once ("revoke everything in one go").
+// It returns the number actually revoked, for auditing and test assertions.
 func (s *ShareLinkStore) RevokeAll(ctx context.Context, deckID uint64) (int64, error) {
 	now := time.Now().UTC()
 	res := s.db.WithContext(ctx).Model(&ShareLink{}).
@@ -122,9 +122,9 @@ func (s *ShareLinkStore) RevokeAll(ctx context.Context, deckID uint64) (int64, e
 	return res.RowsAffected, nil
 }
 
-// Resolve 用明文 token 找到有效链接；不存在、已撤销、已过期一律返回 ErrShareLinkNotFound。
+// Resolve finds the active link for a plaintext token; absent, revoked and expired all return ErrShareLinkNotFound.
 //
-// 撤销与过期在此统一收口：读取路径只有这一处判定，任何新增入口都不会漏掉过滤。
+// Revocation and expiry converge here: the read path has this single decision point, so no new entry point can miss the filter.
 func (s *ShareLinkStore) Resolve(ctx context.Context, plaintext string, now time.Time) (*ShareLink, error) {
 	if plaintext == "" {
 		return nil, ErrShareLinkNotFound
@@ -146,7 +146,7 @@ func (s *ShareLinkStore) Resolve(ctx context.Context, plaintext string, now time
 	return &link, nil
 }
 
-// Active 报告链接当前是否有效（未撤销且未过期）；共享管理页用它展示状态。
+// Active reports whether the link is currently valid (not revoked and not expired); the sharing admin page uses it to show the state.
 func (l ShareLink) Active(now time.Time) bool {
 	if l.RevokedAt != nil {
 		return false

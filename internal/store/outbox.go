@@ -8,60 +8,60 @@ import (
 	"gorm.io/gorm"
 )
 
-// 邮件 outbox。
+// The mail outbox.
 //
-// 投递设计：入站只写这张队列表，后台 worker 带重试与退避投递，绝不在请求路径里同步发信。
-// 发信失败不得让触发它的操作失败，因此 Enqueue 只落一行 pending，投递结果由 worker 写回。
+// Delivery design: enqueueing only writes this queue table; a background worker delivers with retries and backoff, and nothing ever sends mail synchronously on the request path.
+// A send failure must not fail the operation that triggered it, so Enqueue only writes one pending row and the worker writes the delivery outcome back.
 //
-// 状态机：pending -> sent | failed。
-//   - pending：等待投递；next_attempt_at 到了才会被 worker 取走（退避靠它实现）。
-//   - sent：投递成功，记录 sent_at。
-//   - failed：超过最大尝试次数，保留 last_error 供管理面板显示最后一次错误。
+// State machine: pending -> sent | failed.
+//   - pending: waiting for delivery; the worker only picks it up once next_attempt_at has arrived (this is where backoff lives).
+//   - sent: delivered successfully, sent_at is recorded.
+//   - failed: the maximum attempt count was exceeded; last_error is kept so the admin panel can show the final error.
 //
-// 退避与"最后一次错误可见"都落在这一行上，管理面板不需要另建报表。
+// Both the backoff and the "last error is visible" requirement live in this one row, so the admin panel needs no separate report.
 const (
-	// OutboxStatusPending 表示等待投递。
+	// OutboxStatusPending means waiting for delivery.
 	OutboxStatusPending = "pending"
-	// OutboxStatusSent 表示投递成功。
+	// OutboxStatusSent means delivered successfully.
 	OutboxStatusSent = "sent"
-	// OutboxStatusFailed 表示重试耗尽后永久失败。
+	// OutboxStatusFailed means permanently failed after the retries ran out.
 	OutboxStatusFailed = "failed"
 )
 
-// OutboxMessage 是一封待投递（或已投递）的邮件。
+// OutboxMessage is one mail awaiting delivery (or already delivered).
 //
-// 表名固定为 mail_outbox，避免复数化规则漂移。正文与自定义头都以 TEXT 存储，
-// 双库兼容（不用 jsonb/array）。HeadersJSON 是 map[string]string 的 JSON。
+// The table name is pinned to mail_outbox so the pluralization rule cannot drift. The body and custom headers are stored as TEXT,
+// compatible with both databases (no jsonb/array). HeadersJSON is the JSON of a map[string]string.
 type OutboxMessage struct {
 	ID uint64 `gorm:"primaryKey" json:"id"`
-	// To 是收件地址（只用登录邮箱）。
+	// To is the recipient address (the login email only).
 	To string `gorm:"not null" json:"to"`
-	// Type 是自由字符串邮件类型；目录由定义，这里只原样存。
+	// Type is a free-form mail type string; the catalogue is defined by , this only stores it verbatim.
 	Type string `gorm:"not null" json:"type"`
-	// Subject 是主题；用户可见文案在入站时已本地化，这里只存结果。
+	// Subject is the subject; user-visible text is already localized when enqueued, this only stores the result.
 	Subject  string `gorm:"not null" json:"subject"`
 	TextBody string `gorm:"column:text_body;not null" json:"text_body"`
 	HTMLBody string `gorm:"column:html_body;not null" json:"html_body"`
-	// HeadersJSON 是附加邮件头的 JSON 编码（例如 List-Unsubscribe）。
+	// HeadersJSON is the JSON encoding of extra mail headers (List-Unsubscribe, for instance).
 	HeadersJSON string `gorm:"column:headers_json;not null" json:"headers_json"`
-	// Status 是 pending | sent | failed；与 idx_outbox_due 组合成"到期待投递"查询。
+	// Status is pending | sent | failed; together with idx_outbox_due it serves the "due for delivery" query.
 	Status string `gorm:"not null;index:idx_outbox_due,priority:1" json:"status"`
-	// Attempts 是已尝试投递次数。
+	// Attempts is the number of delivery attempts made.
 	Attempts int `gorm:"not null;default:0" json:"attempts"`
-	// NextAttemptAt 是下次可投递时间（UTC）；退避把失败的重排到未来。
+	// NextAttemptAt is the next deliverable time (UTC); backoff reschedules a failure into the future.
 	NextAttemptAt time.Time `gorm:"not null;index:idx_outbox_due,priority:2" json:"next_attempt_at"`
-	// LastError 是最近一次投递失败的服务端错误文本；成功或未失败时为空。
+	// LastError is the server-side error text of the most recent delivery failure; empty on success or before any failure.
 	LastError *string    `gorm:"column:last_error" json:"last_error,omitempty"`
 	CreatedAt time.Time  `gorm:"not null" json:"created_at"`
 	UpdatedAt time.Time  `gorm:"not null" json:"updated_at"`
 	SentAt    *time.Time `json:"sent_at,omitempty"`
 }
 
-// TableName 固定表名，避免复数化规则在不同 GORM 版本下漂移。
+// TableName pins the table name so the pluralization rule cannot drift across GORM versions.
 func (OutboxMessage) TableName() string { return "mail_outbox" }
 
-// EnqueueOutboxMessage 写入一封待投递邮件：强制 pending / attempts=0，并设好创建与首投时间。
-// 这是唯一写入口，保证状态字段不会被调用方写歪。
+// EnqueueOutboxMessage writes one pending mail: it forces pending / attempts=0 and sets the creation and first-attempt times.
+// This is the only write entry point, so callers cannot get the status fields wrong.
 func EnqueueOutboxMessage(ctx context.Context, db *gorm.DB, row *OutboxMessage, now time.Time) error {
 	if row == nil {
 		return fmt.Errorf("store: outbox message is required")
@@ -79,8 +79,8 @@ func EnqueueOutboxMessage(ctx context.Context, db *gorm.DB, row *OutboxMessage, 
 	return nil
 }
 
-// DueOutboxMessages 返回 next_attempt_at 已到（<= now）的 pending 邮件，按到期时间升序。
-// limit <= 0 时不限制（调用方通常传一个批量上限）。
+// DueOutboxMessages returns pending mails whose next_attempt_at has arrived (<= now), ordered by due time ascending.
+// limit <= 0 means no limit (callers normally pass a batch cap).
 func DueOutboxMessages(ctx context.Context, db *gorm.DB, now time.Time, limit int) ([]OutboxMessage, error) {
 	q := db.WithContext(ctx).
 		Where("status = ? AND next_attempt_at <= ?", OutboxStatusPending, now.UTC()).
@@ -95,7 +95,7 @@ func DueOutboxMessages(ctx context.Context, db *gorm.DB, now time.Time, limit in
 	return rows, nil
 }
 
-// MarkOutboxSent 把一封邮件标记为投递成功。
+// MarkOutboxSent marks a mail as delivered successfully.
 func MarkOutboxSent(ctx context.Context, db *gorm.DB, id uint64, at time.Time) error {
 	if err := db.WithContext(ctx).Model(&OutboxMessage{}).Where("id = ?", id).Updates(map[string]any{
 		"status":     OutboxStatusSent,
@@ -107,7 +107,7 @@ func MarkOutboxSent(ctx context.Context, db *gorm.DB, id uint64, at time.Time) e
 	return nil
 }
 
-// MarkOutboxRetry 记录一次失败并把邮件重排到 nextAt（退避）；状态保持 pending。
+// MarkOutboxRetry records one failure and reschedules the mail to nextAt (backoff); the status stays pending.
 func MarkOutboxRetry(ctx context.Context, db *gorm.DB, id uint64, attempts int, nextAt time.Time, lastErr string, at time.Time) error {
 	if err := db.WithContext(ctx).Model(&OutboxMessage{}).Where("id = ?", id).Updates(map[string]any{
 		"status":          OutboxStatusPending,
@@ -121,7 +121,7 @@ func MarkOutboxRetry(ctx context.Context, db *gorm.DB, id uint64, attempts int, 
 	return nil
 }
 
-// MarkOutboxFailed 在重试耗尽后把邮件标记为永久失败，保留最后一次错误。
+// MarkOutboxFailed marks a mail as permanently failed once the retries are exhausted, keeping the last error.
 func MarkOutboxFailed(ctx context.Context, db *gorm.DB, id uint64, attempts int, lastErr string, at time.Time) error {
 	if err := db.WithContext(ctx).Model(&OutboxMessage{}).Where("id = ?", id).Updates(map[string]any{
 		"status":     OutboxStatusFailed,
@@ -134,22 +134,22 @@ func MarkOutboxFailed(ctx context.Context, db *gorm.DB, id uint64, attempts int,
 	return nil
 }
 
-// OutboxSummary 是管理面板要读的 outbox 读数：各状态计数与最近一次错误。
-// 它只做只读聚合，不改任何行。
+// OutboxSummary is the outbox reading the admin panel needs: counts per status plus the most recent error.
+// It performs read-only aggregation and changes no row.
 type OutboxSummary struct {
 	Pending int64
 	Sent    int64
 	Failed  int64
-	// LastError 是最近一次失败的服务端错误文本；没有失败时为空。
+	// LastError is the server-side error text of the most recent failure; empty when nothing has failed.
 	LastError string
-	// LastErrorAt 是上述错误的记录时间。
+	// LastErrorAt is when the error above was recorded.
 	LastErrorAt *time.Time
-	// LastAttempts 是产生上述错误时该邮件的尝试次数。
+	// LastAttempts is that mail's attempt count when the error above was produced.
 	LastAttempts int
 }
 
-// OutboxSummaryOf 汇总 outbox：逐状态计数，并取最近一条带错误的行作为"最后一次错误"。
-// 错误为空的行不参与 LastError 的选取（否则成功投递会把上一次错误覆盖成空）。
+// OutboxSummaryOf summarizes the outbox: count per status and the most recent row carrying an error as the "last error".
+// Rows with an empty error do not take part in choosing LastError (otherwise a successful delivery would overwrite the previous error with empty).
 func OutboxSummaryOf(ctx context.Context, db *gorm.DB) (OutboxSummary, error) {
 	var out OutboxSummary
 	for _, tc := range []struct {

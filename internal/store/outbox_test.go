@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// openOutboxTestDB 开一个只迁移 outbox 表的临时 SQLite 库，聚焦数据访问本身。
+// openOutboxTestDB opens a temporary SQLite database that only migrates the outbox table, focusing on data access itself.
 func openOutboxTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "outbox.db")), &gorm.Config{})
@@ -23,12 +23,12 @@ func openOutboxTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestOutboxEnqueueForcesPendingState 证明写入口强制 pending/attempts=0，调用方写不歪状态。
+// TestOutboxEnqueueForcesPendingState proves the write entry point forces pending/attempts=0, so callers cannot get the status wrong.
 func TestOutboxEnqueueForcesPendingState(t *testing.T) {
 	db := openOutboxTestDB(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	// 故意塞入脏的状态字段，写入口必须覆盖它们。
+	// Dirty status fields are stuffed in on purpose; the write entry point must overwrite them.
 	row := &OutboxMessage{
 		To: "a@example.com", Type: "invite", Subject: "hi", HeadersJSON: "{}",
 		Status: OutboxStatusSent, Attempts: 99,
@@ -44,13 +44,13 @@ func TestOutboxEnqueueForcesPendingState(t *testing.T) {
 	}
 }
 
-// TestDueOutboxMessagesHonorsNextAttemptAt 证明退避：未到时间的行不会被取走。
+// TestDueOutboxMessagesHonorsNextAttemptAt proves the backoff: rows that are not yet due are not picked up.
 func TestDueOutboxMessagesHonorsNextAttemptAt(t *testing.T) {
 	db := openOutboxTestDB(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	// 一封到期、一封未来。
+	// One due, one in the future.
 	due := &OutboxMessage{To: "due@example.com", Type: "invite", Subject: "due", HeadersJSON: "{}"}
 	if err := EnqueueOutboxMessage(ctx, db, due, now); err != nil {
 		t.Fatalf("enqueue due: %v", err)
@@ -72,8 +72,8 @@ func TestDueOutboxMessagesHonorsNextAttemptAt(t *testing.T) {
 	}
 }
 
-// TestOutboxSummaryReportsCountsAndLastError 覆盖管理面板要读的聚合：
-// 各状态计数 + 最近一次错误文本与尝试次数。
+// TestOutboxSummaryReportsCountsAndLastError covers the aggregation the admin panel reads:
+// per-status counts plus the most recent error text and attempt count.
 func TestOutboxSummaryReportsCountsAndLastError(t *testing.T) {
 	db := openOutboxTestDB(t)
 	ctx := context.Background()
@@ -113,12 +113,12 @@ func TestOutboxSummaryReportsCountsAndLastError(t *testing.T) {
 	}
 }
 
-// TestOutboxTableNameIsStable 固定表名，避免复数化规则漂移（AutoMigrate 依赖它）。
+// TestOutboxTableNameIsStable pins the table name so the pluralization rule cannot drift (AutoMigrate relies on it).
 func TestOutboxTableNameIsStable(t *testing.T) {
 	if got := (OutboxMessage{}).TableName(); got != "mail_outbox" {
 		t.Errorf("OutboxMessage.TableName() = %q, want mail_outbox", got)
 	}
-	// 必须登记进 AllModels，否则 AutoMigrate 会静默缺表。
+	// It must be registered in AllModels, otherwise AutoMigrate silently misses the table.
 	found := false
 	for _, m := range AllModels() {
 		if _, ok := m.(*OutboxMessage); ok {

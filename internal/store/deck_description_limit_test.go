@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// 待办第 5 项：卡组描述与卡组名共用同一套界限（≤2000 字符、按 rune 计、拒 C0 控制字符、
-// 拒非法 UTF-8；空描述允许）。修复前描述完全不校验，网页能建出「自己的导入器会拒」的卡组。
-// 这里在真 SQLite（以及门控的 PG）上验证 store 层的创建与改名两条写入路径。
+// TODO item 5: the deck description shares the same bounds as the deck name (≤2000 characters, counted by rune, C0 control characters
+// rejected, invalid UTF-8 rejected; an empty description is allowed). Before the fix the description was not validated at all, so the web UI could create a deck 'its own importer would reject'.
+// Here both store-layer write paths, creation and rename, are exercised on real SQLite (and on gated PG).
 
-// assertDescriptionRejected 断言 store 层拒绝了该描述写入。
+// assertDescriptionRejected asserts that the store layer rejected writing that description.
 func assertDescriptionRejected(t *testing.T, err error) {
 	t.Helper()
 	if err == nil {
@@ -73,7 +73,7 @@ func TestDeckDescriptionLimitCreateAndRename(t *testing.T) {
 				if err := decks.Update(ctx, owner, d.ID, nil, &d.Description); !errors.Is(err, ErrDeckDescriptionInvalid) {
 					t.Fatalf("Update(description 2001) error = %v, want ErrDeckDescriptionInvalid", err)
 				}
-				// 被拒的改名不得落库：库里仍是上一次合法的 2000 字符描述。
+				// a rejected rename must not reach the DB: it still holds the last valid 2000-character description.
 				got, err := decks.ByID(ctx, d.ID)
 				if err != nil {
 					t.Fatalf("ByID() error = %v", err)
@@ -84,7 +84,7 @@ func TestDeckDescriptionLimitCreateAndRename(t *testing.T) {
 			})
 
 			t.Run("2000 hanzi counted by character", func(t *testing.T) {
-				// 2000 个汉字 = 6000 字节：按 rune 计应通过，按字节会误拒。
+				// 2000 Han characters = 6000 bytes: counted by rune it must pass, counted by bytes it would be wrongly rejected.
 				hanzi := strings.Repeat("汉", 2000)
 				if len(hanzi) <= 2000 {
 					t.Fatalf("fixture is not multi-byte: len = %d", len(hanzi))
@@ -117,9 +117,9 @@ func TestDeckDescriptionLimitCreateAndRename(t *testing.T) {
 	}
 }
 
-// TestDeckDescriptionLimitExportImportRoundTrip 断言共享界限的对称性：一个 2000 字符描述的
-// 卡组能原样导出成卡组包，再被导入端（另一个新账号）接受 —— 修复前网页能建出 2000+ 描述的
-// 卡组，导入器却会拒，往返不对称。
+// TestDeckDescriptionLimitExportImportRoundTrip asserts the symmetry of the shared bounds: a deck with a 2000-character
+// description can be exported as a deck package as-is and then accepted by the import side (another new account) — before the fix the web UI could create
+// decks with 2000+ descriptions that the importer would reject, so the round trip was asymmetric.
 func TestDeckDescriptionLimitExportImportRoundTrip(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

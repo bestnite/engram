@@ -9,14 +9,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// newInviteTestDB 建一个已迁移的全新 SQLite 库文件；邀请测试只需 invites 表，但迁移全模型更贴近生产。
+// newInviteTestDB creates a freshly migrated SQLite file; invite tests only need the invites table, but migrating all models is closer to production.
 func newInviteTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	dbs := testDatabases(t)
 	return dbs["sqlite"]
 }
 
-// TestInviteCreateAndList 断言创建后能取回，且 token 自动生成、角色默认 user。
+// TestInviteCreateAndList asserts that a created invite can be fetched back, with the token auto-generated and the role defaulting to user.
 func TestInviteCreateAndList(t *testing.T) {
 	db := newInviteTestDB(t)
 	if err := db.AutoMigrate(AllModels()...); err != nil {
@@ -55,7 +55,7 @@ func TestInviteCreateAndList(t *testing.T) {
 	}
 }
 
-// TestUsableInvite 是纯判定矩阵：已用、已过期、邮箱不符分别被拒。
+// TestUsableInvite is a pure decision matrix: used, expired and email-mismatch are each rejected.
 func TestUsableInvite(t *testing.T) {
 	now := time.Now().UTC()
 	past := now.Add(-time.Hour)
@@ -92,7 +92,7 @@ func TestUsableInvite(t *testing.T) {
 	}
 }
 
-// TestInviteMarkUsedIsOneShot 断言一次邀请只能被消费一次（并发语义的强制点）。
+// TestInviteMarkUsedIsOneShot asserts that an invite can be consumed only once (the enforcement point for the concurrency semantics).
 func TestInviteMarkUsedIsOneShot(t *testing.T) {
 	db := newInviteTestDB(t)
 	if err := db.AutoMigrate(AllModels()...); err != nil {
@@ -112,7 +112,7 @@ func TestInviteMarkUsedIsOneShot(t *testing.T) {
 	if !claimed {
 		t.Fatal("first MarkUsed() claimed = false, want true")
 	}
-	// 第二次必须失败，且 token 不再可用。
+	// the second attempt must fail, and the token is no longer usable.
 	again, err := invites.MarkUsed(ctx, inv.Token, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("second MarkUsed() error = %v", err)
@@ -129,7 +129,7 @@ func TestInviteMarkUsedIsOneShot(t *testing.T) {
 	}
 }
 
-// TestInviteRevokeDeletesToken 断言撤销后 token 与“不存在”同路被拒。
+// TestInviteRevokeDeletesToken asserts that a revoked token is refused the same way as 'does not exist'.
 func TestInviteRevokeDeletesToken(t *testing.T) {
 	db := newInviteTestDB(t)
 	if err := db.AutoMigrate(AllModels()...); err != nil {
@@ -148,13 +148,13 @@ func TestInviteRevokeDeletesToken(t *testing.T) {
 	if _, err := invites.ByToken(ctx, inv.Token); !errors.Is(err, ErrInviteNotFound) {
 		t.Errorf("ByToken(revoked) error = %v, want ErrInviteNotFound", err)
 	}
-	// 再次撤销已不存在的行同样报 not found，而不是静默成功。
+	// revoking an already missing row likewise reports not found instead of silently succeeding.
 	if err := invites.Revoke(ctx, inv.ID); !errors.Is(err, ErrInviteNotFound) {
 		t.Errorf("Revoke(again) error = %v, want ErrInviteNotFound", err)
 	}
 }
 
-// TestInviteReleaseRestoresToken 断言建号失败后的回滚让邀请恢复可用。
+// TestInviteReleaseRestoresToken asserts that the rollback after a failed account creation makes the invite usable again.
 func TestInviteReleaseRestoresToken(t *testing.T) {
 	db := newInviteTestDB(t)
 	if err := db.AutoMigrate(AllModels()...); err != nil {

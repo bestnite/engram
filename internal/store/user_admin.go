@@ -7,18 +7,18 @@ import (
 	"gorm.io/gorm"
 )
 
-// 管理面板的用户管理所需的用户存储扩展。
+// The user-store extension that user management in the admin panel needs.
 //
-// 放在独立文件而不是塞进 user.go / models.go：这两处是其它里程碑的单写者热点，
-// 并行工作时尽量不动它们。这里只新增方法，不改动既有行为。
+// It lives in a separate file rather than being stuffed into user.go / models.go: those two are single-writer hotspots for other milestones
+// and should not be touched while work is running in parallel. Only new methods are added here; no existing behaviour changes.
 
-// AdminListUsersPageSize 是管理面板用户列表的每页条数；同时作为一次渲染的上限，
-// 避免一次把全库用户全画出来（「分页或上限保护」）。
+// AdminListUsersPageSize is the per-page row count of the admin panel's user list; it doubles as the cap for one render,
+// so the whole user table is never drawn in one go ("pagination or a cap").
 const AdminListUsersPageSize = 50
 
-// ListForAdmin 按搜索词分页列出用户。query 为空表示不筛选；命中用户名、邮箱或显示名。
-// 搜索一律 LOWER(...) 比较：SQLite 的 LIKE 对 ASCII 默认不区分大小写，而 PostgreSQL 区分，
-// 统一转小写才能让两库行为一致（双库约定）。
+// ListForAdmin pages through users by search term. An empty query means no filter; it matches username, email or display name.
+// Searches always compare LOWER(...): SQLite's LIKE is case-insensitive for ASCII by default while PostgreSQL's is not,
+// and only lowering both sides makes the two databases behave the same (the two-database convention).
 func (s *UserStore) ListForAdmin(ctx context.Context, query string, page, size int) ([]User, int64, error) {
 	if size <= 0 || size > AdminListUsersPageSize {
 		size = AdminListUsersPageSize
@@ -43,11 +43,11 @@ func (s *UserStore) ListForAdmin(ctx context.Context, query string, page, size i
 	return users, total, nil
 }
 
-// ListAdmins 返回所有仍可登录的管理员账号（role = admin 且 status = active），按 id 升序。
+// ListAdmins returns every admin account that can still sign in (role = admin and status = active), ordered by id ascending.
 //
-// D 类管理员通知据此解析收件地址规定只用登录邮箱、不设单独收件
-// 邮箱，所以收件人就是这些账号的 Email。只取 active 的管理员：被禁用的账号收不到信也不该
-// 被当成投递目标。
+// The (category D) admin notification resolves its recipients from this: the rule is to use the login email only, with no separate recipient
+// mailbox, so the recipients are simply these accounts' Email. Only active admins are taken: a disabled account cannot receive mail and should not
+// be treated as a delivery target.
 func (s *UserStore) ListAdmins(ctx context.Context) ([]User, error) {
 	var users []User
 	if err := s.db.WithContext(ctx).
@@ -58,7 +58,7 @@ func (s *UserStore) ListAdmins(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
-// SetRole 只改角色一列，避免整行覆盖带来的并发丢写。
+// SetRole changes only the role column, so a whole-row overwrite cannot lose a concurrent write.
 func (s *UserStore) SetRole(ctx context.Context, id uint64, role string) error {
 	if err := s.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).
 		Update("role", role).Error; err != nil {
@@ -67,21 +67,21 @@ func (s *UserStore) SetRole(ctx context.Context, id uint64, role string) error {
 	return nil
 }
 
-// UserUsage 是一个用户的用量计数（卡组数、卡片数、复习次数），管理面板列表里展示。
+// UserUsage is one user's usage counts (decks, cards, reviews), shown in the admin panel list.
 type UserUsage struct {
 	Decks   int64
 	Cards   int64
 	Reviews int64
 }
 
-// UsageCounts 统计某用户拥有的卡组数、这些卡组下的有效卡片数，以及其复习次数。
+// UsageCounts counts the decks a user owns, the live cards in those decks, and their review count.
 func (s *UserStore) UsageCounts(ctx context.Context, userID uint64) (UserUsage, error) {
 	var u UserUsage
 	db := s.db.WithContext(ctx)
 	if err := db.Model(&Deck{}).Where("owner_user_id = ?", userID).Count(&u.Decks).Error; err != nil {
 		return u, fmt.Errorf("count decks for user: %w", err)
 	}
-	// 只计未软删除的 note / card，与复习页的可见集合口径一致。
+	// Only non-soft-deleted notes / cards count, matching the visible set of the review page.
 	if err := db.Raw(`SELECT COUNT(*) FROM cards c
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 		JOIN decks d ON d.id = n.deck_id
@@ -94,28 +94,28 @@ func (s *UserStore) UsageCounts(ctx context.Context, userID uint64) (UserUsage, 
 	return u, nil
 }
 
-// DeleteUser 彻底删除一个用户及其拥有的数据。
+// DeleteUser deletes a user and the data they own outright.
 //
-// 用户表被大量表引用（会话、身份、key、进度、复习、授权、卡组、预设……），
-// 单条 DELETE 在 Postgres 上会被外键拦下，在 SQLite 上则留下孤儿行，因此按依赖顺序
-// 在一个事务里显式清理。审计行刻意保留：删除动作本身要留痕（谁删了谁）。
+// The users table is referenced by a great many tables (sessions, identities, keys, progress, reviews, grants, decks, presets, ...),
+// so a single DELETE would be stopped by a foreign key on Postgres and would leave orphan rows on SQLite; hence the explicit cleanup
+// in dependency order inside one transaction. Audit rows are deliberately kept: the deletion itself must leave a trace (who deleted whom).
 func (s *UserStore) DeleteUser(ctx context.Context, userID uint64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return DeleteUserTx(ctx, tx, userID)
 	})
 }
 
-// userCleanup 是删除用户时的一条语句；args 个数与语句里的占位符一致，取值都是被删用户的 id。
+// userCleanup is one statement run when deleting a user; args is the number of placeholders in the statement, all bound to the deleted user's id.
 type userCleanup struct {
 	stmt string
 	args int
 }
 
-// userCleanups 列出删除用户时要处理的全部行，分三类：
-//   - 只属于该用户的行：删除；
-//   - 别人的内容里记着「由该用户创建 / 修改」的可空列：置空，内容本身留给它的主人；
-//   - 媒体：**不删**媒体行。媒体按内容去重，同一份字节可能被别人的 note 引用，删行会让别人的
-//     图片失效、文件变成没有元数据的孤儿。只删该用户的「上传者」记录，没有引用的媒体由回收任务处理。
+// userCleanups lists every row to handle when deleting a user, in three groups:
+//   - rows that belong only to this user: delete;
+//   - nullable columns in someone else's content recording "created / modified by this user": null them out, leaving the content to its owner;
+//   - media: media rows are **not** deleted. Media is de-duplicated by content, the same bytes may be referenced by someone else's note, and deleting the row would break their
+//     image and turn the file into an orphan without metadata. Only the user's "uploader" records are deleted; unreferenced media is handled by the reclamation job.
 var userCleanups = []userCleanup{
 	{"DELETE FROM sessions WHERE user_id = ?", 1},
 	{"DELETE FROM identities WHERE user_id = ?", 1},
@@ -145,10 +145,10 @@ var userCleanups = []userCleanup{
 	{"UPDATE mail_templates SET updated_by = NULL WHERE updated_by = ?", 1},
 }
 
-// DeleteUserTx 在调用方给定的事务里执行 DeleteUser 的清理（管理员闸门在同一事务里先做判定）。
+// DeleteUserTx runs DeleteUser's cleanup inside the transaction given by the caller (the admin gate is decided first, in the same transaction).
 //
-// 该用户名下的卡组走与 DeckStore.Delete 同一份级联（deleteDeckTx）：别人在这些卡组上的授权、
-// 进度、待接受的邀请与媒体映射都一并清掉，而不是只删卡片与笔记、留下悬空的行。
+// The decks owned by the user go through the same cascade as DeckStore.Delete (deleteDeckTx): other people's grants on those decks,
+// progress, pending invites and media mappings are all cleared with them, rather than deleting only cards and notes and leaving dangling rows.
 func DeleteUserTx(ctx context.Context, tx *gorm.DB, userID uint64) error {
 	tx = tx.WithContext(ctx)
 	var deckIDs []uint64
@@ -169,7 +169,7 @@ func DeleteUserTx(ctx context.Context, tx *gorm.DB, userID uint64) error {
 			return fmt.Errorf("delete user data: %w", err)
 		}
 	}
-	// 预设在卡组之后删（卡组引用预设），用户本体最后删。
+	// Presets are deleted after decks (decks reference presets), and the user row itself last.
 	for _, stmt := range []string{"DELETE FROM presets WHERE owner_user_id = ?", "DELETE FROM users WHERE id = ?"} {
 		if err := tx.Exec(stmt, userID).Error; err != nil {
 			return fmt.Errorf("delete user data: %w", err)

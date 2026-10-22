@@ -21,8 +21,8 @@ func newSQLite(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestApplyRefusesUnnamedMigration 覆盖反面用例：
-// 没有注册名字的破坏性变更必须被 schema sync 拒绝。
+// TestApplyRefusesUnnamedMigration covers the counter-case:
+// a destructive change registered without a name must be rejected by schema sync.
 func TestApplyRefusesUnnamedMigration(t *testing.T) {
 	db := newSQLite(t)
 	ran := false
@@ -50,7 +50,7 @@ func TestApplyRefusesDuplicateMigrationNames(t *testing.T) {
 	}
 }
 
-// TestApplyRunsRegisteredMigrationExactlyOnce 覆盖正面用例：已注册的迁移恰好执行一次。
+// TestApplyRunsRegisteredMigrationExactlyOnce covers the positive case: a registered migration runs exactly once.
 func TestApplyRunsRegisteredMigrationExactlyOnce(t *testing.T) {
 	db := newSQLite(t)
 	ctx := context.Background()
@@ -77,7 +77,7 @@ func TestApplyRunsRegisteredMigrationExactlyOnce(t *testing.T) {
 		t.Errorf("CurrentVersion() = %d, want 1", version)
 	}
 
-	// 第二次执行不得重跑：版本已到位。
+	// the second run must not re-run it: the version is already in place.
 	applied, err = Apply(ctx, db, migrations)
 	if err != nil {
 		t.Fatalf("second Apply() error = %v", err)
@@ -107,16 +107,16 @@ func TestSyncAppliesMigrationsAfterAutoMigrate(t *testing.T) {
 	}
 }
 
-// TestBuiltinMediaPrimaryKeyMigrationPreservesRows 覆盖破坏性迁移：media 主键从自增 id
-// 换成内容 sha256。先在临时库里造**旧 schema**（id 主键 + sha256 唯一索引）并写入一行，
-// 跑 Sync 后断言行数保留、id 列消失、sha256 成为主键（重复 sha 被拒），且新代码按 sha 能读到它。
+// TestBuiltinMediaPrimaryKeyMigrationPreservesRows covers a destructive migration: the media primary key moves from an auto-increment id
+// to the content sha256. First build the **old schema** (id primary key + sha256 unique index) in a temp DB and write one row;
+// after Sync, assert the row count is preserved, the id column is gone, sha256 is the primary key (duplicate sha rejected), and the new code can read it by sha.
 func TestBuiltinMediaPrimaryKeyMigrationPreservesRows(t *testing.T) {
 	ctx := context.Background()
 	db := newSQLite(t)
 
 	const oldSha = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-	// 旧 schema 与 GORM 为旧模型（id 自增主键 + sha256 not null uniqueIndex）生成的 DDL 一致：
-	// 单行、带反引号、created_at 为 datetime。这正是生产库里的形状。
+	// the old schema matches the DDL GORM generates for the old model (id auto-increment primary key + sha256 not null uniqueIndex):
+	// a single line, back-quoted, created_at as datetime. This is exactly the shape in production.
 	oldSchema := []string{
 		"CREATE TABLE `media` (`id` integer PRIMARY KEY AUTOINCREMENT,`sha256` text NOT NULL,`rel_path` text NOT NULL,`mime` text NOT NULL,`bytes` integer NOT NULL,`width` integer,`height` integer,`created_by` integer,`created_at` datetime NOT NULL)",
 		"CREATE UNIQUE INDEX `idx_media_sha256` ON `media`(`sha256`)",
@@ -139,12 +139,12 @@ func TestBuiltinMediaPrimaryKeyMigrationPreservesRows(t *testing.T) {
 	if applied == 0 {
 		t.Fatal("Sync() applied no migration, want the media primary-key migration")
 	}
-	// 重建表按固定列清单进行，会丢掉第一次 AutoMigrate 加的新列；Sync 必须在迁移后补回来。
+	// The table rebuild goes by a fixed column list and drops the new columns the first AutoMigrate added; Sync must add them back after the migration.
 	if !db.Migrator().HasColumn("media", "orphaned_at") {
 		t.Error("media lost the orphaned_at column after the rebuild migration")
 	}
 
-	// 行数保留，id 列消失，sha256 列仍在。
+	// the row count is preserved, the id column is gone, the sha256 column is still there.
 	var rows int64
 	if err := db.Table("media").Count(&rows).Error; err != nil {
 		t.Fatalf("count media rows: %v", err)
@@ -159,7 +159,7 @@ func TestBuiltinMediaPrimaryKeyMigrationPreservesRows(t *testing.T) {
 		t.Error("media lost its sha256 column")
 	}
 
-	// 按 sha 读回该行，确认数据本身没有丢。
+	// read the row back by sha to confirm the data itself was not lost.
 	var got Media
 	if err := db.First(&got, "sha256 = ?", oldSha).Error; err != nil {
 		t.Fatalf("read migrated media by sha: %v", err)
@@ -168,7 +168,7 @@ func TestBuiltinMediaPrimaryKeyMigrationPreservesRows(t *testing.T) {
 		t.Fatalf("migrated row differs: %+v", got)
 	}
 
-	// sha256 是新主键：同 sha 再插一行必须被拒；不同 sha 可正常插入（不需要 id）。
+	// sha256 is the new primary key: inserting another row with the same sha must be rejected; a different sha inserts fine (no id needed).
 	dup := Media{Sha256: oldSha, RelPath: "cc/other.png", Mime: "image/png", Bytes: 1}
 	if err := db.Create(&dup).Error; err == nil {
 		t.Error("duplicate sha256 was accepted after the migration, want primary-key violation")
@@ -178,7 +178,7 @@ func TestBuiltinMediaPrimaryKeyMigrationPreservesRows(t *testing.T) {
 		t.Fatalf("insert a new sha after the migration: %v", err)
 	}
 
-	// 迁移幂等：第二次 Sync 不再是「本次执行」，也不会因为表已是新形状而报错。
+	// migration idempotence: the second Sync is no longer 'run this time', and does not error because the table is already in the new shape.
 	applied, err = Sync(ctx, db, BuiltinMigrations)
 	if err != nil {
 		t.Fatalf("second Sync(BuiltinMigrations) error = %v", err)
@@ -188,8 +188,8 @@ func TestBuiltinMediaPrimaryKeyMigrationPreservesRows(t *testing.T) {
 	}
 }
 
-// legacyDeck 只用于迁移测试：它是 decks 还带 visibility 列时的形状。
-// 业务模型已删除该列，因此不能拿 store.Deck 造出旧表。
+// legacyDeck is used only by migration tests: it is the shape decks had while it still carried a visibility column.
+// The domain model has dropped that column, so store.Deck cannot be used to build the old table.
 type legacyDeck struct {
 	ID            uint64    `gorm:"primaryKey"`
 	OwnerUserID   uint64    `gorm:"not null;index"`
@@ -204,9 +204,9 @@ type legacyDeck struct {
 
 func (legacyDeck) TableName() string { return "decks" }
 
-// TestBuiltinDropDeckVisibilityMigration 覆盖破坏性迁移：decks.visibility 被删除。
-// 先在临时库里造**旧 schema**（带 visibility 列）并写入一行自有、一行「公开」卡组；
-// 跑 Sync 后断言列消失、两行都还在，且旧 public 行不再对别的用户可见——这正是删列的目的。
+// TestBuiltinDropDeckVisibilityMigration covers a destructive migration: decks.visibility is dropped.
+// First build the **old schema** (with the visibility column) in a temp DB and write one owned deck and one 'public' deck;
+// after Sync, assert the column is gone, both rows are still there, and the old public row is no longer visible to other users — which is exactly the purpose of dropping the column.
 func TestBuiltinDropDeckVisibilityMigration(t *testing.T) {
 	ctx := context.Background()
 	db := newSQLite(t)
@@ -237,7 +237,7 @@ func TestBuiltinDropDeckVisibilityMigration(t *testing.T) {
 		t.Error("decks still has a visibility column after the migration")
 	}
 
-	// 两行都保留（删列不改数据），公开卡组的名字也没被动过。
+	// both rows are kept (dropping a column does not change data), and the public deck's name was not touched either.
 	var decks []Deck
 	if err := db.Order("owner_user_id ASC").Find(&decks).Error; err != nil {
 		t.Fatalf("read decks after migration: %v", err)
@@ -246,7 +246,7 @@ func TestBuiltinDropDeckVisibilityMigration(t *testing.T) {
 		t.Fatalf("decks after migration = %+v, want the two seeded rows intact", decks)
 	}
 
-	// 关键行为：原先靠 public 对所有人可见的那张卡组，现在只属于它的属主。
+	// key behavior: the deck that used to be visible to everyone via public now belongs only to its owner.
 	visible, err := NewDeckStore(db).ListVisible(ctx, 1)
 	if err != nil {
 		t.Fatalf("ListVisible() error = %v", err)
@@ -255,7 +255,7 @@ func TestBuiltinDropDeckVisibilityMigration(t *testing.T) {
 		t.Fatalf("ListVisible(1) = %+v, want only the caller's own deck", visible)
 	}
 
-	// 幂等：第二次 Sync 不再是「本次执行」，也不会因为列已删除而报错。
+	// idempotent: the second Sync is no longer 'run this time', and does not error because the column is already dropped.
 	applied, err = Sync(ctx, db, BuiltinMigrations)
 	if err != nil {
 		t.Fatalf("second Sync(BuiltinMigrations) error = %v", err)
@@ -265,9 +265,9 @@ func TestBuiltinDropDeckVisibilityMigration(t *testing.T) {
 	}
 }
 
-// TestBuiltinBackfillMediaNotesMigration 模拟映射表上线前的数据：note 字段引用了媒体，
-// media_notes 里却没有行（含一条软删除的 note）。迁移后两条 note 的引用都进了映射，
-// 已有的映射行不重复、不报错；再跑一次不再执行。
+// TestBuiltinBackfillMediaNotesMigration simulates data from before the mapping table existed: note fields reference media,
+// but media_notes has no rows (including one soft-deleted note). After the migration both notes' references are in the mapping,
+// existing mapping rows are neither duplicated nor errored on, and another run does not execute again.
 func TestBuiltinBackfillMediaNotesMigration(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -275,7 +275,7 @@ func TestBuiltinBackfillMediaNotesMigration(t *testing.T) {
 			if err := AutoMigrate(ctx, db); err != nil {
 				t.Fatalf("AutoMigrate() error = %v", err)
 			}
-			// 前四个迁移视为已执行，只验证本迁移。
+			// treat the first four migrations as applied, verifying only this one.
 			if err := setVersion(db, 4); err != nil {
 				t.Fatalf("set version: %v", err)
 			}
@@ -298,12 +298,12 @@ func TestBuiltinBackfillMediaNotesMigration(t *testing.T) {
 			if err := db.Delete(&gone).Error; err != nil {
 				t.Fatalf("soft-delete note: %v", err)
 			}
-			// 一条已存在的映射行：回填不能因唯一索引冲突而失败。
+			// one existing mapping row: the backfill must not fail on a unique index conflict.
 			if err := db.Create(&MediaNote{MediaSha: shaA, NoteID: live.ID, CreatedAt: now}).Error; err != nil {
 				t.Fatalf("seed existing mapping: %v", err)
 			}
 
-			// 只跑到本迁移（第 5 个）：之后追加的迁移不属于本用例。
+			// run only up to this migration (the 5th): migrations appended later are not part of this case.
 			upTo := BuiltinMigrations[:5]
 			applied, err := Apply(ctx, db, upTo)
 			if err != nil {
@@ -338,8 +338,8 @@ func TestBuiltinBackfillMediaNotesMigration(t *testing.T) {
 	}
 }
 
-// TestBuiltinBackfillMemberSettingsMigration 模拟成员设置上线前的共享卡组：授权行存在、成员设置行
-// 不存在。迁移后成员得到自己的默认预设（不是属主的）与卡组当前的上限；已有的行不被覆盖。
+// TestBuiltinBackfillMemberSettingsMigration simulates shared decks from before member settings existed: grant rows exist, member settings rows
+// do not. After the migration members get their own default preset (not the owner's) and the deck's current caps; existing rows are not overwritten.
 func TestBuiltinBackfillMemberSettingsMigration(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -358,7 +358,7 @@ func TestBuiltinBackfillMemberSettingsMigration(t *testing.T) {
 				t.Fatalf("set caps: %v", err)
 			}
 			now := time.Now().UTC()
-			// 直接写授权行，绕过 GrantStore（它会顺手建成员设置）——模拟旧数据。
+			// write the grant row directly, bypassing GrantStore (which would create member settings on the side) — simulating old data.
 			for _, u := range []uint64{member, kept} {
 				if err := db.Create(&DeckGrant{DeckID: deckID, UserID: u, Role: RoleReader, CreatedAt: now}).Error; err != nil {
 					t.Fatalf("seed grant: %v", err)
@@ -399,9 +399,9 @@ func TestBuiltinBackfillMemberSettingsMigration(t *testing.T) {
 	}
 }
 
-// TestBuiltinPerUserSuspensionMigration 模拟卡片级暂停的旧库：cards 上有 suspended_at。
-// 迁移后暂停只落在卡组属主的状态行上（属主没有状态行的卡建一行新卡状态），共享成员不继承，
-// 原列被删除；已有进度不变。
+// TestBuiltinPerUserSuspensionMigration simulates an old DB with card-level suspension: cards has suspended_at.
+// After the migration suspension lands only on the deck owner's state row (a card the owner has no state row for gets a new card state), shared members do not inherit,
+// the original column is dropped, and existing progress is unchanged.
 func TestBuiltinPerUserSuspensionMigration(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

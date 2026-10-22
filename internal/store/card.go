@@ -10,25 +10,25 @@ import (
 	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
-// CardStore 封装 cards 表的 GORM 访问。
+// CardStore wraps GORM access to the cards table.
 //
-// 可见性规则：note 被软删除时，它的 cards 一并不可见 —— 这一过滤在查询层用与 notes 的
-// join 实现，而不是在删除时改写 cards 行。这样进度数据（挂在 card 上）永不因删除内容而丢失。
+// Visibility rule: when a note is soft-deleted, its cards become invisible as well — that filter is implemented in the query
+// layer as a join with notes, not by rewriting cards rows at delete time. That way progress data (attached to the card) is never lost because content was deleted.
 type CardStore struct {
 	db *gorm.DB
 }
 
-// NewCardStore 构造卡片存储。
+// NewCardStore constructs the card store.
 func NewCardStore(db *gorm.DB) *CardStore { return &CardStore{db: db} }
 
-// visibleCards 是\"card 可见\"的统一查询起点：GORM 自动加上 cards.deleted_at IS NULL，
-// join 条件再要求所属 note 未软删除。
+// visibleCards is the single query starting point for \"card visible\": GORM adds cards.deleted_at IS NULL automatically,
+// and the join condition further requires the owning note not to be soft-deleted.
 func (s *CardStore) visibleCards(ctx context.Context) *gorm.DB {
 	return s.db.WithContext(ctx).Model(&Card{}).
 		Joins("JOIN notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL")
 }
 
-// ByID 取一张可见的 card；所属 note 已软删除时返回 gorm.ErrRecordNotFound。
+// ByID fetches one visible card; returns gorm.ErrRecordNotFound when the owning note is soft-deleted.
 func (s *CardStore) ByID(ctx context.Context, id uint64) (*Card, error) {
 	var c Card
 	if err := s.visibleCards(ctx).Select("cards.*").Where("cards.id = ?", id).First(&c).Error; err != nil {
@@ -37,8 +37,8 @@ func (s *CardStore) ByID(ctx context.Context, id uint64) (*Card, error) {
 	return &c, nil
 }
 
-// ByNote 按 note 列出可见的 cards，按 ordinal、id 升序；note 已软删除时返回空切片。
-// 返回的卡片标识（template）与 ordinal 与 cardtype 产出保持一致。
+// ByNote lists a note's visible cards, ordered by ordinal, then id ascending; returns an empty slice when the note is soft-deleted.
+// The returned card templates and ordinals line up with cardtype's output.
 func (s *CardStore) ByNote(ctx context.Context, noteID uint64) ([]Card, error) {
 	var cards []Card
 	if err := s.visibleCards(ctx).Select("cards.*").
@@ -49,20 +49,20 @@ func (s *CardStore) ByNote(ctx context.Context, noteID uint64) ([]Card, error) {
 	return cards, nil
 }
 
-// syncCards 让 note 的 card 集合与 cardtype 产出的 wanted 对齐。
+// syncCards aligns a note's card set with the wanted set produced by cardtype.
 //
-// 不变量（AGENTS.md §2.3 第 1 条，内容与进度分离）：
-//   - 已存在的 card 与其 id 永远保留：进度数据挂在 card 上，删行会连带丢进度；
-//   - 已存在的 template 复用原行（软删除的在此恢复、ordinal 对齐），id 保持不变；
-//   - 只有新出现的 template 会被插入；
-//   - 已有但不再出现在 wanted 里的 template 被**软删除**：删掉 {{c2::}} 之后 cloze:2 不能再
-//     进复习队列（它渲染出来没有任何挖空）。软删除只写 cards.deleted_at，card_states 与 reviews
-//     原样保留，template 重新出现时上面的复用分支会恢复同一行，进度随之回来。
+// Invariants (AGENTS.md §2.3 item 1, content and progress kept separate):
+//   - an existing card and its id are always kept: progress hangs off the card, deleting the row loses progress with it;
+//   - an existing template reuses the original row (a soft-deleted one is restored here, ordinal aligned), the id stays unchanged;
+//   - only newly appearing templates are inserted;
+//   - a template that exists but no longer appears in wanted is **soft-deleted**: after removing {{c2::}} the cloze:2 can no longer
+//     enter the review queue (it renders no blank at all). Soft delete writes only cards.deleted_at; card_states and reviews
+//     stay as they are, and when the template reappears the reuse branch above restores the same row, bringing the progress back.
 //
-// 同一次同步内若出现重复 template，直接报错 —— 这是 (note_id, template) 唯一约束的
-// Go 侧防线，数据库唯一索引是最终兜底。
+// If a duplicate template shows up within one sync, that is an error — this is the Go-side
+// guard for the (note_id, template) unique constraint; the DB unique index is the final backstop.
 func syncCards(tx *gorm.DB, noteID uint64, wanted []cardtype.Card, now time.Time) ([]Card, error) {
-	// 必须包含软删除行：唯一索引不排除它们，按 template 复用才能避免撞唯一约束。
+	// soft-deleted rows must be included: the unique index does not exclude them, so only reusing by template avoids hitting the unique constraint.
 	var existing []Card
 	if err := tx.Unscoped().Where("note_id = ?", noteID).Find(&existing).Error; err != nil {
 		return nil, fmt.Errorf("load cards for note %d: %w", noteID, err)
@@ -84,7 +84,7 @@ func syncCards(tx *gorm.DB, noteID uint64, wanted []cardtype.Card, now time.Time
 		seen[want.Template] = true
 
 		if row, ok := byTemplate[want.Template]; ok {
-			// 复用原行：仅在需要恢复软删除或对齐 ordinal 时写库，其余情况完全不写，id 保持不变。
+			// reuse the original row: write to the DB only when a soft-deleted row must be restored or the ordinal aligned, otherwise write nothing and keep the id.
 			if row.DeletedAt.Valid || row.Ordinal != want.Ordinal {
 				updates := map[string]any{"ordinal": want.Ordinal, "deleted_at": nil}
 				if err := tx.Unscoped().Model(&Card{}).Where("id = ?", row.ID).Updates(updates).Error; err != nil {
@@ -104,7 +104,7 @@ func syncCards(tx *gorm.DB, noteID uint64, wanted []cardtype.Card, now time.Time
 		out = append(out, card)
 	}
 
-	// 收尾：仍然存活但已不在 wanted 里的卡软删除。按主键逐个写，范围与上面加载的集合一致。
+	// wrap-up: soft-delete cards that are still alive but no longer in wanted. Written per primary key, over the same set loaded above.
 	var stale []uint64
 	for i := range existing {
 		if !existing[i].DeletedAt.Valid && !seen[existing[i].Template] {
@@ -119,7 +119,7 @@ func syncCards(tx *gorm.DB, noteID uint64, wanted []cardtype.Card, now time.Time
 	return out, nil
 }
 
-// SuspendedNoteIDs 返回 noteIDs 中「userID 暂停了其下至少一张未删除卡」的 note（暂停只对本人生效）。
+// SuspendedNoteIDs returns the notes in noteIDs for which userID has suspended at least one undeleted card (suspension applies to the caller only).
 func SuspendedNoteIDs(ctx context.Context, db *gorm.DB, userID uint64, noteIDs []uint64) (map[uint64]bool, error) {
 	out := map[uint64]bool{}
 	if len(noteIDs) == 0 {

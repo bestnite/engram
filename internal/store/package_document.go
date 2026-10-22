@@ -11,14 +11,14 @@ import (
 	"strings"
 )
 
-// 卡组包的 JSON 文档形态与 zip 字节之间的互转。
+// Conversion between the deck package's JSON document form and zip bytes.
 //
-// MCP/CLI 既可能拿到 `export_deck` 输出的 JSON 文档（键为 manifest.json 等，
-// 媒体条目为 base64 字符串），也可能拿到 base64 编码的 .edeck zip。两条入口都归一到
-// 存储层唯一的 zip 解析路径（ImportPackage -> ReadPackageArchive），避免第二套解析。
+// MCP/CLI may receive either the JSON document output by `export_deck` (keyed by manifest.json etc.,
+// with media entries as base64 strings) or a base64-encoded .edeck zip. Both entry points normalize onto
+// the store layer's single zip parsing path (ImportPackage -> ReadPackageArchive), avoiding a second parser.
 
-// PackageDocumentToZip 把 DeckPackage.Document 形态的文档还原成 .edeck zip 字节。
-// 以 .json 结尾的条目按 JSON 序列化，其余条目（media/ 下的文件）视为 base64 字符串解码。
+// PackageDocumentToZip turns a document in DeckPackage.Document form back into .edeck zip bytes.
+// Entries ending in .json are serialized as JSON; the other entries (files under media/) are treated as base64 strings and decoded.
 func PackageDocumentToZip(doc map[string]any) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -37,7 +37,7 @@ func PackageDocumentToZip(doc map[string]any) ([]byte, error) {
 			if !ok {
 				return nil, fmt.Errorf("package entry %s must be a base64 string", name)
 			}
-			// 单条媒体同样先按上限校验再解码，避免一条超大 base64 先被整体解进内存。
+			// A single media entry is length-checked against the cap before decoding too, so one huge base64 string is not decoded into memory wholesale.
 			raw, err = decodeBase64Bounded(s, DefaultPackageLimits().MaxFileBytes)
 		}
 		if err != nil {
@@ -57,16 +57,16 @@ func PackageDocumentToZip(doc map[string]any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// PackageReader 把 MCP/CLI 传入的包参数归一成 zip 读取器：
-//   - string：base64 编码的 .edeck zip 字节；
-//   - map[string]any：export_deck 输出的 JSON 文档（内部转成 zip）；
-//   - []byte：原始 zip 字节。
+// PackageReader normalizes the package argument passed in by MCP/CLI into a zip reader:
+//   - string: base64-encoded .edeck zip bytes;
+//   - map[string]any: the JSON document export_deck outputs (converted to a zip internally);
+//   - []byte: raw zip bytes.
 func PackageReader(pkg any) (io.Reader, error) {
 	return packageReader(pkg, DefaultPackageLimits())
 }
 
-// packageReader 是 PackageReader 的可注入上限版本：上限由调用方给出，测试用小上限验证
-// 「解码前先判长度」而不必构造 100 MiB 级的串。
+// packageReader is the version of PackageReader with injectable limits: the caller supplies the caps, so a test can verify
+// "check the length before decoding" with small caps instead of building a 100 MiB string.
 func packageReader(pkg any, limits PackageLimits) (io.Reader, error) {
 	switch v := pkg.(type) {
 	case string:
@@ -88,9 +88,9 @@ func packageReader(pkg any, limits PackageLimits) (io.Reader, error) {
 	}
 }
 
-// decodeBase64Bounded 解码一段 base64：先按 maxBytes 对应的 base64 展开上界拒绝超限输入，
-// 超限时根本不进入解码，避免把超过归档上限的字节先整体解进内存（「解压拒绝超限」）。
-// 错误沿用既有的 package_too_large code，与 ReadPackageArchive 的上限同一口径，不新造 code。
+// decodeBase64Bounded decodes a base64 string: it first rejects oversized input against the base64 expansion bound of maxBytes,
+// and when over the bound it never decodes at all, so bytes beyond the archive cap are not pulled into memory wholesale ("reject oversize before decompressing").
+// The error reuses the existing package_too_large code, the same definition as ReadPackageArchive's caps, and invents no new code.
 func decodeBase64Bounded(s string, maxBytes int64) ([]byte, error) {
 	if maxBytes > 0 && int64(len(s)) > int64(base64.StdEncoding.EncodedLen(int(maxBytes))) {
 		return nil, &PackageError{Code: CodePackageTooLarge, Message: "encoded archive exceeds the size limit"}

@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// TestDeckCapsDefaultsAndRoundTrip 是 store 侧验收用例：
-// 未显式设置时列默认值生效（20/200）；SetCaps 能写入与默认值不同的上限，
-// 也能显式写入 0（不限）；负数与非 owner 的写入被拒。
+// TestDeckCapsDefaultsAndRoundTrip is a store-side acceptance case:
+// without explicit caps the column defaults apply (20/200); SetCaps can write caps that differ from the defaults
+// and can also write 0 explicitly (unlimited); negative values and non-owner writes are rejected.
 func TestDeckCapsDefaultsAndRoundTrip(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -26,7 +26,7 @@ func TestDeckCapsDefaultsAndRoundTrip(t *testing.T) {
 				t.Fatalf("Create() error = %v", err)
 			}
 
-			// 未显式给上限：由数据库列默认值补齐为 20/200。
+			// no caps given explicitly: the database column defaults fill in 20/200.
 			got, err := decks.Caps(ctx, d.ID)
 			if err != nil {
 				t.Fatalf("Caps() error = %v", err)
@@ -35,7 +35,7 @@ func TestDeckCapsDefaultsAndRoundTrip(t *testing.T) {
 				t.Fatalf("default caps = %+v, want %d/%d", got, DefaultNewPerDay, DefaultReviewsPerDay)
 			}
 
-			// 写入与默认不同的值并读回。
+			// write values different from the defaults and read them back.
 			if err := decks.SetCaps(ctx, owner, d.ID, DeckCaps{NewPerDay: 3, ReviewsPerDay: 7}); err != nil {
 				t.Fatalf("SetCaps() error = %v", err)
 			}
@@ -47,7 +47,7 @@ func TestDeckCapsDefaultsAndRoundTrip(t *testing.T) {
 				t.Errorf("caps after SetCaps = %+v, want 3/7", got)
 			}
 
-			// 0 是合法值（不限），必须能显式写入、不被列默认值覆盖。
+			// 0 is a legal value (unlimited) and must be writable explicitly, without being overwritten by the column default.
 			if err := decks.SetCaps(ctx, owner, d.ID, DeckCaps{NewPerDay: 0, ReviewsPerDay: 0}); err != nil {
 				t.Fatalf("SetCaps(unlimited) error = %v", err)
 			}
@@ -59,12 +59,12 @@ func TestDeckCapsDefaultsAndRoundTrip(t *testing.T) {
 				t.Errorf("caps after unlimited = %+v, want 0/0", got)
 			}
 
-			// 负数被拒。
+			// a negative value is rejected.
 			if err := decks.SetCaps(ctx, owner, d.ID, DeckCaps{NewPerDay: -1}); !errors.Is(err, ErrInvalidDeckCap) {
 				t.Errorf("SetCaps(negative) error = %v, want ErrInvalidDeckCap", err)
 			}
 
-			// 非 owner 不能改上限。
+			// a non-owner cannot change the caps.
 			if err := decks.SetCaps(ctx, stranger, d.ID, DeckCaps{NewPerDay: 1, ReviewsPerDay: 1}); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("non-owner SetCaps() error = %v, want ErrNotOwner", err)
 			}

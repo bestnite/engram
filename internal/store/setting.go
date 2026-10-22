@@ -13,9 +13,9 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 普通（非敏感）系统设置的写入通道。读取端是 store.go 的 LoadSettings；
-// 写入值同样 JSON 编码，保证两端约定一致。敏感值走 secret.go 的 PutSecret，
-// 不能经过这里，否则密文写作明文会破坏敏感值的加密存储要求。
+// The write channel for ordinary (non-sensitive) system settings. The read side is LoadSettings in store.go;
+// written values are JSON-encoded too, so both sides share one convention. Sensitive values go through PutSecret in secret.go
+// and must not pass through here, otherwise writing ciphertext as plaintext breaks the encrypted-storage requirement for sensitive values.
 func PutSetting(ctx context.Context, db *gorm.DB, key, value string, updatedBy *uint64, at time.Time) error {
 	if strings.TrimSpace(key) == "" {
 		return errors.New("store: setting key is required")
@@ -34,8 +34,8 @@ func PutSetting(ctx context.Context, db *gorm.DB, key, value string, updatedBy *
 	return nil
 }
 
-// SensitiveSettingKeys 返回 settings 表里所有敏感键（后缀约定见 secret.go），
-// 按字母序。管理面板据此逐项显示「已配置/未配置」，全程不接触明文。
+// SensitiveSettingKeys returns every sensitive key in the settings table (the suffix convention is in secret.go),
+// alphabetically. The admin panel uses it to show "configured/not configured" per item, never touching the plaintext.
 func SensitiveSettingKeys(ctx context.Context, db *gorm.DB) ([]string, error) {
 	var rows []Setting
 	if err := db.WithContext(ctx).Model(&Setting{}).Select("key").Find(&rows).Error; err != nil {

@@ -10,57 +10,57 @@ import (
 	"gorm.io/gorm"
 )
 
-// 卡组级每日上限的文档化默认值：新卡 20、复习 200，0 表示不限。
-// 与 decks 表的列默认值保持一致；改这里必须同步改 models.go 的 default 标签。
+// Documented defaults for deck-level daily caps: 20 new cards, 200 reviews, 0 means unlimited.
+// Kept in sync with the column defaults of the decks table; changing them requires updating the default tags in models.go.
 const (
 	DefaultNewPerDay     = 20
 	DefaultReviewsPerDay = 200
 )
 
-// 卡组名与描述的长度界限（2026-10-06 由用户拍板）。
+// Length bounds for deck name and description (decided by the user on 2026-10-06).
 //
-// 按 Unicode 字符（rune）计数，不按字节：一个汉字或 emoji 算一个字符。若按字节，
-// 中文卡组名会被腰斩到 66 个字，而 200 个 emoji 只能留下 50 个——字号与用户认知的
-// “几个字”直接冲突。
+// Counted in Unicode characters (runes), not bytes: one Han character or emoji counts as one character. Counting bytes would
+// cut a Chinese deck name down to 66 characters, while 200 emoji would leave only 50 — character count would directly
+// conflict with the user's notion of 'how many characters'.
 //
-// 这是唯一来源：卡组包 manifest 的导入校验（package_import.go）与网页/API 的创建、
-// 改名共用这一组常量，数值只在此处书写一次；package_import.go 保留旧名别名。
+// This is the single source of truth: deck package manifest import validation (package_import.go) and web/API creation
+// and rename share this constant set, the numbers are written only here; package_import.go keeps the old name as an alias.
 const (
 	maxDeckNameChars        = 200
 	maxDeckDescriptionChars = 2000
 )
 
 var (
-	// ErrNotOwner 表示调用者不是资源的所有者，因此无权修改。
-	// 复用同一个哨兵值，让上层用 errors.Is 一致地翻译成 403。
+	// ErrNotOwner means the caller is not the resource owner and therefore may not modify it.
+	// Reusing the same sentinel lets upper layers translate it consistently into 403 via errors.Is.
 	ErrNotOwner = errors.New("actor is not the owner")
-	// ErrDeckNameRequired 表示卡组名为空。
+	// ErrDeckNameRequired means the deck name is empty.
 	ErrDeckNameRequired = errors.New("deck name is required")
-	// ErrDeckNameInvalid 表示卡组名不满足与卡组包 manifest 共用的规则：超过
-	// maxDeckNameChars 个字符（按 rune 计）、含 C0 控制字符、或不是合法 UTF-8。
-	// 空名单独由 ErrDeckNameRequired 表示，不并入这个哨兵。
+	// ErrDeckNameInvalid means the deck name does not meet the rules shared with the deck package manifest: more than
+	// maxDeckNameChars characters (counted by rune), containing C0 control characters, or not valid UTF-8.
+	// An empty name is signalled separately by ErrDeckNameRequired and is not folded into this sentinel.
 	ErrDeckNameInvalid = errors.New("deck name is invalid")
-	// ErrDeckDescriptionInvalid 将描述拒绝与卡组名拒绝区分，便于传输层定位字段。
+	// ErrDeckDescriptionInvalid separates description rejection from deck name rejection, so the transport layer can point at the field.
 	ErrDeckDescriptionInvalid = errors.New("deck description is invalid")
-	// ErrDeckPresetRequired 表示卡组未指定调度预设。
+	// ErrDeckPresetRequired means the deck has no scheduling preset set.
 	ErrDeckPresetRequired = errors.New("deck preset is required")
-	// ErrInvalidDeckCap 表示每日上限为负；0 是合法值（不限）。
+	// ErrInvalidDeckCap means a daily cap is negative; 0 is a legal value (unlimited).
 	ErrInvalidDeckCap = errors.New("deck daily cap must not be negative")
-	// ErrDeckPresetInvalid 表示目标预设不属于该卡组的属主。挂别人的预设会把他人
-	// 的调度参数暴露给自己（卡组可读 ⇒ 预设可读）。
+	// ErrDeckPresetInvalid means the target preset does not belong to this deck's owner. Attaching someone else's preset would
+	// expose their scheduling parameters to the caller (deck readable ⇒ preset readable).
 	ErrDeckPresetInvalid = errors.New("deck preset must belong to the deck owner")
-	// ErrDeckUpdateEmpty 表示一次卡组修改既没给名称也没给描述：没有可写字段（PATCH 语义下
-	// 两个字段都可省略，但至少要给一个）。
+	// ErrDeckUpdateEmpty means a deck update supplied neither name nor description: no writable field at all (under PATCH semantics
+	// both fields may be omitted, but at least one must be given).
 	ErrDeckUpdateEmpty = errors.New("deck update has no fields")
 )
 
-// DeckCaps 是卡组级的每日上限；NewPerDay 与 ReviewsPerDay 都为 0 时表示不限。
+// DeckCaps is the deck-level daily caps; NewPerDay and ReviewsPerDay both 0 means unlimited.
 type DeckCaps struct {
 	NewPerDay     int
 	ReviewsPerDay int
 }
 
-// validDeckCaps 校验上限非负。
+// validDeckCaps validates that the caps are non-negative.
 func validDeckCaps(c DeckCaps) error {
 	if c.NewPerDay < 0 || c.ReviewsPerDay < 0 {
 		return fmt.Errorf("%w: new_per_day=%d reviews_per_day=%d", ErrInvalidDeckCap, c.NewPerDay, c.ReviewsPerDay)
@@ -68,11 +68,11 @@ func validDeckCaps(c DeckCaps) error {
 	return nil
 }
 
-// requireDeckOwner 检查 actor 是否为卡组 owner，不是则返回 ErrNotOwner。
+// requireDeckOwner checks whether actor is the deck owner and returns ErrNotOwner if not.
 //
-// 阶段 decks 是唯一的归属来源：deck_grants 里还没有任何行，所以\"谁能改\"只由
-// owner_user_id 决定。 引入授权后，这里会扩展为 owner/editor 的读写判定，
-// reader 与陌生人仍在此被拒 —— 本轮的 owner 检查是它的子集，不会推翻。
+// In this phase decks is the only source of ownership: deck_grants still has no rows, so \"who may edit\" is decided
+// only by owner_user_id. Once grants land, this expands into owner/editor read-write decisions,
+// while reader and stranger are still rejected here — this round's owner check is a subset of that and will not be overturned.
 func requireDeckOwner(d *Deck, actorUserID uint64) error {
 	if d.OwnerUserID != actorUserID {
 		return fmt.Errorf("%w: deck %d is owned by user %d", ErrNotOwner, d.ID, d.OwnerUserID)
@@ -80,19 +80,19 @@ func requireDeckOwner(d *Deck, actorUserID uint64) error {
 	return nil
 }
 
-// DeckStore 封装 decks 表的 GORM 访问，集中全部权限判断的入口。
+// DeckStore wraps GORM access to the decks table and concentrates every permission check at one entry point.
 type DeckStore struct {
 	db *gorm.DB
 }
 
-// NewDeckStore 构造卡组存储。
+// NewDeckStore constructs the deck store.
 func NewDeckStore(db *gorm.DB) *DeckStore { return &DeckStore{db: db} }
 
-// validateDeckName 校验卡组名，规则与卡组包 manifest 完全一致：非空、合法 UTF-8、
-// 不含 C0 控制字符（U+0000–U+001F）、长度不超过 maxDeckNameChars（按 rune 计）。
+// validateDeckName validates a deck name with rules exactly matching the deck package manifest: non-empty, valid UTF-8,
+// free of C0 control characters (U+0000–U+001F), at most maxDeckNameChars long (counted by rune).
 //
-// 空名保持既有语义返回 ErrDeckNameRequired，不并入 ErrDeckNameInvalid——调用方对
-// “没填名字”与“名字不合法”要给不同提示。
+// An empty name keeps the existing semantics and returns ErrDeckNameRequired instead of ErrDeckNameInvalid — callers must
+// give different messages for 'no name filled in' and 'name is invalid'.
 func validateDeckName(name string) error {
 	if name == "" {
 		return ErrDeckNameRequired
@@ -109,9 +109,9 @@ func validateDeckName(name string) error {
 	return nil
 }
 
-// DeckCopyName 返回「源名 + 副本后缀」的卡组名：整串超过 maxDeckNameChars 个字符时，
-// 按 rune 截断源名，保证结果仍满足统一名称校验。后缀由调用方按语言给出（本地化只在传输层），
-// 因此这里只处理长度，不关心后缀内容——否则克隆会给接近上限的合法卡组产出超长副本名。
+// DeckCopyName returns the deck name 'source name + copy suffix': when the whole string exceeds maxDeckNameChars
+// characters, the source name is truncated by rune so the result still satisfies the shared name validation. The suffix is supplied by the caller per language (localization lives only in the transport layer),
+// so only length is handled here and the suffix content is irrelevant — otherwise cloning would produce an over-long copy name for a legitimate deck near the limit.
 func DeckCopyName(sourceName, suffix string) string {
 	if utf8.RuneCountInString(sourceName)+utf8.RuneCountInString(suffix) <= maxDeckNameChars {
 		return sourceName + suffix
@@ -127,12 +127,12 @@ func DeckCopyName(sourceName, suffix string) string {
 	return string(runes[:keep]) + suffix
 }
 
-// validateDeckForWrite 校验可写字段；create 时额外要求 owner 与 preset 已给定。
+// validateDeckForWrite validates the writable fields; on create it additionally requires owner and preset to be set.
 func validateDeckForWrite(d *Deck, create bool) error {
 	if err := validateDeckName(d.Name); err != nil {
 		return err
 	}
-	// 与包导入复用同一文本规则，避免创建端产出导入端拒绝的描述。空描述合法。
+	// Shares the same text rules as package import, so creation cannot produce a description that the import side rejects. An empty description is legal.
 	if entries := textFieldErrors("deck.description", d.Description, maxDeckDescriptionChars); len(entries) > 0 {
 		return fmt.Errorf("%w: %s", ErrDeckDescriptionInvalid, entries[0])
 	}
@@ -147,7 +147,7 @@ func validateDeckForWrite(d *Deck, create bool) error {
 	return nil
 }
 
-// Create 写入一个新卡组；owner 归属由 d.OwnerUserID 显式给出。
+// Create writes a new deck; ownership is given explicitly by d.OwnerUserID.
 func (s *DeckStore) Create(ctx context.Context, d *Deck) error {
 	if err := validateDeckForWrite(d, true); err != nil {
 		return err
@@ -161,7 +161,7 @@ func (s *DeckStore) Create(ctx context.Context, d *Deck) error {
 	return nil
 }
 
-// ByID 按主键取卡组；归档不影响读取，调用方按 ArchivedAt 决定如何展示。
+// ByID fetches a deck by primary key; archiving does not affect reads, callers decide how to display it by ArchivedAt.
 func (s *DeckStore) ByID(ctx context.Context, id uint64) (*Deck, error) {
 	var d Deck
 	if err := s.db.WithContext(ctx).First(&d, "id = ?", id).Error; err != nil {
@@ -170,7 +170,7 @@ func (s *DeckStore) ByID(ctx context.Context, id uint64) (*Deck, error) {
 	return &d, nil
 }
 
-// ListByOwner 列出某用户名下的卡组（含已归档），按创建时间倒序。
+// ListByOwner lists the decks owned by a user (archived included), newest first.
 func (s *DeckStore) ListByOwner(ctx context.Context, ownerUserID uint64) ([]Deck, error) {
 	var decks []Deck
 	if err := s.db.WithContext(ctx).Where("owner_user_id = ?", ownerUserID).
@@ -180,13 +180,13 @@ func (s *DeckStore) ListByOwner(ctx context.Context, ownerUserID uint64) ([]Deck
 	return decks, nil
 }
 
-// Update 修改卡组的名称与描述；只有 owner 能改。name / description 为 nil 表示「本次不改这一项」，
-// 因此只带名称的请求不会把描述清空（PATCH 语义）。
+// Update changes a deck's name and description; only the owner may. nil name / description means 'do not change this field',
+// so a request with only a name does not wipe the description (PATCH semantics).
 //
-// 校验针对「合并后的最终文本」（现有值 + 本次提供的字段），规则与建组、卡组包导入同源。
-// **不写 preset_id**：调度预设是学习设置，只经 SetPreset / SetStudySettings 变更，改名路径若
-// 把它写回去，就会用本次调用更早读到的值覆盖期间发生的预设变更（属主的设置就存在 decks.preset_id）。
-// 归属、创建时间、归档状态同样不在可改字段内，避免一次整行覆盖顺带抹掉它们。
+// Validation applies to the 'merged final text' (existing value + fields supplied this time), with rules shared by creation and deck package import.
+// **preset_id is not written**: the scheduling preset is a study setting changed only via SetPreset / SetStudySettings; if the rename path
+// wrote it back, it would overwrite a preset change made in the meantime with the value read earlier in this call (the owner's setting lives in decks.preset_id).
+// Ownership, creation time and archive state are likewise not writable fields, so a whole-row overwrite cannot also wipe them.
 func (s *DeckStore) Update(ctx context.Context, actorUserID, deckID uint64, name, description *string) error {
 	if name == nil && description == nil {
 		return ErrDeckUpdateEmpty
@@ -221,7 +221,7 @@ func (s *DeckStore) Update(ctx context.Context, actorUserID, deckID uint64, name
 	return nil
 }
 
-// Archive 打上归档时间；重复归档直接返回 nil（幂等）。
+// Archive stamps the archive time; archiving again returns nil directly (idempotent).
 func (s *DeckStore) Archive(ctx context.Context, actorUserID, deckID uint64, at time.Time) error {
 	if at.IsZero() {
 		at = time.Now().UTC()
@@ -229,12 +229,12 @@ func (s *DeckStore) Archive(ctx context.Context, actorUserID, deckID uint64, at 
 	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"archived_at": at})
 }
 
-// Restore 清空归档时间；未归档时幂等返回 nil。
+// Restore clears the archive time; idempotent and returns nil when not archived.
 func (s *DeckStore) Restore(ctx context.Context, actorUserID, deckID uint64) error {
 	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"archived_at": nil})
 }
 
-// Caps 读取卡组的每日上限；卡组不存在时返回底层错误。
+// Caps reads the deck's daily caps; returns the underlying error when the deck does not exist.
 func (s *DeckStore) Caps(ctx context.Context, deckID uint64) (DeckCaps, error) {
 	var d Deck
 	if err := s.db.WithContext(ctx).Select("id", "new_per_day", "reviews_per_day").
@@ -244,9 +244,9 @@ func (s *DeckStore) Caps(ctx context.Context, deckID uint64) (DeckCaps, error) {
 	return DeckCaps{NewPerDay: d.NewPerDay, ReviewsPerDay: d.ReviewsPerDay}, nil
 }
 
-// SetCaps 写卡组级每日上限；只有 owner 能改。
-// 用 map 更新而非模型整体 Save：0 在这里是合法值（不限），map 会显式写入 0，
-// 不受 GORM 对带默认值列的零值省略行为影响。
+// SetCaps writes the deck-level daily caps; only the owner may.
+// It updates via a map rather than Save on the whole model: 0 is a legal value here (unlimited), and a map writes 0 explicitly,
+// unaffected by GORM's zero-value omission for columns with defaults.
 func (s *DeckStore) SetCaps(ctx context.Context, actorUserID, deckID uint64, caps DeckCaps) error {
 	if err := validDeckCaps(caps); err != nil {
 		return err
@@ -257,9 +257,9 @@ func (s *DeckStore) SetCaps(ctx context.Context, actorUserID, deckID uint64, cap
 	})
 }
 
-// SetPreset 改卡组的调度预设；只有 owner 能改，
-// 且目标预设必须属于同一个用户——否则可以把别人的预设挂到自己的卡组上，
-// 借由「卡组读得到」把他人预设参数暴露出去。
+// SetPreset changes a deck's scheduling preset; only the owner may,
+// and the target preset must belong to the same user — otherwise someone could hang another's preset on their own deck
+// and expose that preset's parameters through 'the deck is readable'.
 func (s *DeckStore) SetPreset(ctx context.Context, actorUserID, deckID, presetID uint64) error {
 	var count int64
 	if err := s.db.WithContext(ctx).Model(&Preset{}).
@@ -272,7 +272,7 @@ func (s *DeckStore) SetPreset(ctx context.Context, actorUserID, deckID, presetID
 	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"preset_id": presetID})
 }
 
-// mutateOwned 是带 owner 校验的单列/多列更新通道；所有修改型方法都经它落地。
+// mutateOwned is the single-column / multi-column update channel with the owner check; every mutating method lands through it.
 func (s *DeckStore) mutateOwned(ctx context.Context, actorUserID, deckID uint64, updates map[string]any) error {
 	existing, err := s.ByID(ctx, deckID)
 	if err != nil {
@@ -287,7 +287,7 @@ func (s *DeckStore) mutateOwned(ctx context.Context, actorUserID, deckID uint64,
 	return nil
 }
 
-// Delete 删除卡组及其关联内容；只有 owner 能删。
+// Delete deletes the deck and its related content; only the owner may.
 func (s *DeckStore) Delete(ctx context.Context, actorUserID, deckID uint64) error {
 	existing, err := s.ByID(ctx, deckID)
 	if err != nil {
@@ -301,10 +301,10 @@ func (s *DeckStore) Delete(ctx context.Context, actorUserID, deckID uint64) erro
 	})
 }
 
-// deleteDeckTx 在给定事务里硬删除一个卡组及其全部关联行（不做权限判断）。
-// 卡组删除与用户删除（删除其名下全部卡组）共用这一份级联，保证两处清理的范围一致。
+// deleteDeckTx hard-deletes a deck and all its related rows inside the given transaction (no permission check).
+// Deck deletion and user deletion (removing every deck under a user) share this one cascade, so both clean up the same scope.
 func deleteDeckTx(tx *gorm.DB, deckID uint64) error {
-	// 显式级联清理关联表，确保两库在外键 PRAGMA 配置不同时行为均完全一致（AGENTS.md §2.3 第 4 条）
+	// explicitly cascade-clean the related tables so both databases behave exactly the same regardless of their foreign-key PRAGMA settings (AGENTS.md §2.3 item 4)
 	if err := tx.Exec("DELETE FROM media_notes WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Error; err != nil {
 		return fmt.Errorf("delete media_notes: %w", err)
 	}
@@ -329,7 +329,7 @@ func deleteDeckTx(tx *gorm.DB, deckID uint64) error {
 	if err := tx.Exec("DELETE FROM share_links WHERE deck_id = ?", deckID).Error; err != nil {
 		return fmt.Errorf("delete share_links: %w", err)
 	}
-	// 待接受的邀请也要清：卡组没了，那条邀请点开只会 404。
+	// pending invites must be cleaned too: with the deck gone, opening that invite only 404s.
 	if err := tx.Exec("DELETE FROM deck_share_invites WHERE deck_id = ?", deckID).Error; err != nil {
 		return fmt.Errorf("delete deck_share_invites: %w", err)
 	}

@@ -10,23 +10,23 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ErrShareInviteNotFound 表示该 (卡组, 用户) 没有待接受的邀请。它是**正常状态**（没有邀请），
-// 用哨兵是为了让调用方把「没有」与「查库失败」分开。
+// ErrShareInviteNotFound means there is no pending invite for that (deck, user). It is a **normal state** (no invite);
+// the sentinel exists so callers can tell 'none' apart from 'the query failed'.
 var ErrShareInviteNotFound = errors.New("deck share invite not found")
 
-// DeckShareInviteStore 读写待接受的共享邀请。
+// DeckShareInviteStore reads and writes pending share invites.
 //
-// 授权（deck_grants）只在接受时才写，所以这张表**不参与任何可见性判定**：待接受的邀请
-// 不该让别人看到卡组内容。
+// Grants (deck_grants) are written only on accept, so this table **takes part in no visibility decision**: a pending invite
+// must not let anyone see the deck's content.
 type DeckShareInviteStore struct{ db *gorm.DB }
 
-// NewDeckShareInviteStore 构造邀请存储。
+// NewDeckShareInviteStore constructs the invite store.
 func NewDeckShareInviteStore(db *gorm.DB) *DeckShareInviteStore {
 	return &DeckShareInviteStore{db: db}
 }
 
-// Invite 写入或刷新一条邀请。同一 (卡组, 用户) 只有一行，重复邀请刷新角色与有效期，
-// 不叠加——否则「邀请两次」会在列表里出现两条一样的待接受项。
+// Invite writes or refreshes an invite. There is only one row per (deck, user); inviting again refreshes the role and expiry
+// instead of stacking — otherwise 'invited twice' would show two identical pending entries in the list.
 func (s *DeckShareInviteStore) Invite(ctx context.Context, inv DeckShareInvite) error {
 	if inv.CreatedAt.IsZero() {
 		inv.CreatedAt = time.Now().UTC()
@@ -41,7 +41,7 @@ func (s *DeckShareInviteStore) Invite(ctx context.Context, inv DeckShareInvite) 
 	return nil
 }
 
-// ByDeckAndUser 取一条邀请；没有则 ErrShareInviteNotFound。
+// ByDeckAndUser fetches one invite; ErrShareInviteNotFound when there is none.
 func (s *DeckShareInviteStore) ByDeckAndUser(ctx context.Context, deckID, userID uint64) (*DeckShareInvite, error) {
 	var inv DeckShareInvite
 	err := s.db.WithContext(ctx).
@@ -56,26 +56,26 @@ func (s *DeckShareInviteStore) ByDeckAndUser(ctx context.Context, deckID, userID
 	return &inv, nil
 }
 
-// DeckShareInviteView 是一条带展示信息的待接受邀请。
+// DeckShareInviteView is a pending invite with display information.
 //
-// 收件人视角用 DeckName + InviterName（卡组名、谁邀请我）；属主视角用 Username
-// （我邀请了谁）。两个视角共用这一个结构，因为它们是同一行的两种读法。
-// 三个 id 都是对外 id（UUIDv7 文本）：数字主键不对外，查询里 join 出 public_id 再回填。
+// The recipient's view uses DeckName + InviterName (deck name, who invited me); the owner's view uses Username
+// (whom I invited). Both views share this struct because they are two readings of the same row.
+// All three ids are public ids (UUIDv7 text): numeric primary keys are not exposed, the query joins public_id and fills it in.
 type DeckShareInviteView struct {
 	DeckID   string `json:"deck_id"`
 	DeckName string `json:"deck_name"`
 	UserID   string `json:"user_id"`
-	// Username 是被邀请者的用户名（属主视角）。
+	// Username is the invitee's username (owner's view).
 	Username string `json:"username"`
 	Role     string `json:"role"`
-	// InvitedBy 与 InviterName 是邀请人（收件人视角）。
+	// InvitedBy and InviterName are the inviter (recipient's view).
 	InvitedBy   string    `json:"invited_by"`
 	InviterName string    `json:"inviter_name"`
 	CreatedAt   time.Time `json:"created_at"`
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
-// ListForDeck 列出某卡组待接受的邀请（属主视角：我邀请了谁还没答应），按邀请时间倒序。
+// ListForDeck lists a deck's pending invites (owner's view: whom I invited who has not answered yet), newest first.
 func (s *DeckShareInviteStore) ListForDeck(ctx context.Context, deckID uint64) ([]DeckShareInviteView, error) {
 	var rows []DeckShareInviteView
 	err := s.db.WithContext(ctx).
@@ -93,17 +93,17 @@ func (s *DeckShareInviteStore) ListForDeck(ctx context.Context, deckID uint64) (
 	return rows, nil
 }
 
-// ListForUser 列出某人待接受的邀请，按邀请时间倒序。
+// ListForUser lists a user's pending invites, newest first.
 //
-// 未过期的才算：过期行可能还没被回收 worker 清掉，读路径必须自己判——否则界面会出现
-// 「点了接受却什么也没发生」的幽灵条目。
+// Only unexpired ones count: expired rows may not have been cleaned up by the retention worker yet, so the read path must judge for itself — otherwise the UI shows
+// ghost entries where 'clicked accept and nothing happened'.
 func (s *DeckShareInviteStore) ListForUser(ctx context.Context, userID uint64) ([]DeckShareInviteView, error) {
 	var rows []DeckShareInviteView
 	err := s.db.WithContext(ctx).
 		Table("deck_share_invites AS i").
 		Select("d.public_id AS deck_id, d.name AS deck_name, COALESCE(w.public_id, '') AS user_id, '' AS username, i.role, COALESCE(u.public_id, '') AS invited_by, COALESCE(u.display_name, u.username, '') AS inviter_name, i.created_at, i.expires_at").
-		// decks 是**硬删除**（DeckStore.Delete 显式级联清关联表），没有 deleted_at 列；
-		// 卡组被删时邀请行由那个级联一起清掉，所以这里不需要软删过滤。
+		// decks rows are **hard-deleted** (DeckStore.Delete explicitly cascades the related tables) and have no deleted_at column;
+		// when a deck is deleted the invite rows go with that cascade, so no soft-delete filter is needed here.
 		Joins("JOIN decks AS d ON d.id = i.deck_id").
 		Joins("LEFT JOIN users AS w ON w.id = i.user_id").
 		Joins("LEFT JOIN users AS u ON u.id = i.invited_by").
@@ -116,7 +116,7 @@ func (s *DeckShareInviteStore) ListForUser(ctx context.Context, userID uint64) (
 	return rows, nil
 }
 
-// Delete 删掉一条邀请（接受或拒绝之后）。删不存在的行不算失败：意图是「这条不该再挂着」。
+// Delete removes one invite (after accept or decline). Deleting a non-existent row is not a failure: the intent is 'this should no longer be pending'.
 func (s *DeckShareInviteStore) Delete(ctx context.Context, deckID, userID uint64) error {
 	err := s.db.WithContext(ctx).
 		Where("deck_id = ? AND user_id = ?", deckID, userID).
@@ -127,7 +127,7 @@ func (s *DeckShareInviteStore) Delete(ctx context.Context, deckID, userID uint64
 	return nil
 }
 
-// DeleteExpired 删除已过期的邀请（internal/retention 的 Expirer）。
+// DeleteExpired deletes expired invites (the Expirer of internal/retention).
 func (s *DeckShareInviteStore) DeleteExpired(ctx context.Context, before time.Time) (int64, error) {
 	res := s.db.WithContext(ctx).
 		Where("expires_at <= ?", before.UTC()).

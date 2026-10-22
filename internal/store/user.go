@@ -7,20 +7,20 @@ import (
 	"gorm.io/gorm"
 )
 
-// UserStore 封装 users 表的 GORM 访问；具体类型优先，接口留给消费方按需定义（AGENTS.md §2.4）。
+// UserStore wraps GORM access to the users table; concrete types are preferred and interfaces are left to consumers to define as needed (AGENTS.md §2.4).
 type UserStore struct {
 	db *gorm.DB
 }
 
-// NewUserStore 构造用户存储。
+// NewUserStore builds the user store.
 func NewUserStore(db *gorm.DB) *UserStore { return &UserStore{db: db} }
 
-// Create 写入一个新用户；唯一约束冲突由调用方翻译成稳定错误码。
+// Create writes a new user; the caller translates a unique-constraint conflict into a stable error code.
 func (s *UserStore) Create(ctx context.Context, u *User) error {
 	return s.CreateTx(ctx, s.db, u)
 }
 
-// CreateTx 在调用方给定的事务里写入新用户：邀请占用与建号因此能共享同一个事务边界。
+// CreateTx writes a new user in the transaction given by the caller, so claiming the invite and creating the account share one transaction boundary.
 func (s *UserStore) CreateTx(ctx context.Context, tx *gorm.DB, u *User) error {
 	if err := tx.WithContext(ctx).Create(u).Error; err != nil {
 		return fmt.Errorf("create user: %w", err)
@@ -28,7 +28,7 @@ func (s *UserStore) CreateTx(ctx context.Context, tx *gorm.DB, u *User) error {
 	return nil
 }
 
-// ByID 按主键取用户；不存在时返回 gorm.ErrRecordNotFound。
+// ByID fetches a user by primary key; returns gorm.ErrRecordNotFound when absent.
 func (s *UserStore) ByID(ctx context.Context, id uint64) (*User, error) {
 	var u User
 	if err := s.db.WithContext(ctx).First(&u, "id = ?", id).Error; err != nil {
@@ -37,7 +37,7 @@ func (s *UserStore) ByID(ctx context.Context, id uint64) (*User, error) {
 	return &u, nil
 }
 
-// ByUsername 按登录名取用户（登录路径使用）。
+// ByUsername fetches a user by login name (used by the login path).
 func (s *UserStore) ByUsername(ctx context.Context, username string) (*User, error) {
 	var u User
 	if err := s.db.WithContext(ctx).First(&u, "username = ?", username).Error; err != nil {
@@ -46,7 +46,7 @@ func (s *UserStore) ByUsername(ctx context.Context, username string) (*User, err
 	return &u, nil
 }
 
-// ByEmail 按邮箱取用户（OIDC 自动绑定与管理员查找使用）。
+// ByEmail fetches a user by email (used by OIDC auto-linking and admin lookups).
 func (s *UserStore) ByEmail(ctx context.Context, email string) (*User, error) {
 	var u User
 	if err := s.db.WithContext(ctx).First(&u, "email = ?", email).Error; err != nil {
@@ -55,7 +55,7 @@ func (s *UserStore) ByEmail(ctx context.Context, email string) (*User, error) {
 	return &u, nil
 }
 
-// Update 保存用户全部字段；Save 在两库都生成正确的 upsert。
+// Update saves all of the user's fields; Save generates the right upsert on both databases.
 func (s *UserStore) Update(ctx context.Context, u *User) error {
 	if err := s.db.WithContext(ctx).Save(u).Error; err != nil {
 		return fmt.Errorf("update user: %w", err)
@@ -63,13 +63,13 @@ func (s *UserStore) Update(ctx context.Context, u *User) error {
 	return nil
 }
 
-// SetPasswordHash 只改密码哈希一列，避免整行覆盖带来的并发丢写。
+// SetPasswordHash changes only the password hash column, so a whole-row overwrite cannot lose a concurrent write.
 func (s *UserStore) SetPasswordHash(ctx context.Context, id uint64, hash string) error {
 	return s.SetPasswordHashTx(ctx, s.db, id, hash)
 }
 
-// SetPasswordHashTx 在调用方给定的事务里改密码哈希一列。
-// 口令重置需要它：密码写入必须与同一事务里的会话/API Key 吊销要么全成、要么全不生效。
+// SetPasswordHashTx changes the password hash column inside the transaction given by the caller.
+// A password reset needs it: the password write and the session/API key revocation in the same transaction must either all take effect or none.
 func (s *UserStore) SetPasswordHashTx(ctx context.Context, tx *gorm.DB, id uint64, hash string) error {
 	if err := tx.WithContext(ctx).Model(&User{}).Where("id = ?", id).
 		Update("password_hash", hash).Error; err != nil {
@@ -78,7 +78,7 @@ func (s *UserStore) SetPasswordHashTx(ctx context.Context, tx *gorm.DB, id uint6
 	return nil
 }
 
-// ByIDTx 在调用方给定的事务里按主键取用户；口令重置在事务内做存在性校验，避免另开连接。
+// ByIDTx fetches a user by primary key inside the transaction given by the caller; a password reset checks existence in the transaction, avoiding another connection.
 func (s *UserStore) ByIDTx(ctx context.Context, tx *gorm.DB, id uint64) (*User, error) {
 	var u User
 	if err := tx.WithContext(ctx).First(&u, "id = ?", id).Error; err != nil {
@@ -87,7 +87,7 @@ func (s *UserStore) ByIDTx(ctx context.Context, tx *gorm.DB, id uint64) (*User, 
 	return &u, nil
 }
 
-// SetStatus 只改账号状态一列（active | disabled）。
+// SetStatus changes only the account status column (active | disabled).
 func (s *UserStore) SetStatus(ctx context.Context, id uint64, status string) error {
 	if err := s.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).
 		Update("status", status).Error; err != nil {
@@ -96,7 +96,7 @@ func (s *UserStore) SetStatus(ctx context.Context, id uint64, status string) err
 	return nil
 }
 
-// CountActiveAdmins 统计仍可登录的管理员数；用于禁止把最后一个管理员禁用（引导页依赖它）。
+// CountActiveAdmins counts the admins who can still sign in; it prevents disabling the last admin (the onboarding page relies on it).
 func (s *UserStore) CountActiveAdmins(ctx context.Context) (int64, error) {
 	var n int64
 	if err := s.db.WithContext(ctx).Model(&User{}).

@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TestAuditStoreWriteRecordsOneRowPerMutation 是验收测试：
-// 每次变更写入恰好一行，且 action 字符串与常量完全一致。
+// TestAuditStoreWriteRecordsOneRowPerMutation is an acceptance test:
+// every change writes exactly one row, and the action string matches the constant exactly.
 func TestAuditStoreWriteRecordsOneRowPerMutation(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -34,7 +34,7 @@ func TestAuditStoreWriteRecordsOneRowPerMutation(t *testing.T) {
 			}); err != nil {
 				t.Fatalf("Write(user.create) error = %v", err)
 			}
-			// 第二次变更必须产生第二行，而不是覆盖上一次。
+			// a second change must produce a second row instead of overwriting the previous one.
 			if err := audit.Write(ctx, AuditEntry{
 				UserID: Ptr(u.ID),
 				Action: ActionUserLoginFailed,
@@ -50,7 +50,7 @@ func TestAuditStoreWriteRecordsOneRowPerMutation(t *testing.T) {
 			if len(rows) != 2 {
 				t.Fatalf("audit rows = %d, want 2 (one per mutation)", len(rows))
 			}
-			// List 按 id 倒序：最后写入的 login_failed 在最前。
+			// List is ordered by id descending: the last-written login_failed comes first.
 			if rows[0].Action != ActionUserLoginFailed {
 				t.Errorf("rows[0].Action = %q, want %q", rows[0].Action, ActionUserLoginFailed)
 			}
@@ -61,7 +61,7 @@ func TestAuditStoreWriteRecordsOneRowPerMutation(t *testing.T) {
 				t.Errorf("CountByAction(user.create) = (%d, %v), want (1, nil)", n, err)
 			}
 
-			// user.create 带目标；detail_json 必须是可解析的 JSON。
+			// user.create carries a target; detail_json must be parseable JSON.
 			createRow := rows[1]
 			if createRow.UserID == nil || *createRow.UserID != u.ID {
 				t.Errorf("user.create UserID = %v, want %d", createRow.UserID, u.ID)
@@ -79,7 +79,7 @@ func TestAuditStoreWriteRecordsOneRowPerMutation(t *testing.T) {
 				t.Errorf("detail username = %v, want alice", detail["username"])
 			}
 
-			// login_failed 没有 user_id 时该列保持 NULL，不被 0 冒充。
+			// login_failed without a user_id keeps that column NULL and is not faked with 0.
 			failedRow := rows[0]
 			if failedRow.TargetType != nil {
 				t.Errorf("login_failed TargetType = %v, want NULL", *failedRow.TargetType)
@@ -102,7 +102,7 @@ func TestAuditStoreWriteRecordsOneRowPerMutation(t *testing.T) {
 	}
 }
 
-// TestAuditStoreRejectsEmptyAction 断言没有动作名的审计行被拒绝：它无法被检索。
+// TestAuditStoreRejectsEmptyAction asserts that an audit row without an action name is rejected: it cannot be searched.
 func TestAuditStoreRejectsEmptyAction(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

@@ -1,13 +1,13 @@
-// 本文件实现对外可见的不可预测 id（public_id）。
+// This file implements the externally visible, unpredictable id (public_id).
 //
-// 为什么需要它：路由与 JSON 里的 id 原本就是自增主键，可以被枚举和推测。数字主键保留不动
-// （它是全部外键与索引的基石），但不再对外暴露——模型上的 ID 标 json:"-"，新增的
-// PublicID 标 json:"id"，于是直接序列化模型就得到正确的对外形态（AGENTS.md §2.4：
-// 一个模型同时服务业务、GORM 与 JSON，不做 DTO 映射层）。
+// Why it exists: the ids in routes and JSON used to be auto-increment primary keys, enumerable and guessable. The numeric primary key stays as is
+// (it is the foundation of every foreign key and index) but is no longer exposed -- on the model ID is tagged json:\"-\", and the added
+// PublicID is tagged json:\"id\", so serializing the model directly yields the right external shape (AGENTS.md §2.4:
+// one model serves business logic, GORM and JSON at once, with no DTO mapping layer).
 //
-// 生成点集中在 GORM 的 BeforeCreate 钩子：页面、REST、MCP、导入、克隆、测试种子等所有
-// 创建路径都经过 Create，因此在这里补值即可，不必在每个调用点重复。钩子只填空值，
-// 显式指定的 public_id 不会被覆盖。
+// Generation is concentrated in the GORM BeforeCreate hook: every creation path -- pages, REST, MCP, import, clone, test seeding --
+// goes through Create, so filling the value in here suffices and no call site has to repeat it. The hook only fills empty values,
+// an explicitly set public_id is never overwritten.
 package store
 
 import (
@@ -18,14 +18,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// NewPublicID 生成一个对外 id：UUIDv7（RFC 9562），36 字符的标准文本形式。
+// NewPublicID generates an external id: UUIDv7 (RFC 9562), in the 36-character standard text form.
 //
-// 选 v7 而不是 v4：v7 由「毫秒时间戳 + 随机位」构成，仍然不可预测，但值随时间递增，
-// 作为唯一索引插入时不会像纯随机的 v4 那样把 B-tree 随机打散。
+// Why v7 and not v4: v7 is built from "a millisecond timestamp + random bits", still unpredictable, but the values increase over time, so
+// inserting into a unique index does not scatter the B-tree randomly the way pure-random v4 does.
 func NewPublicID() string {
 	id, err := uuid.NewV7()
 	if err != nil {
-		// 只有系统随机源不可用才会失败；退回到 v4 仍然比返回空串安全。
+		// It only fails when the system random source is unavailable; falling back to v4 is still safer than returning an empty string.
 		fallback, ferr := uuid.NewRandom()
 		if ferr != nil {
 			panic("store: cannot generate a public id: " + ferr.Error())
@@ -35,14 +35,14 @@ func NewPublicID() string {
 	return id.String()
 }
 
-// assignPublicID 是各模型 BeforeCreate 钩子的公共实现：空值即生成。
+// assignPublicID is the shared implementation of the models' BeforeCreate hooks: an empty value is generated.
 func assignPublicID(p *string) {
 	if *p == "" {
 		*p = NewPublicID()
 	}
 }
 
-// 以下钩子覆盖全部对外可见实体；未对外暴露的表（sessions、outbox、日志台账等）不需要这一列。
+// The hooks below cover every externally visible entity; tables that are not exposed (sessions, outbox, log ledgers, etc.) do not need this column.
 func (m *User) BeforeCreate(*gorm.DB) error     { assignPublicID(&m.PublicID); return nil }
 func (m *Identity) BeforeCreate(*gorm.DB) error { assignPublicID(&m.PublicID); return nil }
 func (m *Invite) BeforeCreate(*gorm.DB) error   { assignPublicID(&m.PublicID); return nil }
@@ -55,8 +55,8 @@ func (m *APIKey) BeforeCreate(*gorm.DB) error   { assignPublicID(&m.PublicID); r
 func (m *Job) BeforeCreate(*gorm.DB) error      { assignPublicID(&m.PublicID); return nil }
 func (m *AuditLog) BeforeCreate(*gorm.DB) error { assignPublicID(&m.PublicID); return nil }
 
-// firstByPublicID 是各 Store ByPublicID 的公共实现。
-// 空串直接当作未找到：迁移前的旧行 public_id 可能为空，绝不能让空串匹配到一行。
+// firstByPublicID is the shared implementation behind the stores' ByPublicID methods.
+// An empty string counts as not found right away: rows from before the migration may have an empty public_id, and an empty string must never match a row.
 func firstByPublicID[T any](ctx context.Context, db *gorm.DB, publicID string) (*T, error) {
 	if publicID == "" {
 		return nil, gorm.ErrRecordNotFound
@@ -68,33 +68,33 @@ func firstByPublicID[T any](ctx context.Context, db *gorm.DB, publicID string) (
 	return &out, nil
 }
 
-// ByPublicID 按对外 id 取卡组。归档不影响读取，调用方按 ArchivedAt 决定如何展示。
+// ByPublicID fetches a deck by external id. Archiving does not affect reading; the caller decides how to present it based on ArchivedAt.
 func (s *DeckStore) ByPublicID(ctx context.Context, publicID string) (*Deck, error) {
 	return firstByPublicID[Deck](ctx, s.db, publicID)
 }
 
-// ByPublicID 按对外 id 取未软删除的 note；已删除的 note 视为不存在（用 Restore 恢复）。
+// ByPublicID fetches a note that is not soft-deleted by external id; a deleted note counts as absent (use Restore to bring it back).
 func (s *NoteStore) ByPublicID(ctx context.Context, publicID string) (*Note, error) {
 	return firstByPublicID[Note](ctx, s.db, publicID)
 }
 
-// ByPublicID 按对外 id 取预设。
+// ByPublicID fetches a preset by external id.
 func (s *PresetStore) ByPublicID(ctx context.Context, publicID string) (*Preset, error) {
 	return firstByPublicID[Preset](ctx, s.db, publicID)
 }
 
-// ByPublicID 按对外 id 取用户；不存在时返回 gorm.ErrRecordNotFound。
+// ByPublicID fetches a user by external id; returns gorm.ErrRecordNotFound when absent.
 func (s *UserStore) ByPublicID(ctx context.Context, publicID string) (*User, error) {
 	return firstByPublicID[User](ctx, s.db, publicID)
 }
 
-// ByPublicID 按对外 id 取用户级凭据。
+// ByPublicID fetches a user-level credential by external id.
 func (s *APIKeyStore) ByPublicID(ctx context.Context, publicID string) (*APIKey, error) {
 	return firstByPublicID[APIKey](ctx, s.db, publicID)
 }
 
-// ByPublicID 按对外 id 取一张可见的 card；所属 note 已软删除时返回 gorm.ErrRecordNotFound。
-// 可见性走 visibleCards，与 CardStore.ByID 同一口径。
+// ByPublicID fetches a visible card by external id; returns gorm.ErrRecordNotFound when its note is soft-deleted.
+// Visibility goes through visibleCards, the same definition as CardStore.ByID.
 func (s *CardStore) ByPublicID(ctx context.Context, publicID string) (*Card, error) {
 	if publicID == "" {
 		return nil, gorm.ErrRecordNotFound
@@ -106,7 +106,7 @@ func (s *CardStore) ByPublicID(ctx context.Context, publicID string) (*Card, err
 	return &c, nil
 }
 
-// ByPublicID 按对外 id 取邀请；未找到返回 ErrInviteNotFound。
+// ByPublicID fetches an invite by external id; returns ErrInviteNotFound when absent.
 func (s *InviteStore) ByPublicID(ctx context.Context, publicID string) (*Invite, error) {
 	inv, err := firstByPublicID[Invite](ctx, s.db, publicID)
 	if err != nil {
@@ -118,7 +118,7 @@ func (s *InviteStore) ByPublicID(ctx context.Context, publicID string) (*Invite,
 	return inv, nil
 }
 
-// ByPublicID 按对外 id 取绑定；未找到返回 ErrIdentityNotFound。
+// ByPublicID fetches a binding by external id; returns ErrIdentityNotFound when absent.
 func (s *IdentityStore) ByPublicID(ctx context.Context, publicID string) (*Identity, error) {
 	ident, err := firstByPublicID[Identity](ctx, s.db, publicID)
 	if err != nil {

@@ -11,8 +11,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// openEmailPrefFile 打开一个基于临时文件的 SQLite 库并迁移全部模型。
-// 用文件库（不是内存库）是为了能关掉再打开，真实模拟一次「重启」。
+// openEmailPrefFile opens a temp-file-based SQLite database and migrates all models.
+// A file database (not an in-memory one) is used so it can be closed and reopened, faithfully simulating a 'restart'.
 func openEmailPrefFile(t *testing.T, path string) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
@@ -25,7 +25,7 @@ func openEmailPrefFile(t *testing.T, path string) *gorm.DB {
 	return db
 }
 
-// closeEmailPrefDB 关闭底层 sql.DB，让后续的重新打开拿到真正的磁盘状态。
+// closeEmailPrefDB closes the underlying sql.DB so that a later reopen sees the real on-disk state.
 func closeEmailPrefDB(t *testing.T, db *gorm.DB) {
 	t.Helper()
 	sqlDB, err := db.DB()
@@ -37,14 +37,14 @@ func closeEmailPrefDB(t *testing.T, db *gorm.DB) {
 	}
 }
 
-// TestEmailPrefsPersistAcrossReopen 是验收项「用户对可选类型的选择重启后仍生效」的直接证据：
-// 写入选择 → 关闭数据库 → 重新打开同一文件 → 读回的选择完全一致。
+// TestEmailPrefsPersistAcrossReopen is direct evidence for the acceptance item 'a user's choices for optional types still apply after a restart':
+// write choices → close the database → reopen the same file → the choices read back are identical.
 func TestEmailPrefsPersistAcrossReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "prefs.db")
 	ctx := context.Background()
 	want := map[string]bool{
-		"deck_shared":     false, // B：默认开，用户关掉
-		"review_reminder": true,  // C：默认关，用户打开
+		"deck_shared":     false, // B: on by default, turned off by the user
+		"review_reminder": true,  // C: off by default, turned on by the user
 		"invite":          false,
 	}
 
@@ -65,7 +65,7 @@ func TestEmailPrefsPersistAcrossReopen(t *testing.T) {
 	closeEmailPrefDB(t, reopened)
 }
 
-// TestEmailPrefsChoicesEmptyWhenUnset 断言从未保存过偏好的用户读到空 map（而非报错）。
+// TestEmailPrefsChoicesEmptyWhenUnset asserts that a user who never saved preferences reads an empty map (rather than an error).
 func TestEmailPrefsChoicesEmptyWhenUnset(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -83,8 +83,8 @@ func TestEmailPrefsChoicesEmptyWhenUnset(t *testing.T) {
 	}
 }
 
-// TestEmailPrefsSetChoicesReplaces 断言保存是整体覆盖而不是合并：
-// 一次提交就是用户在该时刻的完整选择，旧值必须被顶掉，否则关掉某个类型后它会残留。
+// TestEmailPrefsSetChoicesReplaces asserts that saving overwrites wholesale rather than merging:
+// one submission is the user's complete choice at that moment, so old values must be replaced, otherwise a type that was turned off lingers.
 func TestEmailPrefsSetChoicesReplaces(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -111,8 +111,8 @@ func TestEmailPrefsSetChoicesReplaces(t *testing.T) {
 	}
 }
 
-// TestEmailPrefsTableRegisteredForMigration 断言 email_prefs 进了 AllModels()：
-// AutoMigrate 从 AllModels 取，漏登记会让建表静默少一张（AGENTS.md §6.4、守卫测试）。
+// TestEmailPrefsTableRegisteredForMigration asserts that email_prefs is in AllModels():
+// AutoMigrate reads from AllModels, and a missing registration silently leaves one table uncreated (AGENTS.md §6.4, guard test).
 func TestEmailPrefsTableRegisteredForMigration(t *testing.T) {
 	found := false
 	for _, model := range AllModels() {

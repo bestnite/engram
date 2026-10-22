@@ -10,19 +10,19 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// 每个用户对每个卡组的学习设置（调度预设与每日上限）。
+// Per-user, per-deck study settings (scheduling preset and daily caps).
 //
-// 进度早已按用户分开（card_states 的主键是 (card_id, user_id)）；学习设置同理必须按用户分开：
-// 共享卡组的成员按自己的记忆参数复习、按自己的节奏引入新卡，不受属主的预设与上限支配。
+// Progress has long been separated per user (the card_states primary key is (card_id, user_id)); study settings must be separated per user
+// for the same reason: members of a shared deck review with their own memory parameters and introduce new cards at their own pace, not governed by the owner's preset and caps.
 //
-// 存放位置按身份分两处，读写都只经过本文件的 StudySettings / SetStudySettings：
-//   - 属主：decks 表上的 preset_id / new_per_day / reviews_per_day 三列（它们一直就是属主的设置，
-//     保持原样避免迁移数据与改动大量调用点）；
-//   - 其他成员：deck_member_settings 表，一行对应一个 (卡组, 用户)。授权写入时建行，
-//     初始值是成员自己的默认预设与默认上限；撤销授权、删除卡组或删除用户时随之删除。
+// Storage lives in two places by identity, and reads and writes only go through StudySettings / SetStudySettings in this file:
+//   - owner: the preset_id / new_per_day / reviews_per_day columns on the decks table (they have always been the owner's settings,
+//     left as they are to avoid data migrations and touching many call sites);
+//   - other members: the deck_member_settings table, one row per (deck, user). The row is created when a grant is written,
+//     initialized to the member's own default preset and default caps; it is deleted with the grant, the deck or the user.
 
-// DeckMemberSetting 是一个非属主成员对一个共享卡组的学习设置。
-// 两个上限列不带数据库默认值：0 是合法值（不限），带默认值的整型零值会被 GORM 省略后由默认值覆盖。
+// DeckMemberSetting is one non-owner member's study settings for a shared deck.
+// The two cap columns carry no database default: 0 is a legal value (unlimited), and an integer zero with a default would be omitted by GORM and overwritten by that default.
 type DeckMemberSetting struct {
 	DeckID        uint64    `gorm:"primaryKey" json:"-"`
 	UserID        uint64    `gorm:"primaryKey;index" json:"-"`
@@ -34,16 +34,16 @@ type DeckMemberSetting struct {
 
 func (DeckMemberSetting) TableName() string { return "deck_member_settings" }
 
-// StudySettings 是某用户复习某卡组时生效的设置。
+// StudySettings is the settings in effect when a user reviews a deck.
 type StudySettings struct {
 	PresetID uint64
 	Caps     DeckCaps
 }
 
-// StudySettingsFor 返回 userID 在每个给定卡组上的学习设置（键是卡组主键）。
+// StudySettingsFor returns userID's study settings on each given deck (keys are deck primary keys).
 //
-// 属主读卡组列；成员读 deck_member_settings。成员行缺失（例如本表上线前的授权、由迁移补齐之前）
-// 时回落到成员自己的默认预设与默认上限——不回落到属主的设置，否则就又把属主的参数用在了别人身上。
+// The owner reads the deck columns; a member reads deck_member_settings. When the member row is missing (e.g. a grant made before
+// this table existed, before the migration backfills it) it falls back to the member's own default preset and default caps — never to the owner's settings, which would apply the owner's parameters to someone else.
 func StudySettingsFor(ctx context.Context, db *gorm.DB, userID uint64, decks []Deck) (map[uint64]StudySettings, error) {
 	out := make(map[uint64]StudySettings, len(decks))
 	var memberDecks []uint64
@@ -79,7 +79,7 @@ func StudySettingsFor(ctx context.Context, db *gorm.DB, userID uint64, decks []D
 	return out, nil
 }
 
-// StudySettings 返回 userID 在单个卡组上的学习设置（规则见 StudySettingsFor）。
+// StudySettings returns userID's study settings on a single deck (rules in StudySettingsFor).
 func (s *DeckStore) StudySettings(ctx context.Context, userID uint64, deck *Deck) (StudySettings, error) {
 	all, err := StudySettingsFor(ctx, s.db, userID, []Deck{*deck})
 	if err != nil {
@@ -88,7 +88,7 @@ func (s *DeckStore) StudySettings(ctx context.Context, userID uint64, deck *Deck
 	return all[deck.ID], nil
 }
 
-// defaultStudySettings 是成员的初始设置：自己的默认预设（没有则建）与卡组的默认上限。
+// defaultStudySettings is a member's initial settings: their own default preset (created if absent) and the deck's default caps.
 func defaultStudySettings(ctx context.Context, db *gorm.DB, userID uint64) (StudySettings, error) {
 	presets, err := EnsureDefaultPreset(ctx, db, userID)
 	if err != nil {
@@ -101,7 +101,7 @@ func defaultStudySettings(ctx context.Context, db *gorm.DB, userID uint64) (Stud
 	return StudySettings{PresetID: p.ID, Caps: DeckCaps{NewPerDay: DefaultNewPerDay, ReviewsPerDay: DefaultReviewsPerDay}}, nil
 }
 
-// ensureMemberSettings 在成员还没有设置行时按初始值建一行；已有则不动（改角色不重置设置）。
+// ensureMemberSettings creates a row with the initial values when the member has no settings row yet; an existing row is left alone (a role change does not reset settings).
 func ensureMemberSettings(ctx context.Context, db *gorm.DB, deckID, userID uint64) error {
 	initial, err := defaultStudySettings(ctx, db, userID)
 	if err != nil {
@@ -117,10 +117,10 @@ func ensureMemberSettings(ctx context.Context, db *gorm.DB, deckID, userID uint6
 	return nil
 }
 
-// SetStudySettings 改 userID 在卡组上的学习设置；presetID 与 caps 为 nil 的项保持不变。
+// SetStudySettings changes userID's study settings on a deck; fields whose presetID or caps is nil are left unchanged.
 //
-// 预设必须属于 userID 本人（否则返回 ErrDeckPresetInvalid）：挂上别人的预设，就能借「卡组读得到」
-// 读出他人的参数。调用方负责确认 userID 至少是该卡组的 reader。
+// The preset must belong to userID itself (otherwise ErrDeckPresetInvalid): hanging someone else's preset on the deck would let
+// their parameters be read through 'the deck is readable'. The caller must confirm that userID is at least a reader of the deck.
 func (s *DeckStore) SetStudySettings(ctx context.Context, userID uint64, deck *Deck, presetID *uint64, caps *DeckCaps) error {
 	updates := map[string]any{}
 	if presetID != nil {

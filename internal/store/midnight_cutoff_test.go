@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// 午夜不是默认值哨兵：统计必须在 00:00 而不是 04:00 开始新复习日。
+// Midnight is not the default sentinel: statistics must start a new review day at 00:00, not 04:00.
 func TestMidnightCutoffIsCalendarDay(t *testing.T) {
 	loc := time.FixedZone("UTC+8", 8*3600)
 	now := time.Date(2026, 10, 2, 0, 30, 0, 0, loc)

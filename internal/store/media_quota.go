@@ -8,37 +8,37 @@ import (
 	"gorm.io/gorm"
 )
 
-// 每用户媒体总量配额的计量口径。
+// The accounting rule for the per-user media quota.
 //
-// 「已用媒体量」= 下面两个集合的并集按 sha256 去重后的字节数之和：
-//  1. 该用户创建的、未软删除的 note 引用到的媒体（经 media_notes 映射，映射由 note 写入路径维护）；
-//  2. 该用户上传过、但**目前没有任何 note 引用**的媒体（待用的上传）。
+// 'Used media' = the sum of the bytes of the union of the two sets below, deduped by sha256:
+//  1. media referenced by notes this user created and that are not soft-deleted (via the media_notes mapping, maintained by the note write path);
+//  2. media this user uploaded but that **no note currently references** (pending uploads).
 //
-// 为什么按「引用」计：媒体按 sha256 内容寻址，同一份字节全库只存一份。按上传者计会让共享的
-// blob 只记在第一个上传者名下，也让「删掉自己的引用」无法释放配额。按引用计满足：删除或替换
-// 引用即释放（note 软删除同样释放）；同一 blob 被同一用户多处引用只计一次；多个用户引用同一 blob
-// 时各计一次（逻辑归属，磁盘物理上仍只有一份，所以配额不等于磁盘占用）。
+// Why count by 'reference': media is content-addressed by sha256, so the same bytes are stored only once instance-wide. Counting by uploader would attribute a shared
+// blob only to its first uploader, and would make 'deleting your own reference' unable to free quota. Counting by reference gives: deleting or replacing a
+// reference frees it (soft-deleting the note frees it too); one blob referenced several times by the same user counts once; when several users reference the same blob
+// it counts once for each (logical attribution — physically there is still one copy on disk, so the quota is not disk usage).
 //
-// 为什么还要计第 2 类：只按引用计时，上传后不插进任何卡片的文件永远不计费，一个账号可以
-// 反复上传「不引用的文件」把磁盘写满。待用的上传计到上传者名下，直到有 note 引用它（转为
-// 第 1 类，由引用者计费）或被媒体回收删除。
+// Why set 2 is counted too: counting only by reference would make a file uploaded and never inserted into any card free forever, so an account could
+// repeatedly upload 'unreferenced files' and fill the disk. Pending uploads are charged to the uploader until a note references them (which moves them into
+// set 1, charged to the referencer) or until media reclamation deletes them.
 type MediaUsage struct {
-	// Bytes 是去重后的已用媒体字节数。
+	// Bytes is the deduped number of used media bytes.
 	Bytes int64
-	// Sha256 是该用户已计费的媒体集合（sha256 → true），用于上传时判断新文件是否已被计费。
+	// Sha256 is the set of media this user is charged for (sha256 → true), used at upload time to decide whether a new file is already charged.
 	Sha256 map[string]bool
 }
 
-// mediaRefByURLRE 匹配编辑器写入的媒体 URL `/media/<sha256>`（同一字段里可能出现多次）。
-// 左右用非十六进制字符界定，避免把更长的十六进制串截成 64 位而误配。
+// mediaRefByURLRE matches the media URL `/media/<sha256>` written by the editor (it may appear several times in one field).
+// It is bounded on both sides by non-hex characters so that a longer hex string is not cut to 64 characters and matched by mistake.
 var mediaRefByURLRE = regexp.MustCompile(`(?:^|[^0-9a-f])/media/([0-9a-f]{64})(?:[^0-9a-f]|$)`)
 
-// mediaRefByShaRE 匹配卡组包形态的 `media/<sha256>.<ext>`；左右用非十六进制字符界定，
-// 避免把更长的串误当 sha256。
+// mediaRefByShaRE matches the deck-package form `media/<sha256>.<ext>`; it is bounded on both sides by non-hex characters
+// so a longer string is not mistaken for a sha256.
 var mediaRefByShaRE = regexp.MustCompile(`(?:^|[^0-9a-f])media/([0-9a-f]{64})\.([A-Za-z0-9]+)`)
 
-// UserMediaUsage 计算用户已用媒体量（口径见 MediaUsage 注释）。db 为空时返回空用量。
-// 两个集合都是索引上的子查询，耗时与该用户的 note 总数无关。
+// UserMediaUsage computes the user's used media (rule in the MediaUsage comment). Returns empty usage when db is nil.
+// Both sets are subqueries over indexes, so the cost is independent of the user's total note count.
 func UserMediaUsage(ctx context.Context, db *gorm.DB, userID uint64) (MediaUsage, error) {
 	usage := MediaUsage{Sha256: map[string]bool{}}
 	if db == nil || userID == 0 {
@@ -63,7 +63,7 @@ func UserMediaUsage(ctx context.Context, db *gorm.DB, userID uint64) (MediaUsage
 	return usage, nil
 }
 
-// scanMediaRefs 递归扫描 note 字段，收集其中的媒体 sha256 引用（URL 形态与包内形态都识别）。
+// scanMediaRefs recursively scans note fields and collects the media sha256 references in them (both URL form and in-package form are recognized).
 func scanMediaRefs(v any, shas map[string]bool) {
 	switch x := v.(type) {
 	case string:

@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// TestMailTemplateStoreUpsertAndDelete 覆盖模板存储的全部动作。跑双驱动：唯一键是
-// 复合主键 + OnConflict 覆盖，这两点都是驱动相关的（AGENTS.md §2.3.4）。
+// TestMailTemplateStoreUpsertAndDelete covers every action of the template store. It runs both drivers: the unique key is a
+// composite primary key and OnConflict provides the overwrite, both of which are driver-specific (AGENTS.md §2.3.4).
 func TestMailTemplateStoreUpsertAndDelete(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -24,7 +24,7 @@ func TestMailTemplateStoreUpsertAndDelete(t *testing.T) {
 				UpdatedAt: time.Now().UTC(),
 			}
 
-			// 没有行是正常状态，不是错误。
+			// no row is a normal state, not an error.
 			if _, err := store.ByTypeLocale(ctx, "password_reset", "zh-CN"); !errors.Is(err, ErrMailTemplateNotFound) {
 				t.Fatalf("ByTypeLocale() error = %v, want ErrMailTemplateNotFound", err)
 			}
@@ -43,7 +43,7 @@ func TestMailTemplateStoreUpsertAndDelete(t *testing.T) {
 				t.Errorf("UpdatedBy = %v, want %d", got.UpdatedBy, editor)
 			}
 
-			// 再存一次是整份覆盖，不是插入第二行。
+			// storing again replaces wholesale rather than inserting a second row.
 			second := &MailTemplate{
 				Type: "password_reset", Locale: "zh-CN",
 				Subject: "new", BodyMD: "new body", UpdatedAt: time.Now().UTC(),
@@ -62,7 +62,7 @@ func TestMailTemplateStoreUpsertAndDelete(t *testing.T) {
 				t.Errorf("row after overwrite = %+v, want the new subject and a cleared editor", rows[0])
 			}
 
-			// 同一类型另一语言是独立一行。
+			// another locale of the same type is an independent row.
 			other := &MailTemplate{Type: "password_reset", Locale: "en", Subject: "s", BodyMD: "b", UpdatedAt: time.Now().UTC()}
 			if err := store.Upsert(ctx, other); err != nil {
 				t.Fatalf("Upsert(other locale) error = %v", err)
@@ -77,7 +77,7 @@ func TestMailTemplateStoreUpsertAndDelete(t *testing.T) {
 			if _, err := store.ByTypeLocale(ctx, "password_reset", "zh-CN"); !errors.Is(err, ErrMailTemplateNotFound) {
 				t.Errorf("after Delete() error = %v, want ErrMailTemplateNotFound", err)
 			}
-			// 删不存在的行不算失败：意图是「回到内置」，那个状态已经成立。
+			// deleting a missing row is not a failure: the intent is 'back to the built-in', and that state already holds.
 			if err := store.Delete(ctx, "password_reset", "zh-CN"); err != nil {
 				t.Errorf("Delete() of a missing row error = %v, want nil", err)
 			}

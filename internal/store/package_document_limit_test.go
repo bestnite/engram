@@ -10,14 +10,14 @@ import (
 	"testing"
 )
 
-// MCP/CLI 的 base64 归档入口在解码前先按「归档上限对应的展开上界」拒绝超限输入，
-// 绝不对超限串做整体解码。
+// The base64 archive entry point of MCP/CLI rejects oversized input before decoding, against "the expansion bound of the archive cap",
+// and never decodes an oversized string wholesale.
 
-// TestPackageReaderRejectsOversizedBase64BeforeDecoding 断言超限的 base64 串在解码前被拒。
-// 用一个既超限、又含非法 base64 字符（'!'）的串：若实现先解码，必然得到解码错误；
-// 只有「先判长度」才会得到 package_too_large。
+// TestPackageReaderRejectsOversizedBase64BeforeDecoding asserts an oversized base64 string is rejected before decoding.
+// It uses a string that is both oversized and contains an illegal base64 character ('!'): an implementation that decodes first must yield a decoding error;
+// only "check the length first" yields package_too_large.
 func TestPackageReaderRejectsOversizedBase64BeforeDecoding(t *testing.T) {
-	// MaxTotalBytes=30 时展开上界 EncodedLen(30)=40 字节；64 > 40，必被长度校验拦下。
+	// With MaxTotalBytes=30 the expansion bound is EncodedLen(30)=40 bytes; 64 > 40, so the length check must stop it.
 	limits := PackageLimits{MaxEntries: 8, MaxFileBytes: 1 << 20, MaxTotalBytes: 30}
 	oversize := strings.Repeat("!", 64)
 	_, err := packageReader(oversize, limits)
@@ -30,11 +30,11 @@ func TestPackageReaderRejectsOversizedBase64BeforeDecoding(t *testing.T) {
 	}
 }
 
-// TestPackageReaderBase64Boundary 断言展开上界本身不被误拒：恰好等于上界的串被接受，
-// 超过上界即拒。
+// TestPackageReaderBase64Boundary asserts the expansion bound itself is not rejected by mistake: a string exactly at the bound is accepted,
+// anything over the bound is rejected.
 func TestPackageReaderBase64Boundary(t *testing.T) {
 	limits := PackageLimits{MaxEntries: 8, MaxFileBytes: 1 << 20, MaxTotalBytes: 3}
-	// EncodedLen(3)=4：'YWJj' 解码为 3 字节，恰好在上界内，放行。
+	// EncodedLen(3)=4: 'YWJj' decodes to 3 bytes, exactly within the bound, so it passes.
 	exact := base64.StdEncoding.EncodeToString([]byte("abc"))
 	if len(exact) != 4 {
 		t.Fatalf("test setup: encoded len = %d, want 4", len(exact))
@@ -47,14 +47,14 @@ func TestPackageReaderBase64Boundary(t *testing.T) {
 	if err != nil || !bytes.Equal(got, []byte("abc")) {
 		t.Fatalf("decoded = %q err %v, want %q", got, err, "abc")
 	}
-	// 比上界多一个字符：即使内容巧合合法，也必须被拒（不上界外溢）。
+	// One character more than the bound: even if the content happens to be legal it must be rejected (no spill past the bound).
 	if _, err := packageReader(strings.Repeat("A", 5), limits); err == nil {
 		t.Fatal("base64 one byte over the expansion bound was accepted")
 	}
 }
 
-// TestImportViaBase64PackageReader 是正向对照：一个合法的 base64 归档经 PackageReader
-// 仍能完整导入（真实 SQLite 往返，复用 store 层已有的包构造工具）。
+// TestImportViaBase64PackageReader is the positive control: a legal base64 archive still imports
+// completely through PackageReader (a real SQLite round trip, reusing the store layer's existing package builders).
 func TestImportViaBase64PackageReader(t *testing.T) {
 	srcs := packageDatabases(t)
 	dsts := packageDatabases(t)

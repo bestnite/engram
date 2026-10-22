@@ -9,17 +9,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// statsNow 是所有统计用例的固定观测时刻；固定它才能把分桶边界写成常量。
+// statsNow is the fixed observation moment of all stats cases; fixing it is what lets the bucket boundaries stay constants.
 var statsNow = time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 
-// statsFixture 保存 seedStatsFixture 建好的行 id，供断言引用。
+// statsFixture holds the row ids seedStatsFixture created, for the assertions to reference.
 type statsFixture struct {
 	deckID uint64
-	card1  uint64 // note1 ["go","fsrs"]，被复习的主力
+	card1  uint64 // note1 ["go","fsrs"], the one mostly reviewed
 	card2  uint64 // note2 ["go"]
 }
 
-// seedStatsFixture 建出统计用例的完整数据集。数值刻意手算：
+// seedStatsFixture builds the complete dataset for the stats cases. The numbers are hand-computed on purpose:
 //
 //	reviews: r1(card1,10-02,Good,Review,stab5,1000ms,self) r2(card1,10-02,Again,Review,stab0.5,2000ms,self)
 //	         r3(card2,10-01,Easy,Review,stab40,3000ms,typed) r4(card1,09-20,Hard,Learning,stab2,nil,self)
@@ -48,7 +48,7 @@ func seedStatsFixture(t *testing.T, db *gorm.DB) statsFixture {
 	card1 := createStatsCard(t, db, n1.ID, "forward")
 	card2 := createStatsCard(t, db, n2.ID, "back")
 
-	// 到期预测分桶用的卡：今日 / 明日 / 7 日内 / 30 日内 / 更远 / 新卡无状态行。
+	// Cards for the due-forecast buckets: today / tomorrow / within 7 days / within 30 days / further out / a new card with no state row.
 	setState(t, db, card1, "review", statsNow.Add(-2*time.Hour), 5)
 	setState(t, db, card2, "review", time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC), 40)
 	b5 := createStatsCard(t, db, n1.ID, "b5")
@@ -57,7 +57,7 @@ func seedStatsFixture(t *testing.T, db *gorm.DB) statsFixture {
 	setState(t, db, b6, "review", time.Date(2026, 10, 5, 10, 0, 0, 0, time.UTC), 20)
 	b7 := createStatsCard(t, db, n1.ID, "b7")
 	setState(t, db, b7, "review", time.Date(2026, 12, 1, 10, 0, 0, 0, time.UTC), 15)
-	_ = createStatsCard(t, db, n1.ID, "b8") // 新卡：无 card_states 行
+	_ = createStatsCard(t, db, n1.ID, "b8") // new card: no card_states row
 
 	seedReview(t, db, card1, "2026-10-02", 3, 2, 5, 1000, "self", statsNow)
 	seedReview(t, db, card1, "2026-10-02", 1, 2, 0.5, 2000, "self", statsNow.Add(time.Minute))
@@ -85,7 +85,7 @@ func setState(t *testing.T, db *gorm.DB, cardID uint64, state string, due time.T
 	}
 }
 
-// seedReview 写一条复习日志；elapsedMS 传 -1 表示 NULL。
+// seedReview writes one review log entry; elapsedMS -1 means NULL.
 func seedReview(t *testing.T, db *gorm.DB, cardID uint64, day string, rating, stateBefore int, stability float64, elapsedMS int, source string, at time.Time) {
 	t.Helper()
 	rv := Review{
@@ -100,8 +100,8 @@ func seedReview(t *testing.T, db *gorm.DB, cardID uint64, day string, rating, st
 	}
 }
 
-// TestStatsReviewVolumeMatchesHandSQL 用独立 SQL 对拍复习量（第一条）。
-// 期望值同时对照固定数据集：今日 2、近 7 日 3、近 30 日 4。
+// TestStatsReviewVolumeMatchesHandSQL cross-checks the review volume against independent SQL (the first metric).
+// The expected values also match the fixed dataset: today 2, last 7 days 3, last 30 days 4.
 func TestStatsReviewVolumeMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -129,9 +129,9 @@ func TestStatsReviewVolumeMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsDueForecastMatchesHandSQL 用独立 SQL 对拍到预测分桶。
-// 日边界取复习日起点 04:00 UTC：今日结束 10-03 04:00、明日结束 10-04 04:00、
-// 7 日结束 10-09 04:00、30 日结束 11-01 04:00。
+// TestStatsDueForecastMatchesHandSQL cross-checks the due-forecast buckets against independent SQL.
+// The day boundary is the review-day start at 04:00 UTC: today ends 10-03 04:00, tomorrow ends 10-04 04:00,
+// the 7-day window ends 10-09 04:00, the 30-day window ends 11-01 04:00.
 func TestStatsDueForecastMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -173,8 +173,8 @@ func TestStatsDueForecastMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsRetentionByStabilityMatchesHandSQL 用独立 SQL 对拍留存率：
-// 到期复习（state_before=Review）中「评分不是 Again」的比例，按 stability 分桶。
+// TestStatsRetentionByStabilityMatchesHandSQL cross-checks the retention rate against independent SQL:
+// the share of "rated something other than Again" among due reviews (state_before=Review), bucketed by stability.
 func TestStatsRetentionByStabilityMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -224,7 +224,7 @@ func TestStatsRetentionByStabilityMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsTimeSpentMatchesHandSQL 对拍时间投入的日均与中位数。
+// TestStatsTimeSpentMatchesHandSQL cross-checks the time-invested average and median.
 func TestStatsTimeSpentMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -241,7 +241,7 @@ func TestStatsTimeSpentMatchesHandSQL(t *testing.T) {
 			if got.TotalMS != 6500 || got.Count != 4 || got.AvgMS != 1625 {
 				t.Errorf("TimeSpent() = %+v, want total 6500 count 4 avg 1625", got)
 			}
-			// 升序 [500,1000,2000,3000] 的下中位数是 1000。
+			// The lower median of [500,1000,2000,3000] in ascending order is 1000.
 			if got.MedianMS != 1000 {
 				t.Errorf("MedianMS = %d, want 1000", got.MedianMS)
 			}
@@ -249,7 +249,7 @@ func TestStatsTimeSpentMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsGradeSourceDistribution 对拍判分来源分布。
+// TestStatsGradeSourceDistribution cross-checks the grading source distribution.
 func TestStatsGradeSourceDistribution(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -276,7 +276,7 @@ func TestStatsGradeSourceDistribution(t *testing.T) {
 	}
 }
 
-// TestStatsDeckBreakdownMatchesHandSQL 对拍卡组维度。
+// TestStatsDeckBreakdownMatchesHandSQL cross-checks the deck dimension.
 func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -288,7 +288,7 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 			if len(got) != 1 || got[0].DeckID != fx.deckID || got[0].Name != "Deck A" {
 				t.Fatalf("DeckBreakdown() = %+v, want one row for deck %d", got, fx.deckID)
 			}
-			// 留存的分母/分子是真实留存口径：只数 state_before=Review 的到期复习，而复习量仍数全部。
+			// The retention denominator/numerator use the true retention definition: only due reviews with state_before=Review count, while the review volume still counts everything.
 			var wantReviews, wantRetTotal, wantPassed, wantDue, wantElapsed int64
 			db.Raw(`SELECT COUNT(*),
 				COALESCE(SUM(CASE WHEN r.state_before = 2 AND r.stability IS NOT NULL THEN 1 ELSE 0 END), 0),
@@ -321,7 +321,7 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// TestStatsTagBreakdown 对拍标签维度：tags_json 在 Go 侧解码后聚合。
+// TestStatsTagBreakdown cross-checks the tag dimension: tags_json is decoded and aggregated on the Go side.
 func TestStatsTagBreakdown(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -330,8 +330,8 @@ func TestStatsTagBreakdown(t *testing.T) {
 			if err != nil {
 				t.Fatalf("TagBreakdown() error = %v", err)
 			}
-			// go 覆盖全部 5 条复习，其中 4 条到期复习、3 条非 Again；fsrs 只有 card1 的
-			// 3 条（r1 r2 r4），r4 是学习步骤不计入留存，剩 2 条到期复习、1 条非 Again。
+			// go covers all 5 reviews, of which 4 are due reviews and 3 are not Again; fsrs only covers card1's
+			// 3 (r1 r2 r4), r4 is a learning step and does not count toward retention, leaving 2 due reviews and 1 not Again.
 			want := map[string]TagStat{
 				"go":   {Tag: "go", Reviews: 5, RetentionTotal: 4, Passed: 3, Retention: 0.75},
 				"fsrs": {Tag: "fsrs", Reviews: 3, RetentionTotal: 2, Passed: 1, Retention: 0.5},
@@ -352,8 +352,8 @@ func TestStatsTagBreakdown(t *testing.T) {
 	}
 }
 
-// seedStreakDays 建出只含指定复习日的最小数据集：每个 day 写一条复习日志，
-// 用于连续打卡的日期分布断言（不复用 seedStatsFixture，避免它的日期干扰）。
+// seedStreakDays builds a minimal dataset holding only the given review days: one review log entry per day,
+// for the streak's date-distribution assertions (seedStatsFixture is not reused, so its dates do not interfere).
 func seedStreakDays(t *testing.T, db *gorm.DB, days ...string) {
 	t.Helper()
 	if err := db.AutoMigrate(AllModels()...); err != nil {
@@ -377,16 +377,16 @@ func seedStreakDays(t *testing.T, db *gorm.DB, days ...string) {
 	}
 }
 
-// TestStatsStreakBoundaryAtCutoff 是验收边界：连续天数只在「整整一个复习日
-// 被跳过」时中断。同一个挂钟日期 2026-10-04，03:30 仍算复习日 10-03（连续未断），
-// 04:30 跨过 04:00 切点后 10-03 已被整天跳过（连续归零）。
+// TestStatsStreakBoundaryAtCutoff is the acceptance boundary: the streak breaks only when "a whole review day
+// is skipped". On the same wall-clock date 2026-10-04, 03:30 still counts as review day 10-03 (streak unbroken),
+// and at 04:30, past the 04:00 cutoff, 10-03 has been skipped whole (streak drops to zero).
 func TestStatsStreakBoundaryAtCutoff(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			seedStreakDays(t, db, "2026-10-01", "2026-10-02")
 			ctx := context.Background()
 
-			// 切点本身：03:59:59 属前一天，04:00:00 属当天。
+			// The cutoff itself: 03:59:59 belongs to the previous day, 04:00:00 to the current one.
 			if got := reviewDayString(time.Date(2026, 10, 3, 3, 59, 59, 0, time.UTC), time.UTC, 4); got != "2026-10-02" {
 				t.Errorf("reviewDayString(03:59:59) = %q, want 2026-10-02", got)
 			}
@@ -413,8 +413,8 @@ func TestStatsStreakBoundaryAtCutoff(t *testing.T) {
 	}
 }
 
-// TestStatsStreakCurrentAndLongest 断言当前/最长连续段：最长段取历史最长，
-// 当前段允许「今天还没复习」而不算断（只有昨天整天被跳过才归零）。
+// TestStatsStreakCurrentAndLongest asserts the current/longest run: the longest run is the historical maximum,
+// and the current run tolerates "no review yet today" without breaking (only a whole skipped day yesterday zeroes it).
 func TestStatsStreakCurrentAndLongest(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -430,9 +430,9 @@ func TestStatsStreakCurrentAndLongest(t *testing.T) {
 				wantLongest int
 			}{
 				{time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC), 2, 3}, // 10-02,10-01
-				{time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC), 2, 3}, // 今天未复习，昨天 10-02 在，未断
-				{time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), 0, 3}, // 10-03 整天被跳过
-				{time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC), 3, 3}, // 09-25..27 正好当天
+				{time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC), 2, 3}, // not reviewed today, 10-02 is there from yesterday, unbroken
+				{time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), 0, 3}, // 10-03 skipped entirely
+				{time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC), 3, 3}, // 09-25..27 right up to today
 			}
 			for _, tc := range cases {
 				got, err := store.Streak(ctx, 1, tc.now, time.UTC, 4)
@@ -448,13 +448,13 @@ func TestStatsStreakCurrentAndLongest(t *testing.T) {
 	}
 }
 
-// TestStatsLearningCurveMatchesHandSQL 对拍学习曲线：每日新引入
-// 是 state_before=New 的次数，其余算复习量。期望值全部硬编码，逐日断言两个数字。
+// TestStatsLearningCurveMatchesHandSQL cross-checks the learning curve: each day's newly introduced
+// count is state_before=New, everything else counts as review volume. All expected values are hard-coded, asserting both numbers day by day.
 func TestStatsLearningCurveMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			fx := seedStatsFixture(t, db)
-			// 补两条「新引入」：10-02 一张、10-03 一张。
+			// Add two "newly introduced" entries: one on 10-02, one on 10-03.
 			seedReview(t, db, fx.card1, "2026-10-02", 3, 0, 5, 1000, "self", statsNow)
 			seedReview(t, db, fx.card2, "2026-10-03", 3, 0, 5, 1000, "self", statsNow)
 
@@ -474,7 +474,7 @@ func TestStatsLearningCurveMatchesHandSQL(t *testing.T) {
 				if got[i] != want[i] {
 					t.Errorf("LearningCurve()[%d] = %+v, want %+v", i, got[i], want[i])
 				}
-				// 独立 SQL 对拍同一天的互斥分桶。
+				// Independent SQL cross-checks the mutually exclusive buckets for the same day.
 				var handNew, handReview int64
 				db.Raw(`SELECT
 					COALESCE(SUM(CASE WHEN state_before = 0 THEN 1 ELSE 0 END), 0),
@@ -488,8 +488,8 @@ func TestStatsLearningCurveMatchesHandSQL(t *testing.T) {
 	}
 }
 
-// seedForeignDeck 建一个属于 owner 的卡组，含 cards 张没有 card_states 行的新卡，
-// 用来构造「别人的卡组」（对当前用户而言这些卡看起来就是没复习过的新卡）。
+// seedForeignDeck builds a deck owned by owner with cards new cards that have no card_states row,
+// to construct "someone else's deck" (to the current user these cards look like new cards never reviewed).
 func seedForeignDeck(t *testing.T, db *gorm.DB, owner uint64, name string, cards int) uint64 {
 	t.Helper()
 	p := NewPreset(owner, name)
@@ -510,15 +510,15 @@ func seedForeignDeck(t *testing.T, db *gorm.DB, owner uint64, name string, cards
 	return d.ID
 }
 
-// TestStatsScopesToVisibleDecks 是卡组越权的回归用例（卡组维度与到期预测）。
+// TestStatsScopesToVisibleDecks is the regression case for deck privilege escalation (deck dimension and due forecast).
 //
-// 缺陷形态：DeckBreakdown 的到期量与 DueForecast 的新卡计数都以 cards 为起点、只按
-// user_id 左连接 card_states，没有任何卡组范围过滤——别人卡组里的卡对当前用户没有
-// card_states 行（cs.card_id IS NULL），于是被整体算成「到期 / 新卡未到期」，再按
-// deck_id 分组，别人的私有卡组连名字一起出现在我的统计页上。
+// The shape of the defect: DeckBreakdown's due volume and DueForecast's new-card count both start from cards and only join
+// card_states on user_id, with no deck-scope filter at all -- cards in someone else's deck have no
+// card_states row for the current user (cs.card_id IS NULL), so they were all counted as "due / new not yet due", then grouped by
+// deck_id, and other people's private decks appeared on my stats page, name and all.
 //
-// 口径＝该用户「可见」的卡组（自有 ∪ 被 deck_grants 授权，与卡组列表页、全库队列同一集合）：
-// 别人的卡组一律不出现，无论它叫什么名字；「曾授权、现已撤销」的卡组同样不出现。
+// Definition = the decks "visible" to the user (their own ∪ granted through deck_grants, the same set as the deck list page and the whole-database queue):
+// other people's decks never appear, whatever their name; a deck "once granted, now revoked" does not appear either.
 func TestStatsScopesToVisibleDecks(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -529,8 +529,8 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 			foreignTwo := seedForeignDeck(t, db, 2, "Other deck B", 3)
 			revoked := seedForeignDeck(t, db, 2, "Revoked grant", 2)
 
-			// 用户 1 曾在 revoked 卡组里复习过（有状态行与复习日志），随后授权被撤销：
-			// 该卡组当前不可见，统计页不该再出现它，也不该把它的卡算进到期预测。
+			// User 1 once reviewed in the revoked deck (there is a state row and a log entry), and then the grant was revoked:
+			// the deck is no longer visible, so the stats page must not show it and must not count its cards in the due forecast.
 			if err := db.Create(&DeckGrant{DeckID: revoked, UserID: 1, Role: "reader", CreatedAt: statsNow}).Error; err != nil {
 				t.Fatalf("create grant: %v", err)
 			}
@@ -549,7 +549,7 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 				t.Fatalf("delete grant: %v", err)
 			}
 
-			// 卡组维度：只有自己的卡组，且到期量正确。
+			// Deck dimension: only their own deck, and the due volume is right.
 			got, err := NewStatsStore(db).DeckBreakdown(ctx, 1, statsNow)
 			if err != nil {
 				t.Fatalf("DeckBreakdown() error = %v", err)
@@ -568,13 +568,13 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 					t.Errorf("DeckBreakdown() deck %d due = %d, want %d", row.DeckID, row.DueCount, want)
 				}
 			}
-			// 显式点名：别人的卡组一张都不能出现（缺陷的直接症状）。
+			// Named explicitly: not a single card of someone else's deck may appear (the direct symptom of the defect).
 			for _, row := range got {
 				if row.DeckID == foreignOne || row.DeckID == foreignTwo {
 					t.Errorf("DeckBreakdown() leaked another user's deck %d (%q)", row.DeckID, row.Name)
 				}
 			}
-			// 到期预测：新卡未到期只数可见卡组（夹具自有 1 张）。
+			// Due forecast: new cards not yet due only count visible decks (the fixture's own 1).
 			due, err := NewStatsStore(db).DueForecast(ctx, 1, 0, statsNow, time.UTC, 4)
 			if err != nil {
 				t.Fatalf("DueForecast() error = %v", err)
@@ -582,7 +582,7 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 			if due.NewNotDue != 1 {
 				t.Errorf("DueForecast().NewNotDue = %d, want 1 (own cards only)", due.NewNotDue)
 			}
-			// 撤销授权的卡组里用户 1 有两张已到期的状态行：不过滤时这里会变成 3。
+			// User 1 has two due state rows in the revoked-grant deck: without the filter this would become 3.
 			if due.Today != 1 {
 				t.Errorf("DueForecast().Today = %d, want 1 (revoked-grant deck must not count)", due.Today)
 			}
@@ -590,8 +590,8 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 	}
 }
 
-// seedTaggedDeck 建一个属于 owner 的卡组，含一张带单个标签的笔记与 cards 张卡，
-// 供标签维度的可见性用例构造「他人卡组 / 已撤销授权」两种卡组。
+// seedTaggedDeck builds a deck owned by owner, holding one note with a single tag and cards cards,
+// for the tag-dimension visibility cases to construct both "someone else's deck" and "revoked grant".
 func seedTaggedDeck(t *testing.T, db *gorm.DB, owner uint64, name, tag string, cards int) uint64 {
 	t.Helper()
 	p := NewPreset(owner, name)
@@ -612,8 +612,8 @@ func seedTaggedDeck(t *testing.T, db *gorm.DB, owner uint64, name, tag string, c
 	return d.ID
 }
 
-// addUser1Reviews 在指定卡组内的每张卡上补一条用户 1 的复习（状态行 + 2026-10-02 的日志），
-// 用来构造「撤销授权后仍有历史复习」的越权场景；want 是预期的卡数，卡数不符即夹具漂移。
+// addUser1Reviews adds one review by user 1 on every card in the given deck (a state row + a 2026-10-02 log entry),
+// to construct the escalation scenario "history remains after the grant is revoked"; want is the expected card count, and a mismatch means the fixture drifted.
 func addUser1Reviews(t *testing.T, db *gorm.DB, deckID uint64, want int) {
 	t.Helper()
 	var cards []Card
@@ -629,26 +629,26 @@ func addUser1Reviews(t *testing.T, db *gorm.DB, deckID uint64, want int) {
 	}
 }
 
-// TestStatsTagBreakdownScopesToVisibleDecks 是标签维度越权的回归用例（标签维度）。
+// TestStatsTagBreakdownScopesToVisibleDecks is the regression case for tag-dimension escalation (the tag dimension).
 //
-// 缺陷形态：TagBreakdown 以 reviews 为起点、JOIN notes 取 tags_json 在 Go 侧聚合。
-// 标签是 note 级内容元数据，reviews.user_id 这道行级安全挡不住它：A 撤销对 B 的授权后，
-// B 的统计页仍会列出原卡组的标签及其复习量/留存率（本仓真实缺陷）。
+// The shape of the defect: TagBreakdown starts from reviews and JOINs notes to take tags_json, aggregating on the Go side.
+// Tags are note-level content metadata, and the reviews.user_id row-level guard does not stop them: after A revokes B's grant,
+// B's stats page still lists the former deck's tags with their review volume/retention (a real defect in this repo).
 //
-// 口径：标签维度与卡组维度同源，只聚合「当前可见卡组」的标签；其余 reviews 纯聚合
-// （ReviewVolume 等）按刻意不对称的口径保持全史。本用例在同一个夹具里
-// 用正向对照把这两条口径一起钉死，防止实现顺手给别的聚合也加上谓词。
+// Definition: the tag dimension comes from the same source as the deck dimension and only aggregates tags of "currently visible decks"; the other pure review aggregates
+// (ReviewVolume and the like) deliberately stay whole-history, asymmetrically. This case, in one fixture,
+// pins both definitions down together with a positive control, preventing an implementation from casually adding the predicate to other aggregates.
 func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			seedStatsFixture(t, db)
 			ctx := context.Background()
 
-			// 他人卡组：不可见，标签不得出现。
+			// Someone else's deck: not visible, its tags must not appear.
 			otherDeck := seedTaggedDeck(t, db, 2, "Other deck", "shared", 1)
-			// 另一个他人卡组：同样不可见（即使存在用户 1 的历史复习）。
+			// Another of someone else's decks: likewise invisible (even though user 1 has historical reviews).
 			privateDeck := seedTaggedDeck(t, db, 2, "Other private", "leaked-private", 2)
-			// 曾授权给用户 1、现已撤销的卡组：不可见，标签不得出现——缺陷的直接症状。
+			// A deck once granted to user 1 and now revoked: invisible, its tags must not appear -- the direct symptom of the defect.
 			revokedDeck := seedTaggedDeck(t, db, 2, "Revoked grant", "leaked-revoked", 2)
 			if err := db.Create(&DeckGrant{DeckID: revokedDeck, UserID: 1, Role: "reader", CreatedAt: statsNow}).Error; err != nil {
 				t.Fatalf("create grant: %v", err)
@@ -666,7 +666,7 @@ func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 			if err != nil {
 				t.Fatalf("TagBreakdown() error = %v", err)
 			}
-			// 只应出现自有卡组的标签：go、fsrs。别人的标签一律不出现。
+			// Only the tags of their own deck may appear: go, fsrs. Other people's tags never appear.
 			want := map[string]int64{"go": 5, "fsrs": 3}
 			gotTags := make(map[string]int64, len(got))
 			for _, row := range got {
@@ -680,17 +680,17 @@ func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 					t.Errorf("tag %q reviews = %d, want %d", tag, gotTags[tag], reviews)
 				}
 			}
-			// 显式点名三个越权标签，失败信息直接指认缺陷。
+			// The three escalating tags are named explicitly so a failure points straight at the defect.
 			for _, leak := range []string{"shared", "leaked-private", "leaked-revoked"} {
 				if _, ok := gotTags[leak]; ok {
 					t.Errorf("TagBreakdown() leaked tag %q from a deck not visible to the user", leak)
 				}
 			}
 
-			// 正向对照：ReviewVolume 是纯聚合，保持全史，撤销授权不得让它减少。
-			// 夹具自有 10-02 两条 + 追加的 other 1、private 2、已撤销 2 = 今日 7；
-			// 近 7 日加 10-01 一条 = 8；近 30 日再加 09-20 一条 = 9。
-			// 若实现顺手给 ReviewVolume 也加了可见卡组谓词，这里会掉到 3/4/5。
+			// Positive control: ReviewVolume is a pure aggregate and stays whole-history; revoking a grant must not shrink it.
+			// The fixture's own 2 on 10-02 + the added other 1, private 2 and revoked 2 = 7 today;
+			// the last 7 days add one on 10-01 = 8; the last 30 days add one more on 09-20 = 9.
+			// If an implementation casually adds the visible-deck predicate to ReviewVolume too, this drops to 3/4/5.
 			vol, err := NewStatsStore(db).ReviewVolume(ctx, 1, "2026-10-02")
 			if err != nil {
 				t.Fatalf("ReviewVolume() error = %v", err)
@@ -702,10 +702,10 @@ func TestStatsTagBreakdownScopesToVisibleDecks(t *testing.T) {
 	}
 }
 
-// TestStatsTagBreakdownCountsOnlyReviewedNotes 把标签维度的口径钉死：
-// 这个维度回答的是「哪块内容弱」，留存率要由复习记录算出来，所以它只统计**已复习卡片上**
-// 的标签。同一个卡组里没有复习记录的标签不会出现——这是刻意口径，不是漏算；页面上也写了
-// 这行说明，否则它会看起来像在重复卡组维度。
+// TestStatsTagBreakdownCountsOnlyReviewedNotes pins down the tag dimension's definition:
+// this dimension answers "which content is weak" and the retention rate has to come from review records, so it only counts the tags
+// on **reviewed cards**. Tags on notes with no review record in the same deck do not appear -- that is deliberate, not an omission; the page also says
+// so in a line, otherwise it would look like a duplicate of the deck dimension.
 func TestStatsTagBreakdownCountsOnlyReviewedNotes(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -747,9 +747,9 @@ func TestStatsTagBreakdownCountsOnlyReviewedNotes(t *testing.T) {
 	}
 }
 
-// TestStatsTrueRetentionIgnoresLearningSteps 把「留存率」的唯一口径钉死：总体值、卡组行、
-// 标签行都只数 state_before=Review 的到期复习，新卡首次复习与学习/重学步骤只进复习量。
-// 只有学习步骤的用户分母为 0，界面据此显示「无数据」，而不是一个虚高的百分比。
+// TestStatsTrueRetentionIgnoresLearningSteps pins down the single definition of "retention rate": the overall value, deck rows and
+// tag rows all count only due reviews with state_before=Review; new cards' first reviews and the learning/relearning steps only enter the review volume.
+// A user with only learning steps has a zero denominator, so the UI shows "no data" instead of an inflated percentage.
 func TestStatsTrueRetentionIgnoresLearningSteps(t *testing.T) {
 	type review struct{ rating, stateBefore int }
 	cases := []struct {
@@ -763,8 +763,8 @@ func TestStatsTrueRetentionIgnoresLearningSteps(t *testing.T) {
 		{
 			name: "mixed states count only due reviews",
 			reviews: []review{
-				{3, 0}, {1, 1}, {3, 3}, // New / Learning(Again) / Relearning：不计入留存
-				{3, 2}, {1, 2}, {2, 2}, // Review：Good / Again / Hard
+				{3, 0}, {1, 1}, {3, 3}, // New / Learning(Again) / Relearning: not counted toward retention
+				{3, 2}, {1, 2}, {2, 2}, // Review: Good / Again / Hard
 			},
 			wantAll: 6, wantTotal: 3, wantPass: 2, wantRate: 2.0 / 3.0,
 		},
@@ -836,8 +836,8 @@ func TestStatsTrueRetentionIgnoresLearningSteps(t *testing.T) {
 	}
 }
 
-// TestResolveLearnAhead 断言提前学习窗口的解析：未设置（NULL）按默认 0 关闭，显式值原样生效，
-// 越界值夹到 [0, 上限]。
+// TestResolveLearnAhead asserts the parsing of the learn-ahead window: unset (NULL) is off at the default 0, an explicit value takes effect as given,
+// and out-of-range values clamp to [0, cap].
 func TestResolveLearnAhead(t *testing.T) {
 	ptr := func(v int) *int { return &v }
 	cases := []struct {

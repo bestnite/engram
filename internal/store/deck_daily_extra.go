@@ -9,19 +9,19 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// DeckDailyExtra 记录某用户在某卡组上、某个复习日里「再来一组」追加的新卡额度。
+// DeckDailyExtra records the extra new-card quota a user added with 'one more round' on a deck, for one review day.
 //
-// 每日新卡上限是学习目标而不是硬上限：学完今天的量之后，用户可以只为今天、只为这个卡组
-// 多放一批新卡，第二天自动回到原来的上限。额度要落库而不是放在请求参数里，因为队列在每次
-// 评分后都会重建，刷新页面或换个入口（REST / MCP）也必须看到同一份追加量。
+// The daily new-card cap is a study goal, not a hard limit: after finishing today's load, a user can pull in an extra batch of new
+// cards for today and this deck only, and automatically returns to the original cap the next day. The quota must be stored, not passed as a request parameter, because the queue is
+// rebuilt after every rating, so a page refresh or a different entry point (REST / MCP) must see the same extra amount.
 //
-// 主键带 review_day，所以「只对今天生效」不需要任何清理任务：别的复习日查不到这一行。
-// 写入时顺手删掉同一 (卡组, 用户) 更早复习日的行，表里每对 (卡组, 用户) 最多留一行。
-// 属主与共享成员一视同仁地写这张表：追加量是本人的学习节奏，不会影响卡组上的其他成员。
+// The primary key includes review_day, so 'valid only for today' needs no cleanup job: other review days cannot find this row.
+// The write also deletes rows for earlier review days of the same (deck, user) pair, leaving at most one row per (deck, user).
+// Owners and shared members write this table alike: the extra amount is the user's own study pace and does not affect other members of the deck.
 type DeckDailyExtra struct {
 	DeckID uint64 `gorm:"primaryKey" json:"-"`
 	UserID uint64 `gorm:"primaryKey;index" json:"-"`
-	// ReviewDay 是用户自己的复习日（YYYY-MM-DD），与 reviews.review_day 同一口径。
+	// ReviewDay is the user's own review day (YYYY-MM-DD), same rule as reviews.review_day.
 	ReviewDay string    `gorm:"primaryKey;size:10" json:"review_day"`
 	ExtraNew  int       `gorm:"not null" json:"extra_new"`
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
@@ -29,8 +29,8 @@ type DeckDailyExtra struct {
 
 func (DeckDailyExtra) TableName() string { return "deck_daily_extras" }
 
-// AddDailyExtraNew 把 (卡组, 用户, 复习日) 的追加新卡额度增加 n，并返回累加后的值。
-// 同一 (卡组, 用户) 更早复习日的行在同一事务里删除：它们已不再生效。n 必须为正。
+// AddDailyExtraNew adds n to the extra new-card quota of (deck, user, review day) and returns the accumulated value.
+// Rows for earlier review days of the same (deck, user) are deleted in the same transaction: they no longer take effect. n must be positive.
 func AddDailyExtraNew(ctx context.Context, db *gorm.DB, deckID, userID uint64, day string, n int) (int, error) {
 	if n <= 0 {
 		return 0, fmt.Errorf("add daily extra new: n must be positive, got %d", n)
@@ -63,8 +63,8 @@ func AddDailyExtraNew(ctx context.Context, db *gorm.DB, deckID, userID uint64, d
 	return total, err
 }
 
-// DailyExtraNew 返回 userID 在给定复习日里各卡组的追加新卡额度（键是卡组主键）；
-// 没有追加的卡组不出现在结果里，调用方按 0 处理。
+// DailyExtraNew returns, for userID on the given review day, the extra new-card quota per deck (keys are deck primary keys);
+// decks with no extra do not appear in the result and callers treat them as 0.
 func DailyExtraNew(ctx context.Context, db *gorm.DB, userID uint64, day string, deckIDs []uint64) (map[uint64]int, error) {
 	out := make(map[uint64]int, len(deckIDs))
 	if len(deckIDs) == 0 {

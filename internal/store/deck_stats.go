@@ -5,20 +5,20 @@ import (
 	"fmt"
 )
 
-// DeckSummary 是卡组列表页的一行：卡组本体加上卡片数。
-// 卡片数在存储层用一条分组聚合一次取回，避免每个卡组各查一次（N+1）。
+// DeckSummary is one row of the deck list page: the deck itself plus its card count.
+// The card count comes back in one grouped aggregate at the storage layer, avoiding one query per deck (N+1).
 //
-// 「今日可刷多少张」不在这里：它必须先过队列的每日额度（schedule.DeckCounts），
-// 由 web 层用同一套取卡路径取得 —— 存储层再算一份原始积压数只会和队列口径漂移
-// 要求的是「各卡组到期数/新卡数」两个数，不是原始积压。
+// 'how many cards can I review today' is not computed here: it must first pass the queue's daily quota (schedule.DeckCounts),
+// obtained by the web layer through the same card-fetching path — a second raw backlog count at the storage layer would only drift from the queue's rules, since what is needed
+// is the two numbers 'due count / new count per deck', not the raw backlog.
 type DeckSummary struct {
 	Deck Deck
-	// CardCount 是卡组内未删除 note 产生的未删除 card 数。
+	// CardCount is the number of undeleted cards produced by the deck's undeleted notes.
 	CardCount int64
 }
 
-// countCardsByDeck 统计每个卡组的有效 card 数。
-// 直接用 Table/Joins 写显式条件，不走模型自动软删除，条件集中在一处便于核对。
+// countCardsByDeck counts the live cards of each deck.
+// It writes explicit conditions with Table/Joins instead of relying on the model's automatic soft delete, keeping the conditions in one place for review.
 func (s *DeckStore) countCardsByDeck(ctx context.Context, deckIDs []uint64) (map[uint64]int64, error) {
 	type row struct {
 		DeckID uint64
