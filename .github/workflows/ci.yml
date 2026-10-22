@@ -35,7 +35,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
-      # The version comes from the value declared in go.mod (currently 1.26): that is this repository's compatibility floor, and it saves manual syncing.
+      # The version comes from the value declared in go.mod (currently 1.27): that is this repository's compatibility floor, and it saves manual syncing.
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -46,9 +46,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
+
+      # The npm version comes from packageManager in frontend/package.json; the npm bundled with the
+      # image/runner is older, so install the declared one explicitly and keep lockfile writes consistent.
+      - name: Pin npm
+        run: npm install -g npm@12.2.1
 
       - name: Show tool versions
         run: |
