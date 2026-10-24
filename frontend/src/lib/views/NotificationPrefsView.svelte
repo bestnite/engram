@@ -94,12 +94,28 @@
     choices = { ...choices, [type]: checked };
   }
 
+  /**
+   * The choices to submit: every closable type the server sent, and no locked one.
+   * The server rejects a request that names a locked (class A) type at all — even with the value true —
+   * so the locked entries that choiceMap keeps for rendering must never reach the request body.
+   */
+  function submittedChoices(): Record<string, boolean> {
+    const out: Record<string, boolean> = {};
+    for (const group of data?.groups ?? []) {
+      for (const item of group.types) {
+        if (item.locked) continue;
+        out[item.type] = choices[item.type] ?? false;
+      }
+    }
+    return out;
+  }
+
   /** Save: submit an explicit switch for each closable type, with the send time as null (site default) or 0–23. */
   async function save(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     saving = true;
     const payload: UpdateNotificationPrefsRequest = {
-      choices,
+      choices: submittedChoices(),
       reminder_hour: reminderHour === '' ? null : Number(reminderHour),
     };
     try {
