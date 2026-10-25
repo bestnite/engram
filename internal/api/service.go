@@ -1157,7 +1157,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		// Only card kinds declaring an options field have option controls to shuffle; every other kind stays null.
 		if t, ok := cardtype.Lookup(note.Kind); ok {
 			if field := t.Describe().OptionsField; field != "" {
-				entry.OptionOrder = OptionOrder(optionCount(entry.Fields, field), u.ID, it.CardID, entry.Version)
+				entry.OptionOrder = OptionOrder(cardtype.OptionCount(entry.Fields, field), u.ID, it.CardID, entry.Version)
 			}
 		}
 		out = append(out, entry)

@@ -60,6 +60,20 @@ func stringSliceField(fields map[string]any, name string) ([]string, error) {
 	return out, nil
 }
 
+// OptionCount returns how many options fields[name] holds, where name is the option field the card
+// type's Description names. It returns 0 when the value is absent or is not an array. Every caller
+// needs only the count (the size of a display order or of the answer controls), so a field whose
+// elements are malformed still reports the number of stored entries.
+func OptionCount(fields map[string]any, name string) int {
+	switch v := fields[name].(type) {
+	case []any:
+		return len(v)
+	case []string:
+		return len(v)
+	}
+	return 0
+}
+
 // boolField reads an optional boolean field; returns the default def when missing.
 func boolField(fields map[string]any, name string, def bool) (bool, error) {
 	v, ok := fields[name]

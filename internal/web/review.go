@@ -147,7 +147,7 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	// One display order per (user, card, state version): the render response and the reveal both read it, so a
 	// revealed back lists the correct options in the same order the user saw. It changes only after a review.
 	if optionsField := t.Describe().OptionsField; optionsField != "" {
-		ct.OptionOrder = api.OptionOrder(optionCountIn(fields, optionsField), user.ID, card.ID, version)
+		ct.OptionOrder = api.OptionOrder(cardtype.OptionCount(fields, optionsField), user.ID, card.ID, version)
 	}
 	front, err := t.Render(ct, cardtype.SideFront)
 	if err != nil {
@@ -216,18 +216,6 @@ func (s *Server) stateVersion(ctx context.Context, userID, cardID uint64) int {
 		return 0
 	}
 	return st.Version
-}
-
-// optionCountIn returns the number of stored options held by the fields value named field;
-// it returns 0 when the value is absent or is not an array.
-func optionCountIn(fields map[string]any, field string) int {
-	switch v := fields[field].(type) {
-	case []any:
-		return len(v)
-	case []string:
-		return len(v)
-	}
-	return 0
 }
 
 // graderFor decides whether a question type supports machine grading by asserting an optional narrow interface.

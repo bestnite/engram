@@ -31,15 +31,3 @@ func OptionOrder(n int, userID, cardID uint64, version int) []int {
 	r.Shuffle(n, func(i, j int) { order[i], order[j] = order[j], order[i] })
 	return order
 }
-
-// optionCount returns the number of stored options held by the fields value named field;
-// it returns 0 when the value is absent or is not an array.
-func optionCount(fields map[string]any, field string) int {
-	switch v := fields[field].(type) {
-	case []any:
-		return len(v)
-	case []string:
-		return len(v)
-	}
-	return 0
-}
