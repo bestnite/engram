@@ -115,12 +115,12 @@ func TestListValidateAndRender(t *testing.T) {
 	}
 
 	front, _ := listType{}.Render(cards[0], SideFront)
-	if front.Body != "Name the stages." || len(front.Extra) != 0 {
+	if front.Body != "Name the stages." || len(front.Options) != 0 {
 		t.Errorf("front = %+v, want prompt only", front)
 	}
 	// The back side gives only the items, not the prompt again: the review page renders the back below the front, so repeating it would show the prompt twice.
 	back, _ := listType{}.Render(cards[0], SideBack)
-	if back.Body != "- evaporation\n- condensation\n" || len(back.Extra) != 0 {
+	if back.Body != "- evaporation\n- condensation\n" || len(back.Options) != 0 {
 		t.Errorf("back = %+v, want a bullet list of the items only", back)
 	}
 }

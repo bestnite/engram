@@ -85,7 +85,7 @@ func TestShortAnswerCardsAndRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render(front) error = %v", err)
 	}
-	if front.Body != "为什么？" || len(front.Extra) != 0 {
+	if front.Body != "为什么？" || len(front.Options) != 0 {
 		t.Fatalf("Render(front) = %+v, want prompt only", front)
 	}
 
@@ -94,7 +94,7 @@ func TestShortAnswerCardsAndRender(t *testing.T) {
 		t.Fatalf("Render(back) error = %v", err)
 	}
 	// The back gives only the reference answer, without repeating the prompt: the review page renders the back below the front.
-	if back.Body != "因为 X。" || len(back.Extra) != 0 {
+	if back.Body != "因为 X。" || len(back.Options) != 0 {
 		t.Fatalf("Render(back) = %+v, want the reference only", back)
 	}
 
@@ -103,7 +103,7 @@ func TestShortAnswerCardsAndRender(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render(back, no reference) error = %v", err)
 	}
-	if back.Body != "" || len(back.Extra) != 0 {
+	if back.Body != "" || len(back.Options) != 0 {
 		t.Fatalf("Render(back, no reference) = %+v, want an empty back", back)
 	}
 

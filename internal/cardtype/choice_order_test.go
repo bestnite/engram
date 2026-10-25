@@ -6,7 +6,7 @@ import (
 )
 
 // TestChoiceMultiBackFollowsOptionOrder pins the one place a display order reaches the card type: the back lists the
-// correct options in the order the answer controls showed them, while the front keeps stored order so its Extra stays
+// correct options in the order the answer controls showed them, while the front keeps stored order so its Options stay
 // parallel with the stored options slice.
 func TestChoiceMultiBackFollowsOptionOrder(t *testing.T) {
 	fields := map[string]any{
@@ -24,12 +24,12 @@ func TestChoiceMultiBackFollowsOptionOrder(t *testing.T) {
 			t.Fatalf("front render: %v", err)
 		}
 		wantFront := []string{"alpha", "beta", "gamma", "delta"}
-		if len(front.Extra) != len(wantFront) {
-			t.Fatalf("front Extra = %v, want stored order %v", front.Extra, wantFront)
+		if len(front.Options) != len(wantFront) {
+			t.Fatalf("front Options = %v, want stored order %v", front.Options, wantFront)
 		}
 		for i := range wantFront {
-			if front.Extra[i] != wantFront[i] {
-				t.Fatalf("front Extra = %v, want stored order %v", front.Extra, wantFront)
+			if front.Options[i] != wantFront[i] {
+				t.Fatalf("front Options = %v, want stored order %v", front.Options, wantFront)
 			}
 		}
 		back, err := choiceMultiType{}.Render(card, SideBack)
@@ -75,8 +75,8 @@ func TestChoiceSingleIgnoresOptionOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("front render: %v", err)
 	}
-	if strings.Join(front.Extra, ",") != "alpha,beta,gamma" {
-		t.Errorf("front Extra = %v, want stored order", front.Extra)
+	if strings.Join(front.Options, ",") != "alpha,beta,gamma" {
+		t.Errorf("front Options = %v, want stored order", front.Options)
 	}
 	back, err := choiceSingleType{}.Render(card, SideBack)
 	if err != nil {

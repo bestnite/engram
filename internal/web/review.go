@@ -153,31 +153,31 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	if err != nil {
 		return nil, err
 	}
-	// For question types that declare OptionsField (choice questions) the review page renders the options as answer controls, so the
-	// front Extra is cleared below to keep the options out of FrontHTML (otherwise the page shows them twice). The preview and share pages
-	// have no answer controls and still show Extra via renderSide. The controls still need the options as sanitized HTML — plain source text
-	// would print TeX delimiters literally — so each option is rendered through the same pipeline as the card face and kept in OptionsHTML.
-	// The HTML is sanitized here, which is why the SPA may inject it.
+	// The front HTML carries the card face only. A choice card's options are drawn as the answer controls below the face, so they
+	// travel in OptionsHTML instead of being joined into the face; joining them would show every option twice.
+	// The controls need sanitized HTML rather than the plain option source: formulas in the options carry TeX delimiters that would
+	// print literally, and injecting unsanitized source would open an HTML injection path. Each option therefore goes through the
+	// same rendering pipeline as the card face, which is why the SPA may inject the result.
 	var optionsHTML []string
 	if t.Describe().OptionsField != "" {
-		optionsHTML = make([]string, 0, len(front.Extra))
-		for _, option := range front.Extra {
+		optionsHTML = make([]string, 0, len(front.Options))
+		for _, option := range front.Options {
 			optionHTML, err := render.RenderMarkdown(option)
 			if err != nil {
 				return nil, err
 			}
 			optionsHTML = append(optionsHTML, optionHTML)
 		}
-		front.Extra = nil
 	}
 	back, err := t.Render(ct, cardtype.SideBack)
 	if err != nil {
 		return nil, err
 	}
-	frontHTML, err := renderSide(front)
+	frontHTML, err := render.RenderMarkdown(front.Body)
 	if err != nil {
 		return nil, err
 	}
+	// The back has no answer controls, so anything a type put in its Options is shown inline rather than dropped.
 	backHTML, err := renderSide(back)
 	if err != nil {
 		return nil, err

@@ -238,11 +238,13 @@ func (s *Server) buildPreview(loc *i18n.Localizer, kind string, fields map[strin
 	return data
 }
 
-// renderSide renders one side's Markdown text (including the Extra fragment) into sanitized HTML.
+// renderSide renders one side's Markdown text into sanitized HTML, with a choice card's options appended after the body.
+// It serves the pages that show the options as text (note preview and public share); the review page draws them as answer
+// controls instead and therefore renders the body alone.
 func renderSide(side cardtype.RenderResult) (string, error) {
 	body := side.Body
-	if len(side.Extra) > 0 {
-		body = strings.Join(append([]string{body}, side.Extra...), "\n\n")
+	if len(side.Options) > 0 {
+		body = strings.Join(append([]string{body}, side.Options...), "\n\n")
 	}
 	return render.RenderMarkdown(body)
 }

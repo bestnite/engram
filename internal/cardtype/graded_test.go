@@ -343,8 +343,8 @@ func TestTypedBackJoinsAcceptedAnswers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Render back: %v", err)
 			}
-			if back.Body != tc.want || len(back.Extra) != 0 {
-				t.Errorf("back = %+v, want body %q and no extra", back, tc.want)
+			if back.Body != tc.want || len(back.Options) != 0 {
+				t.Errorf("back = %+v, want body %q and no options", back, tc.want)
 			}
 		})
 	}

@@ -63,9 +63,12 @@ func (s Side) String() string {
 type RenderResult struct {
 	// Body is the main content of this side.
 	Body string
-	// Extra is the additional fragments shown in order on this side (the items a list reveals one by one);
-	// empty when there are no extra fragments.
-	Extra []string
+	// Options holds the answer options of a choice card, in stored order and parallel with the field that
+	// Describe().OptionsField names; each entry is Markdown/TeX source. No type sets it on the back side, and it is
+	// empty for every card type without option controls.
+	// The review page renders these entries as answer controls, so they stay out of that side's HTML there; the preview
+	// and share pages have no controls and append them to the face instead.
+	Options []string
 }
 
 // CardType is the interface a card type must implement; the method set is deliberately kept minimal.

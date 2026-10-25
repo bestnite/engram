@@ -83,7 +83,7 @@ func (choiceSingleType) Render(card Card, side Side) (RenderResult, error) {
 		return RenderResult{}, err
 	}
 	if side == SideFront {
-		return RenderResult{Body: question, Extra: options}, nil
+		return RenderResult{Body: question, Options: options}, nil
 	}
 	return RenderResult{Body: options[answer]}, nil
 }
@@ -238,12 +238,12 @@ func (choiceMultiType) Render(card Card, side Side) (RenderResult, error) {
 		return RenderResult{}, err
 	}
 	if side == SideFront {
-		return RenderResult{Body: question, Extra: options}, nil
+		return RenderResult{Body: question, Options: options}, nil
 	}
 	correct := make([]string, 0, len(answers))
 	if isPermutation(card.OptionOrder, len(options)) {
 		// The back follows the display order the user saw, so the joined list of correct options reads in the same
-		// sequence as the controls. The front keeps stored order: its Extra stays parallel with fields.options.
+		// sequence as the controls. The front keeps stored order: its Options stay parallel with fields.options.
 		picked := make(map[int]bool, len(answers))
 		for _, idx := range answers {
 			picked[idx] = true
