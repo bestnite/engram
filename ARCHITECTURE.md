@@ -60,10 +60,10 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/web` | The gin router: security headers, session and locale middleware, the session-and-CSRF JSON endpoints the SPA uses, the admin API, media proxying, the SPA shell, and the not-found fallback. It mounts `internal/api` and `internal/mcp`. |
 | `internal/media` | Content-addressed local file storage (`<sha256[:2]>/<sha256>.<ext>`) and media metadata. |
 | `internal/mediatype` | Leaf package with the media type detection and allowlist shared by `internal/media` and `internal/store`. |
-| `internal/render` | Markdown to HTML (goldmark) followed by allowlist sanitising (bluemonday). |
+| `internal/render` | Markdown to HTML (goldmark) followed by allowlist sanitising (bluemonday). Card content and mail bodies share the pipeline; the mail allowlist additionally permits headings. |
 | `internal/texmath` | The single rule for locating TeX math, shared by `internal/render` and `internal/cardtype`. |
 | `internal/i18n` | Server-side translation catalogs (`internal/i18n/locales/*.yaml`), request language resolution, and the localiser placed in the request context. |
-| `internal/mail` | Mail outbox, SMTP transport, and the delivery worker with backoff retry. |
+| `internal/mail` | Mail templates (built-in defaults and admin overrides share one Markdown renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. |
 | `internal/reminder` | Worker that emails users who have due cards. |
 | `internal/digest` | Worker that sends the weekly digest email. |
 | `internal/retention` | Worker that deletes expired sessions, used or expired action tokens, expired invites, and old login fingerprints. |
