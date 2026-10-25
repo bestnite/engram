@@ -89,15 +89,15 @@ func (s *Server) NotifyMediaAlert(ctx context.Context, u *store.User, used, quot
 	})
 }
 
-// ── Copy assembly for the two kinds of mail (the default body is plain text only; an HTML part is produced only when the admin configured a template) ──
+// ── Copy assembly for the two kinds of mail (the built-in bodies are Markdown and render to HTML; a custom template replaces them) ──
 
 // adminJobFailedMessage assembles the "job failed" notification; reason is the failure reason (English, from jobs.error).
 func (s *Server) adminJobFailedMessage(ctx context.Context, loc *i18n.Localizer, site string, job store.Job, reason string) mail.Message {
 	vars := mail.Vars{
 		"site": site, "job_id": job.PublicID, "kind": job.Kind, "reason": reason,
 	}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeJobFailed, mail.VariantDefault, loc.Tf, vars)
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeJobFailed, vars, fbSubject, fbText, "")
+	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeJobFailed, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeJobFailed, vars, fbSubject, fallbackBodyMD, "")
 	return mail.Message{Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
@@ -105,7 +105,7 @@ func (s *Server) adminJobFailedMessage(ctx context.Context, loc *i18n.Localizer,
 func (s *Server) adminMediaAlertMessage(ctx context.Context, loc *i18n.Localizer, site string, u store.User, used, quota int64) mail.Message {
 	usedText, limitText := humanBytes(used), humanBytes(quota)
 	vars := mail.Vars{"site": site, "username": u.Username, "used": usedText, "limit": limitText}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeMediaDiskAlert, mail.VariantDefault, loc.Tf, vars)
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeMediaDiskAlert, vars, fbSubject, fbText, "")
+	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeMediaDiskAlert, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeMediaDiskAlert, vars, fbSubject, fallbackBodyMD, "")
 	return mail.Message{Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }

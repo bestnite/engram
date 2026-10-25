@@ -198,10 +198,10 @@ func TestOptimizeDoneMailShowsDefaultPresetNameInRecipientLanguage(t *testing.T)
 
 	srv.NotifyOptimizeDone(ctx, job)
 	msgs := waitForMail(t, sender, 1)
-	if !strings.Contains(msgs[0].TextBody, "预设「默认」") {
+	if !strings.Contains(msgs[0].TextBody, "默认") {
 		t.Errorf("text body = %q, want the localized default preset name", msgs[0].TextBody)
 	}
-	if strings.Contains(msgs[0].TextBody, "预设「Default」") {
+	if strings.Contains(msgs[0].TextBody, "Default") {
 		t.Errorf("text body = %q, want no storage literal in user-facing text", msgs[0].TextBody)
 	}
 }

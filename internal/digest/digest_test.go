@@ -373,13 +373,13 @@ func TestDigestNumbersMatchStatsPage(t *testing.T) {
 		t.Fatalf("enqueued %d, want 1", enq.count())
 	}
 	body := enq.last().TextBody
-	if !strings.Contains(body, "Reviews in the last 7 days: 4") {
+	if !strings.Contains(body, "Reviews: 4") {
 		t.Errorf("body missing reviewed count, got:\n%s", body)
 	}
-	if !strings.Contains(body, "Current streak: 3 day(s)") {
+	if !strings.Contains(body, "Current streak: 3 days") {
 		t.Errorf("body missing streak, got:\n%s", body)
 	}
-	if !strings.Contains(body, "Cards due now: 1") {
+	if !strings.Contains(body, "Due now: 1") {
 		t.Errorf("body missing due count, got:\n%s", body)
 	}
 }

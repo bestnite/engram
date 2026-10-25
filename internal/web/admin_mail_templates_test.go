@@ -221,7 +221,10 @@ func TestAdminMailTemplatePreviewRendersAndWritesNothing(t *testing.T) {
 	if out.Subject != "Reset for Engram" {
 		t.Errorf("subject = %q, want the sample site substituted", out.Subject)
 	}
-	if !strings.Contains(out.HTML, "<strong>Hi</strong>") {
+	if strings.TrimSpace(out.HTML) == "" {
+		t.Error("html is empty, want a rendered body")
+	}
+	if !strings.Contains(out.HTML, "Hi</strong>") {
 		t.Errorf("html = %q, want the template rendered", out.HTML)
 	}
 	if len(out.Variables) == 0 {
@@ -229,6 +232,65 @@ func TestAdminMailTemplatePreviewRendersAndWritesNothing(t *testing.T) {
 	}
 	if rows, err := store.NewMailTemplateStore(db).List(context.Background()); err != nil || len(rows) != 0 {
 		t.Errorf("preview wrote %d rows (err %v), want none", len(rows), err)
+	}
+}
+
+// TestAdminMailTemplatePreviewMatchesBuiltinDefaultSend pins the identity the editor depends on: previewing the built-in
+// default produces exactly the HTML that sending it after an unchanged save produces, for the same type, variables and locale.
+// If preview and send diverged, the admin would approve one mail and send another.
+func TestAdminMailTemplatePreviewMatchesBuiltinDefaultSend(t *testing.T) {
+	srv, _, _, cookies, csrf := newNotesServer(t)
+
+	list := decodeMailTemplates(t, getJSON(t, srv, "/api/v1/admin/mail-templates", cookies, nil).Body.Bytes())
+	var def mailTemplateDefault
+	for _, d := range list.Defaults {
+		if d.Type == string(mail.TypePasswordReset) && d.Locale == "en" {
+			def = d
+		}
+	}
+	if def.BodyMD == "" {
+		t.Fatal("no password_reset/en built-in default")
+	}
+
+	// "Save without changing anything" is the most common admin action; the row must render identically to the built-in body.
+	saveBody, err := json.Marshal(mailTemplateSaveRequest{Subject: def.Subject, BodyMD: def.BodyMD})
+	if err != nil {
+		t.Fatalf("marshal save request: %v", err)
+	}
+	if rec := jsonRequest(t, srv, http.MethodPut,
+		"/api/v1/admin/mail-templates/"+string(mail.TypePasswordReset)+"/en", string(saveBody), cookies, csrf); rec.Code != http.StatusOK {
+		t.Fatalf("PUT = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+
+	previewBody, err := json.Marshal(mailTemplatePreviewRequest{
+		Type: string(mail.TypePasswordReset), Locale: "en", Subject: def.Subject, BodyMD: def.BodyMD,
+	})
+	if err != nil {
+		t.Fatalf("marshal preview request: %v", err)
+	}
+	rec := jsonRequest(t, srv, http.MethodPost, "/api/v1/admin/mail-templates/preview", string(previewBody), cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var preview mailTemplatePreviewResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+
+	// Sending the saved template with the same variables and locale goes through the real sender entry point.
+	vars := sampleVars(mail.TypePasswordReset)
+	loc := srv.i18n.Localizer(srv.i18n.Pick("en", "", ""))
+	fallbackSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypePasswordReset, mail.VariantDefault, loc.Tf, vars)
+	subject, text, html := srv.renderMail(context.Background(), loc, mail.TypePasswordReset, vars, fallbackSubject, fallbackBodyMD, "")
+
+	if preview.Subject != subject {
+		t.Errorf("preview subject = %q, sent subject = %q", preview.Subject, subject)
+	}
+	if preview.Text != text {
+		t.Errorf("preview text differs from the sent plain-text part:\n preview = %q\n sent    = %q", preview.Text, text)
+	}
+	if preview.HTML != html {
+		t.Errorf("preview HTML differs from the sent HTML:\n preview = %q\n sent    = %q", preview.HTML, html)
 	}
 }
 

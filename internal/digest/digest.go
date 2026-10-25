@@ -322,21 +322,22 @@ func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestS
 	if unsubURL != "" {
 		vars["unsubscribe_url"] = unsubURL
 	}
-	footerNote, unsubLabel := "", ""
+	footerNote, unsubLabel := lc.T("mail.footer.automated"), ""
 	if unsubURL != "" {
 		footerNote = lc.T("mail.footer.note")
 		unsubLabel = lc.T("mail.footer.unsubscribe")
 	}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeStudyDigest, mail.VariantDefault, lc.Tf, vars)
+	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeStudyDigest, mail.VariantDefault, lc.Tf, vars)
 	tpl := mail.Resolve(w.templates, mail.TypeStudyDigest, lc.Locale(), w.siteDefaultLocale())
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             mail.TypeStudyDigest,
 		Site:             site,
+		Lang:             lc.Locale(),
 		Vars:             vars,
 		Subject:          tpl.Subject,
 		BodyMD:           tpl.Body,
 		FallbackSubject:  fbSubject,
-		FallbackText:     fbText,
+		FallbackBodyMD:   fallbackBodyMD,
 		UnsubscribeURL:   unsubURL,
 		FooterNote:       footerNote,
 		UnsubscribeLabel: unsubLabel,

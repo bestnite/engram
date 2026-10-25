@@ -68,7 +68,7 @@ func TestReminderUsesAdminTemplate(t *testing.T) {
 	if !strings.HasSuffix(msg.Subject, "cards are due") {
 		t.Errorf("subject = %q, want the template's subject with the count substituted", msg.Subject)
 	}
-	if !strings.Contains(msg.HTMLBody, "<strong>Time to review</strong>") {
+	if !strings.Contains(msg.HTMLBody, "Time to review</strong>") {
 		t.Errorf("html body = %q, want the template rendered", msg.HTMLBody)
 	}
 	if !strings.Contains(msg.HTMLBody, "/unsubscribe?token=") {
@@ -79,8 +79,9 @@ func TestReminderUsesAdminTemplate(t *testing.T) {
 	}
 }
 
-// TestReminderWithoutTemplateKeepsBuiltinBody asserts that with no template configured it is verbatim identical to today: plain text, no HTML part.
-func TestReminderWithoutTemplateKeepsBuiltinBody(t *testing.T) {
+// TestReminderWithoutTemplateRendersBuiltinHTML asserts that with no template the built-in body goes through the same
+// renderer: the HTML part is non-empty and carries the review link, and the plain-text part still carries that link.
+func TestReminderWithoutTemplateRendersBuiltinHTML(t *testing.T) {
 	db := newTestDB(t)
 	enq := &fakeEnqueuer{configured: true}
 	now := shanghaiAt(t, 19, 5)
@@ -92,8 +93,11 @@ func TestReminderWithoutTemplateKeepsBuiltinBody(t *testing.T) {
 		t.Fatalf("RunOnce() error = %v", err)
 	}
 	msg := enq.last()
-	if msg.HTMLBody != "" {
-		t.Errorf("html body = %q, want empty without a template", msg.HTMLBody)
+	if !strings.Contains(msg.HTMLBody, "<!DOCTYPE html>") {
+		t.Errorf("html body = %q, want the fixed HTML shell", msg.HTMLBody)
+	}
+	if !strings.Contains(msg.HTMLBody, "Time to review") || !strings.Contains(msg.HTMLBody, "/review") {
+		t.Errorf("html body = %q, want the built-in body with the review link", msg.HTMLBody)
 	}
 	if !strings.Contains(msg.TextBody, "/review") {
 		t.Errorf("text body = %q, want the built-in body with the review link", msg.TextBody)

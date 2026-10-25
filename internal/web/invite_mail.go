@@ -123,7 +123,7 @@ func (s *Server) inviteMessage(ctx context.Context, loc *i18n.Localizer, to, lin
 		vars["expires"] = expiresAt.UTC().Format("2006-01-02 15:04 UTC")
 	}
 	// The expiry is an optional variable: without that line it does not appear (the function decides on the variable, with no extra parameter).
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeInvite, mail.VariantDefault, loc.Tf, vars)
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeInvite, vars, fbSubject, fbText, unsubURL)
+	fallbackSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeInvite, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeInvite, vars, fallbackSubject, fallbackBodyMD, unsubURL)
 	return mail.Message{To: to, Type: string(mail.TypeInvite), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }

@@ -76,18 +76,20 @@ func loginFingerprint(c *gin.Context) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// ── copy assembly for the five mail types (the default body is plain text only; an HTML part is produced only when an admin configured a template) ──────────
+// ── copy assembly for the five mail types (the built-in bodies are Markdown and render to HTML; a custom template replaces them) ──────────
 //
-// Each assembly function does three things: provide the template variables, provide the built-in body (today's behavior), and hand it to renderMail to render.
+// Each assembly function does three things: provide the template variables, provide the built-in body, and hand it to renderMail to render.
 // Variable names must match the table in internal/mail/vars.go, otherwise the required-variable check stops the send (this is a deliberate
 // direction of failure: better not to send at all than to send a mail with no reset link).
 
 // passwordResetMessage assembles the password reset mail. The plaintext link appears only here and never reaches the database or the logs.
-func (s *Server) passwordResetMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
+//
+// username is passed for custom templates; the built-in body does not use it.
+func (s *Server) passwordResetMessage(ctx context.Context, loc *i18n.Localizer, to, username, link, site string, expires time.Time) mail.Message {
 	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
-	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypePasswordReset, mail.VariantDefault, loc.Tf, vars)
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypePasswordReset, vars, fbSubject, fbText, "")
+	vars := mail.Vars{"site": site, "username": username, "url": link, "expires": expiresAt}
+	fallbackSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypePasswordReset, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypePasswordReset, vars, fallbackSubject, fallbackBodyMD, "")
 	return mail.Message{To: to, Type: string(mail.TypePasswordReset), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
@@ -95,8 +97,8 @@ func (s *Server) passwordResetMessage(ctx context.Context, loc *i18n.Localizer, 
 func (s *Server) emailVerificationMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
 	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
 	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeEmailVerification, mail.VariantDefault, loc.Tf, vars)
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars, fbSubject, fbText, "")
+	fallbackSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeEmailVerification, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars, fallbackSubject, fallbackBodyMD, "")
 	return mail.Message{To: to, Type: string(mail.TypeEmailVerification), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
@@ -107,8 +109,8 @@ func (s *Server) emailVerificationMessage(ctx context.Context, loc *i18n.Localiz
 func (s *Server) emailChangeMessage(ctx context.Context, loc *i18n.Localizer, to, link, site string, expires time.Time) mail.Message {
 	expiresAt := expires.UTC().Format("2006-01-02 15:04 UTC")
 	vars := mail.Vars{"site": site, "url": link, "expires": expiresAt}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeEmailVerification, mail.VariantEmailChange, loc.Tf, vars)
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars, fbSubject, fbText, "")
+	fallbackSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeEmailVerification, mail.VariantEmailChange, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeEmailVerification, vars, fallbackSubject, fallbackBodyMD, "")
 	return mail.Message{To: to, Type: string(mail.TypeEmailVerification), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
@@ -116,24 +118,24 @@ func (s *Server) emailChangeMessage(ctx context.Context, loc *i18n.Localizer, to
 func (s *Server) newDeviceLoginMessage(ctx context.Context, loc *i18n.Localizer, to, site, ip, userAgent string, at time.Time) mail.Message {
 	atText := at.UTC().Format("2006-01-02 15:04 UTC")
 	vars := mail.Vars{"site": site, "ip": ip, "time": atText}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeNewDeviceLogin, mail.VariantDefault, loc.Tf, vars)
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeNewDeviceLogin, vars, fbSubject, fbText, "")
+	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeNewDeviceLogin, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeNewDeviceLogin, vars, fbSubject, fallbackBodyMD, "")
 	return mail.Message{To: to, Type: string(mail.TypeNewDeviceLogin), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // credentialChangedMessage assembles the credential change notice; what is the already-localized phrase for "what changed".
 func (s *Server) credentialChangedMessage(ctx context.Context, loc *i18n.Localizer, to, site, what string) mail.Message {
 	vars := mail.Vars{"site": site, "what": what}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeCredentialChanged, mail.VariantDefault, loc.Tf, vars)
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeCredentialChanged, vars, fbSubject, fbText, "")
+	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeCredentialChanged, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeCredentialChanged, vars, fbSubject, fallbackBodyMD, "")
 	return mail.Message{To: to, Type: string(mail.TypeCredentialChanged), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 
 // accountStatusMessage assembles the account status change notice; status is the already-localized status phrase.
 func (s *Server) accountStatusMessage(ctx context.Context, loc *i18n.Localizer, to, site, status string) mail.Message {
 	vars := mail.Vars{"site": site, "status": status}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeAccountStatus, mail.VariantDefault, loc.Tf, vars)
-	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeAccountStatus, vars, fbSubject, fbText, "")
+	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeAccountStatus, mail.VariantDefault, loc.Tf, vars)
+	subject, text, htmlBody := s.renderMail(ctx, loc, mail.TypeAccountStatus, vars, fbSubject, fallbackBodyMD, "")
 	return mail.Message{To: to, Type: string(mail.TypeAccountStatus), Subject: subject, TextBody: text, HTMLBody: htmlBody}
 }
 

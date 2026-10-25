@@ -273,21 +273,22 @@ func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate) mail.
 	if unsubURL != "" {
 		vars["unsubscribe_url"] = unsubURL
 	}
-	footerNote, unsubLabel := "", ""
+	footerNote, unsubLabel := lc.T("mail.footer.automated"), ""
 	if unsubURL != "" {
 		footerNote = lc.T("mail.footer.note")
 		unsubLabel = lc.T("mail.footer.unsubscribe")
 	}
-	fbSubject, fbText, _ := mail.DefaultTemplate(mail.TypeReviewReminder, mail.VariantDefault, lc.Tf, vars)
+	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeReviewReminder, mail.VariantDefault, lc.Tf, vars)
 	tpl := mail.Resolve(r.templates, mail.TypeReviewReminder, lc.Locale(), r.siteDefaultLocale())
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             mail.TypeReviewReminder,
 		Site:             site,
+		Lang:             lc.Locale(),
 		Vars:             vars,
 		Subject:          tpl.Subject,
 		BodyMD:           tpl.Body,
 		FallbackSubject:  fbSubject,
-		FallbackText:     fbText,
+		FallbackBodyMD:   fallbackBodyMD,
 		UnsubscribeURL:   unsubURL,
 		FooterNote:       footerNote,
 		UnsubscribeLabel: unsubLabel,

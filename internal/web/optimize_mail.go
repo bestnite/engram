@@ -96,21 +96,22 @@ func (s *Server) NotifyOptimizeDone(ctx context.Context, job store.Job) {
 	if unsubURL != "" {
 		vars["unsubscribe_url"] = unsubURL
 	}
-	footerNote, unsubLabel := "", ""
+	footerNote, unsubLabel := loc.T("mail.footer.automated"), ""
 	if unsubURL != "" {
 		footerNote = loc.T("mail.footer.note")
 		unsubLabel = loc.T("mail.footer.unsubscribe")
 	}
-	fallbackSubject, fallbackText, _ := mail.DefaultTemplate(mail.TypeOptimizeDone, mail.VariantDefault, loc.Tf, vars)
+	fallbackSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeOptimizeDone, mail.VariantDefault, loc.Tf, vars)
 	tpl := mail.Resolve(s.mailTemplateLookup(), mail.TypeOptimizeDone, loc.Locale(), s.siteDefaultLocale(ctx))
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             mail.TypeOptimizeDone,
 		Site:             site,
+		Lang:             loc.Locale(),
 		Vars:             vars,
 		Subject:          tpl.Subject,
 		BodyMD:           tpl.Body,
 		FallbackSubject:  fallbackSubject,
-		FallbackText:     fallbackText,
+		FallbackBodyMD:   fallbackBodyMD,
 		UnsubscribeURL:   unsubURL,
 		FooterNote:       footerNote,
 		UnsubscribeLabel: unsubLabel,

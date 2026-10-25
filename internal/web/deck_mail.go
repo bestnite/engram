@@ -63,7 +63,7 @@ func (s *Server) notifyDeckGrantChange(c *gin.Context, deck *store.Deck, actor, 
 	}
 }
 
-// deckGrantMessage assembles the share/permission-change mail. The default body is plain text; an HTML part is produced only when the admin configured a template.
+// deckGrantMessage assembles the share/permission-change mail. The built-in body is Markdown and renders to HTML; a custom template replaces it.
 func (s *Server) deckGrantMessage(ctx context.Context, loc *i18n.Localizer, to string, typ mail.Type,
 	inviter, deck, role, link, unsubURL string) mail.Message {
 	site := securitySiteName(loc)
@@ -81,9 +81,9 @@ func (s *Server) deckGrantMessage(ctx context.Context, loc *i18n.Localizer, to s
 
 	// The built-in body comes from mail.DefaultTemplate: the "default" pre-filled on the admin page and what is sent here are the same text.
 	// On revocation roleLabel is empty, and that branch is decided by the function from the variable itself (no separate parameter).
-	fallbackSubject, fallbackText, _ := mail.DefaultTemplate(typ, mail.VariantDefault, loc.Tf, vars)
+	fallbackSubject, fallbackBodyMD, _ := mail.DefaultTemplate(typ, mail.VariantDefault, loc.Tf, vars)
 
-	footerNote, unsubLabel := "", ""
+	footerNote, unsubLabel := loc.T("mail.footer.automated"), ""
 	if unsubURL != "" {
 		footerNote = loc.T("mail.footer.note")
 		unsubLabel = loc.T("mail.footer.unsubscribe")
@@ -92,11 +92,12 @@ func (s *Server) deckGrantMessage(ctx context.Context, loc *i18n.Localizer, to s
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             typ,
 		Site:             site,
+		Lang:             loc.Locale(),
 		Vars:             vars,
 		Subject:          tpl.Subject,
 		BodyMD:           tpl.Body,
 		FallbackSubject:  fallbackSubject,
-		FallbackText:     fallbackText,
+		FallbackBodyMD:   fallbackBodyMD,
 		UnsubscribeURL:   unsubURL,
 		FooterNote:       footerNote,
 		UnsubscribeLabel: unsubLabel,

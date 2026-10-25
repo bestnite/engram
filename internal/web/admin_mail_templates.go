@@ -114,7 +114,7 @@ var mailTemplateSampleValues = map[string]string{
 	"ip":              "203.0.113.7",
 	"count":           "NN",
 	"days":            "5",
-	"rate":            "87.5%",
+	"rate":            "87.5",
 	"used":            "1.1 GiB",
 	"limit":           "1.0 GiB",
 	"job_id":          "42",
@@ -277,15 +277,33 @@ func (s *Server) adminMailTemplatePreview(c *gin.Context) {
 		adminError(c, http.StatusBadRequest, "unknown_type")
 		return
 	}
+	// The preview copy follows the locale being edited: the request carries it, and the language pack
+	// supplies the footer note. An unknown code falls back to the default locale.
+	loc := s.i18n.Localizer(s.i18n.Pick(strings.TrimSpace(req.Locale), "", ""))
 	vars := sampleVars(mailType)
+	unsubURL := ""
+	if mail.CanUnsubscribe(mailType) {
+		// A sample unsubscribe address keeps the preview representative of an optional-type mail; it is
+		// placeholder data and carries no token, so the preview stays side-effect free.
+		unsubURL = vars["unsubscribe_url"]
+	}
+	footerNote, unsubLabel := loc.T("mail.footer.automated"), ""
+	if unsubURL != "" {
+		footerNote = loc.T("mail.footer.note")
+		unsubLabel = loc.T("mail.footer.unsubscribe")
+	}
 	out := mail.RenderOrFallback(mail.RenderInput{
-		Type:            mailType,
-		Site:            vars["site"],
-		Vars:            vars,
-		Subject:         req.Subject,
-		BodyMD:          req.BodyMD,
-		FallbackSubject: "(built-in subject)",
-		FallbackText:    "(no template: the built-in body is used)",
+		Type:             mailType,
+		Site:             vars["site"],
+		Lang:             loc.Locale(),
+		Vars:             vars,
+		Subject:          req.Subject,
+		BodyMD:           req.BodyMD,
+		FallbackSubject:  "(built-in subject)",
+		FallbackBodyMD:   "(no template: the built-in body is used)",
+		UnsubscribeURL:   unsubURL,
+		FooterNote:       footerNote,
+		UnsubscribeLabel: unsubLabel,
 	})
 	c.JSON(http.StatusOK, mailTemplatePreviewResponse{
 		Subject: out.Subject, Text: out.Text, HTML: out.HTML, Variables: vars,
@@ -332,7 +350,7 @@ func (s *Server) adminMailTemplateTest(c *gin.Context) {
 			vars["unsubscribe_url"] = unsubURL
 		}
 	}
-	footerNote, unsubLabel := "", ""
+	footerNote, unsubLabel := loc.T("mail.footer.automated"), ""
 	if unsubURL != "" {
 		footerNote = loc.T("mail.footer.note")
 		unsubLabel = loc.T("mail.footer.unsubscribe")
@@ -340,11 +358,12 @@ func (s *Server) adminMailTemplateTest(c *gin.Context) {
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             mailType,
 		Site:             securitySiteName(loc),
+		Lang:             loc.Locale(),
 		Vars:             vars,
 		Subject:          req.Subject,
 		BodyMD:           req.BodyMD,
 		FallbackSubject:  loc.T("admin.mail.test.subject"),
-		FallbackText:     loc.T("admin.mail.test.body"),
+		FallbackBodyMD:   loc.T("admin.mail.test.body"),
 		UnsubscribeURL:   unsubURL,
 		FooterNote:       footerNote,
 		UnsubscribeLabel: unsubLabel,

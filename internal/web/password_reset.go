@@ -56,6 +56,6 @@ func (s *Server) issuePasswordReset(c *gin.Context, u *store.User) {
 	}
 	loc := s.userLocalizer(u)
 	link := s.securityAbsoluteURL(c, "/reset-password?token="+url.QueryEscape(token))
-	msg := s.passwordResetMessage(ctx, loc, u.Email, link, securitySiteName(loc), now.Add(auth.PasswordResetTTL))
+	msg := s.passwordResetMessage(ctx, loc, u.Email, u.Username, link, securitySiteName(loc), now.Add(auth.PasswordResetTTL))
 	s.sendSecurity(ctx, u.ID, msg.To, mail.TypePasswordReset, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
