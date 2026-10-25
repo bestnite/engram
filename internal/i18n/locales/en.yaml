@@ -312,7 +312,7 @@ It renders with sample variables; real recipients see their own data."
   translation: "Invite created; the recipient has this email type turned off, so nothing was sent."
 # ── Review reminder (M1-21, class C) ─────────────────────────
 - id: mail.reminder.subject
-  translation: "{{.count}} cards are due on {{.site}}"
+  translation: "Time to review - {{.site}}"
 - id: mail.reminder.title
   translation: "Time to review"
 - id: mail.reminder.body

@@ -312,7 +312,7 @@
   translation: "邀请已创建；收件人已关闭该类邮件，因此没有发送。"
 # ── Review due reminders (M1-21, class C) ────────────────────────────────
 - id: mail.reminder.subject
-  translation: "{{.site}} 上有 {{.count}} 张卡片待复习"
+  translation: "该复习了 - {{.site}}"
 - id: mail.reminder.title
   translation: "该复习了"
 - id: mail.reminder.body
@@ -356,9 +356,9 @@
 - id: mail.notice.new_device.body
   translation: "你的 {{.site}} 账户刚刚在一台新设备或新网络环境下登录。"
 - id: mail.notice.new_device.time
-  translation: "**时间：** {{.time}}"
+  translation: "**时间**：{{.time}}"
 - id: mail.notice.new_device.ip
-  translation: "**IP 地址：** {{.ip}}"
+  translation: "**IP 地址**：{{.ip}}"
 - id: mail.notice.new_device.note
   translation: "如果是你本人操作，无需处理；如果不是，请立即修改密码，并检查账户的登录状态。"
 - id: mail.notice.credential.subject
@@ -416,15 +416,15 @@
 - id: mail.digest.intro
   translation: "这是你最近七天的学习情况。"
 - id: mail.digest.reviewed
-  translation: "**复习次数：** {{.count}}"
+  translation: "**复习次数**：{{.count}}"
 - id: mail.digest.pass_rate
-  translation: "**通过率：** {{.rate}}%"
+  translation: "**通过率**：{{.rate}}%"
 - id: mail.digest.streak
-  translation: "**当前连续学习：** {{.days}} 天"
+  translation: "**当前连续学习**：{{.days}} 天"
 - id: mail.digest.new_cards
-  translation: "**新卡片：** {{.count}}"
+  translation: "**新卡片**：{{.count}}"
 - id: mail.digest.due
-  translation: "**待复习：** {{.count}}"
+  translation: "**待复习**：{{.count}}"
 - id: mail.digest.link_label
   translation: "查看统计"
 # Per-user send hour for reminders and digests (mail.prefs.reminder_time.*): review reminders and the weekly digest share the same local hour;
