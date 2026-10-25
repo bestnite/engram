@@ -202,58 +202,66 @@ func TestDefaultBodiesRenderWithRealCatalogs(t *testing.T) {
 		loc := translator.Localizer(language.Make(code))
 		for _, def := range Catalog() {
 			typ := def.Type
-			t.Run(code+"/"+string(typ), func(t *testing.T) {
-				vars := sampleVars(typ)
-				// The sender builds its built-in subject with the real values; the admin editor gets the
-				// same body but a subject written with placeholders.
-				fallbackSubject, fallbackBody, ok := DefaultTemplate(typ, VariantDefault, loc.Tf, vars)
-				if !ok {
-					t.Fatal("no built-in template")
-				}
-				editorSubject, editorBody, _ := DefaultTemplate(typ, VariantDefault, loc.Tf, PlaceholderVars(typ))
-
-				// No custom template: the built-in Markdown is the fallback body.
-				sent := renderOne(t, RenderInput{
-					Type:            typ,
-					Site:            "Example",
-					Lang:            code,
-					Vars:            vars,
-					FallbackSubject: fallbackSubject,
-					FallbackBodyMD:  fallbackBody,
-					FooterNote:      loc.T("mail.footer.automated"),
-				})
-				// The editor pre-filled with the default and saved unchanged.
-				saved := renderOne(t, RenderInput{
-					Type:       typ,
-					Site:       "Example",
-					Lang:       code,
-					Vars:       vars,
-					Subject:    editorSubject,
-					BodyMD:     editorBody,
-					FooterNote: loc.T("mail.footer.automated"),
-				})
-
-				if sent.HTML != saved.HTML || sent.Text != saved.Text || sent.Subject != saved.Subject {
-					t.Errorf("saving the default unchanged changed the mail:\nsent HTML:\n%s\nsaved HTML:\n%s", sent.HTML, saved.HTML)
-				}
-				for name, out := range map[string]string{"subject": sent.Subject, "html": sent.HTML, "text": sent.Text} {
-					if m := mailKeyPattern.FindString(out); m != "" {
-						t.Errorf("%s contains the untranslated message id %q", name, m)
+			// Every variant is rendered too: an alternate wording has its own language pack keys, and a
+			// missing one would otherwise only show up in the one flow that sends it.
+			variants := []string{VariantDefault}
+			if typ == TypeEmailVerification {
+				variants = append(variants, VariantEmailChange)
+			}
+			for _, variant := range variants {
+				t.Run(code+"/"+string(typ)+"/"+variant, func(t *testing.T) {
+					vars := sampleVars(typ)
+					// The sender builds its built-in subject with the real values; the admin editor gets the
+					// same body but a subject written with placeholders.
+					fallbackSubject, fallbackBody, ok := DefaultTemplate(typ, variant, loc.Tf, vars)
+					if !ok {
+						t.Fatal("no built-in template")
 					}
-					if strings.Contains(out, "{{") {
-						t.Errorf("%s contains a placeholder:\n%s", name, out)
+					editorSubject, editorBody, _ := DefaultTemplate(typ, variant, loc.Tf, PlaceholderVars(typ))
+
+					// No custom template: the built-in Markdown is the fallback body.
+					sent := renderOne(t, RenderInput{
+						Type:            typ,
+						Site:            "Example",
+						Lang:            code,
+						Vars:            vars,
+						FallbackSubject: fallbackSubject,
+						FallbackBodyMD:  fallbackBody,
+						FooterNote:      loc.T("mail.footer.automated"),
+					})
+					// The editor pre-filled with the default and saved unchanged.
+					saved := renderOne(t, RenderInput{
+						Type:       typ,
+						Site:       "Example",
+						Lang:       code,
+						Vars:       vars,
+						Subject:    editorSubject,
+						BodyMD:     editorBody,
+						FooterNote: loc.T("mail.footer.automated"),
+					})
+
+					if sent.HTML != saved.HTML || sent.Text != saved.Text || sent.Subject != saved.Subject {
+						t.Errorf("saving the default unchanged changed the mail:\nsent HTML:\n%s\nsaved HTML:\n%s", sent.HTML, saved.HTML)
 					}
-				}
-				if !strings.Contains(sent.HTML, "<h2") {
-					t.Errorf("HTML has no title heading:\n%s", sent.HTML)
-				}
-				if ctaTypes[typ] && !strings.Contains(sent.HTML, buttonStyle) {
-					t.Errorf("CTA mail has no button:\n%s", sent.HTML)
-				}
-				if !ctaTypes[typ] && strings.Contains(sent.HTML, buttonStyle) {
-					t.Errorf("mail without a CTA rendered a button:\n%s", sent.HTML)
-				}
-			})
+					for name, out := range map[string]string{"subject": sent.Subject, "html": sent.HTML, "text": sent.Text} {
+						if m := mailKeyPattern.FindString(out); m != "" {
+							t.Errorf("%s contains the untranslated message id %q", name, m)
+						}
+						if strings.Contains(out, "{{") {
+							t.Errorf("%s contains a placeholder:\n%s", name, out)
+						}
+					}
+					if !strings.Contains(sent.HTML, "<h2") {
+						t.Errorf("HTML has no title heading:\n%s", sent.HTML)
+					}
+					if ctaTypes[typ] && !strings.Contains(sent.HTML, buttonStyle) {
+						t.Errorf("CTA mail has no button:\n%s", sent.HTML)
+					}
+					if !ctaTypes[typ] && strings.Contains(sent.HTML, buttonStyle) {
+						t.Errorf("mail without a CTA rendered a button:\n%s", sent.HTML)
+					}
+				})
+			}
 		}
 	}
 }
