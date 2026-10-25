@@ -60,6 +60,37 @@ milestone adds one fixed set of single-line shortcodes, expanded at render time,
 side that turns them into controls. Adding further shortcodes means adding a row to that table,
 not widening the allowlist.
 
+The agreed grammar, which every shortcode in this milestone follows:
+
+- one line, no nesting: `{{name:body|key=value|...}}`, and the body ends at the first `}}`;
+- a shortcode never fails a render: an unknown name, a malformed parameter, or a body that itself
+  contains `{{` is emitted as its source text, and the review flow never learns about it;
+- the expanded element carries data in named attributes and no behaviour: the server emits no
+  `<audio>`, no `<button>` and no event attribute, so the allowlist grows by exactly the
+  attributes a shortcode needs;
+- the visible body always stays in the output, so a client without JavaScript, without a speech
+  engine, or on a page whose media it may not read shows text instead of nothing;
+- the mail renderer turns every shortcode into plain text, because a mail body shares the same
+  pipeline and has no controls.
+
+Rejected, with the reason recorded so it is not re-litigated:
+
+- `style`, `size`, `color`: the allowlist forbids the `style` attribute on purpose, and one
+  shortcode emitting it would make every other constraint worthless;
+- conditionals, loops, variables, template expressions: a requirement that needs an expression is
+  a card type, and card types are registered;
+- cross-note references such as `{{card:<id>}}`: rendering takes one string and stays a pure
+  function of it, or the export, mail and share paths inherit a database read;
+- `video`: the media allowlist holds no video format;
+- server-side reading generation for ruby: it needs a dictionary and disambiguation, which is
+  another system rather than a shortcode;
+- `kbd`, `mark`, `ipa`: inline code and emphasis already express them.
+
+Deferred, not part of this milestone: `{{record:<seconds>}}`, which records and plays back the
+learner's own voice through `MediaRecorder`, and `{{timer:<seconds>}}`, a countdown for a spoken
+answer. Both are front-end only and need no server change; they wait until the first three
+shortcodes have been used on a real deck.
+
 - [ ] **M11-1 Shortcode layer in `internal/render` with `tts`, `audio` and `ruby`** — add a
   goldmark inline parser and one fixed shortcode table in `internal/render` (a new file beside
   `render.go`, sharing the existing pipeline). Syntax is single-line, non-nesting,
@@ -69,8 +100,8 @@ not widening the allowlist.
   - `{{audio:/media/<sha256>|start=12.5|end=15|rate=0.75|loop}}` → `<span class="engram-audio"
     data-audio-src="…" …>…</span>`, the same visible-text rule.
   - `{{ruby:漢字|かんじ}}` → `<ruby>漢字<rt>かんじ</rt></ruby>`.
-  - An unknown name, a malformed parameter or a body containing `{{` or `}}` emits the source
-    text unchanged: a shortcode never makes rendering fail.
+  - An unknown name, a malformed parameter or a body containing `{{` emits the source text
+    unchanged: a shortcode never makes rendering fail.
   - The server emits no `<audio>`, no `<button>` and no event attribute; the controls come from
     M11-2.
   - Allowlist changes are exactly: the elements `ruby`, `rt`, `rp`, and the named `data-tts-*` /
