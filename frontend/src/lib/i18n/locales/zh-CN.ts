@@ -570,6 +570,7 @@ export const zhCN: LocaleCatalog = {
   'auth.register.blocked_heading': '无法自助注册',
   'auth.register.heading': '创建账号',
   'auth.register.invite_intro': '你收到了邀请，完成注册即可加入。',
+  'auth.register.oidc': '使用 OIDC 注册',
   'auth.register.submit': '创建账号',
   'auth.register.to_login': '已有账号？去登录',
   'auth.setup.heading': '创建首个管理员',

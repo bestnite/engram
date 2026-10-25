@@ -571,6 +571,7 @@ export const en: LocaleCatalog = {
   'auth.register.blocked_heading': 'Self-service registration is unavailable',
   'auth.register.heading': 'Create your account',
   'auth.register.invite_intro': 'You were invited. Complete registration to join.',
+  'auth.register.oidc': 'Sign up with OIDC',
   'auth.register.submit': 'Create account',
   'auth.register.to_login': 'Already have an account? Log in',
   'auth.setup.heading': 'Create the first administrator',

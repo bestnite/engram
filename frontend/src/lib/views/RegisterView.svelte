@@ -6,6 +6,7 @@
   import { register, authStore } from '../auth';
   import { apiClient, getApiErrorMessageKey, validatePasswordConfirmation, ApiClientError } from '../api';
   import type { RegistrationPolicy } from '../api';
+  import OIDCLoginEntry from '../components/OIDCLoginEntry.svelte';
   import Button from '../components/ui/Button.svelte';
   import { toast } from '../components/ui/toast';
 
@@ -258,6 +259,10 @@
           {$t('auth.register.to_login')}
         </a>
       </div>
+
+      <!-- Optional OIDC entry: the first OIDC sign-in also creates the account, so it belongs in the same branch as the registration form.
+           It stays out of the probing and blocked branches: the entry leads through the same server flow that would refuse a closed site. -->
+      <OIDCLoginEntry labelKey="auth.register.oidc" />
     </div>
   </div>
 {/if}
