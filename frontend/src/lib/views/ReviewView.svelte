@@ -6,6 +6,7 @@
   import type { ApiClient, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
   import { toast } from '../components/ui/toast';
   import { typeset, removeMenuTabStops } from '../mathjax';
+  import { enhanceShortcodes, stopShortcodePlayback } from '../shortcodes';
   import { reviewShortcut, reviewSwipe } from '../review-shortcuts';
   import RadioGroup from '../components/ui/RadioGroup.svelte';
 
@@ -306,6 +307,8 @@
       // The per-blank inputs only appear with the render response, while the auto-focus on a card change runs before that, so it is topped up here.
       if (blanks.length && !feedback && !gradedRevealed) blankInputs[0]?.focus();
       await typeset([frontSection, answerSection, optionsSection]);
+      // Shortcode controls are attached only to the sanitized DOM of this card face: the module reads data attributes, never the raw fields.
+      enhanceShortcodes([frontSection, answerSection, optionsSection]);
       // The option rows are interactive controls, so MathJax's keyboard entry to its context menu must not add a nested
       // focus stop there; the prompt and answer sections are ordinary content and keep their tab stop.
       removeMenuTabStops([optionsSection]);
@@ -444,6 +447,7 @@
     revealed = true;
     await tick();
     await typeset([answerSection]);
+    enhanceShortcodes([answerSection]);
   }
 
   /** Submit the raw answer and let the server grade it; the result panel keeps the answered card, and the card only changes when the user presses "continue". */
@@ -475,6 +479,7 @@
       // Wait for the result panel to mount into the DOM, then typeset only it with the answer HTML returned by the server.
       await tick();
       await typeset([feedbackSection]);
+      enhanceShortcodes([feedbackSection]);
     } catch (cause) {
       error = cause;
     } finally {
@@ -498,6 +503,7 @@
       // Typeset the revealed answer HTML once the reveal panel has mounted into the DOM.
       await tick();
       await typeset([revealedSection]);
+      enhanceShortcodes([revealedSection]);
     } catch (cause) {
       error = cause;
     } finally {
@@ -823,7 +829,11 @@
     // Metadata is loaded only once (idempotent within the module); on failure it silently degrades to the loading/empty state without interrupting the review flow.
     void loadCardTypes(client).catch(() => {});
     window.addEventListener('keydown', onKeydown);
-    return () => window.removeEventListener('keydown', onKeydown);
+    return () => {
+      window.removeEventListener('keydown', onKeydown);
+      // Speech and audio started from this card must not outlive the page that shows it.
+      stopShortcodePlayback();
+    };
   });
 </script>
 

@@ -1335,4 +1335,11 @@ export const en: LocaleCatalog = {
   'decks.bulk_delete.skipped_not_found': 'Skipped {count}: not found',
   'decks.bulk_delete.skipped_forbidden': 'Skipped {count}: you are not the owner',
   'decks.bulk_delete.failed': 'Failed to delete decks. Please try again.',
+  // ---- Card-content shortcode controls (frontend/src/lib/shortcodes) ----
+  'shortcode.tts.play': 'Read aloud',
+  'shortcode.tts.stop': 'Stop reading',
+  'shortcode.tts.unavailable': 'Reading aloud is not available here',
+  'shortcode.audio.play': 'Play audio',
+  'shortcode.audio.stop': 'Stop audio',
+  'shortcode.audio.unavailable': 'This audio could not be loaded',
 };

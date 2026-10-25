@@ -6,6 +6,7 @@
   import { apiClient, ApiClientError } from '../api';
   import type { Note } from '../api';
   import { typeset } from '../mathjax';
+  import { enhanceShortcodes, stopShortcodePlayback } from '../shortcodes';
   import MediaPicker from '../components/MediaPicker.svelte';
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import Select from '../components/ui/Select.svelte';
@@ -264,7 +265,11 @@
       await tick();
       if (disposed || generation !== previewGeneration) return;
       const container = previewSection;
-      if (container) await typeset([container]);
+      if (container) {
+        await typeset([container]);
+        // The preview is the only sanitized HTML container in the editor: controls are attached to it, never to the raw fields.
+        enhanceShortcodes([container]);
+      }
     });
   }
 
@@ -371,6 +376,8 @@
         clearTimeout(debounceTimer);
         debounceTimer = null;
       }
+      // Speech and audio started from the preview must not outlive the editor.
+      stopShortcodePlayback();
     };
   });
 </script>

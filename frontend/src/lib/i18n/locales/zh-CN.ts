@@ -1334,4 +1334,11 @@ export const zhCN: LocaleCatalog = {
   'decks.bulk_delete.skipped_not_found': '跳过 {count} 个：不存在',
   'decks.bulk_delete.skipped_forbidden': '跳过 {count} 个：你不是拥有者',
   'decks.bulk_delete.failed': '批量删除失败，请重试。',
+  // ---- Card-content shortcode controls (frontend/src/lib/shortcodes) ----
+  'shortcode.tts.play': '朗读',
+  'shortcode.tts.stop': '停止朗读',
+  'shortcode.tts.unavailable': '此设备暂不支持朗读',
+  'shortcode.audio.play': '播放音频',
+  'shortcode.audio.stop': '停止播放',
+  'shortcode.audio.unavailable': '无法加载这段音频',
 };

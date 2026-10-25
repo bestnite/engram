@@ -301,6 +301,34 @@ describe('unified note editor — create mode', () => {
     expect(nodes).toEqual([container]);
   });
 
+  it('enhances the same preview container it typesets with shortcode controls', async () => {
+    const sha = 'a'.repeat(64);
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(
+      createResponse([
+        {
+          front_html: `<p><span class="engram-audio" data-audio-src="/media/${sha}" data-audio-start="12.5">/media/${sha}</span></p>`,
+          back_html: '',
+        },
+      ])
+    );
+
+    mountEditor({ id: '5' });
+    await flush();
+    setField('note-field-front', 'Q');
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+
+    const container = target.querySelector('[data-testid="note-preview-result"]');
+    expect(container).toBeTruthy();
+    // The preview is the one sanitized container in the editor: it is the one that was typeset, and the control
+    // appears inside it rather than anywhere the raw field text lives.
+    const [nodes] = typesetSpy.mock.calls.at(-1)!;
+    expect(nodes).toEqual([container]);
+    expect(container!.querySelector('button[data-shortcode-control="audio"]')).toBeTruthy();
+    expect(container!.textContent).toContain(`/media/${sha}`);
+  });
+
   it('serializes commit and typeset so a delayed typeset only ever sees its own generation', async () => {
     // The first typesetting round hangs: if "write the new card" and typesetting are not serialized, the second response would replace the container
     // midway through round one and round one's MathJax would rewrite the DOM round two just committed. Each typesetting call records the container's actual text.
