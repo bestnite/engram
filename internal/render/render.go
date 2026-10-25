@@ -1,6 +1,10 @@
 // Package render implements the rendering pipeline for card content:
-// Markdown + TeX source -> goldmark to HTML -> bluemonday allowlist sanitizing -> HTML that can be
-// embedded into a page safely.
+// Markdown + TeX + shortcode source -> goldmark to HTML -> bluemonday allowlist sanitizing -> HTML
+// that can be embedded into a page safely.
+//
+// The shortcode form `{{name:body|key=value}}` expands during the goldmark step into an element that
+// carries data attributes but no behaviour (see shortcode.go). Card content gets the element; a mail
+// body gets plain text for the same shortcode, because a mail has no client-side controls.
 //
 // Why a separate package: rendering is used by the web pages and will also be reused by a future
 // deck package export; living inside internal/web would make the export path depend on the HTTP
@@ -19,6 +23,7 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
 )
 
@@ -33,6 +38,7 @@ var markdown = goldmark.New(
 	goldmark.WithExtensions(
 		extension.Table,
 		extension.Strikethrough,
+		shortcodeExtension{},
 	),
 	goldmark.WithRendererOptions(html.WithUnsafe()),
 )
@@ -63,26 +69,32 @@ var imgSrcPattern = regexp.MustCompile(
 // MathJax delimiters \( \) and \[ \], along with the backslashes and braces inside them, are kept
 // verbatim for the browser-side MathJax 3 to render.
 func RenderMarkdown(src string) (string, error) {
-	return renderWith(src, policy)
+	return renderWith(src, policy, shortcodeModeCard)
 }
 
 // RenderMailMarkdown renders a mail template: the same pipeline as card content, with headings
-// allowed (a mail body has a title; card content does not).
+// allowed (a mail body has a title; card content does not) and every shortcode reduced to plain
+// text (a mail has no client-side controls to attach).
 //
 // A custom mail template is admin-authored Markdown, so it is untrusted exactly like card content and
-// goes through the same allowlist. The only difference is the element set.
+// goes through the same allowlist.
 func RenderMailMarkdown(src string) (string, error) {
-	return renderWith(src, mailPolicy)
+	return renderWith(src, mailPolicy, shortcodeModeMail)
 }
 
-// renderWith runs the shared Markdown + MathJax + sanitize pipeline under one allowlist.
-func renderWith(src string, pol *bluemonday.Policy) (string, error) {
+// renderWith runs the shared Markdown + TeX + shortcode + sanitize pipeline under one allowlist.
+func renderWith(src string, pol *bluemonday.Policy, mode shortcodeMode) (string, error) {
 	// Protect formulas first, then render Markdown: goldmark treats \( as a CommonMark backslash
 	// escape and would swallow the delimiter into (, destroying MathJax completely; see math.go.
 	protected, spans := protectMath(src)
 
+	// The goldmark instance is shared, so the shortcode output form (element or plain text) travels
+	// with this parse through the parser context.
+	pc := parser.NewContext()
+	pc.Set(shortcodeModeKey, mode)
+
 	var buf bytes.Buffer
-	if err := markdown.Convert([]byte(protected), &buf); err != nil {
+	if err := markdown.Convert([]byte(protected), &buf, parser.WithContext(pc)); err != nil {
 		return "", fmt.Errorf("render markdown: %w", err)
 	}
 
@@ -130,6 +142,23 @@ func buildPolicy(withHeadings bool) *bluemonday.Policy {
 	// span's class is used by site styling and highlighting; narrow the value with bluemonday's own
 	// token regex.
 	p.AllowAttrs("class").Matching(bluemonday.SpaceSeparatedTokens).OnElements("span")
+
+	// The shortcode elements. ruby/rt carry the annotation payload. rp is the parenthesis a browser
+	// without ruby support shows; it is allowed so a raw author-written ruby element can carry that
+	// fallback. No attribute is allowed on these three: the annotation is text only.
+	p.AllowElements("ruby", "rt", "rp")
+
+	// Shortcode data attributes, each named and each restricted to the value shape the shortcode
+	// table produces. There is deliberately no general data-* rule: an exact name with an exact
+	// value shape means content cannot invent an attribute a future client might interpret.
+	p.AllowAttrs("data-tts-text").Matching(shortcodeTextPattern).OnElements("span")
+	p.AllowAttrs("data-tts-lang").Matching(shortcodeLangPattern).OnElements("span")
+	p.AllowAttrs("data-tts-rate").Matching(shortcodeNumberPattern).OnElements("span")
+	p.AllowAttrs("data-audio-src").Matching(shortcodeAudioSrcPattern).OnElements("span")
+	p.AllowAttrs("data-audio-start").Matching(shortcodeNumberPattern).OnElements("span")
+	p.AllowAttrs("data-audio-end").Matching(shortcodeNumberPattern).OnElements("span")
+	p.AllowAttrs("data-audio-rate").Matching(shortcodeNumberPattern).OnElements("span")
+	p.AllowAttrs("data-audio-loop").Matching(regexp.MustCompile(`^1$`)).OnElements("span")
 
 	// The value of a.href is guarded jointly by the global scheme policy below and the relative-path
 	// switch: only http/https/mailto and site-relative paths pass.

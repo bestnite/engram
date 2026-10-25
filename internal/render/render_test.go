@@ -338,11 +338,15 @@ var allowedElementNames = map[string]bool{
 	"ul": true, "ol": true, "li": true,
 	"table": true, "thead": true, "tbody": true, "tr": true, "th": true, "td": true,
 	"a": true, "img": true, "span": true,
+	"ruby": true, "rt": true, "rp": true,
 }
 
 // allowedAttrNames is the set of attribute names the allowlist permits (consistent with buildPolicy).
 var allowedAttrNames = map[string]bool{
 	"class": true, "href": true, "src": true, "alt": true, "start": true,
+	"data-tts-text": true, "data-tts-lang": true, "data-tts-rate": true,
+	"data-audio-src": true, "data-audio-start": true, "data-audio-end": true,
+	"data-audio-rate": true, "data-audio-loop": true,
 }
 
 // urlAttributes is the set of attribute names whose scheme must be checked with URL semantics after
