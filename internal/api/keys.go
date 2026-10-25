@@ -45,6 +45,12 @@ func (a *API) createKey(c *gin.Context) {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
+	// An expiry that is not strictly in the future would create a key that is already dead, so it is rejected
+	// before anything is persisted. This is a request-shape check and therefore belongs to the transport layer.
+	if req.ExpiresAt != nil && !req.ExpiresAt.After(a.now()) {
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+		return
+	}
 	// admin scope can only be issued to admin accounts: non-admins (including ordinary users holding keys or a leftover admin-scope key)
 	// are rejected on any path that submits admin, and nothing is persisted. The restriction has to happen in the transport layer, which knows
 	// the actor's role; the store layer cannot see the caller's identity.
