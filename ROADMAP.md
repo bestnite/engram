@@ -1,31 +1,13 @@
 # ROADMAP.md — Task backlog and release ledger
 
-This file holds two things: the **open** work, and the goals completed since the last release.
-A completed task leaves the backlog in the same commit that finishes it, so the backlog is a
-backlog rather than a history — `git log` is the history, and the commit that deletes a task
-carries its acceptance evidence.
-
-The release ledger in section 2 is cleared when a release is cut: once a goal ships, its entry
-belongs in the release notes of that version, not here. The rules for changing this repository
-live in `AGENTS.md`; read that first.
-
-A subagent must never edit this file: writing it requires user approval, which a leaf subagent
-cannot obtain.
+This file holds the **open** work and the goals completed since the last release: section 1 is
+the backlog, section 2 the release ledger. The rules for writing, counting and closing an entry
+— the checkbox form, ID retirement, the acceptance evidence, the release cut — live in
+`AGENTS.md` section 7; read that first.
 
 ---
 
 ## 1. Task backlog
-
-Conventions:
-
-- `- [ ]` is the only checkbox: an open task. There is no `- [x]` line, because completing a
-  task deletes it (see section 3.2).
-- IDs are unique and never reused. An ID that has been deleted stays retired: reusing it would
-  make an older reference silently point at a different task.
-- Each task is written to be handed to one subagent without extra context: it names the
-  files, the acceptance criteria, and how to verify them.
-- A task may be split, but each resulting task keeps a new ID and its own criteria.
-- Progress is reported as the number of open tasks (section 3).
 
 ### M10 — Future work (not part of the current release)
 
@@ -115,23 +97,3 @@ helpers, the review-day seeding fix inside a test, and the internal rename of
   the one that changed media identity and deleted `/media/<numeric id>`, shipped as a `0.1.x`
   patch, so `v0.1.11` follows the project's own practice.
 
-## 3. Progress tracking
-
-### 3.1 Counting
-
-- Count open tasks with `grep -c '^- [ ]' ROADMAP.md`, and per milestone with
-  `grep -c '^- [ ] \*\*M10-' ROADMAP.md` (replace the prefix).
-- Report the open count per milestone, for example `M10 7 open`.
-- The count only goes down as work lands, and that is the whole picture: a milestone is
-  finished when it holds no open task, at which point its section and heading leave this file.
-
-### 3.2 Marking a task done
-
-- Delete the task's entry from this file in the same commit that completes it, and name the ID
-  in the commit message so the task text and its evidence stay recoverable with
-  `git log --grep=<id>`.
-- A task may be deleted only when the acceptance criteria pass with evidence (command output
-  or captured response) and `AGENTS.md` section 4's definition of done holds.
-- If a task turns out to be wrong or unnecessary, do not delete it as if it were done: delete
-  it with a commit message saying what replaced it, and record the decision in the committed
-  file that owns it.

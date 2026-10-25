@@ -2,7 +2,7 @@
 
 This file is a map of the current code: the processes, the packages, and how a request or a
 review travels through them. It changes whenever the structure changes. The rules for changing
-the repository live in `AGENTS.md`; the task backlog lives in `ROADMAP.md`.
+the repository live in `AGENTS.md`; the task backlog and the release ledger live in `ROADMAP.md`.
 
 The code decides. If this file and the code disagree, the code is right and this file is stale:
 fix this file in the same change that notices the disagreement.
@@ -30,7 +30,7 @@ fix this file in the same change that notices the disagreement.
 engram/
 ├── AGENTS.md                 # rules for changing the repository
 ├── ARCHITECTURE.md           # this file: the current structure
-├── ROADMAP.md                # task backlog and progress conventions
+├── ROADMAP.md                # task backlog and release ledger
 ├── CONTRIBUTING.md           # guide for external contributors
 ├── README.md / README.zh.md  # English is the primary document; Chinese is parallel
 ├── cmd/engram/               # the binary: subcommands and explicit wiring

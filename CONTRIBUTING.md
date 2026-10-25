@@ -282,8 +282,8 @@ leaf subagent cannot obtain; the attempt is auto-denied or it interrupts the use
 This is the easiest trap to fall into when a task description says "update the guide": report
 the needed change to the parent instead.
 
-Maintainers record verified progress in the gitignored `PROGRESS.local.md` and delete the
-finished entries from `ROADMAP.md` in batches, with the user present.
+Maintainers record verified progress in the gitignored `PROGRESS.local.md` and remove finished
+entries from `ROADMAP.md` as `AGENTS.md` section 7 requires, with the user present.
 
 ## Project name and licence
 

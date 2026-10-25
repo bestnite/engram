@@ -205,8 +205,8 @@ A task is done only when all of the following hold:
 - **Subagents must never edit `AGENTS.md` or `ROADMAP.md`** (or any project-context file such as
   `CLAUDE.md` or `.hermes.md`). Writing them requires user approval, which a leaf subagent cannot obtain: the
   attempt is auto-denied or it interrupts the user mid-workflow. The parent records verified
-  progress in the gitignored `PROGRESS.local.md` and deletes the finished entries from
-  `ROADMAP.md` in batches, with the user present.
+  progress in the gitignored `PROGRESS.local.md` and removes finished entries from
+  `ROADMAP.md` under the rules in section 7, with the user present.
 
 
 - One task per subagent. Pass the task's ID, its full text from `ROADMAP.md`, and the code
@@ -293,3 +293,47 @@ git worktree prune                       # drop stale entries
 Use `git clone --local` only when a writer needs its own `.git/config`, its own ignore
 rules, or the freedom to run `git clean -xdf`. That is not the case in this repository;
 worktrees are the default.
+
+---
+
+## 7. Task backlog and release ledger
+
+`ROADMAP.md` holds the open work and the goals completed since the last release. It is data;
+the rules for writing, counting and closing it are here.
+
+**Structure.** Section 1 of the file lists the open tasks grouped by milestone. Section 2 is
+the release ledger: the goals that shipped after the latest release, each marked with whether
+it breaks the HTTP API, the MCP tools, the database schema, the configuration or a file format.
+Cutting a release clears the ledger, because that version's release notes take over, and the
+backlog is what remains in the file.
+
+**Writing a task.**
+
+- `- [ ]` is the only checkbox: an open task. There is no `- [x]` line, because completing a
+  task deletes it.
+- IDs are unique and never reused. A deleted ID stays retired: reusing it makes an older
+  reference silently point at a different task.
+- A task is written to be handed to one subagent without extra context: it names the files, the
+  acceptance criteria, and how to verify them.
+- A task may be split, but each resulting task keeps a new ID and its own criteria.
+
+**Reporting progress.** Count the open tasks with `grep -c '^- [ ]' ROADMAP.md`, and the tasks
+of one milestone with `grep -c '^- [ ] \*\*M10-' ROADMAP.md` (replace the prefix). Report the
+count per milestone, for example `M10 7 open`. The count only goes down as work lands, and a
+milestone that holds no open task loses its section and heading.
+
+**Finishing a task.**
+
+- An entry leaves the backlog only when the acceptance criteria pass with evidence — a command
+  output or a captured response, not a claim — and section 4's definition of done holds.
+- The entry leaves the backlog when the task's work lands, and the commit that removes it names
+  the ID, so the task text and its evidence stay recoverable with `git log --grep=<id>`. The
+  removal either rides the commit that completes the task or, when several tasks land together,
+  takes one `docs(roadmap)` commit that the parent makes with the user present.
+- If a task turns out to be wrong or unnecessary, do not delete it as if it were done: delete
+  it with a commit message saying what replaced it, and record the decision in the committed
+  file that owns it.
+
+**Who edits the file.** Only the parent, with the user present. A subagent must never edit
+`ROADMAP.md` or any other project-context file (see section 5); it reports progress instead, and
+the parent verifies that report before acting on it.
