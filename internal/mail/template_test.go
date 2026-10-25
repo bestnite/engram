@@ -3,6 +3,9 @@ package mail
 import (
 	"strings"
 	"testing"
+
+	"git.nite07.com/nite/engram/internal/i18n"
+	"golang.org/x/text/language"
 )
 
 // These cases pin down the rendering order: render and sanitize first, substitute variables
@@ -420,19 +423,83 @@ func TestRequiredVarsAlwaysIncludeLinks(t *testing.T) {
 			t.Errorf("RequiredVars(%q) = %v, want it to include %q", typ, got, want)
 		}
 	}
-	// Optional-class mail must list the unsubscribe link as required: marketing mail without an
-	// unsubscribe entry is non-compliant.
-	for _, typ := range []Type{TypeReviewReminder, TypeStudyDigest} {
-		got := RequiredVars(typ)
-		found := false
-		for _, name := range got {
-			if name == "unsubscribe_url" {
-				found = true
+}
+
+// TestOptionalClassUnsubscribeIsRenderedNotRequired guards the rule that the unsubscribe entry lives
+// outside the template: a template that never mentions {{unsubscribe_url}} must still validate, and
+// the entry must still appear in both segments. Asserting both halves in one place means the variable
+// table and the renderer cannot drift apart -- a template cannot drop the entry, so the template is
+// not where its presence is enforced.
+func TestOptionalClassUnsubscribeIsRenderedNotRequired(t *testing.T) {
+	const (
+		unsubURL   = "https://example.com/u/token"
+		unsubLabel = "Unsubscribe"
+	)
+	// A real localizer, not echoTF: this test is about the copy the built-in body actually emits, and
+	// echoTF deliberately echoes every variable it is handed, which would look like "the body mentions
+	// unsubscribe_url" regardless of the body.
+	translator, err := i18n.New()
+	if err != nil {
+		t.Fatalf("load language packs: %v", err)
+	}
+	loc := translator.Localizer(language.Make("en"))
+
+	checked := 0
+	for _, def := range Catalog() {
+		typ := def.Type
+		specs, ok := VarSpecs(typ)
+		if !ok {
+			continue
+		}
+		declared := false
+		for _, s := range specs {
+			if s.Name != "unsubscribe_url" {
+				continue
+			}
+			declared = true
+			if s.Required {
+				t.Errorf("%s: unsubscribe_url is required, but the renderer appends the entry itself", typ)
 			}
 		}
-		if !found {
-			t.Errorf("RequiredVars(%q) = %v, want it to include unsubscribe_url", typ, got)
+		if !declared {
+			continue
 		}
+		checked++
+
+		subject, body, ok := DefaultTemplate(typ, VariantDefault, loc.Tf, PlaceholderVars(typ))
+		if !ok {
+			t.Errorf("%s: no built-in template", typ)
+			continue
+		}
+		if strings.Contains(body, "{{unsubscribe_url}}") {
+			t.Errorf("%s: built-in body mentions unsubscribe_url, but the entry is appended by the renderer:\n%s", typ, body)
+		}
+		if err := Validate(typ, subject, body); err != nil {
+			t.Errorf("%s: a template without unsubscribe_url does not validate: %v", typ, err)
+		}
+
+		out, err := Render(RenderInput{
+			Type:             typ,
+			Site:             "Example",
+			Vars:             sampleVars(typ),
+			Subject:          subject,
+			BodyMD:           body,
+			UnsubscribeURL:   unsubURL,
+			UnsubscribeLabel: unsubLabel,
+			FooterNote:       "You get this because you turned it on.",
+		})
+		if err != nil {
+			t.Fatalf("%s: Render() error = %v", typ, err)
+		}
+		if !strings.Contains(out.Text, unsubLabel+": "+unsubURL) {
+			t.Errorf("%s: plain text lacks the unsubscribe entry:\n%s", typ, out.Text)
+		}
+		if !strings.Contains(out.HTML, `<a href="`+unsubURL+`"`) || !strings.Contains(out.HTML, ">"+unsubLabel+"</a>") {
+			t.Errorf("%s: HTML footer lacks the unsubscribe link:\n%s", typ, out.HTML)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no type declares unsubscribe_url; the optional-class mail disappeared from the catalog")
 	}
 }
 

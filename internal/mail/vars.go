@@ -18,11 +18,14 @@ type VarSpec struct {
 	//
 	// **The criterion is "without it the mail is useless or cannot be closed out", which deliberately
 	// admits only two kinds**: (1) a link the recipient has to click (reset, verification, invite,
-	// review, stats, deck page, unsubscribe) -- a password mail without the link is waste paper, and a
-	// marketing mail without an unsubscribe entry is non-compliant; (2) deck_shared's deck and inviter
-	// (without which the mail does not say what it is about). **Display details are never required**:
-	// an expiry time, a due count or a pass rate missing just means slightly less information, and
-	// marking it required would only make admins hit baffling failures when saving.
+	// review, stats, deck page) -- a password mail without the link is waste paper; (2) deck_shared's
+	// deck and inviter (without which the mail does not say what it is about). **Display details are
+	// never required**: an expiry time, a due count or a pass rate missing just means slightly less
+	// information, and marking it required would only make admins hit baffling failures when saving.
+	//
+	// The unsubscribe link is the one declared-but-never-required variable: Render appends the entry to
+	// the HTML footer and the plain-text tail itself, so a template cannot drop it, and requiring it in
+	// the template would reject the built-in default, which never mentions it.
 	Required bool
 	// NoteKey is the language pack key with which the admin page shows what this variable is for.
 	NoteKey string
@@ -30,6 +33,10 @@ type VarSpec struct {
 
 // mailVars is the single variable table. A type not in the table means that type does not support
 // custom templates yet (the sender does not exist yet), so the admin page renders no editor for it.
+//
+// unsubscribe_url is declared so a custom template can place the entry inline, but it is never
+// required: the entry is rendered by Render (plain-text tail) and the fixed shell (HTML footer), so a
+// template cannot remove it, and requiring it in the template would reject the built-in default.
 var mailVars = map[Type][]VarSpec{
 	TypePasswordReset: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
@@ -68,7 +75,7 @@ var mailVars = map[Type][]VarSpec{
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
 		{Name: "count", Required: false, NoteKey: "admin.mail.var.due_count"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.review_url"},
-		{Name: "unsubscribe_url", Required: true, NoteKey: "admin.mail.var.unsubscribe_url"},
+		{Name: "unsubscribe_url", Required: false, NoteKey: "admin.mail.var.unsubscribe_url"},
 	},
 	TypeStudyDigest: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
@@ -81,7 +88,7 @@ var mailVars = map[Type][]VarSpec{
 		{Name: "new_cards", Required: false, NoteKey: "admin.mail.var.new_cards"},
 		{Name: "due", Required: false, NoteKey: "admin.mail.var.due_count"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.stats_url"},
-		{Name: "unsubscribe_url", Required: true, NoteKey: "admin.mail.var.unsubscribe_url"},
+		{Name: "unsubscribe_url", Required: false, NoteKey: "admin.mail.var.unsubscribe_url"},
 	},
 	TypeDeckShared: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
@@ -89,7 +96,7 @@ var mailVars = map[Type][]VarSpec{
 		{Name: "deck", Required: true, NoteKey: "admin.mail.var.deck"},
 		{Name: "role", Required: false, NoteKey: "admin.mail.var.role"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.deck_url"},
-		{Name: "unsubscribe_url", Required: true, NoteKey: "admin.mail.var.unsubscribe_url"},
+		{Name: "unsubscribe_url", Required: false, NoteKey: "admin.mail.var.unsubscribe_url"},
 	},
 	TypeDeckPermissionChanged: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
@@ -97,14 +104,14 @@ var mailVars = map[Type][]VarSpec{
 		{Name: "deck", Required: true, NoteKey: "admin.mail.var.deck"},
 		{Name: "role", Required: false, NoteKey: "admin.mail.var.role"},
 		{Name: "url", Required: false, NoteKey: "admin.mail.var.deck_url"},
-		{Name: "unsubscribe_url", Required: true, NoteKey: "admin.mail.var.unsubscribe_url"},
+		{Name: "unsubscribe_url", Required: false, NoteKey: "admin.mail.var.unsubscribe_url"},
 	},
 	TypeOptimizeDone: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
 		{Name: "preset", Required: false, NoteKey: "admin.mail.var.preset"},
 		{Name: "count", Required: false, NoteKey: "admin.mail.var.reviewed_count"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.presets_url"},
-		{Name: "unsubscribe_url", Required: true, NoteKey: "admin.mail.var.unsubscribe_url"},
+		{Name: "unsubscribe_url", Required: false, NoteKey: "admin.mail.var.unsubscribe_url"},
 	},
 	TypeJobFailed: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
