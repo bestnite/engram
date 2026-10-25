@@ -357,6 +357,13 @@ var urlAttributes = map[string]bool{
 // attributes carry no script-like scheme.
 func assertSafeFragment(t *testing.T, out string) {
 	t.Helper()
+	assertSafeFragmentAllowing(t, out, nil)
+}
+
+// assertSafeFragmentAllowing is assertSafeFragment with extra element names that a variant allowlist
+// permits: the mail policy adds h1-h3 to the card set, and nothing else.
+func assertSafeFragmentAllowing(t *testing.T, out string, extraElements map[string]bool) {
+	t.Helper()
 
 	nodes, err := html.ParseFragment(strings.NewReader(out), &html.Node{Type: html.ElementNode, DataAtom: atom.Div, Data: "div"})
 	if err != nil {
@@ -366,7 +373,7 @@ func assertSafeFragment(t *testing.T, out string) {
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode {
-			if !allowedElementNames[n.Data] {
+			if !allowedElementNames[n.Data] && !extraElements[n.Data] {
 				t.Errorf("element <%s> is not in the whitelist:\n%s", n.Data, out)
 			}
 			for _, a := range n.Attr {

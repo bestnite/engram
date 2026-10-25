@@ -1,16 +1,20 @@
 package mail
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
+
+	"git.nite07.com/nite/engram/internal/i18n"
+	"golang.org/x/text/language"
 )
 
 // echoTF is an assertable fake translate function: it records every call as `id(k1=v1,k2=v2)`.
 //
 // It is used instead of the real language packs in order to assert the **value mapping** -- the
-// digest's three lines all write `{{.count}}` but read three different numbers, and only pinning down
-// "which variable's value did this line get" shows whether the mapping is right.
+// digest's lines all write `{{.count}}` but read different numbers, and only pinning down "which
+// variable's value did this line get" shows whether the mapping is right.
 func echoTF() TfFunc {
 	return func(id string, data map[string]any) string {
 		keys := make([]string, 0, len(data))
@@ -36,8 +40,8 @@ func stringOf(v any) string {
 // TestDefaultTemplateIsSavableAsIs is the precondition of the "editor pre-fills the default" feature.
 //
 // The most common admin action is **save without changing anything** (first take a look at what the
-// default looks like). The pre-filled text must pass save validation, otherwise that action returns a
-// 400 -- and it should be the safest operation of all.
+// default looks like). The pre-filled text must pass save validation, otherwise that action returns
+// a 400 -- and it should be the safest operation of all.
 func TestDefaultTemplateIsSavableAsIs(t *testing.T) {
 	for _, def := range Catalog() {
 		typ := def.Type
@@ -67,8 +71,8 @@ func TestDefaultTemplateIsSavableAsIs(t *testing.T) {
 }
 
 // TestDefaultTemplateRendersWithRealValues asserts that the pre-filled default is not merely
-// "savable" but really renders: after swapping the placeholders for real values and running one pass
-// through the render pipeline, the values must appear in the body.
+// "savable" but really renders: the Markdown body is rendered by the same pipeline, and the real
+// values substituted afterwards show up in the HTML and in the derived plain text.
 func TestDefaultTemplateRendersWithRealValues(t *testing.T) {
 	for _, def := range Catalog() {
 		typ := def.Type
@@ -86,16 +90,22 @@ func TestDefaultTemplateRendersWithRealValues(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: rendering the built-in template failed: %v", typ, err)
 		}
-		if !strings.Contains(out.Text, "V<url>") && typ != TypeJobFailed && typ != TypeMediaDiskAlert && typ != TypeCredentialChanged && typ != TypeAccountStatus && typ != TypeNewDeviceLogin {
-			t.Errorf("%s: rendered text does not contain the url value:\n%s", typ, out.Text)
+		if strings.Contains(out.Text, "{{") || strings.Contains(out.HTML, "{{") {
+			t.Errorf("%s: rendered output still contains a placeholder", typ)
 		}
-		if strings.Contains(out.Text, "{{") {
-			t.Errorf("%s: rendered text still contains a placeholder:\n%s", typ, out.Text)
+		usesURL := false
+		for _, name := range Placeholders(body) {
+			if name == "url" {
+				usesURL = true
+			}
+		}
+		if usesURL && !strings.Contains(out.Text, "V<url>") {
+			t.Errorf("%s: rendered text does not contain the url value:\n%s", typ, out.Text)
 		}
 	}
 }
 
-// TestDefaultTemplateDigestMapsEachCount pins down the value mapping of the digest's three lines:
+// TestDefaultTemplateDigestMapsEachCount pins down the value mapping of the digest's statistics list:
 // "reviewed / new cards / due" all write `{{.count}}` in the language pack but read three different
 // variables.
 func TestDefaultTemplateDigestMapsEachCount(t *testing.T) {
@@ -132,5 +142,138 @@ func TestDefaultTemplateEmailChangeVariant(t *testing.T) {
 func TestDefaultTemplateUnknownType(t *testing.T) {
 	if _, _, ok := DefaultTemplate(Type("nope"), VariantDefault, echoTF(), Vars{}); ok {
 		t.Error("unknown type should report no built-in template")
+	}
+}
+
+// ctaTypes are the types whose built-in body carries a call to action. They must produce a button:
+// without one the mail says "use the button below" and shows nothing to press.
+var ctaTypes = map[Type]bool{
+	TypePasswordReset:         true,
+	TypeEmailVerification:     true,
+	TypeDeckShared:            true,
+	TypeDeckPermissionChanged: true,
+	TypeInvite:                true,
+	TypeReviewReminder:        true,
+	TypeStudyDigest:           true,
+	TypeOptimizeDone:          true,
+}
+
+// mailKeyPattern matches an untranslated language pack id. A missing key makes the localizer return
+// the id itself, so finding one in the output means the built-in body asked for copy that does not
+// exist. It cannot match ordinary words: `\b` before `mail` rejects "email.".
+var mailKeyPattern = regexp.MustCompile(`\bmail\.[a-z0-9_.]+`)
+
+// sampleVars returns one real value per variable of the type. Values are deliberately plain: this test
+// is about the copy and the layout, not about escaping (the escaping cases live in template_test.go).
+func sampleVars(t Type) Vars {
+	out := Vars{}
+	for name := range PlaceholderVars(t) {
+		switch name {
+		case "site":
+			out[name] = "Example"
+		case "url":
+			out[name] = "https://example.com/a/b"
+		case "unsubscribe_url":
+			out[name] = "https://example.com/unsubscribe"
+		case "expires":
+			out[name] = "2026-01-01 00:00 UTC"
+		case "role":
+			out[name] = "readable"
+		default:
+			out[name] = "sample-" + name
+		}
+	}
+	return out
+}
+
+// TestDefaultBodiesRenderWithRealCatalogs is the acceptance test for the built-in bodies: every type
+// is built with a real localizer in both languages and rendered through the production path, so a
+// missing language pack key or an unrenderable built-in body fails here rather than in a mailbox.
+//
+// It also asserts the two invariants of the built-in default: the mail has a title (h2) and a button
+// for the types that offer an action, and saving the pre-filled default unchanged produces exactly the
+// mail that is sent when no template is stored.
+func TestDefaultBodiesRenderWithRealCatalogs(t *testing.T) {
+	translator, err := i18n.New()
+	if err != nil {
+		t.Fatalf("load language packs: %v", err)
+	}
+	for _, code := range translator.SupportedCodes() {
+		loc := translator.Localizer(language.Make(code))
+		for _, def := range Catalog() {
+			typ := def.Type
+			t.Run(code+"/"+string(typ), func(t *testing.T) {
+				vars := sampleVars(typ)
+				// The sender builds its built-in subject with the real values; the admin editor gets the
+				// same body but a subject written with placeholders.
+				fallbackSubject, fallbackBody, ok := DefaultTemplate(typ, VariantDefault, loc.Tf, vars)
+				if !ok {
+					t.Fatal("no built-in template")
+				}
+				editorSubject, editorBody, _ := DefaultTemplate(typ, VariantDefault, loc.Tf, PlaceholderVars(typ))
+
+				// No custom template: the built-in Markdown is the fallback body.
+				sent := renderOne(t, RenderInput{
+					Type:            typ,
+					Site:            "Example",
+					Lang:            code,
+					Vars:            vars,
+					FallbackSubject: fallbackSubject,
+					FallbackBodyMD:  fallbackBody,
+					FooterNote:      loc.T("mail.footer.automated"),
+				})
+				// The editor pre-filled with the default and saved unchanged.
+				saved := renderOne(t, RenderInput{
+					Type:       typ,
+					Site:       "Example",
+					Lang:       code,
+					Vars:       vars,
+					Subject:    editorSubject,
+					BodyMD:     editorBody,
+					FooterNote: loc.T("mail.footer.automated"),
+				})
+
+				if sent.HTML != saved.HTML || sent.Text != saved.Text || sent.Subject != saved.Subject {
+					t.Errorf("saving the default unchanged changed the mail:\nsent HTML:\n%s\nsaved HTML:\n%s", sent.HTML, saved.HTML)
+				}
+				for name, out := range map[string]string{"subject": sent.Subject, "html": sent.HTML, "text": sent.Text} {
+					if m := mailKeyPattern.FindString(out); m != "" {
+						t.Errorf("%s contains the untranslated message id %q", name, m)
+					}
+					if strings.Contains(out, "{{") {
+						t.Errorf("%s contains a placeholder:\n%s", name, out)
+					}
+				}
+				if !strings.Contains(sent.HTML, "<h2") {
+					t.Errorf("HTML has no title heading:\n%s", sent.HTML)
+				}
+				if ctaTypes[typ] && !strings.Contains(sent.HTML, buttonStyle) {
+					t.Errorf("CTA mail has no button:\n%s", sent.HTML)
+				}
+				if !ctaTypes[typ] && strings.Contains(sent.HTML, buttonStyle) {
+					t.Errorf("mail without a CTA rendered a button:\n%s", sent.HTML)
+				}
+			})
+		}
+	}
+}
+
+// TestDefaultBodiesUsePlaceholdersNotValues is the injection guard on the built-in definitions: the
+// body builder must only ever emit `{{name}}`, so a real value passed to DefaultTemplate cannot appear
+// inside the returned Markdown source.
+func TestDefaultBodiesUsePlaceholdersNotValues(t *testing.T) {
+	for _, def := range Catalog() {
+		typ := def.Type
+		real := Vars{}
+		for name := range PlaceholderVars(typ) {
+			real[name] = "REAL-" + name
+		}
+		_, body, _ := DefaultTemplate(typ, VariantDefault, echoTF(), real)
+		if strings.Contains(body, "REAL-") {
+			t.Errorf("%s: built-in body embeds a real variable value:\n%s", typ, body)
+		}
+		if !strings.Contains(body, "## ") {
+			t.Errorf("%s: built-in body has no Markdown title:\n%s", typ, body)
+		}
 	}
 }

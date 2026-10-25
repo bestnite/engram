@@ -6,7 +6,8 @@ import (
 )
 
 // These cases pin down the rendering order: render and sanitize first, substitute variables
-// afterwards. Reversing the order is stored injection -- variable values are user-controlled data.
+// afterwards, then add styles. Reversing the order is stored injection -- variable values are
+// user-controlled data.
 
 func renderOne(t *testing.T, in RenderInput) Rendered {
 	t.Helper()
@@ -17,22 +18,31 @@ func renderOne(t *testing.T, in RenderInput) Rendered {
 	return out
 }
 
-// TestRenderWithoutTemplateUsesFallbackVerbatim asserts that without a custom template the behavior
-// is exactly as before: subject and plain text come from the sender and the HTML segment is empty.
-// This guarantees that shipping the template mechanism changes no existing mail.
-func TestRenderWithoutTemplateUsesFallbackVerbatim(t *testing.T) {
+// TestRenderWithoutTemplateRendersBuiltInBody asserts that a mail with no custom template is a
+// designed mail: the built-in Markdown body goes through the same renderer, so the HTML segment is
+// present and carries the fixed shell. "No template" is no longer a plain-text special case.
+func TestRenderWithoutTemplateRendersBuiltInBody(t *testing.T) {
 	got := renderOne(t, RenderInput{
 		Type:            TypePasswordReset,
-		Site:            "Engram",
-		Vars:            Vars{"url": "https://example.com/reset", "expires": "tomorrow"},
+		Site:            "Example",
+		Lang:            "en",
+		Vars:            Vars{"url": "https://example.com/reset", "expires": "tomorrow", "site": "Example"},
 		FallbackSubject: "Reset your password",
-		FallbackText:    "line one\nline two",
+		FallbackBodyMD:  "## Reset your password\n\nUse the link below.\n\n[Choose a new password]({{url}})",
 	})
-	if got.Subject != "Reset your password" || got.Text != "line one\nline two" {
-		t.Errorf("fallback = %q / %q, want the sender's own text verbatim", got.Subject, got.Text)
+	if got.Subject != "Reset your password" {
+		t.Errorf("subject = %q, want the sender's subject verbatim", got.Subject)
 	}
-	if got.HTML != "" {
-		t.Errorf("HTMLBody = %q, want empty when no template is set", got.HTML)
+	if got.HTML == "" {
+		t.Fatal("HTML = \"\", want the built-in body rendered to HTML")
+	}
+	for _, want := range []string{"<!DOCTYPE html>", `<html lang="en">`, "<h2", "<p", buttonStyle} {
+		if !strings.Contains(got.HTML, want) {
+			t.Errorf("HTML does not contain %q:\n%s", want, got.HTML)
+		}
+	}
+	if !strings.Contains(got.Text, "Choose a new password (https://example.com/reset)") {
+		t.Errorf("text = %q, want the link as label and URL", got.Text)
 	}
 }
 
@@ -41,22 +51,18 @@ func TestRenderWithoutTemplateUsesFallbackVerbatim(t *testing.T) {
 func TestRenderTemplateMarkdownAndShell(t *testing.T) {
 	got := renderOne(t, RenderInput{
 		Type:    TypePasswordReset,
-		Site:    "Engram",
-		Vars:    Vars{"url": "https://example.com/reset", "expires": "2026-01-01", "site": "Engram"},
+		Site:    "Example",
+		Vars:    Vars{"url": "https://example.com/reset", "expires": "2026-01-01", "site": "Example"},
 		Subject: "Reset for {{site}}",
-		BodyMD:  "**Hi**\n\n[Reset]({{url}})\n\nExpires {{expires}}.",
+		BodyMD:  "## Hi\n\n**Bold** paragraph.\n\n[Open]({{url}})\n\nExpires {{expires}}.",
 	})
-	if got.Subject != "Reset for Engram" {
+	if got.Subject != "Reset for Example" {
 		t.Errorf("subject = %q, want the template subject with vars substituted", got.Subject)
 	}
-	if !strings.Contains(got.HTML, "<strong>Hi</strong>") {
-		t.Errorf("HTML = %q, want markdown rendered", got.HTML)
-	}
-	if !strings.Contains(got.HTML, "https://example.com/reset") {
-		t.Errorf("HTML = %q, want the link target substituted", got.HTML)
-	}
-	if !strings.Contains(got.HTML, "<!DOCTYPE html>") {
-		t.Errorf("HTML = %q, want the fixed shell", got.HTML)
+	for _, want := range []string{"<h2", "Bold</strong>", "https://example.com", "<!DOCTYPE html>"} {
+		if !strings.Contains(got.HTML, want) {
+			t.Errorf("HTML does not contain %q:\n%s", want, got.HTML)
+		}
 	}
 	if strings.Contains(got.HTML, "{{") {
 		t.Errorf("HTML = %q, want no placeholder left", got.HTML)
@@ -81,7 +87,7 @@ func TestRenderEscapesVariableValues(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := renderOne(t, RenderInput{
 				Type:    TypePasswordReset,
-				Site:    "Engram",
+				Site:    "Example",
 				Vars:    Vars{"url": "https://example.com", "expires": "x", "username": tc.value},
 				Subject: "s",
 				BodyMD:  "Hello {{username}}",
@@ -96,18 +102,43 @@ func TestRenderEscapesVariableValues(t *testing.T) {
 	}
 }
 
-// TestRenderDoesNotRescanSubstitutedValues asserts that substitution is one-shot: a {{...}} written
-// inside a value is not substituted a second time (otherwise a user could use someone else's value as
-// a template directive).
-func TestRenderDoesNotRescanSubstitutedValues(t *testing.T) {
-	got := renderOne(t, RenderInput{
+// TestRenderRejectsValueThatLooksLikePlaceholder guards the "never send literal braces" rule:
+// substitution is one-shot, so a value that itself contains {{...}} stays literal and the render
+// fails instead of delivering placeholder text to the recipient.
+func TestRenderRejectsValueThatLooksLikePlaceholder(t *testing.T) {
+	_, err := Render(RenderInput{
 		Type:    TypePasswordReset,
 		Vars:    Vars{"url": "https://example.com", "expires": "x", "username": "{{url}}"},
 		Subject: "s",
 		BodyMD:  "Hi {{username}}",
 	})
-	if !strings.Contains(got.HTML, "{{url}}") {
-		t.Errorf("HTML = %q, want the literal value kept unsubstituted", got.HTML)
+	if err == nil {
+		t.Fatal("Render() error = nil, want an unresolved-placeholder error")
+	}
+	if !strings.Contains(err.Error(), "{{url}}") {
+		t.Errorf("error = %v, want it to name the leftover placeholder", err)
+	}
+}
+
+// TestRenderRejectsSpellingTheTokeniserCannotMatch asserts that a mistyped placeholder (one the
+// lowercase-only tokeniser does not recognise) fails the render instead of reaching the recipient.
+func TestRenderRejectsSpellingTheTokeniserCannotMatch(t *testing.T) {
+	_, err := Render(RenderInput{
+		Type:    TypePasswordReset,
+		Vars:    Vars{"url": "https://example.com", "expires": "x"},
+		Subject: "s",
+		BodyMD:  "Hi {{ URL }}",
+	})
+	if err == nil {
+		t.Fatal("Render() error = nil, want an unresolved-placeholder error")
+	}
+}
+
+// TestRenderNoBodyIsError asserts that a caller with neither a template nor a built-in body gets an
+// error instead of an empty mail.
+func TestRenderNoBodyIsError(t *testing.T) {
+	if _, err := Render(RenderInput{Type: TypePasswordReset}); err == nil {
+		t.Fatal("Render() error = nil, want an error when there is no body at all")
 	}
 }
 
@@ -117,10 +148,10 @@ func TestRenderDoesNotRescanSubstitutedValues(t *testing.T) {
 func TestRenderUnsubscribeRow(t *testing.T) {
 	base := RenderInput{
 		Type:             TypeReviewReminder,
-		Site:             "Engram",
+		Site:             "Example",
 		Vars:             Vars{"count": "7", "url": "https://example.com/review", "unsubscribe_url": "https://example.com/u/t"},
 		Subject:          "due",
-		BodyMD:           "{{count}} cards are due.",
+		FallbackBodyMD:   "## Time to review\n\n{{count}} cards are due.",
 		UnsubscribeURL:   "https://example.com/u/t",
 		UnsubscribeLabel: "Unsubscribe",
 		FooterNote:       "You get this because reminders are on.",
@@ -187,6 +218,106 @@ func TestRenderSubjectStaysSingleLine(t *testing.T) {
 	})
 	if strings.ContainsAny(got.Subject, "\r\n") {
 		t.Errorf("subject = %q, want a single line", got.Subject)
+	}
+}
+
+// TestRenderLangAttribute asserts that the shell declares the language only when one is supplied: a
+// blank value drops the attribute rather than writing lang="", which would claim the document has no
+// language. The value goes into an attribute, so it must be escaped.
+func TestRenderLangAttribute(t *testing.T) {
+	cases := []struct {
+		name     string
+		lang     string
+		want     string
+		wantGone string
+	}{
+		{"english", "en", `<html lang="en">`, ""},
+		{"regional", "zh-CN", `<html lang="zh-CN">`, ""},
+		{"empty", "", `<html>`, `lang=`},
+		{"whitespace only", "   ", `<html>`, `lang=`},
+		{"attribute escape", `en" onload="x`, `<html lang="en&#34; onload=&#34;x">`, `" onload="`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := renderOne(t, RenderInput{
+				Type:   TypePasswordReset,
+				Site:   "Example",
+				Lang:   tc.lang,
+				Vars:   Vars{"url": "https://example.com", "expires": "x"},
+				BodyMD: "x",
+			})
+			if !strings.Contains(got.HTML, tc.want) {
+				t.Errorf("HTML does not contain %q:\n%s", tc.want, got.HTML)
+			}
+			if tc.wantGone != "" && strings.Contains(got.HTML, tc.wantGone) {
+				t.Errorf("HTML still contains %q:\n%s", tc.wantGone, got.HTML)
+			}
+			if strings.Contains(got.HTML, "{{") {
+				t.Errorf("HTML still contains a shell placeholder:\n%s", got.HTML)
+			}
+		})
+	}
+}
+
+// TestRenderPlainTextIsDerivedFromTheRenderedBody asserts that the text-only part is not the Markdown
+// source: markers are gone, headings stay as text, links keep their URL, and no placeholder survives.
+func TestRenderPlainTextIsDerivedFromTheRenderedBody(t *testing.T) {
+	got := renderOne(t, RenderInput{
+		Type:    TypePasswordReset,
+		Site:    "Example",
+		Vars:    Vars{"url": "https://example.com/reset", "expires": "2026-01-01"},
+		Subject: "s",
+		BodyMD:  "## Title\n\nSome **bold** text.\n\n[Reset]({{url}})\n\n> Note {{expires}}.",
+	})
+	for _, bad := range []string{"##", "**", "{{", "[Reset]"} {
+		if strings.Contains(got.Text, bad) {
+			t.Errorf("text = %q, must not contain Markdown marker %q", got.Text, bad)
+		}
+	}
+	for _, want := range []string{"Title", "Some bold text.", "Reset (https://example.com/reset)", "Note 2026-01-01."} {
+		if !strings.Contains(got.Text, want) {
+			t.Errorf("text = %q, want %q", got.Text, want)
+		}
+	}
+}
+
+// TestRenderJobFailedReasonInPre asserts that the failure reason is rendered as a code block and is
+// escaped there: a stack trace must survive line breaks without becoming markup.
+func TestRenderJobFailedReasonInPre(t *testing.T) {
+	got := renderOne(t, RenderInput{
+		Type: TypeJobFailed,
+		Site: "Example",
+		Vars: Vars{
+			"site": "Example", "job_id": "42", "kind": "optimize",
+			"reason": "line one <script>alert(1)</script>\nline two",
+		},
+		Subject:        "failed",
+		FallbackBodyMD: "## A background job failed\n\nReason:\n\n```\n{{reason}}\n```",
+	})
+	start := strings.Index(got.HTML, "<pre")
+	if start < 0 {
+		t.Fatalf("HTML has no <pre> block:\n%s", got.HTML)
+	}
+	pre := got.HTML[start:]
+	end := strings.Index(pre, "</pre>")
+	if end < 0 {
+		t.Fatalf("HTML has an unterminated <pre> block:\n%s", got.HTML)
+	}
+	pre = pre[:end]
+	if !strings.Contains(pre, "line one") || !strings.Contains(pre, "line two") {
+		t.Errorf("pre block = %q, want both reason lines", pre)
+	}
+	if strings.Contains(pre, "<script>") {
+		t.Errorf("pre block = %q, must escape the reason", pre)
+	}
+	if !strings.Contains(pre, "&lt;script&gt;") {
+		t.Errorf("pre block = %q, want the reason escaped", pre)
+	}
+	if !strings.Contains(pre, "white-space:pre-wrap") {
+		t.Errorf("pre block = %q, want the code-block style", pre)
+	}
+	if !strings.Contains(got.Text, "line one <script>alert(1)</script>") {
+		t.Errorf("text = %q, want the decoded reason", got.Text)
 	}
 }
 
@@ -302,5 +433,52 @@ func TestRequiredVarsAlwaysIncludeLinks(t *testing.T) {
 		if !found {
 			t.Errorf("RequiredVars(%q) = %v, want it to include unsubscribe_url", typ, got)
 		}
+	}
+}
+
+// TestRenderOrFallbackUsesBuiltInBodyForInvalidTemplate asserts the promise that a broken template
+// still produces a designed mail: an invalid custom template (subject and body) is dropped and the
+// built-in body is rendered instead.
+func TestRenderOrFallbackUsesBuiltInBodyForInvalidTemplate(t *testing.T) {
+	out := RenderOrFallback(RenderInput{
+		Type:            TypePasswordReset,
+		Site:            "Example",
+		Vars:            Vars{"url": "https://example.com/reset", "site": "Example"},
+		Subject:         "custom",
+		BodyMD:          "This template dropped the required link",
+		FallbackSubject: "Reset",
+		FallbackBodyMD:  "## Reset\n\n[Go]({{url}})",
+	})
+	if out.HTML == "" {
+		t.Fatal("HTML = \"\", want the built-in body rendered")
+	}
+	if !strings.Contains(out.HTML, `<h2`) || !strings.Contains(out.HTML, buttonStyle) {
+		t.Errorf("HTML = %q, want the built-in designed body", out.HTML)
+	}
+	if out.Subject != "Reset" {
+		// A template is one unit: the custom subject goes with the custom body, so the mail does not
+		// announce something the recipient does not get.
+		t.Errorf("subject = %q, want the built-in subject", out.Subject)
+	}
+}
+
+// TestRenderOrFallbackReturnsPlainTextOnRenderError asserts the last line of defence: when even the
+// renderer fails, the function still returns a subject and text and no error, so sending never fails
+// because of a template.
+func TestRenderOrFallbackReturnsPlainTextOnRenderError(t *testing.T) {
+	out := RenderOrFallback(RenderInput{
+		Type:            TypePasswordReset,
+		Vars:            Vars{"url": "https://example.com/reset"},
+		FallbackSubject: "Reset",
+		FallbackBodyMD:  "Reset at {{url}}\n\n{{ typo }}",
+	})
+	if out.Subject != "Reset" {
+		t.Errorf("subject = %q, want the fallback subject", out.Subject)
+	}
+	if out.HTML != "" {
+		t.Errorf("HTML = %q, want the plain-text fallback only", out.HTML)
+	}
+	if !strings.Contains(out.Text, "Reset at https://example.com/reset") {
+		t.Errorf("text = %q, want the built-in Markdown with variables substituted", out.Text)
 	}
 }

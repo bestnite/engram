@@ -45,30 +45,36 @@ func Resolve(lookup LookupFunc, t Type, locale, siteDefault string) ResolvedTemp
 }
 
 // RenderOrFallback renders the template; **on a render failure or a missing required variable it falls
-// back to the built-in body**.
+// back to the built-in mail**.
 //
 // This path honors the promise that "a broken template still cannot stop mail from being sent": when
-// an admin writes content into the template that fails to render (or a sender forgets a required
-// variable), the recipient still gets the built-in body rather than an empty mail or a 500. Failures
-// are always logged -- a silent downgrade would mean template problems are never noticed.
+// an admin writes content into the template that fails to validate (or a sender forgets a required
+// variable), the whole custom template -- subject and body -- is dropped and the built-in body is
+// rendered instead, so the recipient still gets a proper mail rather than an empty one or a 500. If
+// even that render fails, the built-in Markdown source with its variables substituted is sent as
+// plain text. Failures are always logged -- a silent downgrade would mean template problems are never
+// noticed.
 func RenderOrFallback(in RenderInput) Rendered {
 	// The template content is validated before rendering: a row may have been written straight into the
 	// DB, or may predate a variable becoming required, and "a template that dropped the reset link"
-	// must fall back to the built-in body, not send a useless mail. The validation lives at this layer
-	// rather than in Render: Render is pure rendering (it only answers "what does this Markdown render
-	// into"), and policy belongs to the layer that sends the mail.
+	// must fall back to the built-in mail, not send a useless one. A template is one unit, so its
+	// subject goes with its body: keeping a custom subject over a built-in body announces a mail the
+	// recipient does not get. The validation lives at this layer rather than in Render: Render is pure
+	// rendering (it only answers "what does this Markdown render into"), and policy belongs to the
+	// layer that sends the mail.
 	if strings.TrimSpace(in.BodyMD) != "" {
 		if err := Validate(in.Type, in.Subject, in.BodyMD); err != nil {
-			slog.Error("mail template is invalid, falling back to the built-in body",
+			slog.Error("mail template is invalid, falling back to the built-in mail",
 				"mail_type", string(in.Type), "error", err)
-			return Rendered{Subject: in.FallbackSubject, Text: in.FallbackText}
+			in.Subject = ""
+			in.BodyMD = ""
 		}
 	}
 	out, err := Render(in)
 	if err == nil {
 		return out
 	}
-	slog.Error("mail template render failed, falling back to the built-in body",
+	slog.Error("mail template render failed, falling back to the substituted Markdown source",
 		"mail_type", string(in.Type), "error", err)
-	return Rendered{Subject: in.FallbackSubject, Text: in.FallbackText}
+	return Rendered{Subject: in.FallbackSubject, Text: substituteRaw(in.FallbackBodyMD, in.Vars)}
 }

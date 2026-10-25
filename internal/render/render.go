@@ -37,8 +37,14 @@ var markdown = goldmark.New(
 	goldmark.WithRendererOptions(html.WithUnsafe()),
 )
 
-// policy is the shared bluemonday sanitizing policy, built once at package init.
-var policy = buildPolicy()
+// policy is the shared bluemonday sanitizing policy for card content, built once at package init.
+var policy = buildPolicy(false)
+
+// mailPolicy is the same allowlist plus headings: a mail body has a title of its own, while card
+// content does not, so the card policy deliberately strips h1-h6. Nothing else is relaxed -- in
+// particular style attributes stay forbidden, because the mail renderer adds its inline styles only
+// after sanitizing.
+var mailPolicy = buildPolicy(true)
 
 // imgSrcPattern describes the two kinds of value img.src may take: an absolute https URL, or a
 // site-relative path.
@@ -57,6 +63,20 @@ var imgSrcPattern = regexp.MustCompile(
 // MathJax delimiters \( \) and \[ \], along with the backslashes and braces inside them, are kept
 // verbatim for the browser-side MathJax 3 to render.
 func RenderMarkdown(src string) (string, error) {
+	return renderWith(src, policy)
+}
+
+// RenderMailMarkdown renders a mail template: the same pipeline as card content, with headings
+// allowed (a mail body has a title; card content does not).
+//
+// A custom mail template is admin-authored Markdown, so it is untrusted exactly like card content and
+// goes through the same allowlist. The only difference is the element set.
+func RenderMailMarkdown(src string) (string, error) {
+	return renderWith(src, mailPolicy)
+}
+
+// renderWith runs the shared Markdown + MathJax + sanitize pipeline under one allowlist.
+func renderWith(src string, pol *bluemonday.Policy) (string, error) {
 	// Protect formulas first, then render Markdown: goldmark treats \( as a CommonMark backslash
 	// escape and would swallow the delimiter into (, destroying MathJax completely; see math.go.
 	protected, spans := protectMath(src)
@@ -66,7 +86,7 @@ func RenderMarkdown(src string) (string, error) {
 		return "", fmt.Errorf("render markdown: %w", err)
 	}
 
-	clean := policy.SanitizeBytes(buf.Bytes())
+	clean := pol.SanitizeBytes(buf.Bytes())
 
 	// Restore the formulas after sanitizing: a formula is plain text, so restoring escapes only the
 	// three characters that would break HTML, leaving backslashes and braces untouched, which is what
@@ -76,7 +96,7 @@ func RenderMarkdown(src string) (string, error) {
 	// The restore has to go through the same allowlist once more.
 	//
 	// The placeholders were inserted before sanitizing, so goldmark may have put one in an attribute
-	// value position (link target, image alt, class/href of raw HTML). The first bluemonday pass
+	// value position (link target, image alt, class/href of raw HTML). The first sanitizing pass
 	// validated the purely alphanumeric placeholder itself, not the restored formula text; a quote in
 	// the formula closes the attribute and injects attributes the allowlist has never seen -- event
 	// handler attributes (onmouseover/onerror), or a javascript: src/href (the restored attribute value
@@ -84,16 +104,17 @@ func RenderMarkdown(src string) (string, error) {
 	// policy, re-validating attribute names, event attributes and URL schemes on the real restored
 	// content. The < > & in the formula text node were already escaped by restoreMath, and the second
 	// pass leaves the backslashes and braces MathJax needs alone.
-	return string(policy.SanitizeBytes([]byte(restored))), nil
+	return string(pol.SanitizeBytes([]byte(restored))), nil
 }
 
-// buildPolicy builds the card allowlist: img/a/code/pre/table/span[class] are allowed, scripts never.
-func buildPolicy() *bluemonday.Policy {
+// buildPolicy builds the content allowlist: img/a/code/pre/table/span[class] are allowed, scripts
+// never. withHeadings adds h1-h3, which only the mail body needs.
+func buildPolicy(withHeadings bool) *bluemonday.Policy {
 	p := bluemonday.NewPolicy()
 
-	// The set of elements card content may contain. Headings/h1-h6 are deliberately excluded: a heading
-	// is meaningless in card content, and leaving it out of the allowlist makes bluemonday strip the tag
-	// while keeping the text, so nothing is lost.
+	// The set of elements card content may contain. Headings/h1-h6 are deliberately excluded from the
+	// card set: a heading is meaningless in card content, and leaving it out of the allowlist makes
+	// bluemonday strip the tag while keeping the text, so nothing is lost.
 	p.AllowElements(
 		"p", "br", "hr",
 		"strong", "em", "del", "blockquote",
@@ -102,6 +123,9 @@ func buildPolicy() *bluemonday.Policy {
 		"table", "thead", "tbody", "tr", "th", "td",
 		"a", "img", "span",
 	)
+	if withHeadings {
+		p.AllowElements("h1", "h2", "h3")
+	}
 
 	// span's class is used by site styling and highlighting; narrow the value with bluemonday's own
 	// token regex.

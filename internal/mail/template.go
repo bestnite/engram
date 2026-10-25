@@ -14,11 +14,12 @@ import (
 
 // This file is the renderer for mail templates.
 //
-// Rendering happens in four steps, and the order is part of the security; do not swap them:
-//  1. replace the {{var}} in the template with tokens carrying a per-render random salt;
-//  2. render the Markdown and sanitize it against the allowlist;
+// Rendering happens in five steps, and the order is part of the security; do not swap them:
+//  1. replace the {{var}} in the source with tokens carrying a per-render random salt;
+//  2. render the Markdown and sanitize it against the mail allowlist;
 //  3. replace the tokens with the values, HTML-escaping in the HTML segment;
-//  4. wrap the result in the fixed shell held by the code.
+//  4. add the fixed inline styles and derive the plain-text part from the same tree;
+//  5. wrap the result in the fixed shell held by the code.
 //
 // **Why render first and substitute afterwards**: variable values contain user-controlled data
 // (usernames, deck names, failure reasons). Substituting into the source first hands the user data
@@ -33,6 +34,12 @@ import (
 // English identifiers.
 var placeholderRe = regexp.MustCompile(`\{\{([a-z0-9_]+)\}\}`)
 
+// leftoverPlaceholderRe matches any brace-delimited placeholder left after substitution. It is wider
+// than placeholderRe on purpose: the source may have spelled a placeholder in a way the tokeniser
+// does not match (`{{URL}}`, `{{ url }}`), and that text must fail the render rather than reach the
+// recipient as literal braces.
+var leftoverPlaceholderRe = regexp.MustCompile(`\{\{[^{}]*\}\}`)
+
 // Vars are the variable values of one mail. The values are untrusted content and are escaped by
 // context when rendering.
 type Vars map[string]string
@@ -43,19 +50,23 @@ type RenderInput struct {
 	Type Type
 	// Site is the site name, used in the shell heading.
 	Site string
+	// Lang is the language code written into the shell's html lang attribute. A blank value drops the
+	// attribute entirely, leaving the client its default.
+	Lang string
 	// Vars are the variable values.
 	Vars Vars
 
 	// Subject and BodyMD are the admin's custom template. A blank BodyMD means there is no
-	// customization, and FallbackSubject/FallbackText (the built-in body assembled by the sender) are
+	// customization, and FallbackSubject/FallbackBodyMD (the built-in body assembled by the sender) are
 	// used -- **the built-in body always lives in code**, so a corrupt or deleted template cannot stop
 	// mail from being sent.
 	Subject string
 	BodyMD  string
 
-	// FallbackSubject and FallbackText are the built-in body.
+	// FallbackSubject and FallbackBodyMD are the built-in body, as Markdown. Both paths run through the
+	// same renderer: the built-in body is not a plain-text special case.
 	FallbackSubject string
-	FallbackText    string
+	FallbackBodyMD  string
 
 	// When UnsubscribeURL is non-empty, the unsubscribe entry is rendered at the bottom of the shell
 	// and at the end of the plain text segment (only optional-class mail has it).
@@ -66,22 +77,37 @@ type RenderInput struct {
 	UnsubscribeLabel string
 }
 
-// Rendered is the render result: subject, plain text segment, HTML segment. An empty HTML segment
-// means this mail goes out as plain text only.
+// Rendered is the render result: subject, plain text segment, HTML segment. A successful render always
+// has a non-empty HTML segment; the plain-text segment is derived from the rendered body, not from the
+// Markdown source.
 type Rendered struct {
 	Subject string
 	Text    string
 	HTML    string
 }
 
-// Render renders one mail. With no custom template it returns the built-in body (an empty HTML
-// segment, consistent with today's behavior).
+// Render renders one mail.
+//
+// The body is the custom template when one is set, otherwise the sender's built-in body; both are
+// Markdown and go through the same pipeline, so "no template" and "the template saved unchanged" are
+// the same mail.
 func Render(in RenderInput) (Rendered, error) {
-	if strings.TrimSpace(in.BodyMD) == "" {
-		return Rendered{Subject: in.FallbackSubject, Text: in.FallbackText}, nil
+	custom := strings.TrimSpace(in.BodyMD) != ""
+	bodyMD := in.BodyMD
+	if !custom {
+		bodyMD = in.FallbackBodyMD
 	}
-	if err := checkRequiredVars(in.Type, in.Vars); err != nil {
-		return Rendered{}, err
+	if strings.TrimSpace(bodyMD) == "" {
+		return Rendered{}, fmt.Errorf("mail type %q: no body to render", in.Type)
+	}
+
+	// A custom template must carry the type's required variables. The built-in body is exempt: it is
+	// written by this package and must stay sendable even when a sender passes a value it considers
+	// optional.
+	if custom {
+		if err := checkRequiredVars(in.Type, in.Vars); err != nil {
+			return Rendered{}, err
+		}
 	}
 
 	// Subject: when the template does not set one, the built-in subject is kept; the subject must be a
@@ -93,18 +119,29 @@ func Render(in RenderInput) (Rendered, error) {
 		subject = in.FallbackSubject
 	}
 
-	tokenised, order, salt := tokenise(in.BodyMD)
-	bodyHTML, err := render.RenderMarkdown(tokenised)
+	tokenised, order, salt := tokenise(bodyMD)
+	bodyHTML, err := render.RenderMailMarkdown(tokenised)
 	if err != nil {
 		return Rendered{}, fmt.Errorf("render mail template: %w", err)
 	}
-	htmlBody := wrapLayout(in.Site, substituteTokens(bodyHTML, order, salt, in.Vars, true), in.UnsubscribeURL, in.FooterNote, in.UnsubscribeLabel)
-
-	text := substituteRaw(in.BodyMD, in.Vars)
-	if in.UnsubscribeURL != "" && in.UnsubscribeLabel != "" {
-		text = strings.TrimRight(text, "\n") + "\n\n" + in.UnsubscribeLabel + ": " + in.UnsubscribeURL + "\n"
+	substituted := substituteTokens(bodyHTML, order, salt, in.Vars, true)
+	if left := leftoverPlaceholderRe.FindString(substituted); left != "" {
+		return Rendered{}, fmt.Errorf("mail type %q: unresolved placeholder %q in body", in.Type, left)
 	}
-	return Rendered{Subject: subject, Text: text, HTML: htmlBody}, nil
+
+	styled, plain, err := styleFragment(substituted)
+	if err != nil {
+		return Rendered{}, fmt.Errorf("style mail body: %w", err)
+	}
+
+	if in.UnsubscribeURL != "" && in.UnsubscribeLabel != "" {
+		plain = strings.TrimRight(plain, "\n") + "\n\n" + in.UnsubscribeLabel + ": " + in.UnsubscribeURL
+	}
+	return Rendered{
+		Subject: subject,
+		Text:    plain,
+		HTML:    wrapLayout(in.Site, in.Lang, styled, in.FooterNote, in.UnsubscribeURL, in.UnsubscribeLabel),
+	}, nil
 }
 
 // Placeholders returns the variable names appearing in the template (deduplicated, ordered by first
@@ -188,8 +225,8 @@ func tokenise(src string) (string, []string, string) {
 const tokenPrefix = "MAILVAR"
 
 // substituteTokens replaces tokens with values. When escape is true it HTML-escapes -- the HTML
-// segment must be escaped, the plain text segment must not be (otherwise `&` would show up as `&amp;`
-// in the plain text).
+// segment must be escaped. Substitution is one-shot: a value that itself looks like a placeholder is
+// left as it is, and Render rejects the result rather than sending literal braces.
 //
 // The caller takes the salt from tokenise and passes it in verbatim rather than recovering it from src:
 // recovering it would mean repeatedly scanning the string that is being rewritten, and once the last
@@ -205,8 +242,8 @@ func substituteTokens(src string, order []string, salt string, vars Vars, escape
 	return src
 }
 
-// substituteRaw substitutes variables directly in the **source**, for the subject and the plain text
-// segment (bypassing the renderer and escaping).
+// substituteRaw substitutes variables directly in the **source**, for the subject and the plain-text
+// fallback (bypassing the renderer and escaping).
 func substituteRaw(src string, vars Vars) string {
 	return placeholderRe.ReplaceAllStringFunc(src, func(match string) string {
 		return vars[placeholderRe.FindStringSubmatch(match)[1]]
@@ -224,36 +261,111 @@ func randomSalt() string {
 	return hex.EncodeToString(b)
 }
 
-// wrapLayout wraps the rendered body in the fixed shell.
+// The fixed shell. The body is inserted into the card cell; the footer is one of three variants so
+// that an absent footer leaves no empty band under the card, and the unsubscribe link is always a
+// block of its own rather than glued to the end of the note.
 //
 // The shell is held by the code and not editable by admins: header, footer, width, font stack and
 // the unsubscribe entry all live here, so one bad edit cannot break brand consistency or lose the
 // unsubscribe entry. All styling is inline -- mail clients generally do not support <style>.
-func wrapLayout(site, bodyHTML, unsubscribeURL, footerNote, unsubscribeLabel string) string {
+const shellOpen = `<!DOCTYPE html>
+<html lang="{{LANG}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>{{SITE}}</title>
+</head>
+<body style="margin:0;padding:0;width:100%;background-color:#f4f4f5;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;background-color:#f4f4f5;">
+<tr>
+<td align="center" style="padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;border-collapse:collapse;">
+<tr>
+<td style="padding:0 0 14px;border-bottom:1px solid #d4d4d8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:13px;font-weight:600;line-height:1.4;letter-spacing:-0.01em;color:#18181b;">{{SITE}}</td>
+</tr>
+<tr>
+<td style="height:20px;font-size:20px;line-height:20px;">&nbsp;</td>
+</tr>
+<tr>
+<td style="padding:28px 24px 14px;background-color:#ffffff;border:1px solid #e4e4e7;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;">
+{{BODY}}
+</td>
+</tr>
+`
+
+// shellFooterBoth is the footer when there is a note and a working unsubscribe link.
+const shellFooterBoth = `<tr>
+<td style="padding:18px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.65;color:#52525b;">{{FOOTER_NOTE}}<div style="padding-top:8px;"><a href="{{UNSUBSCRIBE_URL}}" style="color:#52525b;text-decoration:underline;">{{UNSUBSCRIBE_LABEL}}</a></div></td>
+</tr>
+`
+
+// shellFooterNote is the footer when there is only a note.
+const shellFooterNote = `<tr>
+<td style="padding:18px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.65;color:#52525b;">{{FOOTER_NOTE}}</td>
+</tr>
+`
+
+// shellFooterUnsubOnly is the footer when there is only an unsubscribe link.
+const shellFooterUnsubOnly = `<tr>
+<td style="padding:18px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.65;color:#52525b;"><a href="{{UNSUBSCRIBE_URL}}" style="color:#52525b;text-decoration:underline;">{{UNSUBSCRIBE_LABEL}}</a></td>
+</tr>
+`
+
+// shellClose closes the tables and the document.
+const shellClose = `</table>
+</td>
+</tr>
+</table>
+</body>
+</html>
+`
+
+// wrapLayout assembles the fixed shell. The footer row is built from one of three templates so that
+// an absent footer leaves no empty band under the card, and the unsubscribe link is always a block
+// of its own (never glued to the end of the note).
+//
+// {{LANG}} goes into an attribute and {{SITE}} / {{FOOTER_NOTE}} / {{UNSUBSCRIBE_LABEL}} into text, so
+// all of them are escaped. A blank language drops the attribute instead of writing lang="": an empty
+// value claims the document has no language, while an absent attribute leaves the client its default.
+// {{BODY}} is the fragment that has already been sanitized and styled; it is inserted verbatim.
+//
+// The shell placeholders are uppercase while template variables are lowercase, so the two naming
+// schemes cannot collide: tokenise only matches lowercase names, and the strings.Replacer does not
+// rescan the text it inserts.
+func wrapLayout(site, lang, body, footerNote, unsubURL, unsubLabel string) string {
+	// The <html> tag is decided before the general replacement: dropping the whole attribute needs the
+	// tag, not just the value.
+	open := shellOpen
+	if lang = strings.TrimSpace(lang); lang == "" {
+		open = strings.Replace(open, ` lang="{{LANG}}"`, "", 1)
+	} else {
+		open = strings.Replace(open, "{{LANG}}", html.EscapeString(lang), 1)
+	}
+
 	var b strings.Builder
-	b.WriteString(`<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f5;">`)
-	b.WriteString(`<div style="max-width:600px;margin:0 auto;padding:24px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.6;color:#18181b;">`)
-	if site != "" {
-		b.WriteString(`<div style="font-size:13px;font-weight:600;letter-spacing:.02em;color:#71717a;padding-bottom:12px;">`)
-		b.WriteString(html.EscapeString(site))
-		b.WriteString(`</div>`)
+	b.WriteString(strings.NewReplacer(
+		"{{SITE}}", html.EscapeString(site),
+		"{{BODY}}", body,
+	).Replace(open))
+	switch {
+	case footerNote != "" && unsubURL != "" && unsubLabel != "":
+		b.WriteString(strings.NewReplacer(
+			"{{FOOTER_NOTE}}", html.EscapeString(footerNote),
+			"{{UNSUBSCRIBE_URL}}", html.EscapeString(unsubURL),
+			"{{UNSUBSCRIBE_LABEL}}", html.EscapeString(unsubLabel),
+		).Replace(shellFooterBoth))
+	case footerNote != "":
+		b.WriteString(strings.Replace(shellFooterNote, "{{FOOTER_NOTE}}", html.EscapeString(footerNote), 1))
+	case unsubURL != "" && unsubLabel != "":
+		b.WriteString(strings.NewReplacer(
+			"{{UNSUBSCRIBE_URL}}", html.EscapeString(unsubURL),
+			"{{UNSUBSCRIBE_LABEL}}", html.EscapeString(unsubLabel),
+		).Replace(shellFooterUnsubOnly))
 	}
-	b.WriteString(`<div style="background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;padding:24px;">`)
-	b.WriteString(bodyHTML)
-	b.WriteString(`</div>`)
-	if footerNote != "" || unsubscribeURL != "" {
-		b.WriteString(`<div style="padding-top:16px;font-size:12px;line-height:1.6;color:#71717a;">`)
-		if footerNote != "" {
-			b.WriteString(html.EscapeString(footerNote))
-		}
-		if unsubscribeURL != "" && unsubscribeLabel != "" {
-			if footerNote != "" {
-				b.WriteString(`<br />`)
-			}
-			b.WriteString(`<a href="` + html.EscapeString(unsubscribeURL) + `" style="color:#71717a;">` + html.EscapeString(unsubscribeLabel) + `</a>`)
-		}
-		b.WriteString(`</div>`)
-	}
-	b.WriteString(`</div></body></html>`)
+	b.WriteString(shellClose)
 	return b.String()
 }
