@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import APIKeysView from '../lib/views/APIKeysView.svelte';
 import { apiClient, type APIKeyRecord } from '../lib/api';
+import ConfirmHost from '../lib/components/ui/ConfirmHost.svelte';
 import { setLocale } from '../lib/i18n';
 
 /**
@@ -166,11 +167,14 @@ describe('API & MCP settings page', () => {
 
 describe('API key expiry in the personal list', () => {
   let instance: ReturnType<typeof mount> | null = null;
+  let confirmInstance: ReturnType<typeof mount> | null = null;
   let target: HTMLElement;
 
   afterEach(() => {
     if (instance) unmount(instance);
+    if (confirmInstance) unmount(confirmInstance);
     instance = null;
+    confirmInstance = null;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
   });
@@ -193,13 +197,22 @@ describe('API key expiry in the personal list', () => {
     };
   }
 
-  async function mountWith(keys: APIKeyRecord[]): Promise<void> {
+  async function mountWith(keys: APIKeyRecord[]): Promise<ReturnType<typeof vi.spyOn>> {
     setLocale('zh-CN');
-    vi.spyOn(apiClient, 'getAPIKeys').mockResolvedValue({ keys });
+    const list = vi.spyOn(apiClient, 'getAPIKeys').mockResolvedValue({ keys });
     target = document.createElement('div');
     document.body.appendChild(target);
     instance = mount(APIKeysView, { target });
     await flush();
+    return list;
+  }
+
+  /** Mounts the app's global confirm dialog, which askConfirm resolves through. */
+  function mountConfirmHost(): void {
+    const confirmTarget = document.createElement('div');
+    document.body.appendChild(confirmTarget);
+    confirmInstance = mount(ConfirmHost, { target: confirmTarget });
+    flushSync();
   }
 
   const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -214,8 +227,8 @@ describe('API key expiry in the personal list', () => {
 
     expect(target.querySelector('[data-testid="keys-expired-badge-expired"]')).not.toBeNull();
     expect(target.querySelector('[data-testid="keys-revoked-badge-expired"]')).toBeNull();
-    // The expired key is not offered for revocation; only the usable keys are.
-    expect(target.querySelector('[data-testid="keys-revoke-expired"]')).toBeNull();
+    // An expired key still belongs to the reader and stays revocable, exactly like a usable one.
+    expect(target.querySelector('[data-testid="keys-revoke-expired"]')).not.toBeNull();
     expect(target.querySelector('[data-testid="keys-revoke-active"]')).not.toBeNull();
 
     const html = target.textContent ?? '';
@@ -231,5 +244,22 @@ describe('API key expiry in the personal list', () => {
     expect(target.querySelector('[data-testid="keys-revoked-badge-both"]')).not.toBeNull();
     expect(target.querySelector('[data-testid="keys-expired-badge-both"]')).toBeNull();
     expect(target.textContent).not.toContain('已过期的密钥');
+  });
+
+  it('revokes an expired key through the same confirm dialog and refresh', async () => {
+    const list = await mountWith([key({ id: 'expired', expires_at: past })]);
+    mountConfirmHost();
+    const revoke = vi.spyOn(apiClient, 'deleteAPIKey').mockResolvedValue({ revoked: true, id: 'expired' });
+
+    (target.querySelector('[data-testid="keys-revoke-expired"]') as HTMLElement).click();
+    await flush();
+    // The dialog carries the key's name, so the reader confirms the right key.
+    expect(document.body.textContent).toContain('撤销 key-expired？');
+
+    (document.body.querySelector('[data-testid="confirm-dialog-confirm"]') as HTMLElement).click();
+    await flush();
+
+    expect(revoke).toHaveBeenCalledWith('expired');
+    expect(list).toHaveBeenCalledTimes(2);
   });
 });

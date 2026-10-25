@@ -331,6 +331,14 @@
                 <p class="mt-0.5 text-xs text-muted-foreground">{key.expires_at ? $t('keys.expiry.expired_on', { date: formatExpiry(key.expires_at) }) : ''}</p>
               </div>
               <Badge variant="warning" testId={`keys-expired-badge-${key.id}`}>{$t('keys.state.expired')}</Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="hover:bg-destructive-soft hover:text-destructive-foreground"
+                testId="keys-revoke-{key.id}"
+                loading={revokingId === key.id}
+                onclick={() => revoke(key)}
+              >{$t('keys.revoke')}</Button>
             </li>
           {/each}
         {/if}
