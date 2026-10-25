@@ -204,34 +204,36 @@
   translation: "可编辑"
 - id: mail.deck_shared.subject
   translation: "{{.inviter}} 邀请你使用卡组 {{.deck}} - {{.site}}"
-- id: mail.deck_shared.greeting
-  translation: "你好，"
+- id: mail.deck_shared.title
+  translation: "有人与你共享了卡组"
 - id: mail.deck_shared.body
-  translation: "{{.inviter}} 邀请你以 {{.role}} 的身份使用卡组「{{.deck}}」。请到「我的卡组」页面接受或拒绝。"
+  translation: "{{.inviter}} 在 {{.site}} 上把卡组 {{.deck}} 共享给你，权限为{{.role}}。"
 - id: mail.deck_shared.link_label
-  translation: "打开我的卡组："
+  translation: "打开卡组"
 - id: mail.deck_permission.subject
   translation: "你的卡组权限有变更 - {{.site}}"
-- id: mail.deck_permission.greeting
-  translation: "你好，"
+- id: mail.deck_permission.title
+  translation: "你的卡组权限已变更"
 - id: mail.deck_permission.granted
-  translation: "{{.actor}} 把你在卡组「{{.deck}}」里的权限改成了 {{.role}}。"
+  translation: "{{.actor}} 把卡组 {{.deck}} 的权限改为{{.role}}。"
 - id: mail.deck_permission.revoked
-  translation: "{{.actor}} 取消了你对卡组「{{.deck}}」的访问权限。"
+  translation: "{{.actor}} 取消了你对卡组 {{.deck}} 的访问权限。"
 - id: mail.deck_permission.link_label
-  translation: "打开发起变更的卡组："
+  translation: "打开卡组"
 - id: mail.optimize.subject
   translation: "参数优化完成 - {{.site}}"
-- id: mail.optimize.greeting
-  translation: "你好，"
+- id: mail.optimize.title
+  translation: "学习参数已更新"
 - id: mail.optimize.body
-  translation: "预设「{{.preset}}」的参数优化已经完成，本次用到了 {{.count}} 条复习记录。新的参数已经生效，你可以随时在调度预设页面查看或回退。"
+  translation: "预设 {{.preset}} 的参数已根据 {{.count}} 条复习记录完成优化。新参数已生效，你可以随时在预设页面查看或回退。"
 - id: mail.optimize.link_label
-  translation: "打开调度预设页："
+  translation: "查看参数"
 - id: mail.footer.note
   translation: "你收到这封邮件，因为你开启了此类通知；可以随时在设置里关闭。"
 - id: mail.footer.unsubscribe
   translation: "一键退订这类邮件"
+- id: mail.footer.automated
+  translation: "这封邮件由系统自动发送，请勿直接回复。"
 - id: mail.not_configured
   translation: "本站未开启邮件功能，请联系管理员。"
 # ── Mail type catalog and preferences (M1-18) ────────────────────────────────
@@ -290,14 +292,16 @@
 # ── Invite mail delivery (M1-20) ──────────────────────────────────────
 - id: mail.invite.subject
   translation: "邀请你加入 {{.site}}"
-- id: mail.invite.greeting
-  translation: "你好，"
+- id: mail.invite.title
+  translation: "邀请你加入 {{.site}}"
 - id: mail.invite.body
-  translation: "你受邀加入 {{.site}}。打开下面的链接即可创建账号。"
+  translation: "使用下方按钮创建账户，即可开始使用 {{.site}}。"
 - id: mail.invite.link_label
-  translation: "接受邀请："
+  translation: "创建账户"
 - id: mail.invite.expires
   translation: "该邀请将于 {{.expires}} 过期。"
+- id: mail.invite.note
+  translation: "如果你没有预料到这封邀请，可以忽略它。"
 - id: mail.invite.form_note
   translation: "把邀请链接发送到该邮箱；不勾选则自行拷贝链接。"
 - id: mail.invite.notice.queued
@@ -308,49 +312,63 @@
   translation: "邀请已创建；收件人已关闭该类邮件，因此没有发送。"
 # ── Review due reminders (M1-21, class C) ────────────────────────────────
 - id: mail.reminder.subject
+  translation: "{{.site}} 上有 {{.count}} 张卡片待复习"
+- id: mail.reminder.title
   translation: "该复习了"
 - id: mail.reminder.body
-  translation: "你有 {{.count}} 张卡片到期了，现在开始复习吧：{{.url}}"
-- id: mail.reset.greeting
-  translation: "你好，"
-- id: mail.reset.body
-  translation: "有人为你的 {{.site}} 账号申请了密码重置。如果这是你本人，请打开下面的链接。"
-- id: mail.reset.link_label
-  translation: "重置链接："
-- id: mail.reset.expires
-  translation: "该链接将于 {{.expires}} 过期。"
+  translation: "你在 {{.site}} 上有 {{.count}} 张卡片待复习。现在花几分钟，就能保持学习节奏。"
+- id: mail.reminder.link_label
+  translation: "开始复习"
 - id: mail.reset.subject
   translation: "重置你的 {{.site}} 密码"
-- id: mail.verify.greeting
-  translation: "你好，"
-- id: mail.verify.body
-  translation: "请打开下面的链接确认你的 {{.site}} 邮箱地址。"
-- id: mail.verify.link_label
-  translation: "验证链接："
-- id: mail.verify.expires
-  translation: "该链接将于 {{.expires}} 过期。"
+- id: mail.reset.title
+  translation: "重置密码"
+- id: mail.reset.body
+  translation: "我们收到了重置你 {{.site}} 账户密码的请求。请使用下方按钮设置新密码。"
+- id: mail.reset.link_label
+  translation: "设置新密码"
+- id: mail.reset.note
+  translation: "链接将于 {{.expires}} 过期。如果这不是你的操作，可以忽略这封邮件，你的密码不会改变。"
 - id: mail.verify.subject
   translation: "验证你的 {{.site}} 邮箱地址"
-- id: mail.verify.change_greeting
-  translation: "你好，"
-- id: mail.verify.change_body
-  translation: "请打开下面的链接确认这个新的 {{.site}} 邮箱地址。"
-- id: mail.verify.change_link_label
-  translation: "确认链接："
-- id: mail.verify.change_expires
-  translation: "该链接将于 {{.expires}} 过期。"
+- id: mail.verify.title
+  translation: "确认你的邮箱地址"
+- id: mail.verify.body
+  translation: "确认这个邮箱地址属于你，以完成 {{.site}} 账户的设置。"
+- id: mail.verify.link_label
+  translation: "确认邮箱地址"
+- id: mail.verify.note
+  translation: "链接将于 {{.expires}} 过期。如果这不是你注册的账户，可以忽略这封邮件。"
 - id: mail.verify.change_subject
   translation: "确认你的新 {{.site}} 邮箱地址"
-- id: mail.notice.greeting
-  translation: "你好，"
+- id: mail.verify.change_title
+  translation: "确认你的新邮箱地址"
+- id: mail.verify.change_body
+  translation: "确认这个新地址后，它就会用于你的 {{.site}} 账户。"
+- id: mail.verify.change_link_label
+  translation: "确认新地址"
+- id: mail.verify.change_note
+  translation: "链接将于 {{.expires}} 过期。如果你没有申请更改邮箱，忽略这封邮件即可，当前邮箱仍可正常使用。"
 - id: mail.notice.new_device.subject
   translation: "你的 {{.site}} 账号有新登录"
+- id: mail.notice.new_device.title
+  translation: "你的账户有新的登录"
 - id: mail.notice.new_device.body
-  translation: "你的 {{.site}} 账号刚刚从一个新设备或新 IP 登录。IP：{{.ip}}。时间：{{.time}}。如果不是你本人，请立即修改密码。"
+  translation: "你的 {{.site}} 账户刚刚在一台新设备或新网络环境下登录。"
+- id: mail.notice.new_device.time
+  translation: "**时间：** {{.time}}"
+- id: mail.notice.new_device.ip
+  translation: "**IP 地址：** {{.ip}}"
+- id: mail.notice.new_device.note
+  translation: "如果是你本人操作，无需处理；如果不是，请立即修改密码，并检查账户的登录状态。"
 - id: mail.notice.credential.subject
   translation: "你的 {{.site}} 凭据已变更"
+- id: mail.notice.credential.title
+  translation: "你的安全设置已更改"
 - id: mail.notice.credential.body
-  translation: "你的 {{.site}} 账号的以下安全设置被更改：{{.what}}。如果不是你本人，请立即保护账号。"
+  translation: "你的 {{.site}} 账户更改了这项安全设置：{{.what}}。"
+- id: mail.notice.credential.note
+  translation: "如果这不是你的操作，请立即重置密码并联系管理员。"
 - id: mail.notice.credential.password
   translation: "密码"
 - id: mail.notice.credential.totp_enabled
@@ -361,38 +379,54 @@
   translation: "已重新生成恢复码"
 - id: mail.notice.account.subject
   translation: "你的 {{.site}} 账号状态已变更"
+- id: mail.notice.account.title
+  translation: "你的账户状态已更改"
 - id: mail.notice.account.body
-  translation: "你的 {{.site}} 账号已被{{.status}}。如果你认为这是误操作，请联系管理员。"
+  translation: "你的 {{.site}} 账户已被{{.status}}。"
+- id: mail.notice.account.note
+  translation: "如果你认为这是误操作，请联系站点管理员。"
 - id: mail.notice.account.disabled
   translation: "禁用"
 - id: mail.notice.account.deleted
   translation: "删除"
 # M1-24 class-D admin notifications (mail.admin.*): appended by that task; the key set must match en.yaml.
-- id: mail.admin.greeting
-  translation: "你好，管理员："
 - id: mail.admin.job_failed.subject
   translation: "作业失败 #{{.job_id}} - {{.site}}"
+- id: mail.admin.job_failed.title
+  translation: "后台任务失败"
 - id: mail.admin.job_failed.body
-  translation: "{{.site}} 的作业 #{{.job_id}}（{{.kind}}）失败，原因：{{.reason}}。"
+  translation: "任务 #{{.job_id}}（{{.kind}}）在 {{.site}} 上执行失败。"
+- id: mail.admin.job_failed.reason_label
+  translation: "**失败原因**"
+- id: mail.admin.job_failed.note
+  translation: "请到管理员后台的任务页面查看完整日志并重试。"
 - id: mail.admin.media_alert.subject
   translation: "媒体配额告警 - {{.site}}"
+- id: mail.admin.media_alert.title
+  translation: "有用户触发了媒体配额"
 - id: mail.admin.media_alert.body
-  translation: "{{.site}} 的用户 {{.username}} 触发媒体配额：已用 {{.used}}，限额 {{.limit}}。"
+  translation: "{{.username}} 在 {{.site}} 上已使用 {{.used}}，配额为 {{.limit}}。在清理媒体文件之前，该用户的新上传会被拒绝。"
+- id: mail.admin.media_alert.note
+  translation: "可以考虑提高配额，或提醒该用户清理不再使用的媒体。"
 # M1-23 class-C weekly study digest (mail.digest.*): appended by that task; the key set must match en.yaml.
 - id: mail.digest.subject
   translation: "你的每周学习摘要"
+- id: mail.digest.title
+  translation: "本周学习回顾"
+- id: mail.digest.intro
+  translation: "这是你最近七天的学习情况。"
 - id: mail.digest.reviewed
-  translation: "近 7 天复习：{{.count}} 次"
+  translation: "**复习次数：** {{.count}}"
 - id: mail.digest.pass_rate
-  translation: "通过率：{{.rate}}%"
+  translation: "**通过率：** {{.rate}}%"
 - id: mail.digest.streak
-  translation: "当前连续打卡：{{.days}} 天"
+  translation: "**当前连续学习：** {{.days}} 天"
 - id: mail.digest.new_cards
-  translation: "近 7 天新增卡片：{{.count}} 张"
+  translation: "**新卡片：** {{.count}}"
 - id: mail.digest.due
-  translation: "当前到期卡片：{{.count}} 张"
-- id: mail.digest.link
-  translation: "查看完整统计：{{.url}}"
+  translation: "**待复习：** {{.count}}"
+- id: mail.digest.link_label
+  translation: "查看统计"
 # Per-user send hour for reminders and digests (mail.prefs.reminder_time.*): review reminders and the weekly digest share the same local hour;
 # empty means the site default. Appended by this task.
 - id: mail.prefs.reminder_time.heading

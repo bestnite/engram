@@ -204,34 +204,36 @@ It renders with sample variables; real recipients see their own data."
   translation: "editable"
 - id: mail.deck_shared.subject
   translation: "{{.inviter}} invited you to a deck ({{.deck}}) - {{.site}}"
-- id: mail.deck_shared.greeting
-  translation: "Hello,"
+- id: mail.deck_shared.title
+  translation: "A deck was shared with you"
 - id: mail.deck_shared.body
-  translation: "{{.inviter}} invited you to use the deck {{.deck}} as {{.role}}. Accept or decline it on your decks page."
+  translation: "{{.inviter}} gave you {{.role}} access to the deck {{.deck}} on {{.site}}."
 - id: mail.deck_shared.link_label
-  translation: "Open my decks:"
+  translation: "Open the deck"
 - id: mail.deck_permission.subject
   translation: "Your deck access changed - {{.site}}"
-- id: mail.deck_permission.greeting
-  translation: "Hello,"
+- id: mail.deck_permission.title
+  translation: "Your deck access changed"
 - id: mail.deck_permission.granted
   translation: "{{.actor}} changed your access to the deck {{.deck}} to {{.role}}."
 - id: mail.deck_permission.revoked
   translation: "{{.actor}} removed your access to the deck {{.deck}}."
 - id: mail.deck_permission.link_label
-  translation: "Open the deck:"
+  translation: "Open the deck"
 - id: mail.optimize.subject
   translation: "Parameter optimisation finished - {{.site}}"
-- id: mail.optimize.greeting
-  translation: "Hello,"
+- id: mail.optimize.title
+  translation: "Your study parameters are updated"
 - id: mail.optimize.body
-  translation: "The parameters for the preset {{.preset}} have been optimised from {{.count}} reviews. They are in effect now; you can review or revert them on the presets page at any time."
+  translation: "The parameters for the preset {{.preset}} were optimised from {{.count}} reviews. They are active now; you can review or revert them at any time."
 - id: mail.optimize.link_label
-  translation: "Open the presets page:"
+  translation: "Review parameters"
 - id: mail.footer.note
   translation: "You are receiving this because you turned this notification on. You can turn it off at any time in settings."
 - id: mail.footer.unsubscribe
   translation: "Unsubscribe from these emails"
+- id: mail.footer.automated
+  translation: "This message was sent automatically. Please do not reply."
 - id: mail.not_configured
   translation: "Mail is not enabled on this site; contact an administrator."
 # ── Email type catalog and preferences (M1-18) ────────────────
@@ -290,14 +292,16 @@ It renders with sample variables; real recipients see their own data."
 # ── Invite delivery by email (M1-20) ─────────────────────────
 - id: mail.invite.subject
   translation: "Your invitation to {{.site}}"
-- id: mail.invite.greeting
-  translation: "Hello,"
+- id: mail.invite.title
+  translation: "You're invited to {{.site}}"
 - id: mail.invite.body
-  translation: "You have been invited to join {{.site}}. Open the link below to create your account."
+  translation: "Create your account with the button below to start using {{.site}}."
 - id: mail.invite.link_label
-  translation: "Accept the invitation:"
+  translation: "Create my account"
 - id: mail.invite.expires
   translation: "This invitation expires on {{.expires}}."
+- id: mail.invite.note
+  translation: "If you weren't expecting this invitation, you can ignore this email."
 - id: mail.invite.form_note
   translation: "Sends the invite link to that address; leave unchecked to copy the link yourself."
 - id: mail.invite.notice.queued
@@ -308,49 +312,63 @@ It renders with sample variables; real recipients see their own data."
   translation: "Invite created; the recipient has this email type turned off, so nothing was sent."
 # ── Review reminder (M1-21, class C) ─────────────────────────
 - id: mail.reminder.subject
+  translation: "{{.count}} cards are due on {{.site}}"
+- id: mail.reminder.title
   translation: "Time to review"
 - id: mail.reminder.body
-  translation: "You have {{.count}} cards due. Start reviewing: {{.url}}"
-- id: mail.reset.greeting
-  translation: "Hello,"
-- id: mail.reset.body
-  translation: "Someone requested a password reset for your {{.site}} account. If this was you, open the link below."
-- id: mail.reset.link_label
-  translation: "Reset link:"
-- id: mail.reset.expires
-  translation: "This link expires at {{.expires}}."
+  translation: "You have {{.count}} cards due on {{.site}}. A few minutes now keeps your schedule on track."
+- id: mail.reminder.link_label
+  translation: "Start reviewing"
 - id: mail.reset.subject
   translation: "Reset your {{.site}} password"
-- id: mail.verify.greeting
-  translation: "Hello,"
-- id: mail.verify.body
-  translation: "Please confirm your email address for {{.site}} by opening the link below."
-- id: mail.verify.link_label
-  translation: "Verification link:"
-- id: mail.verify.expires
-  translation: "This link expires at {{.expires}}."
+- id: mail.reset.title
+  translation: "Reset your password"
+- id: mail.reset.body
+  translation: "We received a request to reset the password for your {{.site}} account. Use the button below to choose a new password."
+- id: mail.reset.link_label
+  translation: "Choose a new password"
+- id: mail.reset.note
+  translation: "The link expires at {{.expires}}. If you didn't ask for a reset, you can ignore this email — your password stays the same."
 - id: mail.verify.subject
   translation: "Verify your {{.site}} email address"
-- id: mail.verify.change_greeting
-  translation: "Hello,"
-- id: mail.verify.change_body
-  translation: "Confirm this new email address for {{.site}} by opening the link below."
-- id: mail.verify.change_link_label
-  translation: "Confirmation link:"
-- id: mail.verify.change_expires
-  translation: "This link expires at {{.expires}}."
+- id: mail.verify.title
+  translation: "Confirm your email address"
+- id: mail.verify.body
+  translation: "Confirm that this address belongs to you to finish setting up your {{.site}} account."
+- id: mail.verify.link_label
+  translation: "Confirm email address"
+- id: mail.verify.note
+  translation: "The link expires at {{.expires}}. If you didn't create an account, you can ignore this email."
 - id: mail.verify.change_subject
   translation: "Confirm your new {{.site}} email address"
-- id: mail.notice.greeting
-  translation: "Hello,"
+- id: mail.verify.change_title
+  translation: "Confirm your new email address"
+- id: mail.verify.change_body
+  translation: "Confirm this new address to start using it with your {{.site}} account."
+- id: mail.verify.change_link_label
+  translation: "Confirm new address"
+- id: mail.verify.change_note
+  translation: "The link expires at {{.expires}}. If you didn't ask to change your email, ignore this email and keep using your current address."
 - id: mail.notice.new_device.subject
   translation: "New sign-in to your {{.site}} account"
+- id: mail.notice.new_device.title
+  translation: "New sign-in to your account"
 - id: mail.notice.new_device.body
-  translation: "Your {{.site}} account was just signed in from a new device or IP. IP: {{.ip}}. Time: {{.time}}. If this was not you, change your password immediately."
+  translation: "Your {{.site}} account was just signed in from a device or network we haven't seen before."
+- id: mail.notice.new_device.time
+  translation: "**Time:** {{.time}}"
+- id: mail.notice.new_device.ip
+  translation: "**IP address:** {{.ip}}"
+- id: mail.notice.new_device.note
+  translation: "If this was you, no action is needed. If not, change your password right away and review your active sessions."
 - id: mail.notice.credential.subject
   translation: "Your {{.site}} credentials changed"
+- id: mail.notice.credential.title
+  translation: "Your security settings changed"
 - id: mail.notice.credential.body
-  translation: "The following security setting on your {{.site}} account was changed: {{.what}}. If this was not you, secure your account immediately."
+  translation: "This was changed on your {{.site}} account: {{.what}}."
+- id: mail.notice.credential.note
+  translation: "If you didn't make this change, reset your password immediately and contact an administrator."
 - id: mail.notice.credential.password
   translation: "password"
 - id: mail.notice.credential.totp_enabled
@@ -361,38 +379,54 @@ It renders with sample variables; real recipients see their own data."
   translation: "recovery codes regenerated"
 - id: mail.notice.account.subject
   translation: "Your {{.site}} account status changed"
+- id: mail.notice.account.title
+  translation: "Your account status changed"
 - id: mail.notice.account.body
-  translation: "Your {{.site}} account has been {{.status}}. If you believe this is a mistake, contact the administrator."
+  translation: "Your {{.site}} account has been {{.status}}."
+- id: mail.notice.account.note
+  translation: "If you think this is a mistake, contact the site administrator."
 - id: mail.notice.account.disabled
   translation: "disabled"
 - id: mail.notice.account.deleted
   translation: "deleted"
 # M1-24 D-class admin notifications (mail.admin.*): appended by that task; key set must match zh-CN.yaml.
-- id: mail.admin.greeting
-  translation: "Hello, admin:"
 - id: mail.admin.job_failed.subject
   translation: "Job failed #{{.job_id}} - {{.site}}"
+- id: mail.admin.job_failed.title
+  translation: "A background job failed"
 - id: mail.admin.job_failed.body
-  translation: "Job #{{.job_id}} ({{.kind}}) on {{.site}} failed: {{.reason}}."
+  translation: "Job #{{.job_id}} ({{.kind}}) failed on {{.site}}."
+- id: mail.admin.job_failed.reason_label
+  translation: "**Failure reason**"
+- id: mail.admin.job_failed.note
+  translation: "Open the jobs page in the admin panel for the full log and to retry."
 - id: mail.admin.media_alert.subject
   translation: "Media quota alert - {{.site}}"
+- id: mail.admin.media_alert.title
+  translation: "A user reached the media quota"
 - id: mail.admin.media_alert.body
-  translation: "User {{.username}} on {{.site}} hit the media quota: used {{.used}} of {{.limit}}."
+  translation: "{{.username}} has used {{.used}} of the {{.limit}} quota on {{.site}}. New uploads from this user are refused until some media is removed."
+- id: mail.admin.media_alert.note
+  translation: "Consider raising the quota or asking the user to remove unused media."
 # M1-23 C-class weekly study digest (mail.digest.*): appended by that task; key set must match zh-CN.yaml.
 - id: mail.digest.subject
   translation: "Your weekly study summary"
+- id: mail.digest.title
+  translation: "Your week in review"
+- id: mail.digest.intro
+  translation: "Here is how your studying went over the last seven days."
 - id: mail.digest.reviewed
-  translation: "Reviews in the last 7 days: {{.count}}"
+  translation: "**Reviews:** {{.count}}"
 - id: mail.digest.pass_rate
-  translation: "Pass rate: {{.rate}}%"
+  translation: "**Pass rate:** {{.rate}}%"
 - id: mail.digest.streak
-  translation: "Current streak: {{.days}} day(s)"
+  translation: "**Current streak:** {{.days}} days"
 - id: mail.digest.new_cards
-  translation: "New cards in the last 7 days: {{.count}}"
+  translation: "**New cards:** {{.count}}"
 - id: mail.digest.due
-  translation: "Cards due now: {{.count}}"
-- id: mail.digest.link
-  translation: "See your full statistics: {{.url}}"
+  translation: "**Due now:** {{.count}}"
+- id: mail.digest.link_label
+  translation: "See your statistics"
 # Per-user reminder & digest send hour (mail.prefs.reminder_time.*): the review reminder and the
 # weekly digest share one local hour; empty selection means the site default. Appended by this task.
 - id: mail.prefs.reminder_time.heading
