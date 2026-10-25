@@ -114,6 +114,9 @@ type ReviewCardView struct {
 	// path as the card face: the raw option source is Markdown in which formulas carry TeX delimiters, and injecting it into the
 	// controls unsanitized would both show the delimiters literally and open an HTML injection path.
 	OptionsHTML []string
+	// OptionOrder is the display order of a choice card's options: display slot b shows stored option index OptionOrder[b].
+	// Each OptionsHTML entry stays at its stored index, and the submitted answer stays a stored option index.
+	OptionOrder []int
 	// Blanks holds the hint for each input box of per-blank/per-item answer types (cloze questions, list questions), in order, empty string when there is no hint;
 	// the review page uses it to decide the number of input boxes. nil for other question types.
 	Blanks []string
@@ -140,6 +143,12 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 		return nil, err
 	}
 	ct := cardtype.Card{Template: card.Template, Ordinal: card.Ordinal, Fields: fields}
+	version := s.stateVersion(ctx, user.ID, card.ID)
+	// One display order per (user, card, state version): the render response and the reveal both read it, so a
+	// revealed back lists the correct options in the same order the user saw. It changes only after a review.
+	if optionsField := t.Describe().OptionsField; optionsField != "" {
+		ct.OptionOrder = api.OptionOrder(cardtype.OptionCount(fields, optionsField), user.ID, card.ID, version)
+	}
 	front, err := t.Render(ct, cardtype.SideFront)
 	if err != nil {
 		return nil, err
@@ -182,11 +191,12 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 		CardID:          card.PublicID,
 		NoteID:          note.PublicID,
 		DeckID:          deckPublic,
-		ExpectedVersion: strconv.Itoa(s.stateVersion(ctx, user.ID, card.ID)),
+		ExpectedVersion: strconv.Itoa(version),
 		Template:        card.Template,
 		FrontHTML:       frontHTML,
 		BackHTML:        backHTML,
 		OptionsHTML:     optionsHTML,
+		OptionOrder:     ct.OptionOrder,
 		Blanks:          blanks,
 		EditHref:        "/decks/" + deckPublic + "/notes/" + note.PublicID,
 	}, nil

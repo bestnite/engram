@@ -177,39 +177,6 @@ that already had a localised default preset may end up with one extra row.
 **Unverified.** The PostgreSQL branch of the media primary-key migration has not been
 executed locally. Local and CI tests use SQLite; PostgreSQL testing remains out of scope.
 
-### Backlog (no milestone yet)
-
-- [ ] **B-14 Shuffled option order for choice cards** — `choice_single` and `choice_multi`
-  always show their options in the author's stored order, so the correct answer is
-  memorisable by position. The server decides one display order per
-  (user, card, state version) and publishes it; grading keeps using stored indices.
-  *Contract:* `option_order []int` means "display slot → stored option index". It appears on
-  `api.DueCard` (REST and MCP `get_due_cards` both carry it) and on `web.ReviewCardView` (the
-  SPA render response). It is `null` for every card kind without option controls.
-  `options_html` and `fields.options` stay in stored order, the submitted `answer` stays a
-  stored index, and a client maps a clicked display slot through `option_order`. The order is
-  derived and never persisted: `fnv64a` over `user_id`, `card_id` and `version` (each written
-  as 8 big-endian bytes) seeds a Fisher–Yates shuffle, so one unreviewed card shows the same
-  order across refreshes and transports, and a new order after every submitted review
-  (the version increments).
-  *Files:* `internal/cardtype/cardtype.go` (`Card.OptionOrder`, presentation-only, read by
-  `choice_multi`'s back side so the reveal lists the correct options in display order; the
-  front keeps stored order), `internal/cardtype/choice.go`, `internal/api/` (the seed and the
-  shuffle as one function both transports call, plus `DueCard.OptionOrder`),
-  `internal/web/review.go` (the view field and passing the order into the render),
-  `internal/mcp/mcp.go` (the `get_due_cards` description states the mapping),
-  `frontend/src/lib/api/types.ts`, `frontend/src/lib/views/ReviewView.svelte` (render a
-  display list; answer values and control ids stay bound to the stored index).
-  *Acceptance:* `option_order` is a permutation of `0..n-1` for both choice kinds; two calls
-  with the same `(user, card, version)` return the same order; one review submission changes
-  it; `true_false`, `cloze`, `list` and `typed` publish `null`; a submission whose `answer` is
-  a stored index grades exactly as before (a correct pick scores 1); the `choice_multi` reveal
-  lists the correct options in display order; in the SPA, clicking display slot `b` submits
-  `option_order[b]`.
-  *Verification:* `go test ./internal/cardtype/... ./internal/api/... ./internal/web/... ./internal/mcp/...`
-  plus `npm --prefix frontend run test` and `npm --prefix frontend run test:client`, all scoped
-  to what the change touches; the parent runs the module-wide check at the merge gate.
-
 ## 2. Progress tracking
 
 ### 2.1 Counting

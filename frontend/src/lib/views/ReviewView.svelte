@@ -32,6 +32,11 @@
      * with the render response; the initial value lets the DOM-less server-side rendering tests pin the option HTML sink.
      */
     initialOptionsHTML?: string[];
+    /**
+     * Display order of the choice options: display slot -> stored option index. In production it arrives with the render
+     * response; the initial value lets the DOM-less server-side rendering tests pin a non-identity order.
+     */
+    initialOptionOrder?: number[];
     initialEditHref?: string;
     /** Whether the self-graded card is already flipped (flipped by reveal() in production; the initial value overrides it in tests). */
     initialRevealed?: boolean;
@@ -49,6 +54,7 @@
     initialFrontHTML = '',
     initialBackHTML = '',
     initialOptionsHTML = [],
+    initialOptionOrder,
     initialEditHref = '',
     initialRevealed = false,
     initialLastUndo = null,
@@ -110,6 +116,10 @@
   // text, which would print TeX delimiters literally; the raw field text never reaches an HTML sink.
   // svelte-ignore state_referenced_locally
   let optionsHTML = $state<string[]>(initialOptionsHTML);
+  // The server's display order for the current card's options: display slot -> stored option index. An empty/absent value means
+  // the stored order; the derived list below validates it before use, so a stale or malformed value can never hide an option.
+  // svelte-ignore state_referenced_locally
+  let optionOrder = $state<number[] | null>(initialOptionOrder ?? null);
   // svelte-ignore state_referenced_locally
   let editHref = $state(initialEditHref);
   let renderToken = 0;
@@ -122,6 +132,32 @@
   let revealedSection = $state<HTMLElement | null>(null);
 
   const current = $derived(cards[0] || null);
+
+  type OptionSlot = { slot: number; stored: number; text: string; html: string | undefined };
+
+  /**
+   * The choice options in display order. `slot` is the screen row, `stored` is the option's index in the stored list; the
+   * server's option_order maps one to the other. A missing, null, or malformed order (not a permutation of the option count)
+   * falls back to the stored order, so every option is still rendered exactly once.
+   */
+  const optionSlots = $derived.by<OptionSlot[]>(() => {
+    const options = current ? gradedOptions($cardTypes, current) : [];
+    const count = options.length;
+    const identity = options.map((_, index) => index);
+    const order = optionOrder;
+    let resolved = identity;
+    if (order && order.length === count) {
+      const seen = new Set(order);
+      const valid = seen.size === count && order.every((stored) => Number.isInteger(stored) && stored >= 0 && stored < count);
+      if (valid) resolved = order;
+    }
+    return resolved.map((stored, slot) => ({
+      slot,
+      stored,
+      text: options[stored] ?? '',
+      html: optionsHTML[stored],
+    }));
+  });
 
   // "One more round": when the queue is empty and the review scope happens to be a single deck, read today's new card quota; if there are still new cards beyond today's quota
   // the completion page offers an append entry. The daily new card cap is a study goal rather than a hard limit, and appending only applies to today and only to yourself.
@@ -251,6 +287,7 @@
       frontHTML = response.front_html;
       backHTML = response.back_html;
       optionsHTML = response.options_html ?? [];
+      optionOrder = response.option_order ?? null;
       editHref = response.edit_href;
       blanks = response.blanks ?? [];
       blankAnswers = blanks.map(() => '');
@@ -266,6 +303,7 @@
       frontHTML = '';
       backHTML = '';
       optionsHTML = [];
+      optionOrder = null;
       editHref = '';
     }
   }
@@ -277,6 +315,7 @@
     frontHTML = '';
     backHTML = '';
     optionsHTML = [];
+    optionOrder = null;
     editHref = '';
     blanks = [];
     blankAnswers = [];
@@ -1061,30 +1100,32 @@
                       ariaLabel={$t('review.graded.options')}
                       value={singleChoice === null ? '' : String(singleChoice)}
                       onValueChange={(value) => (singleChoice = value === '' ? null : Number(value))}
-                      options={gradedOptions($cardTypes, current).map((option, index) => ({
-                        value: String(index),
-                        label: option,
-                        html: optionsHTML[index] || undefined,
+                      options={optionSlots.map((option) => ({
+                        value: String(option.stored),
+                        label: option.text,
+                        html: option.html || undefined,
                       }))}
                     />
                   </div>
                 {:else if answerControl === 'multi'}
                   <div bind:this={optionsSection} class="space-y-2" data-testid="review-graded-options">
-                    {#each gradedOptions($cardTypes, current) as option, index (index)}
+                    {#each optionSlots as option (option.slot)}
                       <!-- The whole row is a label: clicking the option text toggles the checkbox too, consistent with the single-choice row being clickable; the selected style matches single choice. -->
                       <label
                         class="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-zinc-300 px-4 text-sm text-zinc-700 transition-colors hover:border-zinc-400 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-50 data-[state=checked]:font-medium data-[state=checked]:text-blue-700 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500 dark:data-[state=checked]:border-blue-600 dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-300"
-                        data-state={multiChoice.includes(index) ? 'checked' : 'unchecked'}
+                        data-state={multiChoice.includes(option.stored) ? 'checked' : 'unchecked'}
                         data-testid="review-graded-option-row"
                       >
                         <Checkbox
                           testId="review-graded-option"
-                          checked={multiChoice.includes(index)}
+                          checked={multiChoice.includes(option.stored)}
                           onCheckedChange={(checked) =>
-                            (multiChoice = checked ? [...multiChoice, index] : multiChoice.filter((item) => item !== index))}
-                          labelledBy={`${uid}-option-${index}`}
+                            (multiChoice = checked
+                              ? [...multiChoice, option.stored]
+                              : multiChoice.filter((item) => item !== option.stored))}
+                          labelledBy={`${uid}-option-${option.slot}`}
                         />
-                        <span id={`${uid}-option-${index}`}>{#if optionsHTML[index]}{@html optionsHTML[index]}{:else}{option}{/if}</span>
+                        <span id={`${uid}-option-${option.slot}`}>{#if option.html}{@html option.html}{:else}{option.text}{/if}</span>
                       </label>
                     {/each}
                   </div>

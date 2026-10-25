@@ -228,7 +228,7 @@ func (choiceMultiType) Cards(note Note) []Card {
 	return []Card{{Template: "forward", Ordinal: 0, Fields: note.Fields}}
 }
 
-// Render gives the question and all options on the front; the back lists all correct options in order.
+// Render gives the question and all options on the front; the back lists all correct options in display order.
 func (choiceMultiType) Render(card Card, side Side) (RenderResult, error) {
 	if card.Template != "forward" {
 		return RenderResult{}, errUnknownTemplate(card.Template)
@@ -241,8 +241,23 @@ func (choiceMultiType) Render(card Card, side Side) (RenderResult, error) {
 		return RenderResult{Body: question, Extra: options}, nil
 	}
 	correct := make([]string, 0, len(answers))
-	for _, idx := range answers {
-		correct = append(correct, options[idx])
+	if isPermutation(card.OptionOrder, len(options)) {
+		// The back follows the display order the user saw, so the joined list of correct options reads in the same
+		// sequence as the controls. The front keeps stored order: its Extra stays parallel with fields.options.
+		picked := make(map[int]bool, len(answers))
+		for _, idx := range answers {
+			picked[idx] = true
+		}
+		for _, idx := range card.OptionOrder {
+			if picked[idx] {
+				correct = append(correct, options[idx])
+			}
+		}
+	} else {
+		// No display order supplied (or one that does not fit the stored options): keep stored order.
+		for _, idx := range answers {
+			correct = append(correct, options[idx])
+		}
 	}
 	return RenderResult{Body: strings.Join(correct, ", ")}, nil
 }
@@ -374,6 +389,21 @@ func uniqueInts(is []int) bool {
 			return false
 		}
 		seen[i] = true
+	}
+	return true
+}
+
+// isPermutation reports whether order is a permutation of 0..n-1; anything else cannot be used as a display order.
+func isPermutation(order []int, n int) bool {
+	if len(order) != n {
+		return false
+	}
+	seen := make([]bool, n)
+	for _, idx := range order {
+		if idx < 0 || idx >= n || seen[idx] {
+			return false
+		}
+		seen[idx] = true
 	}
 	return true
 }
