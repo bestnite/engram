@@ -5,6 +5,11 @@
   export interface RadioOption {
     value: string;
     label: string;
+    /**
+     * Server-sanitized HTML rendered instead of the plain label. It must never receive raw user text: only HTML that already went
+     * through the server's sanitizing Markdown/TeX pipeline may be injected here, because this is an HTML sink.
+     */
+    html?: string;
     disabled?: boolean;
   }
 
@@ -64,7 +69,7 @@
         itemClass
       )}
     >
-      {option.label}
+      {#if option.html}{@html option.html}{:else}{option.label}{/if}
     </BitsRadioGroup.Item>
   {/each}
 </BitsRadioGroup.Root>

@@ -11,6 +11,7 @@ import (
 
 	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/render"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -98,7 +99,7 @@ func (s *Server) parseDeckScope(c *gin.Context, user *store.User) (reviewScope, 
 }
 
 // ReviewCardView is the rendered two sides of the current card plus its identity.
-// FrontHTML / BackHTML always come from internal/render's allowlist sanitizing, so the SPA can embed them as-is safely.
+// FrontHTML / BackHTML / OptionsHTML always come from internal/render's allowlist sanitizing, so the SPA can embed them as-is safely.
 type ReviewCardView struct {
 	CardID string
 	NoteID string
@@ -108,6 +109,11 @@ type ReviewCardView struct {
 	Template        string
 	FrontHTML       string
 	BackHTML        string
+	// OptionsHTML holds one sanitized HTML fragment per option of a choice card, in option order; nil for every other card type.
+	// The review page renders these fragments inside its answer controls, so they must go through the same sanitizing Markdown/TeX
+	// path as the card face: the raw option source is Markdown in which formulas carry TeX delimiters, and injecting it into the
+	// controls unsanitized would both show the delimiters literally and open an HTML injection path.
+	OptionsHTML []string
 	// Blanks holds the hint for each input box of per-blank/per-item answer types (cloze questions, list questions), in order, empty string when there is no hint;
 	// the review page uses it to decide the number of input boxes. nil for other question types.
 	Blanks []string
@@ -138,10 +144,21 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 	if err != nil {
 		return nil, err
 	}
-	// For question types that declare OptionsField (choice questions) the review page renders the options as answer controls; if the same set of
-	// options is also concatenated into FrontHTML, the page shows them twice — once as plain text, once as buttons. The preview and share pages have no
-	// answer controls and still show Extra via renderSide, so they are only dropped here in the review view.
+	// For question types that declare OptionsField (choice questions) the review page renders the options as answer controls, so the
+	// front Extra is cleared below to keep the options out of FrontHTML (otherwise the page shows them twice). The preview and share pages
+	// have no answer controls and still show Extra via renderSide. The controls still need the options as sanitized HTML — plain source text
+	// would print TeX delimiters literally — so each option is rendered through the same pipeline as the card face and kept in OptionsHTML.
+	// The HTML is sanitized here, which is why the SPA may inject it.
+	var optionsHTML []string
 	if t.Describe().OptionsField != "" {
+		optionsHTML = make([]string, 0, len(front.Extra))
+		for _, option := range front.Extra {
+			optionHTML, err := render.RenderMarkdown(option)
+			if err != nil {
+				return nil, err
+			}
+			optionsHTML = append(optionsHTML, optionHTML)
+		}
 		front.Extra = nil
 	}
 	back, err := t.Render(ct, cardtype.SideBack)
@@ -169,6 +186,7 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 		Template:        card.Template,
 		FrontHTML:       frontHTML,
 		BackHTML:        backHTML,
+		OptionsHTML:     optionsHTML,
 		Blanks:          blanks,
 		EditHref:        "/decks/" + deckPublic + "/notes/" + note.PublicID,
 	}, nil

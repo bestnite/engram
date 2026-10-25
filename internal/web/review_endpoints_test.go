@@ -29,8 +29,10 @@ type reviewRenderBody struct {
 	CardID    string `json:"card_id"`
 	FrontHTML string `json:"front_html"`
 	BackHTML  string `json:"back_html"`
-	EditHref  string `json:"edit_href"`
-	Intervals []struct {
+	// OptionsHTML is null for card types without options.
+	OptionsHTML []string `json:"options_html"`
+	EditHref    string   `json:"edit_href"`
+	Intervals   []struct {
 		Rating  int   `json:"rating"`
 		Seconds int64 `json:"seconds"`
 	} `json:"intervals"`
@@ -268,6 +270,63 @@ func TestReviewRenderOmitsChoiceOptionsFromFront(t *testing.T) {
 				t.Errorf("back_html = %s, want it to contain the correct option %q", body.BackHTML, tc.wantBack)
 			}
 		})
+	}
+}
+
+// TestReviewRenderReturnsSanitizedOptionHTML asserts the render response carries one sanitized HTML fragment per choice option, in option
+// order: the answer controls inject these fragments, so a formula option keeps its TeX delimiters for typesetting while injected markup is
+// removed. It also asserts a card type without options returns JSON null, not an empty array.
+func TestReviewRenderReturnsSanitizedOptionHTML(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "Choice option HTML deck")
+	note := seedGradedNote(t, db, deck.ID, "choice_single", map[string]any{
+		"question": "pick-question",
+		"options":  []string{`\(x^2\)`, "opt-beta", "<script>alert(1)</script>"},
+		"answer":   0,
+	})
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{
+		"card_id": cardPublicIDOfNote(t, db, note.ID), "deck": []string{deck.PublicID},
+	}, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var body reviewRenderBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
+	}
+	if len(body.OptionsHTML) != 3 {
+		t.Fatalf("options_html = %#v, want one entry per option", body.OptionsHTML)
+	}
+	if !strings.Contains(body.OptionsHTML[0], `\(x^2\)`) {
+		t.Errorf("option 0 lost its TeX delimiters, MathJax cannot typeset it: %s", body.OptionsHTML[0])
+	}
+	if body.OptionsHTML[1] != "<p>opt-beta</p>\n" {
+		t.Errorf("option 1 = %q, want it rendered in option order", body.OptionsHTML[1])
+	}
+	for _, bad := range []string{"<script", "alert("} {
+		if strings.Contains(body.OptionsHTML[2], bad) {
+			t.Errorf("option HTML still contains %q: %s", bad, body.OptionsHTML[2])
+		}
+	}
+	for _, option := range []string{`\(x^2\)`, "opt-beta"} {
+		if strings.Contains(body.FrontHTML, option) {
+			t.Errorf("front_html repeats option %q that the answer controls already show: %s", option, body.FrontHTML)
+		}
+	}
+
+	basic := seedBasic(t, db, deck.ID, "basic-front", "basic-back")
+	rec = postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{
+		"card_id": cardPublicIDOfNote(t, db, basic.ID), "deck": []string{deck.PublicID},
+	}, cookies, csrf)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("basic render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode basic render response: %v", err)
+	}
+	if got := string(raw["options_html"]); got != "null" {
+		t.Errorf("non-choice options_html = %s, want null", got)
 	}
 }
 

@@ -561,13 +561,18 @@ export interface RevealAnswerResponse {
 
 /**
  * POST /api/v1/review/render response body (Go: internal/web/review_api.go).
- * front_html / back_html are already sanitized by goldmark + bluemonday on the server and are the review page's only HTML sink
+ * front_html / back_html / options_html are already sanitized by goldmark + bluemonday on the server and are the review page's HTML sinks
  * edit_href points at the card edit page, for the `e` shortcut to jump there.
  */
 export interface ReviewRenderResponse {
   card_id: string;
   front_html: string;
   back_html: string;
+  /**
+   * Server-sanitized HTML of each choice option, one entry per option in option order; null for card types without options.
+   * The answer controls inject these fragments, so they must never be replaced with the raw option text.
+   */
+  options_html?: string[] | null;
   /** Prompt per blank of a blanks-graded card (answer_control = 'blanks') on this card, in order of appearance; empty string for no prompt, null for other kinds. */
   blanks?: string[] | null;
   edit_href: string;

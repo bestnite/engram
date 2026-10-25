@@ -285,7 +285,7 @@ func (s *Server) reviewUndo(c *gin.Context) {
 	s.writeQueue(c, user, scope, gin.H{"undone_card_id": result.CardID})
 }
 
-// reviewRender returns server-sanitized HTML of both sides of a card: the SPA only hands the HTML returned here
+// reviewRender returns server-sanitized HTML of both sides of a card and of each choice option: the SPA only hands the HTML returned here
 // to {@html}, never sending raw fields as Markdown into the HTML sink. It reuses cardView, guaranteeing the same
 // goldmark → bluemonday sanitizing path as SSR; edit_href is for the review page's edit entry to jump to;
 // intervals are the next interval for each of the four grades (api.PreviewIntervals).
@@ -318,12 +318,13 @@ func (s *Server) reviewRender(c *gin.Context) {
 		intervals = []api.RatingInterval{}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"card_id":    card.PublicID,
-		"front_html": view.FrontHTML,
-		"back_html":  view.BackHTML,
-		"blanks":     view.Blanks,
-		"edit_href":  view.EditHref,
-		"intervals":  intervals,
+		"card_id":      card.PublicID,
+		"front_html":   view.FrontHTML,
+		"back_html":    view.BackHTML,
+		"options_html": view.OptionsHTML,
+		"blanks":       view.Blanks,
+		"edit_href":    view.EditHref,
+		"intervals":    intervals,
 	})
 }
 

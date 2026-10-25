@@ -27,6 +27,11 @@
     // initial values are kept so the DOM-less server-side rendering tests can pin "only sanitized HTML reaches the HTML sink".
     initialFrontHTML?: string;
     initialBackHTML?: string;
+    /**
+     * The server-sanitized HTML of each choice option, in option order (null/empty for card types without options). In production it arrives
+     * with the render response; the initial value lets the DOM-less server-side rendering tests pin the option HTML sink.
+     */
+    initialOptionsHTML?: string[];
     initialEditHref?: string;
     /** Whether the self-graded card is already flipped (flipped by reveal() in production; the initial value overrides it in tests). */
     initialRevealed?: boolean;
@@ -43,6 +48,7 @@
     initialRevealedAnswerHTML = '',
     initialFrontHTML = '',
     initialBackHTML = '',
+    initialOptionsHTML = [],
     initialEditHref = '',
     initialRevealed = false,
     initialLastUndo = null,
@@ -90,12 +96,16 @@
   let gradedRevealed = $state(initialRevealedAnswerHTML !== '');
   let needAnswer = $state(false);
 
-  // The server-sanitized card-face HTML (the review page's only HTML sink). An empty string means it has not been fetched yet,
+  // The server-sanitized card-face HTML, one of the review page's HTML sinks. An empty string means it has not been fetched yet,
   // in which case it falls back to plain text; the raw fields are never sent into the HTML sink as Markdown.
   // svelte-ignore state_referenced_locally
   let frontHTML = $state(initialFrontHTML);
   // svelte-ignore state_referenced_locally
   let backHTML = $state(initialBackHTML);
+  // The server-sanitized HTML of each choice option, in option order. The answer controls inject these fragments instead of the raw option
+  // text, which would print TeX delimiters literally; the raw field text never reaches an HTML sink.
+  // svelte-ignore state_referenced_locally
+  let optionsHTML = $state<string[]>(initialOptionsHTML);
   // svelte-ignore state_referenced_locally
   let editHref = $state(initialEditHref);
   let renderToken = 0;
@@ -103,6 +113,7 @@
   // The HTML containers returned sanitized by the server: formulas are typeset only on them, never for the whole page.
   let frontSection = $state<HTMLElement | null>(null);
   let answerSection = $state<HTMLElement | null>(null);
+  let optionsSection = $state<HTMLElement | null>(null);
   let feedbackSection = $state<HTMLElement | null>(null);
   let revealedSection = $state<HTMLElement | null>(null);
 
@@ -235,17 +246,19 @@
       if (token !== renderToken) return;
       frontHTML = response.front_html;
       backHTML = response.back_html;
+      optionsHTML = response.options_html ?? [];
       editHref = response.edit_href;
       blanks = response.blanks ?? [];
       blankAnswers = blanks.map(() => '');
       await tick();
       // The per-blank inputs only appear with the render response, while the auto-focus on a card change runs before that, so it is topped up here.
       if (blanks.length && !feedback && !gradedRevealed) blankInputs[0]?.focus();
-      await typeset([frontSection, answerSection]);
+      await typeset([frontSection, answerSection, optionsSection]);
     } catch {
       if (token !== renderToken) return;
       frontHTML = '';
       backHTML = '';
+      optionsHTML = [];
       editHref = '';
     }
   }
@@ -256,6 +269,7 @@
     const token = ++renderToken;
     frontHTML = '';
     backHTML = '';
+    optionsHTML = [];
     editHref = '';
     blanks = [];
     blankAnswers = [];
@@ -1031,18 +1045,24 @@
                     class="field-input text-sm w-full min-h-12 text-lg"
                   />
                 {:else if answerControl === 'single'}
-                  <RadioGroup
-                    testId="review-graded-options"
-                    itemTestId="review-graded-option"
-                    itemClass="min-h-12"
-                    name="graded-single"
-                    ariaLabel={$t('review.ratings')}
-                    value={singleChoice === null ? '' : String(singleChoice)}
-                    onValueChange={(value) => (singleChoice = value === '' ? null : Number(value))}
-                    options={gradedOptions($cardTypes, current).map((option, index) => ({ value: String(index), label: option }))}
-                  />
+                  <div bind:this={optionsSection}>
+                    <RadioGroup
+                      testId="review-graded-options"
+                      itemTestId="review-graded-option"
+                      itemClass="min-h-12"
+                      name="graded-single"
+                      ariaLabel={$t('review.ratings')}
+                      value={singleChoice === null ? '' : String(singleChoice)}
+                      onValueChange={(value) => (singleChoice = value === '' ? null : Number(value))}
+                      options={gradedOptions($cardTypes, current).map((option, index) => ({
+                        value: String(index),
+                        label: option,
+                        html: optionsHTML[index] || undefined,
+                      }))}
+                    />
+                  </div>
                 {:else if answerControl === 'multi'}
-                  <div class="space-y-2" data-testid="review-graded-options">
+                  <div bind:this={optionsSection} class="space-y-2" data-testid="review-graded-options">
                     {#each gradedOptions($cardTypes, current) as option, index (index)}
                       <!-- The whole row is a label: clicking the option text toggles the checkbox too, consistent with the single-choice row being clickable; the selected style matches single choice. -->
                       <label
@@ -1057,7 +1077,7 @@
                             (multiChoice = checked ? [...multiChoice, index] : multiChoice.filter((item) => item !== index))}
                           label={option}
                         />
-                        <span>{option}</span>
+                        <span>{#if optionsHTML[index]}{@html optionsHTML[index]}{:else}{option}{/if}</span>
                       </label>
                     {/each}
                   </div>

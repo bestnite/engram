@@ -65,6 +65,31 @@ describe('ReviewView graded answering', () => {
     expect(multiHtml).toContain('偶数？');
   });
 
+  it('renders server-sanitized option HTML in the controls and never the raw option text', () => {
+    const single = gradedCard('choice_single', { question: '公式？', options: ['原始一', '原始二'], answer: 0 });
+    const singleHtml = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [single],
+        initialOptionsHTML: ['<p>公式 \\(x^2\\)</p>', '<p>选项二</p>'],
+      },
+    }).html;
+    expect(singleHtml).toContain('<p>公式 \\(x^2\\)</p>');
+    expect(singleHtml).not.toContain('原始一');
+
+    const multi = gradedCard('choice_multi', { question: '公式？', options: ['原始一', '原始二'], answers: [0] });
+    const multiHtml = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [multi],
+        initialOptionsHTML: ['<p>公式 \\(x^2\\)</p>', '<p>选项二</p>'],
+      },
+    }).html;
+    expect(multiHtml).toContain('<p>公式 \\(x^2\\)</p>');
+    // The checkbox keeps the raw option as its accessible name, so the rendered text is compared after removing markup and attributes.
+    expect(multiHtml.replace(/<[^>]*>/g, '')).not.toContain('原始一');
+  });
+
   it('renders the result panel from the server feedback, including sanitized answer HTML and rating mapping', () => {
     const feedback: GradedFeedback = {
       verdict: 'correct',
@@ -85,7 +110,7 @@ describe('ReviewView graded answering', () => {
     expect(html).toContain('回答正确');
     expect(html).toContain('data-testid="review-graded-score"');
     expect(html).toContain('100%');
-    // The correct answer is HTML sanitized by the server, rendered as-is (the only HTML sink).
+    // The correct answer is HTML sanitized by the server, rendered as-is (one of the review page's HTML sinks).
     expect(html).toContain('<strong>Paris</strong>');
     // The answer text renders as plain text and does not pass through the HTML sink.
     expect(html).toContain('paris');
