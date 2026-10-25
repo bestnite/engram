@@ -115,6 +115,10 @@ var mailVars = map[Type][]VarSpec{
 	},
 	TypeMediaDiskAlert: {
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
+		// The default body names the user who hit the quota, and the sender passes this value; without
+		// the entry here the editor pre-fill would lose the name and a custom template using it would
+		// be rejected as an unknown variable.
+		{Name: "username", Required: false, NoteKey: "admin.mail.var.username"},
 		{Name: "used", Required: false, NoteKey: "admin.mail.var.media_used"},
 		{Name: "limit", Required: false, NoteKey: "admin.mail.var.media_limit"},
 	},
