@@ -127,11 +127,12 @@ shortcodes have been used on a real deck.
     API, always from a click (no autoplay). Without `speechSynthesis`, or with no voice for that
     language, the control is absent and the text stays visible.
   - `audio` plays `data-audio-src` between `start` and `end`, honours `rate` and `loop`, seeks in
-    the same click. A failed load hides the control and keeps the text: an anonymous visitor on
-    `/s/:token` cannot read `/media` at all, because media reads require sign-in and anonymous
-    share sessions have nowhere to be recorded, which is the limitation images already have.
+    the same click. A failed load hides the control and keeps the text: a session that may not
+    read the bytes gets 404 from `/media` (`internal/web/media.go:267`), which is the limitation
+    images already have.
   - Call it wherever `typeset(...)` already runs: `ReviewView.svelte`, `NoteEditView.svelte`
-    (preview only) and `ShareBrowseView.svelte`.
+    (preview only) and `ShareBrowseView.svelte`. If M12-1 has already landed, `ShareBrowseView`
+    no longer exists and that third call site simply does not apply.
   - New control labels come from both catalogs under a `shortcode.` prefix appended at the end
     of each file, with identical key sets; nothing is hardcoded.
   - Depends on M11-1's DOM contract: do not start before M11-1 lands.
@@ -141,59 +142,64 @@ shortcodes have been used on a real deck.
   nothing twice, that a missing speech API leaves only the visible text, and that a media load
   error removes the control rather than showing a broken player. Evidence is the raw output of
   the frontend test run and `npm --prefix frontend run build`.
-- [ ] **M11-3 Link-scoped media reads for share browsing** — an anonymous visitor on
-  `/s/:token` cannot load any image or audio today: `mediaServe` requires sign-in
-  (`internal/web/media.go:267`), and an anonymous share session has nowhere for a read grant to
-  be recorded (`internal/web/publicshare.go:56-59`). Add a read route that treats the share token
-  as the credential, so a shared deck's own media load without sign-in and nothing else does.
-  Rejecting the cheaper alternative is part of the design: making media public for every deck
-  that holds an active link would publish the content-addressed blob, which other users' private
-  notes may reference through a dedup hit, would bypass a passphrase, and could not be recalled
-  from a browser cache.
-  - `GET /s/:token/media/:sha256`, registered only when the share dependencies are wired, like
-    `registerShareBrowseRoutes`.
-  - Check order: (1) resolve the link and answer 404 when it is revoked, expired or unknown,
-    without telling the three apart; (2) validate `sha` with the existing `mediaShaParamRE`;
-    (3) when the link carries no passphrase, continue at (5); (4) when it carries one, require the
-    unlock cookie below and answer 401 without a valid one; (5) require a `media_notes` row
-    pointing at a non-soft-deleted note of this deck, else 404; (6) serve the bytes under
-    `mediaServe`'s existing content-type allowlist, `nosniff` and `Content-Disposition` rules.
-  - The unlock cookie is stateless: `base64url(payload) + "." + base64url(HMAC-SHA256(secret,
-    "share-unlock:" + payload))` with payload
-    `{"token_sha":<sha256 of the link token>,"exp":<unix seconds>}`, signed
-    through the existing `auth.Manager.SignValue` / `VerifyValue`
-    (`internal/auth/session.go:94-126`), so no session, no table and no cleanup job exist. The
-    attributes are `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/s/<token>/` and `Max-Age=3600`.
-    It is issued only after `shareUnlock` has verified the passphrase. The purpose prefix is what
-    keeps a value signed for another use — a session id, the TOTP pending credential — from being
-    replayed here.
-  - Verification compares `payload.token_sha` with the sha256 of the token resolved from the
-    path, so a cookie minted for one link cannot read another link's media. The link is keyed by
-    its token (`share_links.token` is the primary key), so the token itself is never copied into
-    the cookie; its hash is enough to bind it.
-  - `Cache-Control` on this route is `private, max-age=3600`, not `immutable`: a revoked link then
-    converges within the hour in a browser cache instead of never.
-  - The share content path rewrites, inside HTML that has already been sanitized, exactly the
-    `/media/<64 hex characters>` value of `img[src]` and of `span[data-audio-src]` into
-    `/s/<token>/media/<sha>`. A tokenizer from `golang.org/x/net/html` (already a direct
-    dependency) walks the fragment; no other occurrence is touched, so a path that merely appears
-    in card text or a code span stays literal.
-  - Recorded so it is not mistaken for an oversight: this route gets no rate limiting, as is true
-    of the other share entry points; the only anonymous entry points that have limiting are
-    `/register` and `/forgot-password`.
-  - Depends on M11-1 for the `data-audio-src` attribute shape. M11-2 is not required: the route
-    and the rewrite are testable through the JSON transport.
 
-  *Acceptance:* tests in `internal/web` prove that an anonymous request with an active
-  passphrase-less link fetches a referenced medium and returns its exact bytes; that a sha
-  referenced only by another deck answers 404, so a token is not a general file proxy; that a
-  revoked or expired link answers 404; that a passphrase link answers 401 without the cookie and
-  200 with it; that an edited payload, an edited signature, an expired payload, a cookie minted
-  for another link, and a session cookie value presented as the unlock cookie each answer 401;
-  and that the rendered share HTML carries the rewritten addresses and no bare `/media/<sha>`
-  for media the deck references. The existing `internal/web/media_access_test.go` cases pass
-  unchanged. Evidence is the raw output of
-  `go test ./internal/web/... ./internal/store/... && go vet ./internal/web/...`.
+### M12 — Share link removal
+
+The owner has confirmed that no instance uses this feature, and every job it does is served by a
+better path: `POST /decks/:id/export` writes a self-contained `.edeck` that can inline media
+(`IncludeMedia`, `internal/store/package.go:97`), and sharing inside one instance already runs on
+`deck_grants` plus `share_invites`. A share link cannot serve a language deck at all, because an
+anonymous visitor can never read `/media`. Removing it also deletes the third branch of the media
+read rule, which is where the real simplification lies: three allow conditions become two, and a
+table and a grant concept disappear with them. Invites, grants and the receiving policy are a
+different feature and stay.
+
+- [ ] **M12-1 Remove share links end to end** — delete the anonymous read-only link transport, its
+  management endpoints, its two tables and the media authorization branch it fed. What stays:
+  `deck_grants`, `share_invites`, the accepting policy (`/api/v1/settings/share-policy`), the
+  sharing page at `/decks/:id/sharing`, the grant endpoints, and the `deck_share_invites`
+  retention sweep.
+  - Routes removed: `GET /s/:token`; `GET /api/v1/share/:token`;
+    `POST /api/v1/share/:token/unlock`; `POST /api/v1/share/:token/join`;
+    `POST /api/v1/decks/:id/sharing/links`; `DELETE /api/v1/decks/:id/sharing/links`; and
+    `DELETE /api/v1/decks/:id/sharing/links/revoke/:digest`.
+  - Files deleted whole: `internal/web/publicshare.go`, `internal/web/share_api.go`,
+    `internal/store/sharelink.go`, `internal/store/share_session.go`, and the tests that exist
+    only for them. Removed in place: the link handlers and link fields of
+    `internal/web/sharing_api.go`'s response, the link routes and the `ShareLinks` dependency and
+    field in `internal/web/server.go` and `internal/web/sharing.go`, the `ShareLink` and
+    `ShareSessionDeck` models and their `AllModels()` entries, and the frontend
+    `ShareBrowseView.svelte`, its client-router entry, the `getShare` / `unlockShare` /
+    `joinSharedDeck` client methods, the `ShareResponse` / `JoinShareResponse` types, and every
+    language-pack key used only by them.
+  - Media read rule: drop the share-session branch in `internal/store/media_mapping.go`
+    (`mediaReadableByUser`, `shareSessionDeckIDsQuery`) and the `sessionID` parameter that exists
+    only for it in `MediaAccessibleToUser` (`internal/store/media_access.go`) and in its caller
+    `internal/web/media.go`. Update the doc comments that enumerate the three conditions down to
+    two; a stale comment describing a branch that no longer exists is a defect.
+  - Migration: append `0008_drop_share_link_tables` to `BuiltinMigrations` in
+    `internal/store/migrate.go`, dropping `share_links` and `share_session_decks` on both drivers.
+    `AutoMigrate` is additive only, so a drop must be an explicit versioned migration.
+  - Audit rows: keep the `share_link_*` action constants and their labels. Historical audit rows
+    still reference them, and deleting the constants would render those rows unreadable.
+  - `ARCHITECTURE.md` loses the link transport, the two tables and the third read condition in the
+    same commit.
+
+  *Acceptance:* `grep -rn` over the repository finds no remaining reference to `share_links`,
+    `share_session_decks`, `ShareLink`, `ShareSessionDeck`, `resolveShareLink`, `shareUnlock`,
+    `shareJoin`, `recordShareGrant`, or `share-browse`, except the retained audit constants and
+    their labels. A test on a fresh database shows neither table exists, and the same test on a
+    database that already holds rows for both tables shows the migration drops them and leaves
+    `deck_grants`, `deck_share_invites` and the rest untouched. The media authorization tests that
+    covered the removed branch are deleted rather than weakened, and a positive case proves that a
+    deck member still reads the deck's media while a stranger still cannot. Evidence is the raw
+    output of `go test ./internal/web/... ./internal/store/... ./internal/auth/... &&
+    go vet ./internal/web/... ./internal/store/...`, the frontend test run,
+    `npm --prefix frontend run build`, and the grep above. If `TEST_PG_DSN` was unset, say so
+    explicitly instead of implying the PostgreSQL path of the migration was exercised.
+
+  Removal is breaking: seven REST routes disappear and two tables are dropped. The release that
+  carries it must say so in the ledger, and the commit message must name the removed routes.
 
 ---
 
