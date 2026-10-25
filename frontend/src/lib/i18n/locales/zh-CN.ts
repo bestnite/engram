@@ -173,6 +173,7 @@ export const zhCN: LocaleCatalog = {
   'auth.login.title': '登录',
   'auth.login.heading': '登录 Engram',
   'auth.login.submit': '登录',
+  'auth.login.to_register': '还没有账号？立即注册',
   'auth.field.username': '用户名',
   'auth.field.password': '密码',
   'auth.error.invalid_credentials': '用户名或密码错误',

@@ -173,6 +173,7 @@ export const en: LocaleCatalog = {
   'auth.login.title': 'Log In',
   'auth.login.heading': 'Log In to Engram',
   'auth.login.submit': 'Log In',
+  'auth.login.to_register': 'Need an account? Create one',
   'auth.field.username': 'Username',
   'auth.field.password': 'Password',
   'auth.error.invalid_credentials': 'Invalid username or password',
