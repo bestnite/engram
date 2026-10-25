@@ -1349,13 +1349,7 @@ export const en: LocaleCatalog = {
   'review.extra_new.invalid': 'Enter a whole number from 1 to {max}.',
   'review.extra_new.failed': 'Could not add new cards. Try again.',
   'deck.settings.extra_today': 'Added today',
-  // ---- Rating buttons: next interval and the how-to-choose popover ----
-  'review.interval.under_minute': '<1m',
-  'review.interval.minutes': '{n}m',
-  'review.interval.hours': '{n}h',
-  'review.interval.days': '{n}d',
-  'review.interval.months': '{n}mo',
-  'review.interval.years': '{n}y',
+  // ---- Rating buttons: the how-to-choose popover ----
   'help.review.ratings_label': 'How to choose a rating',
-  'help.review.ratings': 'Again: you could not recall it, or you recalled it wrong.\nHard: you recalled it, but only with real effort or long hesitation. This still counts as remembered; if you could not recall it, choose Again.\nGood: you recalled it after normal thought. Choose this when unsure.\nEasy: you recalled it almost without thinking. Judge this recall only, not how simple the content is.\nUnder each button is roughly how long until the card comes back if you choose it.',
+  'help.review.ratings': 'Again: you could not recall it, or you recalled it wrong.\nHard: you recalled it, but only with real effort or long hesitation. This still counts as remembered; if you could not recall it, choose Again.\nGood: you recalled it after normal thought. Choose this when unsure.\nEasy: you recalled it almost without thinking. Judge this recall only, not how simple the content is.',
 };
