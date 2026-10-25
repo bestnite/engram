@@ -1332,7 +1332,7 @@ export const zhCN: LocaleCatalog = {
   'help.stats.tag.retention': '近 30 天内带这个标签的到期复习中，答对（评分不是「重来」）的比例。没有到期复习时显示「暂无数据」。',
   'help.stats.retention_buckets_label': '记忆强度',
   // ---- Note field syntax help (NoteFieldsForm's question-mark popover) ----
-  'note_help.text': '用 {{c1::内容}} 把要挖空的部分标出来。\n编号相同的挖空在同一张卡上一起考，每个编号各生成一张卡；其余挖空作为上下文显示答案。\n多个可接受的答案用 | 分隔：{{c1::答案|另一种说法}}，第一个是标准写法。\n可加提示：{{c1::答案::提示}}，复习时显示在空格处。',
+  'note_help.text': '用 {{c1::内容}} 把要挖空的部分标出来。\n编号相同的挖空在同一张卡上一起考，每个编号各生成一张卡；其余挖空作为上下文显示答案。\n多个可接受的答案用 | 分隔：{{c1::答案|另一种说法}}，第一个是标准写法。\n整个填空都在公式内时，多个答案用 \\alt 分隔：\\({{c1::a \\alt b}}\\)（公式里的 | 是 TeX）。\n可加提示：{{c1::答案::提示}}，复习时显示在空格处。',
   // ---- Form field help popover (presets, review page) ----
   'help.presets.retention': '希望到期复习时还记得的概率，填 0 到 1 之间的小数，如 0.9。\n设得越高，间隔越短，每天要复习的卡越多。',
   'help.presets.learning_steps': '新卡刚开始学时的复习间隔，按顺序走完后交给 FSRS 排程。\n用逗号分隔，单位 s / m / h / d，不写单位按分钟，如 1m,10m。\n留空表示不启用。',

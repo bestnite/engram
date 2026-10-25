@@ -1333,7 +1333,7 @@ export const en: LocaleCatalog = {
   'help.stats.tag.retention': 'Share of due reviews with this tag over the last 30 days that you got right (any rating except Again). Shows N/A when there were none.',
   'help.stats.retention_buckets_label': 'Memory strength',
   // ---- Note field syntax help (NoteFieldsForm popovers) ----
-  'note_help.text': 'Mark each part to hide with {{c1::text}}.\nDeletions with the same number are tested together on one card, and each number makes its own card; the other deletions show their answer as context.\nSeparate accepted answers with |: {{c1::answer|alternative}}; the first one is the standard form.\nAdd a hint with {{c1::answer::hint}}; it appears in the blank during review.',
+  'note_help.text': 'Mark each part to hide with {{c1::text}}.\nDeletions with the same number are tested together on one card, and each number makes its own card; the other deletions show their answer as context.\nSeparate accepted answers with |: {{c1::answer|alternative}}; the first one is the standard form.\nWhen the whole blank sits inside a formula, separate accepted answers with \\alt: \\({{c1::a \\alt b}}\\) (a | inside a formula is TeX).\nAdd a hint with {{c1::answer::hint}}; it appears in the blank during review.',
   // ---- Form field help popovers (presets, review) ----
   'help.presets.retention': 'The chance of still remembering a card when it comes due, as a decimal between 0 and 1, e.g. 0.9.\nHigher values mean shorter intervals and more reviews each day.',
   'help.presets.learning_steps': 'Intervals for a new card while you first learn it; after the last step FSRS takes over scheduling.\nComma-separated, with units s / m / h / d (minutes when no unit is given), e.g. 1m,10m.\nLeave empty to disable.',
