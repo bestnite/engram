@@ -897,7 +897,11 @@ export class ApiClient {
     return this.request<APIKeysResponse>('/api/v1/keys');
   }
 
-  async createAPIKey(input: { name: string; scopes: string[] }): Promise<{ key: APIKeyRecord; plaintext: string }> {
+  /**
+   * Create a key for the current account. `expires_at` is an RFC3339/ISO timestamp computed by the caller;
+   * omitting it (or null) means the key never expires.
+   */
+  async createAPIKey(input: { name: string; scopes: string[]; expires_at?: string | null }): Promise<{ key: APIKeyRecord; plaintext: string }> {
     return this.request<{ key: APIKeyRecord; plaintext: string }>('/api/v1/keys', {
       method: 'POST',
       body: JSON.stringify(input),

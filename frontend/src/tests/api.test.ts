@@ -202,6 +202,15 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(deleteCall[0]).toBe('/api/v1/keys/1');
       expect(new Headers((deleteCall[1] as RequestInit).headers).get('X-CSRF-Token')).toBe('csrf-test');
     });
+
+    it('passes an expiry timestamp through to the create request', async () => {
+      client.setCsrfToken('csrf-test');
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ key: { id: 2, name: 'cli', prefix: 'fcard_ab', scopes: 'read', created_at: '' }, plaintext: 'secret-once' }), { status: 201 }));
+      const expiresAt = '2030-01-01T00:00:00.000Z';
+      await client.createAPIKey({ name: 'cli', scopes: ['read'], expires_at: expiresAt });
+      const createCall = mockFetch.mock.calls[0]!;
+      expect(JSON.parse((createCall[1] as RequestInit).body as string)).toEqual({ name: 'cli', scopes: ['read'], expires_at: expiresAt });
+    });
   });
 
   it('loads the explicit per-visible-deck queue count contract', async () => {

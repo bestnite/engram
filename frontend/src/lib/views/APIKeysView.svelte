@@ -9,24 +9,97 @@
   import { toast } from '../components/ui/toast';
   import { Copy, X } from '@lucide/svelte';
   import { onMount } from 'svelte';
-  import { t } from '../i18n';
+  import { t, localeStore } from '../i18n';
   import { apiClient, getApiErrorMessageKey, type APIKeyRecord } from '../api';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
+  import Select from '../components/ui/Select.svelte';
+  import type { SelectOption } from '../components/ui/options';
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  /** Days added to "now" for each fixed preset; the key offers a day count, not a calendar date. */
+  const EXPIRY_PRESET_DAYS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 };
 
   let keys = $state<APIKeyRecord[]>([]);
   let name = $state('');
   let scopes = $state<string[]>(['read']);
+  let expiryPreset = $state('never');
+  let customDate = $state('');
+  let expiryError = $state('');
   let plaintext = $state<string | null>(null);
   let loading = $state(true);
   let saving = $state(false);
   let revokingId = $state<string | null>(null);
 
-  // The list returned by the server **includes revoked keys** (with revoked_at). The UI renders two groups by state,
-  // instead of deleting revoked entries from the local array — a local delete only lasts this session, and they come back after a refresh.
-  const activeKeys = $derived(keys.filter((k) => !k.revoked_at));
+  // The list returned by the server **includes revoked keys** (with revoked_at). The UI renders groups by state,
+  // instead of deleting entries from the local array — a local delete only lasts this session, and they come back after a refresh.
+  //
+  // State precedence mirrors the server's APIKeyState: revoked beats expired, so a key that is both is listed as revoked
+  // and never appears twice. Expiry is judged against the same boundary as the server: expires_at <= now means expired.
+  function isExpired(key: APIKeyRecord, at: number): boolean {
+    if (key.revoked_at || !key.expires_at) return false;
+    const expiresAt = new Date(key.expires_at).getTime();
+    return Number.isFinite(expiresAt) && expiresAt <= at;
+  }
+
+  const activeKeys = $derived(keys.filter((k) => !k.revoked_at && !isExpired(k, Date.now())));
+  const expiredKeys = $derived(keys.filter((k) => isExpired(k, Date.now())));
   const revokedKeys = $derived(keys.filter((k) => k.revoked_at));
+
+  const expiryOptions = $derived<SelectOption[]>([
+    { value: 'never', label: $t('keys.expiry.never') },
+    { value: '7d', label: $t('keys.expiry.days_7') },
+    { value: '30d', label: $t('keys.expiry.days_30') },
+    { value: '90d', label: $t('keys.expiry.days_90') },
+    { value: '1y', label: $t('keys.expiry.year_1') },
+    { value: 'custom', label: $t('keys.expiry.custom') },
+  ]);
+
+  /** Expiry is displayed in the reader's local time zone, because that is the day they picked in the create form. */
+  function formatExpiry(iso: string): string {
+    return new Intl.DateTimeFormat($localeStore, { dateStyle: 'medium' }).format(new Date(iso));
+  }
+
+  /** Today as `YYYY-MM-DD` in local time, the earliest day the date input offers. */
+  function todayLocal(): string {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }
+
+  /**
+   * Resolves the chosen expiry into the UTC instant sent to the server.
+   * Returns null for "never", a string for a valid choice, and undefined when the input is invalid (the error is set instead).
+   *
+   * A custom date means the end of the chosen local day: the user picks a day, not a time, and the key stays usable
+   * through that whole day. The instant is therefore 23:59:59 local, which `Date` converts to UTC on serialisation.
+   */
+  function resolveExpiresAt(): string | null | undefined {
+    expiryError = '';
+    if (expiryPreset === 'never') return null;
+    if (expiryPreset === 'custom') {
+      if (!customDate) {
+        expiryError = 'keys.expiry.error_required';
+        return undefined;
+      }
+      const [year, month, day] = customDate.split('-').map(Number);
+      if (!year || !month || !day) {
+        expiryError = 'keys.expiry.error_required';
+        return undefined;
+      }
+      const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 0);
+      if (!(endOfDay.getTime() > Date.now())) {
+        expiryError = 'keys.expiry.error_past';
+        return undefined;
+      }
+      return endOfDay.toISOString();
+    }
+    const days = EXPIRY_PRESET_DAYS[expiryPreset];
+    if (!days) return null;
+    return new Date(Date.now() + days * DAY_MS).toISOString();
+  }
 
   /** When silent is true it only swaps the data without setting loading, used for the in-place refresh after revoking (avoids the whole list flashing). */
   async function load(silent = false): Promise<void> {
@@ -42,14 +115,21 @@
 
   async function create(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    const expiresAt = resolveExpiresAt();
+    // undefined means the custom date was invalid; the reason is already shown under the field.
+    if (expiresAt === undefined) return;
     saving = true;
     plaintext = null;
     try {
-      const result = await apiClient.createAPIKey({ name: name.trim(), scopes });
+      // An explicit null would also mean "no expiry" to the server, but omitting the field keeps the request identical
+      // to the one the page sent before expiry existed.
+      const result = await apiClient.createAPIKey({ name: name.trim(), scopes, expires_at: expiresAt ?? undefined });
       keys = [...keys, result.key];
       plaintext = result.plaintext;
       name = '';
       scopes = ['read'];
+      expiryPreset = 'never';
+      customDate = '';
     } catch (err) {
       toast.error($t(getApiErrorMessageKey(err)));
     } finally {
@@ -168,6 +248,36 @@
           {/each}
         </div>
       </fieldset>
+      <div>
+        <span class="block text-sm font-medium text-foreground">{$t('keys.expiry.label')}</span>
+        <Select
+          class="mt-1.5"
+          value={expiryPreset}
+          onValueChange={(value) => {
+            expiryPreset = value;
+            expiryError = '';
+          }}
+          options={expiryOptions}
+          allowDeselect={false}
+          ariaLabel={$t('keys.expiry.label')}
+          testId="keys-expiry-preset"
+        />
+        {#if expiryPreset === 'custom'}
+          <!-- A custom expiry means the whole chosen day, so only a date is asked for, not a time. -->
+          <input
+            type="date"
+            bind:value={customDate}
+            min={todayLocal()}
+            oninput={() => (expiryError = '')}
+            aria-label={$t('keys.expiry.custom_label')}
+            data-testid="keys-expiry-date"
+            class="field-input mt-2 block w-full text-sm font-normal"
+          />
+        {/if}
+        {#if expiryError}
+          <p role="alert" data-testid="keys-expiry-error" class="mt-1.5 text-sm text-destructive-foreground">{$t(expiryError)}</p>
+        {/if}
+      </div>
       <Button type="submit" size="lg" testId="keys-create" loading={saving}>{$t('keys.create')}</Button>
     </form>
 
@@ -196,6 +306,9 @@
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-foreground">{key.name}</p>
               <p class="truncate font-mono text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
+              <p class="mt-0.5 text-xs text-muted-foreground">
+                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatExpiry(key.expires_at) }) : $t('keys.expiry.never_expires')}
+              </p>
             </div>
             <Button
               variant="ghost"
@@ -207,11 +320,28 @@
             >{$t('keys.revoke')}</Button>
           </li>
         {/each}
+        {#if expiredKeys.length > 0}
+          <!-- Expired keys are already rejected by the server, so they get their own group instead of standing with the usable ones. -->
+          <li class="border-b border-border bg-surface px-4 py-2 text-xs font-medium text-muted-foreground">{$t('keys.expiry.group_expired')}</li>
+          {#each expiredKeys as key (key.id)}
+            <li class="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0">
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-foreground">{key.name}</p>
+                <p class="truncate font-mono text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">{key.expires_at ? $t('keys.expiry.expired_on', { date: formatExpiry(key.expires_at) }) : ''}</p>
+              </div>
+              <Badge variant="warning" testId={`keys-expired-badge-${key.id}`}>{$t('keys.state.expired')}</Badge>
+            </li>
+          {/each}
+        {/if}
         {#each revokedKeys as key (key.id)}
           <li class="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0">
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm text-muted-foreground line-through">{key.name}</p>
               <p class="truncate font-mono text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
+              <p class="mt-0.5 text-xs text-muted-foreground">
+                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatExpiry(key.expires_at) }) : $t('keys.expiry.never_expires')}
+              </p>
             </div>
             <Badge testId={`keys-revoked-badge-${key.id}`}>{$t('keys.revoked')}</Badge>
           </li>
