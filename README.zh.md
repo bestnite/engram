@@ -66,9 +66,10 @@ Engram 内置 Streamable HTTP MCP 服务（挂载于 `/mcp`），通过用户 AP
 
 ### 工具列表
 
-Engram 暴露 18 个业务 MCP 工具：
+Engram 暴露 19 个业务 MCP 工具：
 
 - `list_decks` / `create_deck` / `update_deck`：查看可访问卡组、创建新卡组并指定调度预设，或修改卡组名称与描述。
+- `delete_deck`：连同笔记、卡片和学习进度一起删除卡组。仅所有者可以执行，且删除后不可恢复。
 - `list_card_types`：列出支持的题型，附每个题型的字段表和一条能通过校验的示例 note，agent 不必猜字段名与写法。
 - `search_notes` / `get_note` / `list_deck_tags`：按标签与关键词检索卡片、读取单条 note、列出卡组内用到的标签。
 - `create_notes` / `update_note` / `delete_note` / `bulk_notes`：批量建卡、就地更新、删除，以及批量打标签或删除；支持 Dry-Run 校验。

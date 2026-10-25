@@ -66,9 +66,10 @@ Create an API key in the **Settings** panel, then add Engram to your MCP client 
 
 ### Available Tools
 
-Engram provides 18 dedicated MCP tools:
+Engram provides 19 dedicated MCP tools:
 
 - `list_decks` / `create_deck` / `update_deck`: Inspect accessible decks, create new ones with custom scheduling presets, or rename and describe them.
+- `delete_deck`: Delete a deck together with its notes, cards and progress. Only the owner can do this, and the deletion cannot be undone.
 - `list_card_types`: List the supported card types with each type's fields and a validated example note, so an agent can write notes without guessing field names or syntax.
 - `search_notes` / `get_note` / `list_deck_tags`: Query notes with tag and keyword filters, read a single note, and list the tags used in a deck.
 - `create_notes` / `update_note` / `delete_note` / `bulk_notes`: Create, update and delete notes across all supported card types, with dry-run validation, bulk insertion and bulk tag or delete actions.

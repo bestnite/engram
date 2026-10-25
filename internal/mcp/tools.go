@@ -34,6 +34,11 @@ type updateDeckIn struct {
 	Description *string `json:"description,omitempty" jsonschema:"new deck description; omit to keep it, an empty string clears it"`
 }
 
+// deleteDeckIn is the input of delete_deck.
+type deleteDeckIn struct {
+	DeckID string `json:"deck_id" jsonschema:"the public id of the deck to delete"`
+}
+
 // searchNotesIn is the input of search_notes; deck_id is required.
 type searchNotesIn struct {
 	DeckID  string `json:"deck_id" jsonschema:"the public id of the deck to search in"`
@@ -224,6 +229,19 @@ func (s *Server) updateDeck(ctx context.Context, id Identity, in updateDeckIn) (
 		return nil, err
 	}
 	return s.api.ToDeckResponse(ctx, id.User.ID, *updated, store.RoleOwner), nil
+}
+
+// deleteDeck removes a deck and all of its content; it goes through the same service method as REST `DELETE /decks/:id` (owner only),
+// and returns the same body so the two transports cannot drift. The call is irreversible: the deck rows are hard-deleted.
+func (s *Server) deleteDeck(ctx context.Context, id Identity, in deleteDeckIn) (any, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.api.DeleteDeck(ctx, id.User, d.ID, id.apiKeyID()); err != nil {
+		return nil, err
+	}
+	return map[string]any{"deleted": true}, nil
 }
 
 func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn) (any, error) {

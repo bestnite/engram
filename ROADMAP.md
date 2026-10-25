@@ -59,8 +59,9 @@ release; a task moves into a release milestone when it is scheduled.
 
 **The machine surfaces are compatible with v0.1.10.**
 
-- No REST route and no MCP tool was added, removed or renamed. `get_due_cards` keeps its name
-  and its arguments; only its description mentions the new field.
+- No REST route was added, removed or renamed, and no MCP tool was removed or renamed. One MCP
+  tool was added, `delete_deck`. `get_due_cards` keeps its name and its arguments; only its
+  description mentions the new field.
 - No database migration was added: `BuiltinMigrations` holds the same eight entries as at the
   tag, in the same order.
 - No configuration key and no environment variable was added, removed or renamed.
@@ -82,6 +83,7 @@ release; a task moves into a release milestone when it is scheduled.
 | Class-D admin notifications | They carry RFC 8058 one-click unsubscribe headers, so an admin can opt out without logging in. | No |
 | Toast close button theme | The close button follows the page theme, including a live switch, instead of sonner's light palette in dark mode. | No |
 | Toolchain | Go 1.27 and Node 26 / npm 12 in `go.mod`, the Dockerfile, CI and the release workflow; `engines` requires node >= 26 and npm >= 12. | For from-source builds only — images and binaries are unaffected |
+| Deleting a deck over MCP | `delete_deck` removes a deck together with its notes, cards and progress. Only the deck's owner may call it, and the deletion is irreversible. It calls the same service method as `DELETE /api/v1/decks/:id` and returns the same response body. | No — an added tool; a client that does not call it sees no change |
 
 Not listed because neither a user nor an integration can observe them: the migration of code
 comments to English, the gitignored `.worktrees/` layout, the removal of dead SSR-era test
