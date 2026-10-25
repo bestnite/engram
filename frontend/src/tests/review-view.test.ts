@@ -86,8 +86,76 @@ describe('ReviewView graded answering', () => {
       },
     }).html;
     expect(multiHtml).toContain('<p>公式 \\(x^2\\)</p>');
-    // The checkbox keeps the raw option as its accessible name, so the rendered text is compared after removing markup and attributes.
+    // The raw option text must not leak anywhere, including into an accessible name.
     expect(multiHtml.replace(/<[^>]*>/g, '')).not.toContain('原始一');
+  });
+
+  it('names each multi-choice checkbox from its rendered option text', () => {
+    const multi = gradedCard('choice_multi', { question: '公式？', options: ['原始一', '原始二'], answers: [0] });
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [multi],
+        initialOptionsHTML: ['<p>公式 \\(x^2\\)</p>', '<p>选项二</p>'],
+      },
+    });
+
+    // The checkbox takes its accessible name from the element that shows the rendered option, so a screen reader hears the
+    // typeset formula instead of the raw TeX source.
+    const checkboxTag = html.match(/<[^>]*data-testid="review-graded-option"[^>]*>/)?.[0];
+    expect(checkboxTag).toBeTruthy();
+    const labelledBy = /aria-labelledby="([^"]+)"/.exec(checkboxTag!)?.[1];
+    expect(labelledBy).toBeTruthy();
+    expect(checkboxTag).not.toContain('aria-label=');
+
+    const labelledSpan = new RegExp(`<span id="${labelledBy}"[^>]*>([\\s\\S]*?)</span>`).exec(html);
+    expect(labelledSpan?.[1]).toContain('<p>公式 \\(x^2\\)</p>');
+    expect(html).not.toContain('aria-label="原始一"');
+  });
+
+  it('names each single-choice radio from its rendered option text', () => {
+    const single = gradedCard('choice_single', { question: '公式？', options: ['原始一', '原始二'], answer: 0 });
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [single],
+        initialOptionsHTML: ['<p>\\(x^2\\)</p>', '<p>选项二</p>'],
+      },
+    });
+
+    // Chromium's name-from-content for a button drops a typeset formula's text alternative, so a formula-only option would
+    // have no accessible name; each item must point at the element that renders its content instead.
+    const radioTags = [...html.matchAll(/<[^>]*data-testid="review-graded-option"[^>]*>/g)].map((match) => match[0]);
+    expect(radioTags).toHaveLength(2);
+    const labelledBy = /aria-labelledby="([^"]+)"/.exec(radioTags[0]!)?.[1];
+    expect(labelledBy).toBeTruthy();
+    const labelledSpan = new RegExp(`<span id="${labelledBy}"[^>]*>([\\s\\S]*?)</span>`).exec(html);
+    expect(labelledSpan?.[1]).toContain('<p>\\(x^2\\)</p>');
+
+    // The group is an options group, not a rating group: it must not announce itself as a recall rating.
+    const groupTag = html.match(/<[^>]*data-testid="review-graded-options"[^>]*>/)?.[0];
+    expect(groupTag).toContain('aria-label="选项"');
+    expect(html).not.toContain('选择回忆评分');
+  });
+
+  it('names the true/false radios through their translated label spans', () => {
+    const card = gradedCard('true_false', { statement: '地球是圆的', answer: true });
+    const { html } = render(ReviewView, { props: { initialLoading: false, initialCards: [card] } });
+
+    const groupTag = html.match(/<[^>]*data-testid="review-graded-options"[^>]*>/)?.[0];
+    expect(groupTag).toContain('aria-label="选项"');
+    expect(html).not.toContain('选择回忆评分');
+
+    const radioTags = [...html.matchAll(/<[^>]*data-testid="review-graded-option"[^>]*>/g)].map((match) => match[0]);
+    expect(radioTags).toHaveLength(2);
+    const names = radioTags.map((tag) => {
+      const id = /aria-labelledby="([^"]+)"/.exec(tag)?.[1];
+      expect(id).toBeTruthy();
+      const span = new RegExp(`<span id="${id}"[^>]*>([\\s\\S]*?)</span>`).exec(html);
+      return span?.[1];
+    });
+    expect(names[0]).toContain('对');
+    expect(names[1]).toContain('错');
   });
 
   it('renders the result panel from the server feedback, including sanitized answer HTML and rating mapping', () => {

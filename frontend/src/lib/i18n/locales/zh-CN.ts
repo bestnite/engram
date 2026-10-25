@@ -201,6 +201,7 @@ export const zhCN: LocaleCatalog = {
   'review.graded.placeholder_number': '输入数值',
   'review.graded.true': '对',
   'review.graded.false': '错',
+  'review.graded.options': '选项',
   'review.graded.show_answer': '显示答案',
   'review.graded.give_up': '记为重来并继续',
   'review.graded.correct': '回答正确',

@@ -48,6 +48,12 @@
     class: klass = '',
     onValueChange,
   }: Props = $props();
+
+  // Each item is named through the element that holds its content, not through the button's own text. Chromium's
+  // name-from-content for a button drops a typeset formula's text alternative, so a formula-only option was announced
+  // with no name at all; the span also gives plain-text options one stable naming target. The per-instance prefix keeps
+  // two mounted groups from producing the same ids.
+  const uid = $props.id();
 </script>
 
 <BitsRadioGroup.Root
@@ -59,17 +65,18 @@
   onValueChange={(next) => onValueChange?.(next)}
   class={cn('space-y-2', klass)}
 >
-  {#each options as option (option.value)}
+  {#each options as option, index (option.value)}
     <BitsRadioGroup.Item
       value={option.value}
       disabled={option.disabled}
+      aria-labelledby={`${uid}-label-${index}`}
       data-testid={itemTestIdPrefix ? `${itemTestIdPrefix}${option.value}` : itemTestId}
       class={cn(
         'flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-300 px-4 py-2.5 text-sm text-zinc-700 transition-colors hover:border-zinc-400 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-50 data-[state=checked]:font-medium data-[state=checked]:text-blue-700 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500 dark:data-[state=checked]:border-blue-600 dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-300',
         itemClass
       )}
     >
-      {#if option.html}{@html option.html}{:else}{option.label}{/if}
+      <span id={`${uid}-label-${index}`}>{#if option.html}{@html option.html}{:else}{option.label}{/if}</span>
     </BitsRadioGroup.Item>
   {/each}
 </BitsRadioGroup.Root>

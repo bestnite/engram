@@ -201,6 +201,7 @@ export const en: LocaleCatalog = {
   'review.graded.placeholder_number': 'Type a number',
   'review.graded.true': 'True',
   'review.graded.false': 'False',
+  'review.graded.options': 'Options',
   'review.graded.show_answer': 'Show answer',
   'review.graded.give_up': 'Mark as Again and continue',
   'review.graded.correct': 'Correct',

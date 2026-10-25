@@ -104,3 +104,20 @@ export async function typeset(nodes: Array<Element | null | undefined>): Promise
     // Typesetting failures do not bubble: the rest of the page keeps working as usual.
   }
 }
+
+/**
+ * removeMenuTabStops clears the tabindex MathJax puts on every rendered formula (`mjx-container[tabindex]`) below the given nodes.
+ *
+ * A formula inside a button, a checkbox row or another interactive control must not add a focus stop of its own: a tab stop nested
+ * in a control splits one control into two, and the keyboard user reaches the same control twice. The formula's context menu stays
+ * reachable with the mouse, which is the only reported use of that tab stop. Call this only after `typeset` on containers that live
+ * inside an interactive control; ordinary card content keeps the tab stop so keyboard users can still reach the menu there.
+ */
+export function removeMenuTabStops(nodes: Array<Element | null | undefined>): void {
+  for (const node of nodes) {
+    if (!node) continue;
+    for (const container of node.querySelectorAll('mjx-container[tabindex]')) {
+      container.removeAttribute('tabindex');
+    }
+  }
+}

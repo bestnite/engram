@@ -14,6 +14,11 @@
     disabled?: boolean;
     /** Must be given a label when there is no visible text (screen reader name). */
     label?: string;
+    /**
+     * The id of the element that supplies the accessible name, used when the name comes from rendered content.
+     * When set, `labelledBy` wins over `label` and `label` is not rendered.
+     */
+    labelledBy?: string;
     testId?: string;
     class?: string;
     onCheckedChange?: (checked: boolean) => void;
@@ -26,6 +31,7 @@
     indeterminate = false,
     disabled = false,
     label,
+    labelledBy,
     testId,
     class: klass = '',
     onCheckedChange,
@@ -37,7 +43,8 @@
   bind:checked
   {indeterminate}
   {disabled}
-  aria-label={label}
+  aria-label={labelledBy ? undefined : label}
+  aria-labelledby={labelledBy}
   data-testid={testId}
   onCheckedChange={(next) => onCheckedChange?.(next)}
   {onclick}

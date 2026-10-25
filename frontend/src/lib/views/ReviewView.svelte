@@ -5,7 +5,7 @@
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
   import { toast } from '../components/ui/toast';
-  import { typeset } from '../mathjax';
+  import { typeset, removeMenuTabStops } from '../mathjax';
   import { reviewShortcut, reviewSwipe } from '../review-shortcuts';
   import RadioGroup from '../components/ui/RadioGroup.svelte';
 
@@ -53,6 +53,10 @@
     initialRevealed = false,
     initialLastUndo = null,
   }: Props = $props();
+
+  // A per-instance id prefix for elements that labels point at with aria-labelledby. Two mounted review views (or a client-side
+  // remount) must not produce the same id, otherwise a checkbox could take its accessible name from the other view's option.
+  const uid = $props.id();
 
   // Self-graded card types render four rating buttons; answer-type card types render an input control and are graded by the server.
   // Which card type belongs to which class is decided by the server's self-description (graded / answer_control); the frontend no longer maintains a list.
@@ -254,6 +258,9 @@
       // The per-blank inputs only appear with the render response, while the auto-focus on a card change runs before that, so it is topped up here.
       if (blanks.length && !feedback && !gradedRevealed) blankInputs[0]?.focus();
       await typeset([frontSection, answerSection, optionsSection]);
+      // The option rows are interactive controls, so MathJax's keyboard entry to its context menu must not add a nested
+      // focus stop there; the prompt and answer sections are ordinary content and keep their tab stop.
+      removeMenuTabStops([optionsSection]);
     } catch {
       if (token !== renderToken) return;
       frontHTML = '';
@@ -1051,7 +1058,7 @@
                       itemTestId="review-graded-option"
                       itemClass="min-h-12"
                       name="graded-single"
-                      ariaLabel={$t('review.ratings')}
+                      ariaLabel={$t('review.graded.options')}
                       value={singleChoice === null ? '' : String(singleChoice)}
                       onValueChange={(value) => (singleChoice = value === '' ? null : Number(value))}
                       options={gradedOptions($cardTypes, current).map((option, index) => ({
@@ -1075,9 +1082,9 @@
                           checked={multiChoice.includes(index)}
                           onCheckedChange={(checked) =>
                             (multiChoice = checked ? [...multiChoice, index] : multiChoice.filter((item) => item !== index))}
-                          label={option}
+                          labelledBy={`${uid}-option-${index}`}
                         />
-                        <span>{#if optionsHTML[index]}{@html optionsHTML[index]}{:else}{option}{/if}</span>
+                        <span id={`${uid}-option-${index}`}>{#if optionsHTML[index]}{@html optionsHTML[index]}{:else}{option}{/if}</span>
                       </label>
                     {/each}
                   </div>
@@ -1104,7 +1111,7 @@
                     class="grid grid-cols-2 gap-3"
                     itemClass="min-h-12 justify-center font-medium"
                     name="graded-bool"
-                    ariaLabel={$t('review.ratings')}
+                    ariaLabel={$t('review.graded.options')}
                     value={boolChoice === null ? '' : String(boolChoice)}
                     onValueChange={(value) => (boolChoice = value === '' ? null : value === 'true')}
                     options={[
