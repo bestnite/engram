@@ -218,6 +218,62 @@ describe('ReviewView graded answering', () => {
   });
 });
 
+describe('ReviewView choice option display order', () => {
+  beforeEach(() => {
+    setLocale('zh-CN');
+  });
+
+  it('renders single-choice radios in display-slot order with stored-index values', () => {
+    const card = gradedCard('choice_single', { question: '问？', options: ['ALPHA', 'BETA', 'GAMMA'], answer: 0 });
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [card],
+        initialOptionsHTML: ['<p>ALPHA</p>', '<p>BETA</p>', '<p>GAMMA</p>'],
+        initialOptionOrder: [2, 0, 1],
+      },
+    });
+
+    // The rows are in display order while each radio's value is the stored index, so a submitted answer stays a stored index.
+    const radioTags = [...html.matchAll(/<[^>]*data-testid="review-graded-option"[^>]*>/g)].map((match) => match[0]);
+    expect(radioTags).toHaveLength(3);
+    expect(radioTags.map((tag) => /data-value="([^"]+)"/.exec(tag)?.[1])).toEqual(['2', '0', '1']);
+
+    // Each row's accessible name points at the slot's own label element, whose content follows the same display order.
+    const labelled = radioTags.map((tag) => {
+      const id = /aria-labelledby="([^"]+)"/.exec(tag)?.[1];
+      expect(id).toBeTruthy();
+      return new RegExp(`<span id="${id}"[^>]*>([\\s\\S]*?)</span>`).exec(html)?.[1];
+    });
+    expect(labelled[0]).toContain('GAMMA');
+    expect(labelled[1]).toContain('ALPHA');
+    expect(labelled[2]).toContain('BETA');
+  });
+
+  it('renders multi-choice rows in display-slot order with slot-keyed labels', () => {
+    const card = gradedCard('choice_multi', { question: '问？', options: ['ALPHA', 'BETA', 'GAMMA'], answers: [0] });
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [card],
+        initialOptionsHTML: ['<p>ALPHA</p>', '<p>BETA</p>', '<p>GAMMA</p>'],
+        initialOptionOrder: [2, 0, 1],
+      },
+    });
+
+    // Every row id is keyed by its display slot, so two orders never collide, and the label content follows display order.
+    const spans = [...html.matchAll(/<span id="([^"]*-option-(\d+))"[^>]*>([\s\S]*?)<\/span>/g)].map((match) => ({
+      slot: match[2],
+      content: match[3],
+    }));
+    expect(spans).toHaveLength(3);
+    expect(spans.map((span) => span.slot)).toEqual(['0', '1', '2']);
+    expect(spans[0]!.content).toContain('GAMMA');
+    expect(spans[1]!.content).toContain('ALPHA');
+    expect(spans[2]!.content).toContain('BETA');
+  });
+});
+
 describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
   beforeEach(() => {
     setLocale('zh-CN');

@@ -447,6 +447,13 @@ export interface DueCard {
   tags: string[];
   template?: string;
   version: number;
+  /**
+   * Display order of a choice card's options: display slot -> stored option index. `option_order[b] = s` means screen row `b`
+   * shows the option stored at index `s`; it is a permutation of `0..n-1` for choice_single / choice_multi and null for every
+   * other kind. The card's `fields.options` stay in stored order, and a submitted answer is a stored index (or an array of
+   * stored indices for choice_multi).
+   */
+  option_order?: number[] | null;
 }
 
 /**
@@ -573,6 +580,13 @@ export interface ReviewRenderResponse {
    * The answer controls inject these fragments, so they must never be replaced with the raw option text.
    */
   options_html?: string[] | null;
+  /**
+   * Display order of the options: display slot -> stored option index. `option_order[b] = s` means screen row `b` shows the
+   * option stored at index `s`; it is a permutation of `0..n-1` for choice_single / choice_multi and null for every other kind.
+   * `options_html` stays in stored order, and a submitted answer is a stored index (or an array of stored indices for
+   * choice_multi), so the page displays in this order and submits stored indices.
+   */
+  option_order?: number[] | null;
   /** Prompt per blank of a blanks-graded card (answer_control = 'blanks') on this card, in order of appearance; empty string for no prompt, null for other kinds. */
   blanks?: string[] | null;
   edit_href: string;
