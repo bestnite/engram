@@ -1348,13 +1348,7 @@ export const zhCN: LocaleCatalog = {
   'review.extra_new.invalid': '请输入 1 到 {max} 之间的整数。',
   'review.extra_new.failed': '追加新卡失败，请重试。',
   'deck.settings.extra_today': '今日追加',
-  // ---- Grade buttons: next interval and the "how to choose" popover ----
-  'review.interval.under_minute': '<1 分钟',
-  'review.interval.minutes': '{n} 分钟',
-  'review.interval.hours': '{n} 小时',
-  'review.interval.days': '{n} 天',
-  'review.interval.months': '{n} 个月',
-  'review.interval.years': '{n} 年',
+  // ---- Grade buttons: the "how to choose" popover ----
   'help.review.ratings_label': '怎么选评分',
-  'help.review.ratings': '重来：没想起来，或者想起的是错的。\n困难：想起来了，但费了很大劲或者犹豫了很久。这仍算记住了；没想起来请选「重来」。\n良好：正常想一想就答出来了。拿不准时选这个。\n简单：几乎不用想就答出来。只看这一次回忆，不看内容本身简不简单。\n按钮下面是选这一档之后，这张卡大约多久后再出现。',
+  'help.review.ratings': '重来：没想起来，或者想起的是错的。\n困难：想起来了，但费了很大劲或者犹豫了很久。这仍算记住了；没想起来请选「重来」。\n良好：正常想一想就答出来了。拿不准时选这个。\n简单：几乎不用想就答出来。只看这一次回忆，不看内容本身简不简单。',
 };

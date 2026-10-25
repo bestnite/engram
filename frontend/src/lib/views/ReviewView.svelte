@@ -7,7 +7,6 @@
   import { toast } from '../components/ui/toast';
   import { typeset } from '../mathjax';
   import { reviewShortcut, reviewSwipe } from '../review-shortcuts';
-  import { formatInterval } from '../review-interval';
   import RadioGroup from '../components/ui/RadioGroup.svelte';
 
   import Checkbox from '../components/ui/Checkbox.svelte';
@@ -99,8 +98,6 @@
   let backHTML = $state(initialBackHTML);
   // svelte-ignore state_referenced_locally
   let editHref = $state(initialEditHref);
-  // The next interval (in seconds) for each of the four ratings, keyed by rating 1–4; it arrives with the render response and is cleared on a card change.
-  let intervals = $state<Record<number, number>>({});
   let renderToken = 0;
 
   // The HTML containers returned sanitized by the server: formulas are typeset only on them, never for the whole page.
@@ -239,7 +236,6 @@
       frontHTML = response.front_html;
       backHTML = response.back_html;
       editHref = response.edit_href;
-      intervals = Object.fromEntries((response.intervals ?? []).map((item) => [item.rating, item.seconds]));
       blanks = response.blanks ?? [];
       blankAnswers = blanks.map(() => '');
       await tick();
@@ -261,7 +257,6 @@
     frontHTML = '';
     backHTML = '';
     editHref = '';
-    intervals = {};
     blanks = [];
     blankAnswers = [];
     essayText = '';
@@ -929,10 +924,6 @@
                   data-rating={rating}
                 >
                   <span class="block text-sm font-semibold">{$t(`review.rating.${rating}`)}</span>
-                  <!-- How long until this card is seen again after choosing this rating: the interval is the consequence of the rating, easier to compare than a textual explanation. -->
-                  {#if intervals[rating] !== undefined}
-                    <span class="block text-xs font-normal tabular-nums opacity-75" data-testid="review-rating-interval">{formatInterval(intervals[rating] ?? 0, $t)}</span>
-                  {/if}
                 </button>
               {/each}
             </div>
