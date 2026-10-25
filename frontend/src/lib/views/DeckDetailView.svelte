@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { routeStore } from '../router';
+  import { navigate, routeStore } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Deck, DeckTag, Note, BulkNotesResponse } from '../api';
@@ -54,6 +54,11 @@
   let noteToDelete = $state<Note | null>(null);
   let deletingNoteId = $state<string | null>(null);
   let deleteError = $state('');
+
+  // Deck deletion state: the entry point is owner-only, and a successful delete leaves the page.
+  let confirmDeleteOpen = $state(false);
+  let deletingDeck = $state(false);
+  let deleteDeckError = $state(false);
 
   // Export dialog state
   let showExportModal = $state(false);
@@ -160,6 +165,25 @@
             : 'deck.settings.info_error_failed';
       toast.error($t(key));
       return false;
+    }
+  }
+
+  /**
+   * Delete this deck after the confirmation dialog: on success the deck no longer exists, so the page cannot stay —
+   * navigate to the deck list. A failure keeps the dialog open with its error line, because closing it would look like success.
+   */
+  async function deleteDeck(): Promise<void> {
+    if (!deck || deletingDeck) return;
+    deletingDeck = true;
+    deleteDeckError = false;
+    try {
+      await apiClient.deleteDeck(deckId);
+      confirmDeleteOpen = false;
+      navigate('/decks');
+    } catch {
+      deleteDeckError = true;
+    } finally {
+      deletingDeck = false;
     }
   }
 
@@ -456,6 +480,18 @@
         <Play class="size-4" aria-hidden="true" />
         <span>{$t('home.start_review')}</span>
       </Button>
+      {#if isOwner}
+        <Button
+          variant="ghost"
+          size="lg"
+          label={$t('decks.delete.action')}
+          title={$t('decks.delete.action')}
+          testId="deck-delete-open"
+          onclick={() => { deleteDeckError = false; confirmDeleteOpen = true; }}
+        >
+          <Trash2 class="size-4" aria-hidden="true" />
+        </Button>
+      {/if}
     {/snippet}
   </PageHeader>
 
@@ -873,6 +909,34 @@
     <Button type="button" variant="outline" size="lg" onclick={() => (showExportModal = false)}>{$t('note_edit.cancel')}</Button>
     <Button type="button" testId="deck-package-export" loading={exporting} onclick={exportPackage} variant="primary" size="lg">
       {$t('package.export.action')}
+    </Button>
+  </div>
+</Dialog>
+
+<!-- Deck delete confirmation: deleting the deck destroys its cards, so it takes one explicit confirmation step. -->
+<Dialog
+  bind:open={confirmDeleteOpen}
+  title={$t('decks.delete.confirm_title')}
+  description={$t('decks.delete.confirm_desc', { name: deck?.name ?? '' })}
+  testId="deck-detail-delete-dialog"
+  size="sm"
+>
+  {#if deleteDeckError}
+    <p role="alert" class="text-sm text-destructive-foreground" data-testid="deck-delete-error">{$t('decks.delete.failed')}</p>
+  {/if}
+  <div class="mt-2 flex items-center justify-end gap-2">
+    <Button
+      type="button"
+      variant="outline"
+      size="lg"
+      disabled={deletingDeck}
+      testId="deck-delete-cancel"
+      onclick={() => (confirmDeleteOpen = false)}
+    >
+      {$t('decks.delete.cancel_btn')}
+    </Button>
+    <Button type="button" variant="danger" size="lg" loading={deletingDeck} testId="deck-delete-confirm" onclick={deleteDeck}>
+      {$t('decks.delete.confirm_btn')}
     </Button>
   </div>
 </Dialog>

@@ -102,3 +102,40 @@ describe('DeckDetailView notes table', () => {
     expect(html).toContain('data-testid="note-menu-n1"');
   });
 });
+
+/**
+ * Deleting a deck destroys its cards and is allowed only to the owner (the server enforces the same rule),
+ * so the header entry point must follow the role the server reports.
+ */
+describe('DeckDetailView deck deletion entry', () => {
+  beforeEach(() => {
+    setLocale('zh-CN');
+    setCardTypes(null);
+    routeStore.set(matchRoute('/decks/d1'));
+  });
+
+  it('offers the owner a delete entry in the header', () => {
+    const html = renderView([note('n1')], 'owner');
+    expect(html).toContain('data-testid="deck-delete-open"');
+  });
+
+  it.each(['editor', 'reader'] as const)('hides the delete entry from a %s', (role) => {
+    const html = renderView([note('n1')], role);
+    expect(html).not.toContain('data-testid="deck-delete-open"');
+  });
+
+  it('keeps the actions each non-owner role may use', () => {
+    const editor = renderView([note('n1')], 'editor');
+    expect(editor).toContain('data-testid="deck-export-open"');
+    expect(editor).toContain('data-testid="create-note-link"');
+    expect(editor).toContain('data-testid="deck-tag-review-open"');
+    expect(editor).toContain('data-testid="deck-start-review"');
+
+    const reader = renderView([note('n1')], 'reader');
+    expect(reader).toContain('data-testid="deck-export-open"');
+    expect(reader).toContain('data-testid="deck-tag-review-open"');
+    expect(reader).toContain('data-testid="deck-start-review"');
+    expect(reader).not.toContain('data-testid="create-note-link"');
+    expect(reader).not.toContain('data-testid="deck-delete-open"');
+  });
+});
