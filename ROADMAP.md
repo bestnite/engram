@@ -51,6 +51,66 @@ release; a task moves into a release milestone when it is scheduled.
   settings read as the first row.
   *Do not start until the callback shape is decided.*
 
+### M11 — Card content shortcodes
+
+Card content is Markdown plus TeX rendered server-side by `internal/render`. Markdown cannot
+express inline audio, speech or ruby annotation, and the content allowlist deliberately forbids
+`style`, `data-*` and every script-capable element, so raw HTML is not an option either. This
+milestone adds one fixed set of single-line shortcodes, expanded at render time, plus the browser
+side that turns them into controls. Adding further shortcodes means adding a row to that table,
+not widening the allowlist.
+
+- [ ] **M11-1 Shortcode layer in `internal/render` with `tts`, `audio` and `ruby`** — add a
+  goldmark inline parser and one fixed shortcode table in `internal/render` (a new file beside
+  `render.go`, sharing the existing pipeline). Syntax is single-line, non-nesting,
+  `{{name:body|key=value|...}}`.
+  - `{{tts:こんにちは|lang=ja-JP|rate=0.9}}` → `<span class="engram-tts" data-tts-text="…"
+    data-tts-lang="…" data-tts-rate="…">こんにちは</span>`, the body staying as visible text.
+  - `{{audio:/media/<sha256>|start=12.5|end=15|rate=0.75|loop}}` → `<span class="engram-audio"
+    data-audio-src="…" …>…</span>`, the same visible-text rule.
+  - `{{ruby:漢字|かんじ}}` → `<ruby>漢字<rt>かんじ</rt></ruby>`.
+  - An unknown name, a malformed parameter or a body containing `{{` or `}}` emits the source
+    text unchanged: a shortcode never makes rendering fail.
+  - The server emits no `<audio>`, no `<button>` and no event attribute; the controls come from
+    M11-2.
+  - Allowlist changes are exactly: the elements `ruby`, `rt`, `rp`, and the named `data-tts-*` /
+    `data-audio-*` attributes on `span`, each with a value regex. A general `data-*`, `style`, or
+    any other attribute stays forbidden.
+  - `RenderMailMarkdown` renders each shortcode as plain text: `tts` and `audio` as their body,
+    `ruby` as `漢字(かんじ)`.
+  - Structural change: `ARCHITECTURE.md` gains the shortcode layer and its contract in the same
+    commit.
+
+  *Acceptance:* table-driven tests in `internal/render` prove each expansion, that a shortcode
+  inside a code span or a fenced block stays literal, that an unknown or malformed shortcode
+  returns its source verbatim, that a body carrying `"` or `<` cannot escape its attribute and
+  cannot introduce an attribute outside the allowlist, and that the mail renderer produces plain
+  text for all three. The existing `TestRenderMarkdown*` cases still pass unchanged. Evidence is
+  the raw output of `go test ./internal/render/... && go vet ./internal/render/...`.
+- [ ] **M11-2 Review, preview and share pages turn shortcodes into controls** — add one frontend
+  enhancement entry point in the pattern of `frontend/src/lib/mathjax/index.ts`: it takes the
+  HTML container already sanitized by the server and binds `[data-tts-*]` and `[data-audio-*]`
+  through event delegation, is idempotent when the same container is enhanced twice, and never
+  reads raw card text.
+  - `tts` speaks `data-tts-text` with `data-tts-lang` and `data-tts-rate` through the Web Speech
+    API, always from a click (no autoplay). Without `speechSynthesis`, or with no voice for that
+    language, the control is absent and the text stays visible.
+  - `audio` plays `data-audio-src` between `start` and `end`, honours `rate` and `loop`, seeks in
+    the same click. A failed load hides the control and keeps the text: an anonymous visitor on
+    `/s/:token` cannot read `/media` at all, because media reads require sign-in and anonymous
+    share sessions have nowhere to be recorded, which is the limitation images already have.
+  - Call it wherever `typeset(...)` already runs: `ReviewView.svelte`, `NoteEditView.svelte`
+    (preview only) and `ShareBrowseView.svelte`.
+  - New control labels come from both catalogs under a `shortcode.` prefix appended at the end
+    of each file, with identical key sets; nothing is hardcoded.
+  - Depends on M11-1's DOM contract: do not start before M11-1 lands.
+
+  *Acceptance:* jsdom tests with stubbed `speechSynthesis` and media playback prove that each
+  call site enhances the container it typesets, that a second enhancement of the same DOM binds
+  nothing twice, that a missing speech API leaves only the visible text, and that a media load
+  error removes the control rather than showing a broken player. Evidence is the raw output of
+  the frontend test run and `npm --prefix frontend run build`.
+
 ---
 
 ## 2. Release ledger
