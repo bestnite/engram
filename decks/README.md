@@ -13,7 +13,6 @@ explicitly included them.
 | :--- | :--- | :--- | ---: | ---: | :--- |
 | [`百化分.edeck`](./百化分.edeck) | 百化分 | 资料分析 percentage ↔ fraction drills, 36 prompts each way (`50% = 1/？` and `1/2.8 ≈ ？（百分数）`) | 72 | 72 | `百化分` |
 | [`平方数与常用幂.edeck`](./平方数与常用幂.edeck) | 平方数与常用幂 | Speed-arithmetic recall: perfect squares 11²–30², the growth powers \((1+r)^{n}\) for r = 1–10% and 15–50%, and five common square roots | 89 | 89 | `平方数` `常用幂` `开方` |
-| [`资料分析公式.edeck`](./资料分析公式.edeck) | 资料分析公式 | Data-analysis formulas as cloze cards, plus single-choice drills on which expression a given set of conditions calls for: growth, share, average, multiple, contribution rate, units | 70 | 70 | `增长` `比重` `平均数` `倍数` `概念` `单位` |
 | [`花生十三高频成语 1000 词.edeck`](./花生十三高频成语%201000%20词.edeck) | 花生十三高频成语 1000 词 | 993 high-frequency idioms and content words from the 花生十三 lecture handout, tagged by the handout's own category and sub-category names | 993 | 993 | 291 tags, e.g. `中华文明传统文化`, `搭档配合`, `需要积累的其他词语` |
 
 ## Importing a deck
