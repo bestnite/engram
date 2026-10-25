@@ -18,6 +18,7 @@ type ClozeDeletion struct {
 	Start int    // Start byte offset, pointing at "{{".
 	End   int    // End byte offset, right after the closing "}}".
 	// InMath says the whole cloze falls inside a formula: the front and back must highlight in TeX, and a pipe inside the content also belongs to TeX.
+	// A pipe therefore never separates answers here, so several accepted answers in a formula are written with \alt instead.
 	InMath bool
 }
 
@@ -32,7 +33,8 @@ type ClozeDeletion struct {
 //   - A single "{" directly before a cloze belongs to the outer text (TeX grouping): "{{{c1::x}}}" parses as
 //     "{" + cloze x + "}".
 //   - An unclosed cloze item or one with empty content returns a readable English error.
-//   - A top-level | in the content separates several acceptable answers (see clozeAlternatives); it is not split at parse time and stays verbatim in Text.
+//   - Several acceptable answers are separated by a top-level \alt, or, when the cloze is not inside a formula, by a top-level | (see splitAlternatives).
+//     Separators are not split at parse time: they stay verbatim in Text.
 //
 // With no cloze items it returns an empty slice and a nil error, leaving it to the caller (Validate) to decide how to report that.
 func ParseCloze(text string) ([]ClozeDeletion, error) {
@@ -191,9 +193,12 @@ func (clozeType) Validate(fields map[string]any) error {
 		return errors.New(`cloze: field "text" must contain at least one cloze deletion like {{c1::text}}`)
 	}
 	for _, d := range dels {
+		if !d.InMath && altInsideFormula(d.Text) {
+			return fmt.Errorf(`cloze: cloze deletion c%d has \alt inside a formula; write the alternatives outside the formula, each wrapped in its own formula, for example {{c1::\(a\)|\(b\)}}`, d.Index)
+		}
 		for _, alt := range splitAlternatives(d.Text, d.InMath) {
 			if strings.TrimSpace(alt) == "" {
-				return fmt.Errorf("cloze: cloze deletion c%d has an empty answer alternative around \"|\"", d.Index)
+				return fmt.Errorf("cloze: cloze deletion c%d has an empty answer alternative around \"|\" or \"\\alt\"", d.Index)
 			}
 		}
 	}
@@ -281,7 +286,9 @@ func renderCloze(text string, dels []ClozeDeletion, target int, reveal bool) str
 			// An untested cloze is context, so give only the canonical wording, so the sentence still reads.
 			b.WriteString(stripCloze(alts[0]))
 		case reveal && d.InMath:
-			b.WriteString(`\boxed{` + stripCloze(alts[0]) + `}`)
+			// Every acceptable answer is boxed as one unit: \alt separates answers that are all correct, so the back has to show all of them.
+			// The spaces around the separator are trimmed so the joined TeX keeps the single spacing of the separator itself.
+			b.WriteString(`\boxed{` + strings.Join(trimEach(stripEach(alts)), `\ /\ `) + `}`)
 		case reveal:
 			// When revealing the tested point, list every acceptable wording so the user can see which phrasings all count.
 			b.WriteString(`<span class="cloze">` + strings.Join(stripEach(alts), " / ") + `</span>`)
@@ -339,7 +346,7 @@ func (clozeType) GivenText(_ map[string]any, detail map[string]any) string {
 }
 
 // Grade compares blank by blank and scores proportionally: score = blanks answered correctly / total target clozes.
-// When one blank has several acceptable answers (separated by |), matching any one counts as correct.
+// When one blank has several acceptable answers (separated by \alt, or by | outside a formula), matching any one counts as correct.
 // Comparison ignores case and collapses whitespace; when the answer as a whole is an inline formula \( … \), the form without the delimiters also counts,
 // because a typeset formula cannot be typed into an input box. More answers than blanks counts as ungradable (answers out of step with the card face);
 // with fewer answers than blanks, the missing blanks count as unanswered.
@@ -439,6 +446,15 @@ func stripEach(alts []string) []string {
 	return out
 }
 
+// trimEach trims the surrounding whitespace of each alternative answer.
+func trimEach(alts []string) []string {
+	out := make([]string, len(alts))
+	for i, alt := range alts {
+		out[i] = strings.TrimSpace(alt)
+	}
+	return out
+}
+
 // clozeAlternatives returns all acceptable answers for one cloze, the first being the canonical wording; empty alternatives are dropped,
 // and when they are all empty it falls back to the raw text (such wording would not pass Validate; this only guards against old data).
 func clozeAlternatives(text string, inMath bool) []string {
@@ -454,34 +470,49 @@ func clozeAlternatives(text string, inMath bool) []string {
 	return out
 }
 
-// splitAlternatives splits the cloze content at top-level |, keeping empty segments so Validate can report them.
+// splitAlternatives splits the cloze content at top-level separators, keeping empty segments so Validate can report them.
 //
-// Pipes that are not split on:
-//   - A pipe inside a formula (\(|x|\) is absolute value). Nothing is split when the whole cloze sits inside a formula.
-//   - A pipe inside nested {{ }}, which belongs to the nested content.
+// Two separators exist:
+//   - \alt separates answers in a math cloze, whose whole content is a TeX fragment, and at the top level of a plain-text cloze.
+//     It is not a TeX macro, so it cannot appear in a legitimate formula, and a math cloze needs a separator because a pipe there is TeX.
+//   - | separates answers only outside a formula, and only when the whole cloze is not inside one: \(|x|\) is absolute value.
+//
+// Neither separator is split on in these positions:
+//   - Inside a formula that is part of a plain-text cloze. Splitting there would cut the formula delimiters apart, so Validate
+//     rejects a \alt in that position and asks for the alternatives to be written outside the formula.
+//   - Inside a nested {{ }}, where it belongs to the nested content.
 //   - An escaped \|: use it when writing a literal pipe in prose; Markdown renders \| as |.
+//   - A \alt followed by an ASCII letter, which is a different TeX command such as \alpha.
 func splitAlternatives(text string, inMath bool) []string {
-	if inMath {
-		return []string{text}
-	}
 	math := texmath.Ranges(text)
 	var parts []string
 	depth, last, i := 0, 0, 0
 	for i < len(text) {
-		if end, ok := mathRangeAt(math, i); ok {
-			i = end
+		// \alt separates answers in a math cloze, whose content is a TeX fragment, and at the top level of a plain-text cloze.
+		// Inside a formula that is part of a plain-text cloze it cannot: splitting there would cut the formula delimiters apart.
+		if depth == 0 && !insideMath(math, i) && hasAltSeparator(text, i) {
+			parts = append(parts, text[last:i])
+			i += len(altSeparator)
+			last = i
+			continue
+		}
+		if insideMath(math, i) {
+			// Inside a formula a pipe is TeX, and braces or escapes there are TeX, not cloze syntax.
+			i++
+			continue
+		}
+		if text[i] == '\\' && i+1 < len(text) && strings.IndexByte(`{}\|`, text[i+1]) >= 0 {
+			i += 2
 			continue
 		}
 		switch {
-		case text[i] == '\\' && i+1 < len(text) && strings.IndexByte(`{}\|`, text[i+1]) >= 0:
-			i += 2
 		case strings.HasPrefix(text[i:], "{{"):
 			depth++
 			i += 2
 		case strings.HasPrefix(text[i:], "}}") && depth > 0:
 			depth--
 			i += 2
-		case text[i] == '|' && depth == 0:
+		case text[i] == '|' && depth == 0 && !inMath:
 			parts = append(parts, text[last:i])
 			i++
 			last = i
@@ -490,6 +521,61 @@ func splitAlternatives(text string, inMath bool) []string {
 		}
 	}
 	return append(parts, text[last:])
+}
+
+// altSeparator separates acceptable answers in a math cloze and at the top level of a plain-text cloze.
+// It is not a TeX macro, so no legitimate formula contains it, which is what lets a math cloze use it where a pipe would be TeX.
+const altSeparator = `\alt`
+
+// hasAltSeparator reports whether s[i:] starts with the answer separator \alt.
+// A following ASCII letter makes it a different control word (\alpha, \aligned), which is not a separator.
+func hasAltSeparator(s string, i int) bool {
+	if !strings.HasPrefix(s[i:], altSeparator) {
+		return false
+	}
+	j := i + len(altSeparator)
+	if j >= len(s) {
+		return true
+	}
+	c := s[j]
+	return !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z')
+}
+
+// altInsideFormula reports whether text has a top-level \alt inside a formula of a plain-text cloze.
+// Splitting there would cut the formula delimiters apart, so Validate rejects it instead of producing broken alternatives.
+func altInsideFormula(text string) bool {
+	math := texmath.Ranges(text)
+	depth := 0
+	for i := 0; i < len(text); {
+		if depth == 0 && insideMath(math, i) && hasAltSeparator(text, i) {
+			return true
+		}
+		if text[i] == '\\' && i+1 < len(text) && strings.IndexByte(`{}\|`, text[i+1]) >= 0 {
+			i += 2
+			continue
+		}
+		switch {
+		case strings.HasPrefix(text[i:], "{{"):
+			depth++
+			i += 2
+		case strings.HasPrefix(text[i:], "}}") && depth > 0:
+			depth--
+			i += 2
+		default:
+			i++
+		}
+	}
+	return false
+}
+
+// insideMath reports whether byte position i lies inside one of the formula ranges.
+func insideMath(ranges [][]int, i int) bool {
+	for _, r := range ranges {
+		if r[0] <= i && i < r[1] {
+			return true
+		}
+	}
+	return false
 }
 
 // mathRangeAt reports whether position i starts a formula, and if so returns the end position of that formula.

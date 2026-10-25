@@ -30,8 +30,9 @@ func TestClozeMathMacrosAreBundled(t *testing.T) {
 	if !ok {
 		t.Fatal("cloze card type is not registered")
 	}
-	// The original text has only delimiters and no macros at all, so every macro in the output comes from the cloze rendering itself.
-	fields := map[string]any{"text": `\(x = {{c1::y}} + {{c2::z::hint}}\)`}
+	// The original text has only delimiters and no macros at all, and the first deletion carries alternatives,
+	// so every macro in the output comes from the cloze rendering itself, including the alternatives join.
+	fields := map[string]any{"text": `\(x = {{c1::y \alt y_1}} + {{c2::z::hint}}\)`}
 	used := map[string]bool{}
 	for _, template := range []string{"cloze:1", "cloze:2"} {
 		for _, side := range []cardtype.Side{cardtype.SideFront, cardtype.SideBack} {

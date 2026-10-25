@@ -130,7 +130,7 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\{\\{c[0-9]+::",
-          "description": "Text containing at least one cloze deletion in the form {{cN::text}} or {{cN::text::hint}}, for example 'The {{c1::mitochondrion}} is the powerhouse of the cell.' Every distinct index N produces one card."
+          "description": "Text containing at least one cloze deletion in the form {{cN::text}} or {{cN::text::hint}}, for example 'The {{c1::mitochondrion}} is the powerhouse of the cell.' Every distinct index N produces one card. Separate several accepted answers with |, or with \\alt when the whole deletion is inside a formula, where | is TeX."
         }
       },
       "additionalProperties": true

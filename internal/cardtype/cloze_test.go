@@ -320,8 +320,8 @@ func TestClozeTemplateMismatch(t *testing.T) {
 	}
 }
 
-// TestClozeAlternatives covers the multi-answer-per-blank wording: top-level | separates alternative answers, the back lists them all,
-// an untested cloze gives only the canonical wording; pipes inside formulas, inside nesting, and escaped ones are not split on.
+// TestClozeAlternatives covers the multi-answer-per-blank wording: a top-level \alt separates alternatives in every context, a top-level | only outside a formula,
+// the back lists them all, an untested cloze gives only the canonical wording; pipes inside formulas, inside nesting, and escaped ones are not split on.
 func TestClozeAlternatives(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -338,11 +338,19 @@ func TestClozeAlternatives(t *testing.T) {
 			`Paris and <span class="cloze">[…]</span>`, `Paris and <span class="cloze">x</span>`},
 		{"pipes inside a formula in the deletion stay", `{{c1::\(|x|\)}}`, "cloze:1",
 			`<span class="cloze">[…]</span>`, `<span class="cloze">\(|x|\)</span>`},
-		{"deletion inside a formula is never split", `\(\dfrac{a}{{{c1::b|c}}}\)`, "cloze:1",
+		{"deletion inside a formula is never split on a pipe", `\(\dfrac{a}{{{c1::b|c}}}\)`, "cloze:1",
 			`\(\dfrac{a}{\boxed{\text{[…]}}}\)`, `\(\dfrac{a}{\boxed{b|c}}\)`},
 		{"escaped pipe is literal", `{{c1::A\|B}}`, "cloze:1",
 			`<span class="cloze">[…]</span>`, `<span class="cloze">A\|B</span>`},
 		{"pipe inside a nested deletion belongs to it", "{{c1::a {{c2::b|c}} d}}", "cloze:1",
+			`<span class="cloze">[…]</span>`, `<span class="cloze">a b d</span>`},
+		{"math deletion lists every alternative inside one box", `\({{c1::r_1 \times r_2 \alt r1*r2}}\)`, "cloze:1",
+			`\(\boxed{\text{[…]}}\)`, `\(\boxed{r_1 \times r_2\ /\ r1*r2}\)`},
+		{"three alternatives in a formula", `\({{c1::a \alt b \alt c}}\)`, "cloze:1",
+			`\(\boxed{\text{[…]}}\)`, `\(\boxed{a\ /\ b\ /\ c}\)`},
+		{"alt outside the formula of a prose deletion separates", `{{c1::\(\frac{a}{b}\)|a/b}}`, "cloze:1",
+			`<span class="cloze">[…]</span>`, `<span class="cloze">\(\frac{a}{b}\) / a/b</span>`},
+		{"alt inside a nested deletion belongs to it", `{{c1::a {{c2::b\alt c}} d}}`, "cloze:1",
 			`<span class="cloze">[…]</span>`, `<span class="cloze">a b d</span>`},
 	}
 	for _, tc := range cases {
@@ -370,12 +378,79 @@ func TestClozeAlternatives(t *testing.T) {
 	}
 }
 
-// TestClozeRejectsEmptyAlternative asserts neither side of a | may be empty: an empty alternative is usually a typo, and silently dropping it would make the author think it was saved.
+// TestClozeAltSeparator asserts the separator rules directly: \alt separates in every context, | only outside a formula,
+// and neither splits on a TeX command that merely starts with the same letters, on an escape, or inside nested {{ }}.
+func TestClozeAltSeparator(t *testing.T) {
+	cases := []struct {
+		name   string
+		text   string
+		inMath bool
+		want   []string
+	}{
+		{"prose alternatives", `a \alt b`, false, []string{`a `, ` b`}},
+		{"math alternatives", `r_1 \times r_2 \alt r1*r2`, true, []string{`r_1 \times r_2 `, ` r1*r2`}},
+		{"three alternatives", `a \alt b \alt c`, false, []string{`a `, ` b `, ` c`}},
+		{"pipe stays literal inside a math cloze", `|x|`, true, []string{`|x|`}},
+		{"left and right bars stay TeX", `\left| x \right|`, true, []string{`\left| x \right|`}},
+		{"pipe outside a formula still separates", `a|b`, false, []string{`a`, `b`}},
+		{"braces inside a formula do not swallow a later pipe", `\({{a}\)|b`, false, []string{`\({{a}\)`, `b`}},
+		{"alt inside a formula of a plain-text blank is not a separator", `\(\frac{a}{b} \alt a/b\)`, false, []string{`\(\frac{a}{b} \alt a/b\)`}},
+		{"alpha is not a separator", `\alpha \alt \aligned`, false, []string{`\alpha `, ` \aligned`}},
+		{"longer command starting with alt is not a separator", `\altfoo`, false, []string{`\altfoo`}},
+		{"escaped backslash is not a separator", `a \\alt b`, false, []string{`a \\alt b`}},
+		{"nested marker owns its alt", `a {{c2::b\alt c}} d`, false, []string{`a {{c2::b\alt c}} d`}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := splitAlternatives(tc.text, tc.inMath)
+			if len(got) != len(tc.want) {
+				t.Fatalf("splitAlternatives(%q) = %q, want %q", tc.text, got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Errorf("splitAlternatives(%q)[%d] = %q, want %q", tc.text, i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+// TestClozeRejectsEmptyAlternative asserts neither side of a | or \alt may be empty: an empty alternative is usually a typo, and silently dropping it would make the author think it was saved.
 func TestClozeRejectsEmptyAlternative(t *testing.T) {
-	for _, text := range []string{"{{c1::Paris|}}", "{{c1::|Paris}}", "{{c1::Paris| |巴黎}}"} {
+	for _, text := range []string{
+		"{{c1::Paris|}}", "{{c1::|Paris}}", "{{c1::Paris| |巴黎}}",
+		`{{c1::Paris \alt }}`, `{{c1::\alt Paris}}`, `{{c1::a \alt b \alt }}`,
+		`\({{c1::r_1 \alt }}`,
+	} {
 		err := Validate("cloze", map[string]any{"text": text})
 		if err == nil || !strings.Contains(err.Error(), "empty answer alternative") {
 			t.Errorf("Validate(%q) = %v, want an empty alternative error", text, err)
+		}
+	}
+}
+
+// TestClozeAltInsideFormulaIsRejected asserts \alt cannot separate answers inside a formula of a plain-text cloze,
+// because splitting there would cut the formula delimiters apart. A math cloze and a top-level \alt stay valid.
+func TestClozeAltInsideFormulaIsRejected(t *testing.T) {
+	rejected := []string{
+		`{{c1::\(\frac{a}{b} \alt a/b\)}}`,
+		`{{c1::x \(a \alt b\) y}}`,
+	}
+	for _, text := range rejected {
+		err := Validate("cloze", map[string]any{"text": text})
+		if err == nil || !strings.Contains(err.Error(), `\alt inside a formula`) {
+			t.Errorf("Validate(%q) = %v, want a \\alt-inside-formula error", text, err)
+		}
+	}
+	accepted := []string{
+		`\({{c1::r_1 \alt r1}}\)`,
+		`{{c1::Paris \alt 巴黎}}`,
+		`{{c1::\(\frac{a}{b}\)|a/b}}`,
+		`{{c1::a \\alt b}}`,
+	}
+	for _, text := range accepted {
+		if err := Validate("cloze", map[string]any{"text": text}); err != nil {
+			t.Errorf("Validate(%q) = %v, want nil", text, err)
 		}
 	}
 }

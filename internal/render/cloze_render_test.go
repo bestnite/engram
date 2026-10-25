@@ -83,6 +83,14 @@ func TestClozeInsideMathRendersAsBoxed(t *testing.T) {
 			forbidden: []string{"&lt;span", "{{c"},
 		},
 		{
+			// \alt is not a TeX macro, so a math blank can list several accepted answers; the back boxes all of them.
+			name:      "back lists every alternative inside one box",
+			text:      `\({{c1::r_1 \times r_2 \alt r1*r2}}\)`,
+			side:      cardtype.SideBack,
+			required:  []string{`\(\boxed{r_1 \times r_2\ /\ r1*r2}\)`},
+			forbidden: []string{"&lt;span", "{{c", `\alt`},
+		},
+		{
 			name:      "math and text deletions in one note",
 			text:      `{{c1::基期}} \(= {{c1::A}}\)`,
 			side:      cardtype.SideBack,

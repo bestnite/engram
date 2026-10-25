@@ -45,6 +45,9 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 	steps := map[string]any{"prompt": "p", "items": []any{"wash", "cut", "cook"}, "ordered": true}
 	overlap := map[string]any{"prompt": "p", "items": []any{"blue|violet", "violet"}}
 	clozeAlt := map[string]any{"text": "{{c1::Paris|巴黎}} and {{c2::a\\|b}}"}
+	clozeMathAlt := map[string]any{"text": `\({{c1::r_1 \times r_2 \alt r1*r2}}\)`}
+	clozeMathPipe := map[string]any{"text": `\({{c1::|x|}}\)`}
+	clozeMathBars := map[string]any{"text": `\({{c1::\left| x \right|}}\)`}
 	cloze := map[string]any{"text": "{{c1::Paris}} and {{c1::Rome::city}} are capitals; {{c2::\\(2x\\)}} is a derivative."}
 	cases := []struct {
 		name        string
@@ -88,6 +91,13 @@ func TestGradeAnswerFromJSON(t *testing.T) {
 		{name: "cloze first alternative accepted", kind: "cloze", template: "cloze:1", fields: clozeAlt, raw: `["paris"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "paris"},
 		{name: "cloze answer outside the alternatives is wrong", kind: "cloze", template: "cloze:1", fields: clozeAlt, raw: `["Paris|巴黎"]`, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: "Paris|巴黎"},
 		{name: "cloze escaped pipe is typed as a plain pipe", kind: "cloze", template: "cloze:2", fields: clozeAlt, raw: `["a|b"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "a|b"},
+		{name: "cloze math alt second alternative accepted", kind: "cloze", template: "cloze:1", fields: clozeMathAlt, raw: `["r1*r2"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "r1*r2"},
+		{name: "cloze math alt canonical alternative accepted", kind: "cloze", template: "cloze:1", fields: clozeMathAlt, raw: `["r_1 \\times r_2"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: `r_1 \times r_2`},
+		{name: "cloze math alt answer outside the alternatives is wrong", kind: "cloze", template: "cloze:1", fields: clozeMathAlt, raw: `["r1"]`, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: "r1"},
+		{name: "cloze math whole separator text is not an answer", kind: "cloze", template: "cloze:1", fields: clozeMathAlt, raw: `["r1*r2 \\alt r_1"]`, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: `r1*r2 \alt r_1`},
+		{name: "cloze math pipe stays absolute value", kind: "cloze", template: "cloze:1", fields: clozeMathPipe, raw: `["|x|"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "|x|"},
+		{name: "cloze math half of an absolute value is wrong", kind: "cloze", template: "cloze:1", fields: clozeMathPipe, raw: `["x"]`, wantRating: RatingAgain, wantVerdict: VerdictIncorrect, wantGiven: "x"},
+		{name: "cloze math left right bars unchanged", kind: "cloze", template: "cloze:1", fields: clozeMathBars, raw: `["\\left| x \\right|"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: `\left| x \right|`},
 		{name: "list all items in any order", kind: "list", template: "forward", fields: colours, raw: `["Blue", "red", "GREEN"]`, wantRating: RatingGood, wantVerdict: VerdictCorrect, wantGiven: "Blue, red, GREEN"},
 		{name: "list two of three is partial", kind: "list", template: "forward", fields: colours, raw: `["red", "", "violet"]`, wantRating: RatingHard, wantVerdict: VerdictPartial, wantGiven: "red, violet"},
 		{name: "list wrong entries do not cost points", kind: "list", template: "forward", fields: colours, raw: `["red", "pink", "green"]`, wantRating: RatingHard, wantVerdict: VerdictPartial, wantGiven: "red, pink, green"},
