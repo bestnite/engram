@@ -300,6 +300,42 @@ func (s *DeckStore) Delete(ctx context.Context, actorUserID, deckID uint64) erro
 	})
 }
 
+// DeleteMany hard-deletes a set of decks through the shared cascade; ownership must already be checked by the caller.
+//
+// An empty ids slice returns (0, nil) right away. Ids that do not exist are not counted in the returned number.
+// dryRun only counts the decks that exist and performs no write at all.
+// Every deletion shares one transaction, so a storage failure leaves the whole batch in place.
+func (s *DeckStore) DeleteMany(ctx context.Context, ids []uint64, dryRun bool) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	if dryRun {
+		var n int64
+		if err := s.db.WithContext(ctx).Model(&Deck{}).Where("id IN ?", ids).Count(&n).Error; err != nil {
+			return 0, fmt.Errorf("count decks to delete: %w", err)
+		}
+		return n, nil
+	}
+	var affected int64
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Count inside the transaction: deleteDeckTx returns no row count, and an id that vanished in the meantime
+		// must not be reported as deleted.
+		if err := tx.Model(&Deck{}).Where("id IN ?", ids).Count(&affected).Error; err != nil {
+			return fmt.Errorf("count decks to delete: %w", err)
+		}
+		for _, id := range ids {
+			if err := deleteDeckTx(tx, id); err != nil {
+				return fmt.Errorf("delete deck %d: %w", id, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return affected, nil
+}
+
 // deleteDeckTx hard-deletes a deck and all its related rows inside the given transaction (no permission check).
 // Deck deletion and user deletion (removing every deck under a user) share this one cascade, so both clean up the same scope.
 func deleteDeckTx(tx *gorm.DB, deckID uint64) error {

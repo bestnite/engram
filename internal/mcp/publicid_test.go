@@ -91,6 +91,7 @@ func TestToolSchemasDeclareStringIDs(t *testing.T) {
 	}
 
 	arrayFields := map[string]string{
+		"bulk_decks":    "deck_ids",
 		"bulk_notes":    "note_ids",
 		"get_due_cards": "deck_ids",
 	}

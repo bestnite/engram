@@ -167,6 +167,8 @@ func (a *API) Register(r gin.IRouter) {
 	v1.GET("/decks", a.authn.RequireScope(store.ScopeRead), a.listDecks)
 	v1.GET("/media", a.authn.RequireScope(store.ScopeRead), a.listMedia)
 	v1.POST("/decks", a.authn.RequireScope(store.ScopeWrite), a.createDeck)
+	// Bulk deck action (currently delete) over a set of decks; owner-only per row, dry_run counts without writing.
+	v1.POST("/decks/bulk", a.authn.RequireScope(store.ScopeWrite), a.bulkDeleteDecks)
 	v1.PATCH("/decks/:id", a.authn.RequireScope(store.ScopeWrite), a.updateDeck)
 	v1.DELETE("/decks/:id", a.authn.RequireScope(store.ScopeWrite), a.deleteDeck)
 	// Leave share: revoke your own grant row on this deck; a separate matter from deleting the deck, hence its own path.

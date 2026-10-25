@@ -302,6 +302,32 @@ export interface BulkNotesResponse {
   skipped: BulkNotesSkipped[];
 }
 
+/**
+ * POST /api/v1/decks/bulk request body. Only delete is accepted today; deck_ids is deduplicated to 1..100 entries,
+ * and dry_run counts the decks that would be deleted without writing.
+ */
+export interface BulkDecksRequest {
+  action: 'delete';
+  deck_ids: string[];
+  dry_run?: boolean;
+}
+
+/** A deck rejected row by row in a bulk deck action; code is not_found (unknown id) / forbidden (the caller does not own it). */
+export interface BulkDecksSkipped {
+  deck_id: string;
+  code: string;
+}
+
+/**
+ * POST /api/v1/decks/bulk response body. affected counts the decks actually deleted;
+ * skipped gives the reason per rejected deck, and one rejected row never rolls back the batch.
+ */
+export interface BulkDecksResponse {
+  dry_run: boolean;
+  affected: number;
+  skipped: BulkDecksSkipped[];
+}
+
 /** POST /api/v1/decks/import report. */
 export interface PackageImportReport {
   target: string;

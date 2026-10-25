@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { Deck, DeckShareInvite } from '../api';
+  import type { BulkDecksResponse, Deck, DeckShareInvite } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
   import { toast } from '../components/ui/toast';
@@ -46,6 +46,13 @@
   let includeProgress = $state(false);
   let includeReviews = $state(false);
   let includeWeights = $state(false);
+
+  // Bulk delete state. The ids are captured when the dialog opens, so the confirmation text and the request
+  // always describe the same set even if the selection were to change behind the dialog.
+  let showBatchDelete = $state(false);
+  let batchDeleteIDs = $state<string[]>([]);
+  let batchDeleting = $state(false);
+  let batchDeleteError = $state<string | null>(null);
 
   // Share invitations pending acceptance (consent model): sharing creates an invitation first, and only the accept step writes the grant.
   // A failed fetch does not set error — failing to load invitations should not turn the whole page into an error page, it merely hides this block.
@@ -226,6 +233,67 @@
     }
   }
 
+  /** Open the bulk delete confirmation dialog with the current selection. */
+  function openBatchDelete(): void {
+    if (selectedDeckIds.length === 0) return;
+    batchDeleteIDs = [...selectedDeckIds];
+    batchDeleteError = null;
+    showBatchDelete = true;
+  }
+
+  function closeBatchDelete(): void {
+    if (!batchDeleting) {
+      showBatchDelete = false;
+      batchDeleteError = null;
+    }
+  }
+
+  // How many of the decks captured for deletion are only shared with the caller: the server will skip those,
+  // so the confirmation warns before the request instead of after.
+  const sharedSelectedCount = $derived.by(
+    () => decks.filter((deck) => batchDeleteIDs.includes(deck.id) && deck.role !== 'owner').length
+  );
+
+  /**
+   * Delete every captured deck in one request. The server decides ownership per deck: ids reported in skipped stay
+   * in the list, every other id is dropped from the list, the queue counts and the selection.
+   * On success the dialog closes; on failure it stays open with the error and the list is untouched.
+   */
+  async function handleBatchDelete(): Promise<void> {
+    if (batchDeleteIDs.length === 0 || batchDeleting) return;
+    batchDeleting = true;
+    batchDeleteError = null;
+    try {
+      const res = await apiClient.bulkDecks({ action: 'delete', deck_ids: batchDeleteIDs, dry_run: false });
+      const skipped = new Set(res.skipped.map((row) => row.deck_id));
+      const removed = new Set(batchDeleteIDs.filter((id) => !skipped.has(id)));
+      decks = decks.filter((deck) => !removed.has(deck.id));
+      queueCounts = Object.fromEntries(Object.entries(queueCounts).filter(([deckID]) => !removed.has(deckID)));
+      selectedDeckIds = [];
+      showBatchDelete = false;
+      announceBatchDelete(res);
+    } catch {
+      batchDeleteError = 'decks.bulk_delete.failed';
+    } finally {
+      batchDeleting = false;
+    }
+  }
+
+  // Bulk results are reported with a toast: one line for the deleted count, one line per skip reason,
+  // following the note bulk result pattern so both pages read the same way.
+  function announceBatchDelete(res: BulkDecksResponse): void {
+    const notFound = res.skipped.filter((row) => row.code === 'not_found').length;
+    const forbidden = res.skipped.filter((row) => row.code === 'forbidden').length;
+    const details = [
+      notFound > 0 ? $t('decks.bulk_delete.skipped_not_found', { count: notFound }) : '',
+      forbidden > 0 ? $t('decks.bulk_delete.skipped_forbidden', { count: forbidden }) : '',
+    ].filter(Boolean);
+    // ' · ' separates the reasons in both locales; a full-width semicolon would read as a typo in the English UI.
+    toast.success($t('decks.bulk_delete.result', { count: res.affected }), {
+      description: details.join(' · ') || undefined,
+    });
+  }
+
   /** Open the confirmation dialog. kind decides whether this is "delete own deck" or "leave shared deck". */
   function promptDeckAction(deck: Deck, kind: 'delete' | 'leave', e: Event): void {
     e.stopPropagation();
@@ -269,6 +337,7 @@
     if (e.key === 'Escape') {
       if (showCreateModal) closeCreateModal();
       if (deckAction) closeDeckAction();
+      if (showBatchDelete) closeBatchDelete();
     }
   }
 
@@ -461,6 +530,15 @@
       <Download aria-hidden="true" />
       {$t('package.export.short')}
     </button>
+    <button
+      type="button"
+      data-testid="decks-batch-delete"
+      class={selectionBarButton}
+      onclick={openBatchDelete}
+    >
+      <Trash2 aria-hidden="true" />
+      {$t('decks.bulk_delete')}
+    </button>
   </SelectionBar>
 </Page>
 
@@ -480,6 +558,31 @@
     <Button type="button" variant="outline" size="lg" onclick={() => (showBatchExport = false)}>{$t('note_edit.cancel')}</Button>
     <Button type="button" testId="decks-batch-export-submit" loading={batchExporting} onclick={handleBatchExport} variant="primary" size="lg">
       {$t('package.batch_export', { count: selectedDeckIds.length })}
+    </Button>
+  </div>
+</Dialog>
+
+<!-- Bulk delete confirmation: the same dialog shape as single-deck delete, with one extra line when some selected decks are only shared. -->
+<Dialog
+  bind:open={showBatchDelete}
+  title={$t('decks.bulk_delete.confirm_title', { count: batchDeleteIDs.length })}
+  description={$t('decks.bulk_delete.confirm_desc')}
+  testId="decks-batch-delete-dialog"
+>
+  {#if sharedSelectedCount > 0}
+    <p data-testid="decks-batch-delete-shared-hint" class="mt-3 text-sm text-muted-foreground">
+      {$t('decks.bulk_delete.shared_hint', { count: sharedSelectedCount })}
+    </p>
+  {/if}
+
+  {#if batchDeleteError}
+    <p role="alert" class="mt-3 text-sm text-destructive-foreground">{$t(batchDeleteError)}</p>
+  {/if}
+
+  <div class="mt-5 flex items-center justify-end gap-2">
+    <Button type="button" variant="outline" size="lg" disabled={batchDeleting} onclick={closeBatchDelete}>{$t('note_edit.cancel')}</Button>
+    <Button type="button" testId="decks-batch-delete-confirm" variant="danger" size="lg" loading={batchDeleting} onclick={handleBatchDelete}>
+      {$t('decks.bulk_delete.confirm_btn')}
     </Button>
   </div>
 </Dialog>

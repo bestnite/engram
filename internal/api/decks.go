@@ -176,6 +176,37 @@ func (a *API) deleteDeck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
+// bulkDecksRequest is the request body of POST /api/v1/decks/bulk. deck_ids are the decks' external ids;
+// dry_run counts what would be deleted without writing or auditing.
+type bulkDecksRequest struct {
+	Action  string   `json:"action"`
+	DeckIDs []string `json:"deck_ids"`
+	DryRun  bool     `json:"dry_run"`
+}
+
+// bulkDeleteDecks applies one bulk action to a set of decks (POST /api/v1/decks/bulk, scope: write).
+// Only JSON binding and wrapping here: validation, the per-row owner check and auditing live in the service layer's
+// BulkDecks, shared by REST and the built-in MCP tool bulk_decks.
+func (a *API) bulkDeleteDecks(c *gin.Context) {
+	u, _ := CurrentUser(c)
+	ctx := c.Request.Context()
+	var req bulkDecksRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+		return
+	}
+	resp, err := a.BulkDecks(ctx, u.ID, CurrentAPIKeyID(c), BulkDecksInput{
+		Action:  req.Action,
+		DeckIDs: req.DeckIDs,
+		DryRun:  req.DryRun,
+	})
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 // leaveDeck lets a share recipient leave a deck (DELETE /api/v1/decks/:id/membership, scope: write).
 //
 // It is an independent path from deleteDeck: leaving removes only your own grant row, while deleting the deck is the owner's irreversible operation.

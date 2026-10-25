@@ -1355,4 +1355,14 @@ export const en: LocaleCatalog = {
   // ---- Rating buttons: the how-to-choose popover ----
   'help.review.ratings_label': 'How to choose a rating',
   'help.review.ratings': 'Again: you could not recall it, or you recalled it wrong.\nHard: you recalled it, but only with real effort or long hesitation. This still counts as remembered; if you could not recall it, choose Again.\nGood: you recalled it after normal thought. Choose this when unsure.\nEasy: you recalled it almost without thinking. Judge this recall only, not how simple the content is.',
+  // ---- Bulk delete of decks from the deck list selection bar ----
+  'decks.bulk_delete': 'Delete',
+  'decks.bulk_delete.confirm_title': 'Delete {count} decks?',
+  'decks.bulk_delete.confirm_desc': 'The selected decks and all their notes, cards and review progress will be permanently deleted. This cannot be undone.',
+  'decks.bulk_delete.shared_hint': '{count} of the selected decks are shared with you and will be skipped.',
+  'decks.bulk_delete.confirm_btn': 'Delete decks',
+  'decks.bulk_delete.result': 'Deleted {count} decks',
+  'decks.bulk_delete.skipped_not_found': 'Skipped {count}: not found',
+  'decks.bulk_delete.skipped_forbidden': 'Skipped {count}: you are not the owner',
+  'decks.bulk_delete.failed': 'Failed to delete decks. Please try again.',
 };

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -227,5 +228,51 @@ func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 	}
 	if fields, _ := store.ParseFields(reloaded.FieldsJSON); fields["front"] != "new" {
 		t.Errorf("rejected row must not change the note: fields = %v, want front=new", fields)
+	}
+}
+
+// ---- the bulk_decks tool ----
+
+// TestBulkDecksDeletesOwnedAndReportsShared is the core acceptance for bulk_decks: through MCP the caller's own deck is
+// deleted while a deck only shared with them is reported as forbidden and survives, matching the REST contract.
+func TestBulkDecksDeletesOwnedAndReportsShared(t *testing.T) {
+	_, db, keys, ts := newEnv(t)
+	u := seedUser(t, db, "bulkdecks")
+	own := seedDeck(t, db, u.ID)
+
+	// Another user's deck granted to the caller: visible, but the caller does not own it.
+	owner := seedUser(t, db, "bulkdecksowner")
+	shared := seedDeck(t, db, owner.ID)
+	grant := store.DeckGrant{DeckID: shared.ID, UserID: u.ID, Role: store.RoleEditor, CreatedAt: time.Now().UTC()}
+	if err := db.Create(&grant).Error; err != nil {
+		t.Fatalf("create grant: %v", err)
+	}
+
+	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeWrite}))
+	out, isErr, text := callTool(t, cs, "bulk_decks", map[string]any{
+		"action":   "delete",
+		"deck_ids": []any{own.PublicID, shared.PublicID},
+	})
+	if isErr {
+		t.Fatalf("bulk_decks error: %s", text)
+	}
+	if out["affected"] != float64(1) {
+		t.Errorf("affected = %v, want 1", out["affected"])
+	}
+	skipped, _ := out["skipped"].([]any)
+	if len(skipped) != 1 {
+		t.Fatalf("skipped = %v, want one entry", out["skipped"])
+	}
+	entry, _ := skipped[0].(map[string]any)
+	if entry["deck_id"] != shared.PublicID || entry["code"] != api.CodeForbidden {
+		t.Errorf("skipped[0] = %v, want deck_id=%s code=%s", entry, shared.PublicID, api.CodeForbidden)
+	}
+
+	decks := store.NewDeckStore(db)
+	if _, err := decks.ByID(context.Background(), own.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Errorf("owned deck survives the bulk delete: err = %v, want gorm.ErrRecordNotFound", err)
+	}
+	if _, err := decks.ByID(context.Background(), shared.ID); err != nil {
+		t.Errorf("shared deck was deleted: %v", err)
 	}
 }

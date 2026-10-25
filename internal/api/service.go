@@ -228,8 +228,97 @@ func (a *API) DeleteDeck(ctx context.Context, u *store.User, deckID uint64, apiK
 	return nil
 }
 
-// LeaveDeck lets a share recipient leave a deck (scope: write): it deletes their own grant row in deck_grants.
+// bulkMaxDecks is the maximum number of decks one bulk action accepts after deduplication.
+// Deleting a deck cascades over every card (and every user's progress row) of that deck, so the
+// bound is deliberately tighter than the note bulk cap: one request must not be able to wipe an
+// unbounded share of the database.
+const bulkMaxDecks = 100
+
+// BulkDecksInput is the input of a bulk deck action (shared by REST and the built-in MCP, one model serving both the business and the JSON).
+// DeckIDs are the decks' external ids (opaque strings); the service resolves them to primary keys before the numeric logic runs.
+type BulkDecksInput struct {
+	Action  string   `json:"action"`
+	DeckIDs []string `json:"deck_ids"`
+	DryRun  bool     `json:"dry_run"`
+}
+
+// BulkDecksSkipped is a per-row rejected deck: code is not_found (unknown public id) or forbidden (the caller is not the owner,
+// which also covers a deck merely shared with the caller). DeckID echoes the external id as given in the request verbatim.
+type BulkDecksSkipped struct {
+	DeckID string `json:"deck_id"`
+	Code   string `json:"code"`
+}
+
+// BulkDecksResponse is the bulk deck action response body. Affected counts the decks actually deleted.
+type BulkDecksResponse struct {
+	DryRun   bool               `json:"dry_run"`
+	Affected int64              `json:"affected"`
+	Skipped  []BulkDecksSkipped `json:"skipped"`
+}
+
+// BulkDecks performs a bulk deck action; delete is currently the only action.
 //
+// Request-level validation (unknown action, deck_ids out of range) returns 400 invalid_request and writes not a single row.
+// After validation each row is authorized: an unknown public id is recorded as not_found, a deck the caller does not own
+// (including one only shared with them) as forbidden, and the remaining decks are deleted in one transaction - one rejected
+// row never rolls back the batch. A storage failure rolls the whole batch back and returns internal.
+// Auditing writes one deck.delete row per deleted deck, and only when not dry_run; dry_run writes neither rows nor audits.
+func (a *API) BulkDecks(ctx context.Context, userID uint64, apiKeyID *uint64, in BulkDecksInput) (BulkDecksResponse, error) {
+	action := strings.TrimSpace(in.Action)
+	if action != bulkActionDelete {
+		return BulkDecksResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest,
+			"action must be delete")
+	}
+
+	ids := uniquePublicIDs(in.DeckIDs)
+	if len(ids) == 0 || len(ids) > bulkMaxDecks {
+		return BulkDecksResponse{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest,
+			fmt.Sprintf("deck_ids must contain between 1 and %d entries", bulkMaxDecks))
+	}
+
+	resp := BulkDecksResponse{DryRun: in.DryRun, Skipped: []BulkDecksSkipped{}}
+	permitted := make([]uint64, 0, len(ids))
+	names := make(map[uint64]string, len(ids))
+	for _, publicID := range ids {
+		d, err := a.decks.ByPublicID(ctx, publicID)
+		if err != nil {
+			// Unknown ids are reported row by row rather than failing the batch, matching the note bulk contract.
+			resp.Skipped = append(resp.Skipped, BulkDecksSkipped{DeckID: publicID, Code: CodeNotFound})
+			continue
+		}
+		if d.OwnerUserID != userID {
+			// A grant of any role is not ownership: deleting a deck is the owner's irreversible operation only.
+			resp.Skipped = append(resp.Skipped, BulkDecksSkipped{DeckID: publicID, Code: CodeForbidden})
+			continue
+		}
+		permitted = append(permitted, d.ID)
+		names[d.ID] = d.Name
+	}
+
+	affected, err := a.decks.DeleteMany(ctx, permitted, in.DryRun)
+	if err != nil {
+		a.logger.Error("bulk deck delete failed", "user_id", userID, "error", err)
+		return BulkDecksResponse{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to delete decks")
+	}
+	resp.Affected = affected
+
+	if !in.DryRun {
+		// One row per deck keeps the same shape as the single-deck delete audit, so history stays aggregatable by target.
+		for _, deckID := range permitted {
+			recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+				UserID:     store.Ptr(userID),
+				APIKeyID:   apiKeyID,
+				Action:     store.ActionDeckDelete,
+				TargetType: "deck",
+				TargetID:   store.Ptr(deckID),
+				Detail:     map[string]any{"deck_name": names[deckID]},
+			})
+		}
+	}
+	return resp, nil
+}
+
+// LeaveDeck lets a share recipient leave a deck (scope: write): it deletes their own grant row in deck_grants.
 // It is a separate matter from DeleteDeck, independent of it: leaving revokes only your own grant row, touches no deck content, and is reversible
 // (being granted again brings it back); deleting a deck is irreversible. So the owner does not take this path - for their own deck, deleting is the only option.
 // With no grant row it returns not_found: there is no membership to leave - a deck is either owned or granted,

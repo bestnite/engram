@@ -39,6 +39,14 @@ type deleteDeckIn struct {
 	DeckID string `json:"deck_id" jsonschema:"the public id of the deck to delete"`
 }
 
+// bulkDecksIn is the input of bulk_decks and has the same shape as the REST POST /decks/bulk request body
+// (MCP only shapes arguments; semantics and validation live in the service layer).
+type bulkDecksIn struct {
+	Action  string   `json:"action" jsonschema:"bulk action: delete"`
+	DeckIDs []string `json:"deck_ids" jsonschema:"public ids of the decks to act on, deduplicated to 1..100 entries"`
+	DryRun  bool     `json:"dry_run,omitempty" jsonschema:"count without writing or auditing"`
+}
+
 // searchNotesIn is the input of search_notes; deck_id is required.
 type searchNotesIn struct {
 	DeckID  string `json:"deck_id" jsonschema:"the public id of the deck to search in"`
@@ -242,6 +250,17 @@ func (s *Server) deleteDeck(ctx context.Context, id Identity, in deleteDeckIn) (
 		return nil, err
 	}
 	return map[string]any{"deleted": true}, nil
+}
+
+// bulkDecks performs a bulk action on a set of decks: it goes through the same service method as REST `POST /decks/bulk`.
+// deck_ids are decks' public ids; resolution, the per-row owner check and auditing happen in the service layer,
+// so the two transports cannot drift. Deletion is irreversible.
+func (s *Server) bulkDecks(ctx context.Context, id Identity, in bulkDecksIn) (any, error) {
+	return s.api.BulkDecks(ctx, id.User.ID, id.apiKeyID(), api.BulkDecksInput{
+		Action:  in.Action,
+		DeckIDs: in.DeckIDs,
+		DryRun:  in.DryRun,
+	})
 }
 
 func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn) (any, error) {

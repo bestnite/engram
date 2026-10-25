@@ -1354,4 +1354,14 @@ export const zhCN: LocaleCatalog = {
   // ---- Grade buttons: the "how to choose" popover ----
   'help.review.ratings_label': '怎么选评分',
   'help.review.ratings': '重来：没想起来，或者想起的是错的。\n困难：想起来了，但费了很大劲或者犹豫了很久。这仍算记住了；没想起来请选「重来」。\n良好：正常想一想就答出来了。拿不准时选这个。\n简单：几乎不用想就答出来。只看这一次回忆，不看内容本身简不简单。',
+  // ---- Bulk delete of decks from the deck list selection bar ----
+  'decks.bulk_delete': '删除',
+  'decks.bulk_delete.confirm_title': '确定删除 {count} 个卡组？',
+  'decks.bulk_delete.confirm_desc': '所选卡组及其包含的所有笔记、卡片和复习进度将被永久删除，此操作不可撤销。',
+  'decks.bulk_delete.shared_hint': '所选卡组中有 {count} 个是共享给你的，将被跳过。',
+  'decks.bulk_delete.confirm_btn': '确认删除',
+  'decks.bulk_delete.result': '已删除 {count} 个卡组',
+  'decks.bulk_delete.skipped_not_found': '跳过 {count} 个：不存在',
+  'decks.bulk_delete.skipped_forbidden': '跳过 {count} 个：你不是拥有者',
+  'decks.bulk_delete.failed': '批量删除失败，请重试。',
 };

@@ -17,6 +17,8 @@ import {
   type CreateNotesResponse,
   type BulkNotesRequest,
   type BulkNotesResponse,
+  type BulkDecksRequest,
+  type BulkDecksResponse,
   type NotePreviewResponse,
   type MediaListResponse,
   type MediaUploadResult,
@@ -421,6 +423,21 @@ export class ApiClient {
     const id = encodeURIComponent(String(deckId));
     return this.notifying('decks', this.request<{ deleted: boolean }>(`/api/v1/decks/${id}`, {
       method: 'DELETE',
+    }));
+  }
+
+  /**
+   * Apply one bulk action to a set of decks (POST /api/v1/decks/bulk, scope: write).
+   * Only delete is accepted today; the server decides ownership per deck, reports rejected rows in skipped,
+   * and leaves the list untouched for those decks.
+   */
+  async bulkDecks(input: BulkDecksRequest): Promise<BulkDecksResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.notifying('decks', this.request<BulkDecksResponse>('/api/v1/decks/bulk', {
+      method: 'POST',
+      body: JSON.stringify(input),
     }));
   }
 
