@@ -31,7 +31,9 @@ type reviewRenderBody struct {
 	BackHTML  string `json:"back_html"`
 	// OptionsHTML is null for card types without options.
 	OptionsHTML []string `json:"options_html"`
-	EditHref    string   `json:"edit_href"`
+	// OptionOrder is the display order of a choice card's options, null for card types without option controls.
+	OptionOrder []int  `json:"option_order"`
+	EditHref    string `json:"edit_href"`
 	Intervals   []struct {
 		Rating  int   `json:"rating"`
 		Seconds int64 `json:"seconds"`

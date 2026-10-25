@@ -997,6 +997,9 @@ type DueCard struct {
 	Tags           []string       `json:"tags"`
 	Template       string         `json:"template,omitempty"`
 	Version        int            `json:"version"`
+	// OptionOrder is the display order of a choice card's options: slot b shows stored option index OptionOrder[b].
+	// It is null for card kinds without option controls, and the submitted answer stays a stored option index.
+	OptionOrder []int `json:"option_order"`
 }
 
 // reviewMaxTags is the maximum number of tags one tag review may select (after deduplication), bounding the number of OR conditions in the SQL.
@@ -1150,6 +1153,12 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		}
 		if d, ok := decksByID[note.DeckID]; ok {
 			entry.DeckID = d.PublicID
+		}
+		// Only card kinds declaring an options field have option controls to shuffle; every other kind stays null.
+		if t, ok := cardtype.Lookup(note.Kind); ok {
+			if field := t.Describe().OptionsField; field != "" {
+				entry.OptionOrder = OptionOrder(optionCount(entry.Fields, field), u.ID, it.CardID, entry.Version)
+			}
 		}
 		out = append(out, entry)
 	}

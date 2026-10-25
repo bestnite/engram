@@ -322,6 +322,7 @@ func (s *Server) reviewRender(c *gin.Context) {
 		"front_html":   view.FrontHTML,
 		"back_html":    view.BackHTML,
 		"options_html": view.OptionsHTML,
+		"option_order": view.OptionOrder,
 		"blanks":       view.Blanks,
 		"edit_href":    view.EditHref,
 		"intervals":    intervals,

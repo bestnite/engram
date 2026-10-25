@@ -33,6 +33,11 @@ type Card struct {
 	Template string
 	Ordinal  int
 	Fields   map[string]any
+	// OptionOrder is the display order of the options on the answer controls: display slot b shows stored option
+	// index OptionOrder[b], or nil to keep stored order. It is presentation only: Grade, Validate, ParseAnswer and
+	// GivenText ignore it, and only the choice_multi back side reads it to list the correct options in display order.
+	// Cards() constructors never set it; the transport that renders a card decides it.
+	OptionOrder []int
 }
 
 // Side states whether the render request is for the front or the back.
