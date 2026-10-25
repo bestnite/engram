@@ -280,9 +280,11 @@
             {/if}
           </div>
           <div>
-            <label for="settings-cutoff" class="block text-sm font-medium text-foreground">{$t('settings.profile.cutoff_label')}</label>
+            <div class="flex items-center gap-1">
+              <label for="settings-cutoff" class="text-sm font-medium text-foreground">{$t('settings.profile.cutoff_label')}</label>
+              <HelpTip testId="settings-cutoff-help" label={$t('settings.profile.cutoff_label')} text={$t('settings.profile.cutoff_hint')} />
+            </div>
             <Select id="settings-cutoff" testId="settings-cutoff" bind:value={dayCutoff} options={cutoffChoices} allowDeselect={false} ariaLabel={$t('settings.profile.cutoff_label')} class="mt-1.5" />
-            <p class="mt-1.5 text-xs text-muted-foreground">{$t('settings.profile.cutoff_hint')}</p>
             {#if fieldErrors.day_cutoff_hour}
               <p data-testid="settings-error-cutoff" class="mt-1.5 text-xs text-destructive-foreground">{$t(fieldErrors.day_cutoff_hour)}</p>
             {/if}
