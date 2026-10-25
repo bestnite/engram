@@ -1,10 +1,13 @@
-# ROADMAP.md — Task backlog and progress
+# ROADMAP.md — Task backlog and release ledger
 
-This file holds the **open** work: every open task with a stable ID, grouped by milestone.
-A completed task leaves the file in the same commit that completes it, so this is a backlog
-rather than a history — `git log` is the history, and the commit that deletes a task carries
-its acceptance evidence. The rules for changing this repository live in `AGENTS.md`; read that
-first.
+This file holds two things: the **open** work, and the goals completed since the last release.
+A completed task leaves the backlog in the same commit that finishes it, so the backlog is a
+backlog rather than a history — `git log` is the history, and the commit that deletes a task
+carries its acceptance evidence.
+
+The release ledger in section 2 is cleared when a release is cut: once a goal ships, its entry
+belongs in the release notes of that version, not here. The rules for changing this repository
+live in `AGENTS.md`; read that first.
 
 A subagent must never edit this file: writing it requires user approval, which a leaf subagent
 cannot obtain.
@@ -16,13 +19,13 @@ cannot obtain.
 Conventions:
 
 - `- [ ]` is the only checkbox: an open task. There is no `- [x]` line, because completing a
-  task deletes it (see section 2.2).
+  task deletes it (see section 3.2).
 - IDs are unique and never reused. An ID that has been deleted stays retired: reusing it would
   make an older reference silently point at a different task.
 - Each task is written to be handed to one subagent without extra context: it names the
   files, the acceptance criteria, and how to verify them.
 - A task may be split, but each resulting task keeps a new ID and its own criteria.
-- Progress is reported as the number of open tasks (section 2).
+- Progress is reported as the number of open tasks (section 3).
 
 ### M10 — Future work (not part of the current release)
 
@@ -68,126 +71,61 @@ release; a task moves into a release milestone when it is scheduled.
 
 ---
 
-### Security pass (2026-10-05/06)
+## 2. Release ledger
 
-One-off repository-wide audit and remediation, run outside the milestone plan and therefore
-**not counted** in section 2.1. Recorded here because the working ledger is not committed.
+### 2.1 Completed since v0.1.10 (2026-10-20)
 
-**Method.** `gosec` plus `govulncheck` for the tool layer, then five human audit lanes
-(scope/authz, auth, injection, frontend, admin). 43 findings were consolidated into 27 fix
-tasks; every fix landed as a signed commit with a fail-first test, a directed green run and a
-negative control (behaviour reverted, test must go red, behaviour restored).
+**The machine surfaces are compatible with v0.1.10.**
 
-**Fixed.**
+- No REST route and no MCP tool was added, removed or renamed. `get_due_cards` keeps its name
+  and its arguments; only its description mentions the new field.
+- No database migration was added: `BuiltinMigrations` holds the same eight entries as at the
+  tag, in the same order.
+- No configuration key and no environment variable was added, removed or renamed.
+- The deck-package and note-import schemas keep their shape; the cloze description now documents
+  the `\alt` separator.
+- The only payload change is additive: the optional `option_order` field on due cards (REST and
+  the `get_due_cards` MCP result) and on the `POST /api/v1/review/render` response.
 
-| Area | What changed |
-|---|---|
-| Authorization | Package import now enforces the target deck role (`into_deck` = editor, `replace_deck` = owner); review submission is graded per action (rating/undo/bury/next = reader, suspend = owner); statistics, tag breakdown, due forecast and the retro recompute are all scoped to the caller's visible decks; admin-scope API keys are role-bound and a non-admin cannot mint one; MCP is API-key only and every request must be made with a key owned by the handshake user; the full-database and admin export paths were deleted outright; the MCP session map is dropped on `DELETE` and bounded |
-| Input limits | REST package import caps the request body with the configured media limit before multipart parsing; base64 archives are length-checked before decoding; deck package manifests bound name/description (200/2000 characters, rune-counted, control characters and invalid UTF-8 rejected) on import *and* on deck create/rename; archives with duplicate entries or a declared sha that disagrees with the bytes are rejected; imported media counts against the importer's quota on all four entry points |
-| Resource use | `/register` and `/forgot-password` are rate-limited by IP *and* target email (5 per 15 minutes); the OIDC pending table is capped at 1000 entries with expired-entry eviction; a job whose `MarkRunning` fails is marked failed instead of blocking the queue, and adapter weights reads are bounded |
-| Hardening | Formula-rendering XSS in `internal/render`; media MIME sniffing moved to a leaf package with magic-byte checks; pre-session CSRF cookie `Secure` derives from `BASE_URL`; password reset (self-service and admin) revokes every API key of that user; TOTP rejects a replayed time step; admin actions write audit rows; the share page renders the same sanitized HTML as the review page; `govulncheck` runs in CI; an **enforcing** CSP (no `unsafe-eval`; htmx JS-expression attributes replaced by event delegation) plus `nosniff`, `Referrer-Policy`, `X-Frame-Options` and `Permissions-Policy` are set on every response |
+| Goal | What shipped | Breaking change |
+|---|---|---|
+| Choice options in a display order | Each (user, card, state version) gets a derived display order, so the correct answer cannot be memorised by position; a submitted review produces a new one. `option_order[b]` is the stored index shown in slot `b`, and the submitted `answer` is still a stored index. | No — additive field; a client that ignores it sees the stored order and grades correctly |
+| Formulas in the answer controls | The render response carries one sanitized HTML fragment per option; the controls inject it and typeset it, so TeX delimiters no longer appear literally. | No |
+| `\alt` inside a formula | A cloze deletion whose whole content is inside a formula separates its accepted answers with `\alt`; `\|` keeps its meaning, and validation rejects `\alt` where it cannot split. | No — `\alt` is not a MathJax macro, so no existing content changes meaning |
+| Rating buttons lose the interval hint | The four buttons show only their names, and the help popover no longer promises a time under each one. | No — display only; the render response still carries `intervals` |
+| Login page links to registration | The SPA login page shows a link to `/register` when the anonymous policy probe reports `open`, and nothing while probing or for `invite` / `closed`. | No |
+| Option controls for screen readers | Each checkbox and radio is named from the element that shows the option, through `aria-labelledby`, so a typeset formula is announced as its rendered text and a formula-only option is not nameless. | No |
+| Review completion page | The completion text waits for the another-batch quota request, so the text and the offer form appear together; the form copy and the hint were shortened in the same pass. | No |
+| Notification switches save again | Saving preferences sends only closable mail types; the locked class-A entries the form keeps for rendering no longer make every request fail with `class_locked`. | No |
+| Class-D admin notifications | They carry RFC 8058 one-click unsubscribe headers, so an admin can opt out without logging in. | No |
+| Toast close button theme | The close button follows the page theme, including a live switch, instead of sonner's light palette in dark mode. | No |
+| Toolchain | Go 1.27 and Node 26 / npm 12 in `go.mod`, the Dockerfile, CI and the release workflow; `engines` requires node >= 26 and npm >= 12. | For from-source builds only — images and binaries are unaffected |
 
-**Media model (breaking).** Media is now identified by its content hash: the primary key and
-the URL are the sha256, and `/media/<numeric id>` no longer exists. Read authorization is
-derived from an explicit `media_notes` mapping plus deck visibility, instead of scanning note
-fields; a write that introduces a reference the writer cannot already read is rejected; all
-note-writing entry points route through one method that rebuilds the mapping. A second table,
-`media_uploaders`, records everyone who ever supplied those bytes, so a deduplicated upload
-still grants its uploader read access after a share is revoked. Share links now require a
-logged-in account. Existing note references to the old numeric form were **not** migrated.
+Not listed because neither a user nor an integration can observe them: the migration of code
+comments to English, the gitignored `.worktrees/` layout, the removal of dead SSR-era test
+helpers, the review-day seeding fix inside a test, and the internal rename of
+`RenderResult.Extra` to `Options`.
 
-**Open items.**
+### 2.2 Version number for the next release
 
-- **Closed:** deck descriptions now share the 2000-character bound across creation,
-  updates and package import.
-- The PostgreSQL branch of the media primary-key migration has never been executed: local and
-  CI testing is SQLite only.
-- `gosec` is not wired into CI by decision; only `govulncheck` runs there.
+- Everything in section 2.1 is non-breaking on the HTTP API, the MCP tools, the database and the
+  configuration, so the next release is **v0.1.11**.
+- The toolchain bump is breaking only for someone building from source with Go 1.26 or Node 22.
+  Counting that as breaking makes the same content **v0.2.0**. Every earlier release, including
+  the one that changed media identity and deleted `/media/<numeric id>`, shipped as a `0.1.x`
+  patch, so `v0.1.11` follows the project's own practice.
 
----
+## 3. Progress tracking
 
-### After the 0.1.0 release (2026-10-06)
-
-Not milestone tasks and deliberately not checkboxes, so they stay out of the open-task count
-in section 2.1.
-
-**Hardening completed.** The CSP is now **enforcing** (no `'unsafe-eval'`): the two
-`hx-on::after-swap` uses became a delegated `htmx:afterSwap` listener (`static/js/notes.js`),
-and a source-level guard test fails if the served shell ever needs something the policy lacks.
-Verified in a real browser: the note-editor preview still re-typesets MathJax after an htmx
-swap, the review page still renders formulas, and the route set produces zero CSP
-violations. The card-body attribute whitelist now has explicit regression tests for
-`hx-*`, `data-hx-*`, `on*`, `style`, `javascript:` and `srcdoc`.
-
-**Features added.** A paginated, read-scoped media library: `GET /api/v1/media` (keyset,
-`limit` 1–100, default 24) and the editor's "choose from library" picker
-(`GET /decks/:id/media/picker`, editor role), which inserts `![](/media/<sha256>)` into the
-focused field and previews the originals with CSS sizing plus `loading="lazy"` — no
-thumbnails, no re-encoding. Each user can now choose the local hour at which review
-reminders and the weekly digest are sent (default 19:00, `users.reminder_hour`, nullable
-because midnight is a legitimate value); the old 23:00–07:00 quiet-window heuristic is gone.
-
-**Duplication converged** (from a file-by-file census rather than guesswork). Removed the
-dead HTTP-layer deck/note role guards, collapsed duplicated audit/scope/token-error/
-pagination/decode helpers into single owners, and unified the timezone, day-cutoff and
-review-day-shift helpers. The census also exposed two real defects, both fixed: the default
-preset was created under three different names (literal, localised, lower-case) so one user
-could accumulate several "defaults", and the store's review-day start disagreed with the
-scheduler's about out-of-range cutoffs.
-
-**Behaviour changes worth knowing.** Routing the web import through the shared service
-(so all four entry points make the same decisions) changed two visible things: a corrupt
-package originally rendered the generic `invalid_request` message REST returned. The
-follow-up below restores specific package codes on every transport. Web imports write media through the same
-media root as the other entry points. The web page still returns 400 rather than REST's 413
-for an oversized body — a pre-existing difference, deliberately left alone. The default
-preset is now identified by a stable literal name rather than a localised one, so an account
-that already had a localised default preset may end up with one extra row.
-
-**Follow-up fixes completed.**
-
-- Deck creation and updates enforce the shared 2000-character description limit, valid
-  UTF-8 and absence of C0 controls. Empty descriptions are allowed. Invalid descriptions
-  return `deck_description_invalid`; rejected writes do not persist.
-- **Revised:** the day-cutoff form accepts 0–23; zero is midnight. An unset (`NULL`)
-  configuration uses 04:00, and clearing the input restores that default. User and
-  scheduler inputs distinguish unset from zero; queue quotas, submissions, burying,
-  statistics, notifications and optimizer exports use the same resolution rule.
-  Migration `0002_nullable_day_cutoff` relaxes the column without rewriting stored values,
-  review-day history or existing due times. Existing zero values now mean midnight.
-  The migration is exercised on SQLite, including index/trigger preservation; its
-  PostgreSQL branch is not locally executed.
-- Review reminders and weekly summaries each have an independent 20-hour minimum interval,
-  using their existing `sent_at` ledger column. Skipped ticks do not consume a day/week
-  entry. This prevents the four-hour day/week-boundary collision without blocking a weekly
-  summary after four days of downtime. It is not a calendar-day cap.
-- Package errors preserve their specific codes across REST, MCP and web, including
-  `package_bad_format`; the existing HTTP status semantics are unchanged.
-- `AGENTS.md` now states that integration tests live beside their packages instead of
-  listing a nonexistent top-level `test/` directory.
-- The migration-period `/spa/*` aliases are gone (2026-10-08). Every page the SSR layer
-  owned keeps exactly one address — `/login`, `/register`, `/setup`, `/login/totp`,
-  `/review`, `/decks/:id/settings`, `/settings/totp`, `/settings/notifications`,
-  `/verify-email`, `/confirm-email-change`, `/unsubscribe` — and the second router table
-  that mirrored them under `/spa/...` was removed from both the server and the SPA router.
-  A bookmark to an old address now falls through to the SPA's not-found view. `/login/totp`
-  never had a server route of its own: it is served by the catch-all shell fallback, and the
-  anonymous CSRF cookie comes from `GET /api/v1/auth/session`.
-
-**Unverified.** The PostgreSQL branch of the media primary-key migration has not been
-executed locally. Local and CI tests use SQLite; PostgreSQL testing remains out of scope.
-
-## 2. Progress tracking
-
-### 2.1 Counting
+### 3.1 Counting
 
 - Count open tasks with `grep -c '^- [ ]' ROADMAP.md`, and per milestone with
   `grep -c '^- [ ] \*\*M10-' ROADMAP.md` (replace the prefix).
-- Report the open count per milestone, for example `M10 7 open · backlog 1 open`.
+- Report the open count per milestone, for example `M10 7 open`.
 - The count only goes down as work lands, and that is the whole picture: a milestone is
   finished when it holds no open task, at which point its section and heading leave this file.
 
-### 2.2 Marking a task done
+### 3.2 Marking a task done
 
 - Delete the task's entry from this file in the same commit that completes it, and name the ID
   in the commit message so the task text and its evidence stay recoverable with
