@@ -67,6 +67,11 @@
   // Self-graded card types render four rating buttons; answer-type card types render an input control and are graded by the server.
   // Which card type belongs to which class is decided by the server's self-description (graded / answer_control); the frontend no longer maintains a list.
 
+  /** Counts the queued cards that have never been studied; every other state (learning, review, relearning) counts as a review card. */
+  function countNew(queue: DueCard[]): number {
+    return queue.filter((card) => card.state === 'new').length;
+  }
+
   // svelte-ignore state_referenced_locally
   let cards = $state<DueCard[]>(initialCards);
   // svelte-ignore state_referenced_locally
@@ -79,6 +84,12 @@
   let done = $state(0);
   // svelte-ignore state_referenced_locally
   let remaining = $state(initialCards.length);
+  // The header splits the due count into new and review cards. Every queue-bearing response carries the full remaining queue
+  // (the visible card is only the first slice of it), so the new count is read off that queue and the review count is the
+  // rest of the due total — no extra request is needed and the two numbers always add up to the due total.
+  // svelte-ignore state_referenced_locally
+  let newRemaining = $state(countNew(initialCards));
+  const reviewRemaining = $derived(remaining - newRemaining);
   let startedAt = Date.now();
 
   // Answer and feedback state of answer-type card types; the grading result comes from the server, the client does not choose a rating.
@@ -386,6 +397,7 @@
       const tags = selectedTags();
       const response = await client.getDueCards(query ? { deck: query, tag: tags, limit: 500 } : { tag: tags, limit: 500 });
       remaining = response.cards.length;
+      newRemaining = countNew(response.cards);
       cards = response.cards.slice(0, 1);
       startedAt = Date.now();
     } catch (cause) {
@@ -414,6 +426,7 @@
       });
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
+      newRemaining = countNew(response.cards);
       done += 1;
       // The screen has already flipped to the next card after self-grading: remember this submission so the header's "undo the last rating" becomes available.
       lastUndo = { cardId: ratedCardId, version: response.version, rating };
@@ -455,6 +468,7 @@
       });
       pendingCards = response.cards;
       remaining = response.remaining;
+      newRemaining = countNew(response.cards);
       feedback = response.feedback ?? null;
       lastUndo = { cardId: current.card_id, version: response.version, rating: response.feedback?.rating ?? 0 };
       done += 1;
@@ -507,6 +521,7 @@
       });
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
+      newRemaining = countNew(response.cards);
       // Giving up records a self-grade log as Again; the undo entry is available there as well.
       lastUndo = { cardId: current.card_id, version: response.version, rating: 1 };
       done += 1;
@@ -545,6 +560,7 @@
       const response = await send(current.card_id);
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
+      newRemaining = countNew(response.cards);
       revealed = false;
       feedback = null;
       pendingCards = [];
@@ -613,6 +629,7 @@
       const restored = response.cards.find((card) => card.card_id === response.undone_card_id);
       if (restored) cards = [restored];
       remaining = response.remaining;
+      newRemaining = countNew(response.cards);
       done = Math.max(0, done - 1);
       lastUndo = null;
       feedback = null;
@@ -835,10 +852,19 @@
         class="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-border shadow-xs text-xs font-medium text-muted-foreground"
         aria-live="polite"
       >
-      <span class="inline-flex items-center gap-1.5">
-        <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-        <span>{$t('review.remaining')}</span>
-        <strong class="font-mono text-foreground text-sm">{remaining}</strong>
+      <!-- The pulse marks the due queue as a whole, not one half of the split: it stays whether or not any new cards are left. -->
+      <span class="w-2 h-2 shrink-0 rounded-full bg-blue-500 animate-pulse"></span>
+      <!-- A new count of zero is hidden instead of shown as "new 0": the review count already reports the whole due total. -->
+      {#if newRemaining > 0}
+        <span class="inline-flex items-center gap-1.5" data-testid="review-due-new">
+          <span>{$t('review.due_new')}</span>
+          <strong class="font-mono text-foreground text-sm">{newRemaining}</strong>
+        </span>
+        <span class="w-1 h-3 border-r border-input"></span>
+      {/if}
+      <span class="inline-flex items-center gap-1.5" data-testid="review-due-review">
+        <span>{$t('review.due_review')}</span>
+        <strong class="font-mono text-foreground text-sm">{reviewRemaining}</strong>
       </span>
       <span class="w-1 h-3 border-r border-input"></span>
       <span class="text-muted-foreground">
