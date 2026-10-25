@@ -16,8 +16,8 @@ const (
 	// report-only with no blocking, hence a separate constant: switching between enforce and observe changes only this one spot. Enforce and Report-Only must not be
 	// sent together — with two CSP headers the browser honours only the last one, and mixing them makes the policy unpredictable.
 	cspHeader = "Content-Security-Policy"
-	// referrerPolicy sends only the origin cross-site and keeps the full path same-site. The credential of a share link (/s/:token) lives in the
-	// path, so the path is never sent back cross-site, keeping the access credential from leaking to third parties via Referer.
+	// referrerPolicy sends only the origin cross-site and keeps the full path same-site. Tokens that grant access can live in the path
+	// (for example a password-reset or email-verification link), so the path is never sent back cross-site, keeping that credential from leaking to third parties via Referer.
 	referrerPolicy = "strict-origin-when-cross-origin"
 	// permissionsPolicy turns off browser capabilities this site never uses, keeping the minimal set.
 	permissionsPolicy = "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()"
@@ -52,8 +52,8 @@ var cspScriptHash = func() string {
 //   - object-src 'none' / frame-src 'none': no <object>/<embed>/<iframe> in the shipped pages.
 //   - base-uri 'self' / form-action 'self': no <base> injection surface; forms are submitted by the SPA
 //     (onsubmit prevents the default and goes to the same-origin JSON endpoints instead), with no third-party submit target.
-//   - frame-ancestors 'none': the share page (/s/:token) is a standalone page with no need to be embedded by third parties,
-//     so it may not be nested by any origin (consistent with X-Frame-Options: DENY below).
+//   - frame-ancestors 'none': every page is a standalone application page with no need to be embedded by third parties,
+//     so none may be nested by any origin (consistent with X-Frame-Options: DENY below).
 var cspPolicy = "default-src 'self'; " +
 	"script-src 'self' " + cspScriptHash + "; " +
 	"style-src 'self' 'unsafe-inline'; " +

@@ -34,7 +34,6 @@ import ResetPasswordView from '../views/ResetPasswordView.svelte';
 import EmailSettingsView from '../views/EmailSettingsView.svelte';
 import VerifyEmailView from '../views/VerifyEmailView.svelte';
 import ConfirmEmailChangeView from '../views/ConfirmEmailChangeView.svelte';
-import ShareBrowseView from '../views/ShareBrowseView.svelte';
 import UnsubscribeView from '../views/UnsubscribeView.svelte';
 
 /**
@@ -260,13 +259,6 @@ export const routes: RouteDefinition[] = [
     path: '/settings/email',
     name: 'email-settings',
     component: EmailSettingsView as unknown as RouteDefinition['component'],
-  },
-  {
-    // Public read-only share browsing. The server's GET /s/:token has switched to the app shell (invalid/revoked links still 404 on the server),
-    // the content comes from GET /api/v1/share/:token, passphrase unlock goes through POST /api/v1/share/:token/unlock.
-    path: '/s/:token',
-    name: 'share-browse',
-    component: ShareBrowseView as unknown as RouteDefinition['component'],
   },
   {
     // Canonical path for the email verification result. The server's GET /verify-email returns the app shell,

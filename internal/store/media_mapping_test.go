@@ -214,7 +214,7 @@ func TestMediaMappingRebuiltOnReferenceRemoval(t *testing.T) {
 			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("rebuild"))
 			id := saveRefNote(t, db, deckID, Ptr(owner), refFront(sha))
 
-			if ok, err := MediaAccessibleToUser(ctx, db, reader, "", sha); err != nil || !ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, reader, sha); err != nil || !ok {
 				t.Fatalf("reader before removal: readable=%v err=%v, want true", ok, err)
 			}
 
@@ -230,7 +230,7 @@ func TestMediaMappingRebuiltOnReferenceRemoval(t *testing.T) {
 			if rows != 0 {
 				t.Errorf("stale media_notes rows after reference removal = %d, want 0 (rebuild must delete old rows)", rows)
 			}
-			if ok, err := MediaAccessibleToUser(ctx, db, reader, "", sha); err != nil || ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, reader, sha); err != nil || ok {
 				t.Fatalf("reader after removal: readable=%v err=%v, want false", ok, err)
 			}
 		})
@@ -255,13 +255,13 @@ func TestMediaMappingSoftDeletedNoteDoesNotAuthorize(t *testing.T) {
 			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("softdel"))
 			id := saveRefNote(t, db, deckID, Ptr(owner), refFront(sha))
 
-			if ok, _ := MediaAccessibleToUser(ctx, db, reader, "", sha); !ok {
+			if ok, _ := MediaAccessibleToUser(ctx, db, reader, sha); !ok {
 				t.Fatal("reader should read the media before the note is soft deleted")
 			}
 			if err := NewNoteStore(db).Delete(ctx, id); err != nil {
 				t.Fatalf("soft delete note: %v", err)
 			}
-			if ok, err := MediaAccessibleToUser(ctx, db, reader, "", sha); err != nil || ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, reader, sha); err != nil || ok {
 				t.Fatalf("reader after note soft delete: readable=%v err=%v, want false", ok, err)
 			}
 		})
@@ -412,7 +412,7 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Clone: %v", err)
 			}
-			if ok, err := MediaAccessibleToUser(ctx, db, cloner, "", sha); err != nil || !ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, cloner, sha); err != nil || !ok {
 				t.Fatalf("cloner reads cloned media: readable=%v err=%v, want true", ok, err)
 			}
 			// revoke the source deck's grant and soft-delete the source notes: the copy no longer depends on the source deck being visible.
@@ -422,7 +422,7 @@ func TestCloneKeepsClonedMediaReadable(t *testing.T) {
 			if _, err := NewNoteStore(db).DeleteMany(ctx, mustNoteIDs(t, db, src.ID), false); err != nil {
 				t.Fatalf("soft delete source notes: %v", err)
 			}
-			if ok, err := MediaAccessibleToUser(ctx, db, cloner, "", sha); err != nil || !ok {
+			if ok, err := MediaAccessibleToUser(ctx, db, cloner, sha); err != nil || !ok {
 				t.Fatalf("cloner reads cloned media after source hidden: readable=%v err=%v, want true", ok, err)
 			}
 			// the copy really does have a note referencing that sha (the mapping belongs to the copy, not the source).
@@ -496,6 +496,35 @@ func TestImportPackageRejectsUnreadableMediaRef(t *testing.T) {
 			if deckCount != 0 || noteCount != 0 || mappingCount != 0 {
 				t.Errorf("rejected import left decks=%d notes=%d mapping=%d, want 0/0/0",
 					deckCount, noteCount, mappingCount)
+			}
+		})
+	}
+}
+
+// TestMediaReadableByGrantNotByStranger pins the two remaining allow conditions at the read boundary:
+// a grantee of the deck reads media referenced by a note in it, while a user with neither an uploader
+// record nor a grant gets no access. The share-session branch that used to grant the second case is gone.
+func TestMediaReadableByGrantNotByStranger(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			users := seedUsers(t, db, "media_grant_owner", "media_grant_member", "media_grant_stranger")
+			owner, member, stranger := users[0], users[1], users[2]
+			deckID := seedDeck(t, db, owner)
+			if err := NewGrantStore(db).Grant(ctx, deckID, member, RoleReader, Ptr(owner)); err != nil {
+				t.Fatalf("grant member: %v", err)
+			}
+			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("grant-only"))
+			saveRefNote(t, db, deckID, Ptr(owner), refFront(sha))
+
+			if ok, err := MediaAccessibleToUser(ctx, db, member, sha); err != nil || !ok {
+				t.Errorf("deck member: readable=%v err=%v, want true", ok, err)
+			}
+			if ok, err := MediaAccessibleToUser(ctx, db, stranger, sha); err != nil || ok {
+				t.Errorf("stranger: readable=%v err=%v, want false", ok, err)
 			}
 		})
 	}

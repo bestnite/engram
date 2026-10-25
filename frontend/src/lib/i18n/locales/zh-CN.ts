@@ -397,17 +397,7 @@ export const zhCN: LocaleCatalog = {
   'deck.sharing.role.editor': '编辑者',
   'deck.sharing.grant': '授予访问权限',
   'deck.sharing.revoke': '撤销',
-  'deck.sharing.links': '分享链接',
-  'deck.sharing.password': '可选口令',
-  'deck.sharing.expiry': '可选过期日期',
-  'deck.sharing.create_link': '创建链接',
-  'deck.sharing.link_once': '请立即复制此链接，之后将无法再次查看。',
   'deck.sharing.dismiss': '隐藏',
-  'deck.sharing.link_active': '有效',
-  'deck.sharing.link_expired': '已过期',
-  'deck.sharing.link_revoked': '已撤销',
-  'deck.sharing.password_set': '已设置口令',
-  'deck.sharing.revoke_all': '撤销全部有效链接',
   // ---- Detailed stats (/stats) ----
   // The numbers come from GET /api/v1/stats/detail; the language pack only provides labels and units.
   'stats.volume.heading': '复习量',
@@ -1098,24 +1088,6 @@ export const zhCN: LocaleCatalog = {
   'account.error.password_too_long': '密码长度超限。',
   'account.error.password_too_common': '密码过于常见，请更换更复杂的密码。',
   'account.error.rate_limited': '尝试过于频繁，请稍后再试。',
-  // ---- Public read-only share browsing (GET /s/:token) ----
-  'share.browse.heading': '共享卡组',
-  'share.browse.intro': '这是共享卡组的预览。登录并加入后即可开始复习。',
-  'share.browse.login': '登录后加入并复习',
-  'share.browse.join': '加入我的卡组',
-  'share.browse.joined': '已加入你的卡组，可以在卡组列表里复习它。',
-  'share.browse.open_deck': '打开卡组',
-  'share.browse.join_failed': '加入失败，请稍后重试。',
-  'share.browse.front': '正面',
-  'share.browse.back': '背面',
-  'share.browse.empty': '这个卡组还没有卡片。',
-  'share.browse.loading': '正在加载共享卡组…',
-  'share.password.intro': '这个卡组受口令保护，请输入你收到的口令后查看。',
-  'share.password.label': '口令',
-  'share.password.placeholder': '请输入口令',
-  'share.password.submit': '查看卡组',
-  'share.error_password': '口令不正确。',
-  'share.error_not_found': '分享链接无效、已撤销或已过期。',
   // ---- OIDC login entry (rendered after the SPA login view probes for it) ----
   'account.oidc.button': '使用 OIDC 登录',
   // ---- Nav items added by the parent (copy matches the SSR mainNav) ----
@@ -1239,8 +1211,6 @@ export const zhCN: LocaleCatalog = {
   'deck.settings.left_today': '剩余',
   // Section description for deck sharing management.
   'deck.sharing.grants_hint': '对方接受邀请后即可访问。编辑者可以修改卡片，只读成员只能复习。',
-  'deck.sharing.links_hint': '持有链接的人可以预览这个卡组，登录后可加入复习。可选设置口令与过期日期。',
-  'deck.sharing.link_copied': '链接已复制',
   'deck.sharing.copy': '复制',
   // Two-factor page: section heading for the enrollment step.
   'settings.totp.begin.heading': '绑定认证器',

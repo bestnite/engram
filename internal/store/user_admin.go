@@ -127,7 +127,6 @@ var userCleanups = []userCleanup{
 	{"DELETE FROM deck_daily_extras WHERE user_id = ?", 1},
 	{"DELETE FROM deck_share_invites WHERE user_id = ? OR invited_by = ?", 2},
 	{"DELETE FROM share_allow WHERE from_user_id = ? OR to_user_id = ?", 2},
-	{"DELETE FROM share_links WHERE created_by = ?", 1},
 	{"DELETE FROM user_totp WHERE user_id = ?", 1},
 	{"DELETE FROM totp_recovery_codes WHERE user_id = ?", 1},
 	{"DELETE FROM email_prefs WHERE user_id = ?", 1},

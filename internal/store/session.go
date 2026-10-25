@@ -35,14 +35,13 @@ func (s *SessionStore) ByID(ctx context.Context, id string) (*Session, error) {
 }
 
 // Revoke revokes one session (logout). Calling it again on an already revoked session is idempotent.
-// Once a session is revoked the share grants it registered (L3) must disappear too: the grant only serves that session's browsing, keeping it is just garbage.
 func (s *SessionStore) Revoke(ctx context.Context, id string, at time.Time) error {
 	if err := s.db.WithContext(ctx).Model(&Session{}).
 		Where("id = ? AND revoked_at IS NULL", id).
 		Update("revoked_at", at).Error; err != nil {
 		return fmt.Errorf("revoke session: %w", err)
 	}
-	return removeShareGrantsForSessionTx(ctx, s.db, id)
+	return nil
 }
 
 // RevokeAllForUser revokes every active session of a user (password change, disabling, forced sign-out).
@@ -52,26 +51,24 @@ func (s *SessionStore) RevokeAllForUser(ctx context.Context, userID uint64, at t
 
 // RevokeAllForUserTx revokes all of a user's active sessions in bulk inside the transaction given by the caller.
 // A password reset needs it to share one transaction with the password write and the API key revocation, so a failure leaves nothing half revoked.
-// The share grants (L3) of all that user's sessions are deleted in the same transaction.
 func (s *SessionStore) RevokeAllForUserTx(ctx context.Context, tx *gorm.DB, userID uint64, at time.Time) error {
 	if err := tx.WithContext(ctx).Model(&Session{}).
 		Where("user_id = ? AND revoked_at IS NULL", userID).
 		Update("revoked_at", at).Error; err != nil {
 		return fmt.Errorf("revoke user sessions: %w", err)
 	}
-	return removeShareGrantsForUserTx(ctx, tx, userID, "")
+	return nil
 }
 
 // RevokeAllForUserExcept revokes all of a user's active sessions except keepID.
 // The user's own password change on the settings page uses it: other devices are signed out at once while the current session is kept, so the user is not thrown out right after changing the password.
-// The share grants (L3) of the signed-out sessions go with them; the current session keeps its own (the user is still browsing).
 func (s *SessionStore) RevokeAllForUserExcept(ctx context.Context, userID uint64, keepID string, at time.Time) error {
 	if err := s.db.WithContext(ctx).Model(&Session{}).
 		Where("user_id = ? AND revoked_at IS NULL AND id <> ?", userID, keepID).
 		Update("revoked_at", at).Error; err != nil {
 		return fmt.Errorf("revoke user sessions except current: %w", err)
 	}
-	return removeShareGrantsForUserTx(ctx, s.db, userID, keepID)
+	return nil
 }
 
 // Touch updates the session's last-active time; best effort, a failure should not interrupt the request.

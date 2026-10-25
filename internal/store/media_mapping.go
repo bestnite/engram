@@ -68,19 +68,14 @@ func mediaRefsIn(fields map[string]any) map[string]bool {
 	return refs
 }
 
-// mediaReadableByUser decides whether the media for sha may be read by userID (two branches, plus L3's share branch).
+// mediaReadableByUser decides whether the media for sha may be read by userID (two branches).
 //
-// The necessary and sufficient conditions for allowing a read, one of three:
+// The necessary and sufficient conditions for allowing a read:
 //  1. media_uploaders has a record pointing at userID (they supplied these bytes; a dedup hit counts, and it is irrevocable);
-//  2. the media_notes mapping has a record pointing at 'a non-soft-deleted note inside a deck visible to userID';
-//  3. shareSessionID is non-empty and the media_notes mapping has a record pointing at a non-soft-deleted note inside a deck this **server-side session**
-//     opened through a share link whose grant is unexpired (L3).
+//  2. the media_notes mapping has a record pointing at 'a non-soft-deleted note inside a deck visible to userID'.
 //
-// Branch 3 is only open to the read path: pre-write validation (checkNewMediaRefs) passes an empty sessionID. A share-link visitor is a reader and
-// cannot write notes anyway; counting the share grant as 'readable' would let pre-write validation cite a source that semantically should not exist there.
-//
-// It shares the same decision with the read endpoint MediaAccessibleToUser, and with pre-write validation — 'readable' has only this one definition.
-func mediaReadableByUser(ctx context.Context, db *gorm.DB, userID uint64, mediaSha, shareSessionID string) (bool, error) {
+// It shares the same decision with the read endpoint MediaAccessibleToUser and with pre-write validation — 'readable' has only this one definition.
+func mediaReadableByUser(ctx context.Context, db *gorm.DB, userID uint64, mediaSha string) (bool, error) {
 	if db == nil || userID == 0 || mediaSha == "" {
 		return false, nil
 	}
@@ -92,20 +87,6 @@ func mediaReadableByUser(ctx context.Context, db *gorm.DB, userID uint64, mediaS
 	}
 	if uploads > 0 {
 		return true, nil
-	}
-	// the third branch: decks this session opened through a share link (expired / revoked links are excluded by the subquery, see share_session.go).
-	if shareSessionID != "" {
-		var shared int64
-		if err := db.WithContext(ctx).Model(&MediaNote{}).
-			Joins("JOIN notes ON notes.id = media_notes.note_id AND notes.deleted_at IS NULL").
-			Where("media_notes.media_sha = ?", mediaSha).
-			Where("notes.deck_id IN (?)", shareSessionDeckIDsQuery(db, shareSessionID, time.Now().UTC())).
-			Count(&shared).Error; err != nil {
-			return false, fmt.Errorf("store: count media share session refs: %w", err)
-		}
-		if shared > 0 {
-			return true, nil
-		}
 	}
 	return false, nil
 }
@@ -143,7 +124,7 @@ func checkNewMediaRefs(ctx context.Context, db *gorm.DB, actor uint64, oldFields
 		if err != nil {
 			return fmt.Errorf("store: check media ref %s: %w", sha, err)
 		}
-		ok, err := mediaReadableByUser(ctx, db, actor, sha, "")
+		ok, err := mediaReadableByUser(ctx, db, actor, sha)
 		if err != nil {
 			return err
 		}

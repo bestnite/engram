@@ -1453,31 +1453,6 @@ export interface ResendVerificationResponse {
   sent: boolean;
 }
 
-// ---- Public read-only share browsing (Go: internal/web/share_api.go) ----
-
-/** Both sides of one shared card, each server-sanitized HTML (the client only does {@html} and never re-renders Markdown). */
-export interface ShareNote {
-  front_html: string;
-  back_html: string;
-}
-
-/** Response of GET /api/v1/share/:token and POST /api/v1/share/:token/unlock. */
-export interface ShareResponse {
-  deck_name: string;
-  /** When true, notes is always empty: a password-protected link returns no content before unlocking. */
-  password_required: boolean;
-  notes: ShareNote[];
-}
-
-/**
- * Response of POST /api/v1/share/:token/join.
- * After joining successfully the deck enters the caller's list (and appears in the review queue); revoking the link does not affect it.
- */
-export interface JoinShareResponse {
-  deck_id: number;
-  joined: boolean;
-}
-
 // ---- OIDC login entry probing (Go: internal/web/oidc_api.go) ----
 
 /** GET /api/v1/auth/oidc: whether the entry is available and the initiation URL; contains no credentials. */

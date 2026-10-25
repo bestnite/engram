@@ -36,7 +36,7 @@ type InviteStore struct {
 // NewInviteStore constructs the invite store.
 func NewInviteStore(db *gorm.DB) *InviteStore { return &InviteStore{db: db} }
 
-// newInviteToken generates the URL-safe encoding of a 32-byte random token (same spec as share links).
+// newInviteToken generates the URL-safe encoding of a 32-byte random token.
 func newInviteToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {

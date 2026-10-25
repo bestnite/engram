@@ -72,8 +72,6 @@ import {
   type EmailChangeRequest,
   type EmailChangeResponse,
   type ResendVerificationResponse,
-  type ShareResponse,
-  type JoinShareResponse,
   type OIDCInfo,
   type RegistrationInfo,
   type CardTypesResponse,
@@ -1485,41 +1483,6 @@ export class ApiClient {
   async getAdminI18n(): Promise<import('./types').AdminI18nResponse> {
     return this.request<import('./types').AdminI18nResponse>('/api/v1/admin/i18n');
   }
-  /**
-   * Read the read-only content of a shared deck (GET /api/v1/share/:token).
-   * Accessible anonymously (the link itself is the credential); a password-protected link returns only password_required: true before unlocking.
-   */
-  async getShare(token: string): Promise<ShareResponse> {
-    return this.request<ShareResponse>(`/api/v1/share/${encodeURIComponent(token)}`);
-  }
-
-  /**
-   * Verify the share password and fetch the content (POST /api/v1/share/:token/unlock).
-   * Stateless like SSR: the password is re-verified on every request, no unlock state is established, and no CSRF token is needed.
-   */
-  async unlockShare(token: string, password: string): Promise<ShareResponse> {
-    return this.request<ShareResponse>(`/api/v1/share/${encodeURIComponent(token)}/unlock`, {
-      method: 'POST',
-      body: JSON.stringify({ password }),
-    });
-  }
-
-  /**
-   * Add the deck behind a share link to your own list (POST /api/v1/share/:token/join).
-   *
-   * This is separate from "opening the link": opening only registers session-level read access (visible, not in the list), while joining writes authorization,
-   * after which the deck appears in my list and review queue. The token is the credential; the server rejects it when not logged in, so the caller must guide the user to log in first.
-   * When the session token is missing, fetch a CSRF token first.
-   */
-  async joinSharedDeck(token: string): Promise<JoinShareResponse> {
-    if (!this.csrfToken) {
-      await this.getSession();
-    }
-    return this.notifying('decks', this.request<JoinShareResponse>(`/api/v1/share/${encodeURIComponent(token)}/join`, {
-      method: 'POST',
-    }));
-  }
-
   /**
    * Probe whether the OIDC login entry is available (GET /api/v1/auth/oidc).
    * Read-only and callable before login; the response only contains enabled and a stable initiation URL, never issuer / secret.

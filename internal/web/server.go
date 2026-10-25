@@ -58,10 +58,6 @@ type Deps struct {
 	Presets *store.PresetStore
 	// Grants is the deck grant store; when empty, New builds it from the DB.
 	Grants *store.GrantStore
-	// ShareLinks is the share link store; when empty, New builds it from the DB.
-	ShareLinks *store.ShareLinkStore
-	// ShareSessions is the session-level grant for decks opened through a share link (L3); when empty, New builds it from the DB.
-	ShareSessions *store.ShareSessionStore
 	// Auditor is the single audit exit for all writes; when empty, nothing is audited.
 	Auditor *auth.Auditor
 	// LoginLimiter provides the escalating delay after failed logins; when empty, login is not rate limited.
@@ -124,9 +120,6 @@ type Server struct {
 	cards            *store.CardStore
 	presets          *store.PresetStore
 	grants           *store.GrantStore
-	shareLinks       *store.ShareLinkStore
-	// shareSessions records "which decks this session opened through a share link" (L3); media reads are allowed from it.
-	shareSessions *store.ShareSessionStore
 	// access is the permission decision shared by Web and REST/MCP (the single implementation is auth.DeckAccess).
 	access       *auth.DeckAccess
 	auditor      *auth.Auditor
@@ -283,15 +276,6 @@ func New(addr string, deps Deps) (*Server, error) {
 	if s.grants == nil {
 		s.grants = store.NewGrantStore(deps.DB)
 	}
-	s.shareLinks = deps.ShareLinks
-	if s.shareLinks == nil {
-		s.shareLinks = store.NewShareLinkStore(deps.DB)
-	}
-	// L3: decks opened through a share link join the session's visible set, and media reads are allowed from it. Likewise able to be built from the DB.
-	s.shareSessions = deps.ShareSessions
-	if s.shareSessions == nil {
-		s.shareSessions = store.NewShareSessionStore(deps.DB)
-	}
 	if deps.Decks != nil {
 		s.access = auth.NewDeckAccess(deps.Decks, s.grants)
 	}
@@ -366,7 +350,6 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerPackageWebRoutes(router)
 	s.registerNoteRoutes(router)
 	s.registerSharingRoutes(router)
-	s.registerShareBrowseRoutes(router)
 	s.registerCloneRoutes(router)
 	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)

@@ -1,7 +1,6 @@
 package web
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,7 +9,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-func TestSharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
+func TestSharingOwnerSessionCSRFAndGrantConsent(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Share SPA")
 	path := "/api/v1/decks/" + deck.PublicID + "/sharing"
@@ -31,30 +30,6 @@ func TestSharingOwnerSessionCSRFAndLinkSecrecy(t *testing.T) {
 	}
 	if got := jsonRequest(t, srv, "POST", path+"/grants", `{"username":"non_owner","role":"owner"}`, ownerCookies, ownerCSRF); got.Code != http.StatusBadRequest {
 		t.Fatalf("owner grant = %d, want 400", got.Code)
-	}
-	link := jsonRequest(t, srv, "POST", path+"/links", `{}`, ownerCookies, ownerCSRF)
-	if link.Code != http.StatusCreated || !strings.Contains(link.Body.String(), `"link":"/s/`) {
-		t.Fatalf("create link = %d %s", link.Code, link.Body.String())
-	}
-	var createBody struct {
-		Link string `json:"link"`
-	}
-	if err := json.Unmarshal(link.Body.Bytes(), &createBody); err != nil {
-		t.Fatal(err)
-	}
-	plaintext := strings.TrimPrefix(createBody.Link, "/s/")
-	if got := jsonRequest(t, srv, "GET", "/s/"+plaintext, "", ownerCookies, ""); got.Code != http.StatusOK {
-		t.Fatalf("active link = %d, want 200", got.Code)
-	}
-	if got := jsonRequest(t, srv, "DELETE", path+"/links/revoke/"+store.ShareLinkDigest(plaintext), "", ownerCookies, ownerCSRF); got.Code != http.StatusOK {
-		t.Fatalf("revoke link = %d", got.Code)
-	}
-	if got := jsonRequest(t, srv, "GET", "/s/"+plaintext, "", ownerCookies, ""); got.Code != http.StatusNotFound {
-		t.Fatalf("revoked link = %d, want 404", got.Code)
-	}
-	listed := getWithCookies(t, srv, path, ownerCookies)
-	if strings.Contains(listed.Body.String(), "/s/") {
-		t.Fatalf("link plaintext leaked in listing: %s", listed.Body.String())
 	}
 	// The visibility endpoint was removed along with "public/private decks": the route does not exist, so writing to it always gives 404.
 	if got := jsonRequest(t, srv, "POST", path+"/visibility", `{"visibility":"public"}`, ownerCookies, ownerCSRF); got.Code != http.StatusNotFound {

@@ -14,7 +14,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/store"
@@ -259,9 +258,8 @@ var mediaShaParamRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // mediaServe proxies media reads: with a sha256 ETag and immutable caching.
 //
-// Authorization: besides sign-in, "deck access" is required — one of three: (1) a media_uploaders record pointing at me
-// (I supplied these bytes, including a deduplication hit); (2) a media_notes mapping to a non-soft-deleted note inside a deck I can see;
-// (3) (L3) a mapping to a non-soft-deleted note in a deck my current session opened through a share link, with authorization not expired.
+// Authorization: besides sign-in, "deck access" is required — one of two: (1) a media_uploaders record pointing at me
+// (I supplied these bytes, including a deduplication hit); (2) a media_notes mapping to a non-soft-deleted note inside a deck I can see.
 // The predicate is shared with list/queue/stats (store.MediaAccessibleToUser → mediaReadableByUser),
 // and no permission and not-found both return 404.
 func (s *Server) mediaServe(c *gin.Context) {
@@ -275,13 +273,8 @@ func (s *Server) mediaServe(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	// The share grant hangs off the server-side session (L3): the current session id is handed to the store layer explicitly,
-	// so "decks this session opened through a share link" also count as readable. Unauthenticated requests never get here (requireUser already blocks them).
-	sessionID := ""
-	if sess, ok := auth.CurrentSession(c); ok {
-		sessionID = sess.ID
-	}
-	allowed, err := store.MediaAccessibleToUser(c.Request.Context(), s.db, user.ID, sessionID, sha)
+	// No permission caching: revoking a grant must take effect on the next request, caching would turn 'revoke' into 'wait for expiry'.
+	allowed, err := store.MediaAccessibleToUser(c.Request.Context(), s.db, user.ID, sha)
 	if err != nil {
 		s.logger.Error("media access check failed", "media_sha", sha, "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)

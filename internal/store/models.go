@@ -233,20 +233,6 @@ type DeckGrant struct {
 
 func (DeckGrant) TableName() string { return "deck_grants" }
 
-// ShareLink is a read-only share link for readers without an account.
-type ShareLink struct {
-	Token        string     `gorm:"primaryKey" json:"token"`
-	DeckID       uint64     `gorm:"not null;index" json:"deck_id"`
-	Role         string     `gorm:"not null" json:"role"`
-	PasswordHash *string    `gorm:"column:password_hash" json:"-"`
-	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
-	CreatedBy    uint64     `gorm:"not null" json:"created_by"`
-	CreatedAt    time.Time  `gorm:"not null" json:"created_at"`
-	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
-}
-
-func (ShareLink) TableName() string { return "share_links" }
-
 // Media stores metadata only; the bytes live on the local filesystem, with the path determined by sha256.
 // Primary key = content sha256: the external identifier is the hash itself, and there is no auto-increment id any more.
 type Media struct {
@@ -297,16 +283,6 @@ type MediaUploader struct {
 }
 
 func (MediaUploader) TableName() string { return "media_uploaders" }
-
-// ShareSessionDeck records 'a server-side session opened a deck through a share link' (L3).
-// Domain access and expiry rules live in ShareSessionStore in this file, and it is registered in AllModels().
-type ShareSessionDeck struct {
-	SessionID string    `gorm:"primaryKey;column:session_id" json:"session_id"`
-	DeckID    uint64    `gorm:"primaryKey;column:deck_id" json:"deck_id"`
-	ExpiresAt time.Time `gorm:"not null;index" json:"expires_at"`
-}
-
-func (ShareSessionDeck) TableName() string { return "share_session_decks" }
 
 // APIKey is a user-level credential; the plaintext is returned only once at creation and the DB stores only the sha256.
 type APIKey struct {
@@ -398,10 +374,8 @@ func (Session) TableName() string { return "sessions" }
 func AllModels() []any {
 	return []any{
 		&User{}, &Identity{}, &Invite{}, &Setting{}, &Preset{}, &Deck{}, &Note{}, &Card{},
-		&CardState{}, &Review{}, &DeckGrant{}, &ShareLink{}, &Media{}, &APIKey{}, &Job{},
+		&CardState{}, &Review{}, &DeckGrant{}, &Media{}, &APIKey{}, &Job{},
 		&MediaNote{}, &MediaUploader{},
-		// L3 share session grants: model defined in models.go, access in share_session.go.
-		&ShareSessionDeck{},
 		&AuditLog{}, &SchemaVersion{}, &Session{},
 		// TOTP: model defined in totp.go, but it must appear here (see the comment above).
 		&UserTOTP{}, &TOTPRecoveryCode{},

@@ -64,7 +64,7 @@ const (
 	ActionSharePolicyUpdate = "share.policy_update"
 	// cloning a deck (content copied into the caller's account). Not strictly a sharing change, but recorded all the same.
 	ActionDeckClone = "deck.clone"
-	// share links: create / revoke one / revoke all at once.
+	// Historical share-link actions, retained because audit rows written before the feature's removal still reference them.
 	ActionShareLinkCreate    = "share_link.create"
 	ActionShareLinkRevoke    = "share_link.revoke"
 	ActionShareLinkRevokeAll = "share_link.revoke_all"

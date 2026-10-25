@@ -34,9 +34,8 @@ const mediaBaseColumns = "media.sha256, media.rel_path, media.mime, media.bytes,
 //  1. media_uploaders has a record pointing at userID — they supplied these bytes (a dedup hit counts, irrevocable);
 //  2. media_notes JOIN notes (not soft-deleted) and the note's deck falls inside the visibleDeckIDsQuery range.
 //
-// It is the single source of 'the readable media set', shared by the read decision (the first two branches of mediaReadableByUser) and the listing,
-// so the SQL is not written twice and cannot drift. The third branch (reading through a share session) is open only to the /media proxy path;
-// the picker and the REST listing are both used by the logged-in user themselves and do not include it.
+// It is the single source of 'the readable media set', shared by the read decision (the two branches of mediaReadableByUser) and the listing,
+// so the SQL is not written twice and cannot drift.
 //
 // UNION (rather than UNION ALL) ensures the same bytes hit on both paths appear only once.
 func readableMediaUnionQuery(db *gorm.DB, userID uint64) *gorm.DB {

@@ -66,6 +66,29 @@ var BuiltinMigrations = []Migration{
 		Name: "0007_per_user_suspension",
 		Up:   perUserSuspension,
 	},
+	{
+		// Share links are removed outright, so the two tables that backed them are dropped rather than left behind empty.
+		// AutoMigrate only adds tables, so dropping them needs an explicit versioned migration; DROP TABLE IF EXISTS keeps it safe on a fresh
+		// install where AutoMigrate never created them and on a second run.
+		Name: "0008_drop_share_link_tables",
+		Up:   dropLegacyShareTables,
+	},
+}
+
+// dropLegacyShareTables drops the two tables of the removed anonymous share-link transport.
+// Both databases accept DROP TABLE IF EXISTS, so a fresh database (no such tables) and an upgrade take the same path.
+func dropLegacyShareTables(tx *gorm.DB) error {
+	switch tx.Dialector.Name() {
+	case "sqlite", "postgres":
+		for _, table := range []string{"share_links", "share_session_decks"} {
+			if err := tx.Exec("DROP TABLE IF EXISTS " + table).Error; err != nil {
+				return fmt.Errorf("drop share link tables: drop %s: %w", table, err)
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("drop share link tables: unsupported dialect %q", tx.Dialector.Name())
+	}
 }
 
 // perUserSuspension moves cards.suspended_at onto the owner's card_states row, then drops that column.

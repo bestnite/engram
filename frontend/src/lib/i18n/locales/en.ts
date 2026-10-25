@@ -397,17 +397,7 @@ export const en: LocaleCatalog = {
   'deck.sharing.role.editor': 'Editor',
   'deck.sharing.grant': 'Grant access',
   'deck.sharing.revoke': 'Revoke',
-  'deck.sharing.links': 'Share links',
-  'deck.sharing.password': 'Optional password',
-  'deck.sharing.expiry': 'Optional expiry date',
-  'deck.sharing.create_link': 'Create link',
-  'deck.sharing.link_once': 'Copy this link now. It will not be shown again.',
   'deck.sharing.dismiss': 'Hide',
-  'deck.sharing.link_active': 'Active',
-  'deck.sharing.link_expired': 'Expired',
-  'deck.sharing.link_revoked': 'Revoked',
-  'deck.sharing.password_set': 'Password protected',
-  'deck.sharing.revoke_all': 'Revoke all active links',
   // ---- Detailed statistics (/stats) ----
   // Numbers arrive raw from GET /api/v1/stats/detail; these keys only carry labels and units.
   'stats.volume.heading': 'Review volume',
@@ -1099,24 +1089,6 @@ export const en: LocaleCatalog = {
   'account.error.password_too_long': 'The password is too long.',
   'account.error.password_too_common': 'The password is too common.',
   'account.error.rate_limited': 'Too many attempts. Please wait and try again.',
-  // ---- Public read-only share browser (GET /s/:token) ----
-  'share.browse.heading': 'Shared deck',
-  'share.browse.intro': 'A preview of the shared deck. Sign in and add it to your decks to start reviewing.',
-  'share.browse.login': 'Sign in to add and review',
-  'share.browse.join': 'Add to my decks',
-  'share.browse.joined': 'Added to your decks. You can review it from your deck list.',
-  'share.browse.open_deck': 'Open deck',
-  'share.browse.join_failed': 'Could not add the deck. Please try again.',
-  'share.browse.front': 'Front',
-  'share.browse.back': 'Back',
-  'share.browse.empty': 'This deck has no cards yet.',
-  'share.browse.loading': 'Loading the shared deck…',
-  'share.password.intro': 'This deck is password protected. Enter the password you received to view it.',
-  'share.password.label': 'Password',
-  'share.password.placeholder': 'Enter password',
-  'share.password.submit': 'View deck',
-  'share.error_password': 'The password is incorrect.',
-  'share.error_not_found': 'This share link is invalid, revoked or expired.',
   // ---- OIDC sign-in entry (probed by the SPA login view) ----
   'account.oidc.button': 'Sign in with OIDC',
   // ---- parent-owned navigation entries (mirrors the SSR mainNav labels) ----
@@ -1240,8 +1212,6 @@ export const en: LocaleCatalog = {
   'deck.settings.left_today': 'Left',
   // Section description for deck sharing management.
   'deck.sharing.grants_hint': 'People get access once they accept the invite. Editors can change cards; readers can only review.',
-  'deck.sharing.links_hint': 'Anyone with the link can preview this deck and join after signing in. A password and an expiry date are optional.',
-  'deck.sharing.link_copied': 'Link copied',
   'deck.sharing.copy': 'Copy',
   // Two-factor page: section heading for the enrollment step.
   'settings.totp.begin.heading': 'Set up an authenticator',

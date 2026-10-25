@@ -491,3 +491,128 @@ func TestBuiltinPerUserSuspensionMigration(t *testing.T) {
 		})
 	}
 }
+
+// TestBuiltinDropLegacyShareTablesFreshDatabase proves a fresh install ends up without the two share-link tables:
+// AutoMigrate no longer creates them, and running every builtin migration neither fails on their absence nor recreates them.
+func TestBuiltinDropLegacyShareTablesFreshDatabase(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			applied, err := Sync(ctx, db, BuiltinMigrations)
+			if err != nil {
+				t.Fatalf("Sync(BuiltinMigrations) error = %v", err)
+			}
+			if applied == 0 {
+				t.Fatal("Sync() applied no migration, want the share-link table drop")
+			}
+			for _, table := range []string{"share_links", "share_session_decks"} {
+				if db.Migrator().HasTable(table) {
+					t.Errorf("table %q exists after Sync on a fresh database", table)
+				}
+			}
+			for _, table := range []string{"deck_grants", "deck_share_invites", "decks", "notes"} {
+				if !db.Migrator().HasTable(table) {
+					t.Errorf("table %q missing after Sync; the migration must not touch other tables", table)
+				}
+			}
+		})
+	}
+}
+
+// TestBuiltinDropLegacyShareTablesDropsPopulatedTables simulates an older database that still holds rows in both
+// share-link tables. After only migration 0008 runs, both tables are gone while deck_grants, deck_share_invites, decks and
+// notes keep their rows, and a second Sync neither runs the migration again nor errors on the already-absent tables.
+func TestBuiltinDropLegacyShareTablesDropsPopulatedTables(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			if err := setVersion(db, 7); err != nil {
+				t.Fatalf("set version: %v", err)
+			}
+			for _, stmt := range []string{
+				`CREATE TABLE share_links (
+					token         text PRIMARY KEY,
+					deck_id       bigint NOT NULL,
+					role          text NOT NULL,
+					password_hash text,
+					expires_at    timestamp,
+					created_by    bigint NOT NULL,
+					created_at    timestamp NOT NULL,
+					revoked_at    timestamp
+				)`,
+				`CREATE TABLE share_session_decks (
+					session_id text NOT NULL,
+					deck_id    bigint NOT NULL,
+					expires_at timestamp NOT NULL,
+					PRIMARY KEY (session_id, deck_id)
+				)`,
+			} {
+				if err := db.Exec(stmt).Error; err != nil {
+					t.Fatalf("create legacy share-link table: %v", err)
+				}
+			}
+			ids := seedUsers(t, db, "share_drop_owner", "share_drop_member")
+			owner, member := ids[0], ids[1]
+			deckID := seedDeck(t, db, owner)
+			now := time.Now().UTC()
+			if err := db.Create(&DeckGrant{DeckID: deckID, UserID: member, Role: RoleReader, CreatedBy: Ptr(owner), CreatedAt: now}).Error; err != nil {
+				t.Fatalf("seed deck grant: %v", err)
+			}
+			if err := db.Create(&DeckShareInvite{DeckID: deckID, UserID: member, Role: RoleReader, InvitedBy: owner, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}).Error; err != nil {
+				t.Fatalf("seed deck share invite: %v", err)
+			}
+			if err := db.Exec(`INSERT INTO share_links (token, deck_id, role, created_by, created_at) VALUES (?, ?, ?, ?, ?)`,
+				strings.Repeat("a", 64), deckID, RoleReader, owner, now).Error; err != nil {
+				t.Fatalf("seed share link row: %v", err)
+			}
+			if err := db.Exec(`INSERT INTO share_session_decks (session_id, deck_id, expires_at) VALUES (?, ?, ?)`,
+				"legacy-session", deckID, now.Add(time.Hour)).Error; err != nil {
+				t.Fatalf("seed share session row: %v", err)
+			}
+
+			applied, err := Sync(ctx, db, BuiltinMigrations)
+			if err != nil {
+				t.Fatalf("Sync(BuiltinMigrations) error = %v", err)
+			}
+			if applied != 1 {
+				t.Fatalf("Sync() applied = %d, want 1", applied)
+			}
+			for _, table := range []string{"share_links", "share_session_decks"} {
+				if db.Migrator().HasTable(table) {
+					t.Errorf("table %q still exists after the migration", table)
+				}
+			}
+			checks := []struct {
+				table string
+				want  int64
+			}{
+				{"decks", 1},
+				{"deck_grants", 1},
+				{"deck_share_invites", 1},
+			}
+			for _, check := range checks {
+				var got int64
+				if err := db.Table(check.table).Count(&got).Error; err != nil {
+					t.Fatalf("count %s: %v", check.table, err)
+				}
+				if got != check.want {
+					t.Errorf("%s rows = %d, want %d", check.table, got, check.want)
+				}
+			}
+
+			applied, err = Sync(ctx, db, BuiltinMigrations)
+			if err != nil {
+				t.Fatalf("second Sync(BuiltinMigrations) error = %v", err)
+			}
+			if applied != 0 {
+				t.Errorf("second Sync() applied = %d, want 0", applied)
+			}
+		})
+	}
+}

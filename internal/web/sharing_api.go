@@ -2,38 +2,24 @@ package web
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/api"
-	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
 type sharingRequest struct {
-	Username  string `json:"username"`
-	UserID    string `json:"user_id"`
-	Role      string `json:"role"`
-	Link      string `json:"link"`
-	Password  string `json:"password"`
-	ExpiresAt string `json:"expires_at"`
+	Username string `json:"username"`
+	UserID   string `json:"user_id"`
+	Role     string `json:"role"`
 }
 type grant struct {
 	UserID   string `json:"user_id"`
 	Username string `json:"username"`
 	Role     string `json:"role"`
-}
-type shareLink struct {
-	Prefix      string     `json:"prefix"`
-	CreatedAt   time.Time  `json:"created_at"`
-	ExpiresAt   *time.Time `json:"expires_at"`
-	HasPassword bool       `json:"has_password"`
-	Revoked     bool       `json:"revoked"`
-	Expired     bool       `json:"expired"`
-	TokenDigest string     `json:"token_digest"`
 }
 
 func (s *Server) sharingGet(c *gin.Context) {
@@ -57,12 +43,6 @@ func (s *Server) sharingGet(c *gin.Context) {
 		shareError(c, 500, "internal_error")
 		return
 	}
-	links, err := s.shareLinks.ListByDeck(ctx, deck.ID)
-	if err != nil {
-		s.logger.Error("list SPA share links failed", "deck_id", deck.ID, "error", err)
-		shareError(c, 500, "internal_error")
-		return
-	}
 	grantRows := make([]grant, 0, len(grants))
 	for _, g := range grants {
 		if g.UserID == deck.OwnerUserID {
@@ -75,11 +55,6 @@ func (s *Server) sharingGet(c *gin.Context) {
 		}
 		grantRows = append(grantRows, grant{UserID: u.PublicID, Username: u.Username, Role: g.Role})
 	}
-	now := time.Now().UTC()
-	linkRows := make([]shareLink, 0, len(links))
-	for _, l := range links {
-		linkRows = append(linkRows, shareLink{Prefix: shortDigest(l.Token), CreatedAt: l.CreatedAt, ExpiresAt: l.ExpiresAt, HasPassword: l.PasswordHash != nil, Revoked: l.RevokedAt != nil, Expired: l.ExpiresAt != nil && !now.Before(*l.ExpiresAt)})
-	}
 	// Pending invites get their own column: the owner must be able to tell "already granted" from "invited but not yet accepted" — the latter may be
 	// rejected at any time and must not show up in the UI as existing access.
 	pending, err := s.shareInvites.ListForDeck(ctx, deck.ID)
@@ -88,7 +63,7 @@ func (s *Server) sharingGet(c *gin.Context) {
 		shareError(c, 500, "internal_error")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deck_id": deck.PublicID, "deck_name": deck.Name, "grants": grantRows, "pending_invites": pending, "links": linkRows})
+	c.JSON(http.StatusOK, gin.H{"deck_id": deck.PublicID, "deck_name": deck.Name, "grants": grantRows, "pending_invites": pending})
 }
 
 func (s *Server) sharingWrite(c *gin.Context, action string) {
@@ -106,19 +81,15 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 		return
 	}
 	var req sharingRequest
-	if action == "link_revoke" {
-		req.Link = c.Param("digest")
-	} else if action == "revoke" {
+	if action == "revoke" {
 		req.UserID = strings.TrimSpace(c.Param("userID"))
 		if req.UserID == "" {
 			shareError(c, 400, "invalid_request")
 			return
 		}
-	} else if action != "link_revoke_all" {
-		if err := c.ShouldBindJSON(&req); err != nil {
-			shareError(c, 400, "invalid_request")
-			return
-		}
+	} else if err := c.ShouldBindJSON(&req); err != nil {
+		shareError(c, 400, "invalid_request")
+		return
 	}
 	ctx := c.Request.Context()
 	bad := func() { shareError(c, 400, "invalid_request") }
@@ -230,67 +201,6 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 			shareError(c, 500, "internal_error")
 			return
 		}
-	case "link_create":
-		pw := strings.TrimSpace(req.Password)
-		var hash *string
-		if pw != "" {
-			if len(pw) > auth.MaxPasswordLength {
-				bad()
-				return
-			}
-			h, err := shareLinkPasswordHasher.Hash(pw)
-			if err != nil {
-				s.logger.Error("hash SPA share link password failed", "deck_id", deck.ID, "error", err)
-				shareError(c, 500, "internal_error")
-				return
-			}
-			hash = &h
-		}
-		var expiry *time.Time
-		expiryDetail := ""
-		if raw := strings.TrimSpace(req.ExpiresAt); raw != "" {
-			day, err := time.Parse("2006-01-02", raw)
-			if err != nil {
-				bad()
-				return
-			}
-			end := day.AddDate(0, 0, 1)
-			expiry = &end
-			expiryDetail = end.UTC().Format(time.RFC3339)
-		}
-		plain, _, err := s.shareLinks.Create(ctx, store.ShareLinkInput{DeckID: deck.ID, PasswordHash: hash, ExpiresAt: expiry, CreatedBy: user.ID})
-		if err != nil {
-			s.logger.Error("create SPA share link failed", "deck_id", deck.ID, "error", err)
-			shareError(c, 500, "internal_error")
-			return
-		}
-		s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionShareLinkCreate, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"has_password": hash != nil, "expires_at": expiryDetail}})
-		c.JSON(http.StatusCreated, gin.H{"link": "/s/" + plain})
-		return
-	case "link_revoke":
-		digest := strings.TrimSpace(req.Link)
-		if len(digest) != 64 {
-			bad()
-			return
-		}
-		if _, err := strconv.ParseUint(digest[:16], 16, 64); err != nil {
-			bad()
-			return
-		}
-		if err := s.shareLinks.Revoke(ctx, deck.ID, digest); err != nil {
-			s.logger.Error("revoke SPA share link failed", "deck_id", deck.ID, "error", err)
-			shareError(c, 500, "internal_error")
-			return
-		}
-		s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionShareLinkRevoke, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"link": shortDigest(digest)}})
-	case "link_revoke_all":
-		n, err := s.shareLinks.RevokeAll(ctx, deck.ID)
-		if err != nil {
-			s.logger.Error("revoke all SPA share links failed", "deck_id", deck.ID, "error", err)
-			shareError(c, 500, "internal_error")
-			return
-		}
-		s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionShareLinkRevokeAll, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"revoked": n}})
 	default:
 		bad()
 		return
@@ -300,8 +210,5 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 func shareError(c *gin.Context, status int, code string) {
 	c.AbortWithStatusJSON(status, gin.H{"error": gin.H{"code": code, "message": api.ErrorMessage(c.Request.Context(), code)}})
 }
-func (s *Server) sharingGrant(c *gin.Context)         { s.sharingWrite(c, "grant") }
-func (s *Server) sharingRevoke(c *gin.Context)        { s.sharingWrite(c, "revoke") }
-func (s *Server) sharingLinkCreate(c *gin.Context)    { s.sharingWrite(c, "link_create") }
-func (s *Server) sharingLinkRevoke(c *gin.Context)    { s.sharingWrite(c, "link_revoke") }
-func (s *Server) sharingLinkRevokeAll(c *gin.Context) { s.sharingWrite(c, "link_revoke_all") }
+func (s *Server) sharingGrant(c *gin.Context)  { s.sharingWrite(c, "grant") }
+func (s *Server) sharingRevoke(c *gin.Context) { s.sharingWrite(c, "revoke") }

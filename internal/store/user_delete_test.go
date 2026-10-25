@@ -67,7 +67,7 @@ func TestDeleteUserCleansEverythingAndKeepsSharedMedia(t *testing.T) {
 				"users": {"id"}, "sessions": {"user_id"}, "identities": {"user_id"}, "api_keys": {"user_id"},
 				"card_states": {"user_id"}, "reviews": {"user_id"}, "deck_grants": {"user_id", "created_by"},
 				"deck_share_invites": {"user_id", "invited_by"}, "share_allow": {"from_user_id", "to_user_id"},
-				"share_links": {"created_by"}, "user_totp": {"user_id"}, "totp_recovery_codes": {"user_id"},
+				"user_totp": {"user_id"}, "totp_recovery_codes": {"user_id"},
 				"email_prefs": {"user_id"}, "reminder_log": {"user_id"}, "digest_log": {"user_id"},
 				"action_tokens": {"user_id"}, "login_fingerprints": {"user_id"}, "media_uploaders": {"user_id"},
 				"notes": {"created_by"}, "invites": {"created_by", "used_by"}, "media": {"created_by"},

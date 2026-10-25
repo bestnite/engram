@@ -11,7 +11,7 @@
   import SettingsSection from '../components/ui/SettingsSection.svelte';
   import { listClasses } from '../components/ui/variants';
   import { toast } from '../components/ui/toast';
-  import { Copy, KeyRound, UserMinus, X } from '@lucide/svelte';
+  import { UserMinus, X } from '@lucide/svelte';
 
   // When embedded is true this component sits inside the deck details' "sharing" tab: it does not render the page-level width/padding shell,
   // nor the page header title (the tab already indicates the current section). It is false when /decks/:id/sharing is visited directly, standing alone as a page.
@@ -21,23 +21,19 @@
   let { embedded = false }: Props = $props();
 
   type Grant = { user_id: string; username: string; role: 'reader' | 'editor' };
-  type Link = { prefix: string; created_at: string; expires_at: string | null; has_password: boolean; revoked: boolean; expired: boolean };
   // Invitations pending acceptance: the owner must be able to tell "already granted" from "invited but not yet accepted" — the latter can be declined at any time,
   // and the UI should not present it as existing access (consent model).
   type Invite = { user_id: string; username: string; role: 'reader' | 'editor'; expires_at: string };
-  type Sharing = { deck_id: string; deck_name: string; grants: Grant[]; pending_invites?: Invite[]; links: Link[] };
+  type Sharing = { deck_id: string; deck_name: string; grants: Grant[]; pending_invites?: Invite[] };
   let data = $state<Sharing | null>(null);
   let loading = $state(true);
   let failed = $state(false);
   let saving = $state(false);
   // Which form's submission is in flight: only its button spins; saving still disables the remaining write operations along with it.
-  let submitting = $state<'grant' | 'link' | null>(null);
+  let submitting = $state<'grant' | null>(null);
   let error = $state('');
   let username = $state('');
   let role = $state<'reader'|'editor'>('reader');
-  let password = $state('');
-  let expiresAt = $state('');
-  let newLink = $state('');
   const deckId = $derived($routeStore.params.id || '');
   const apiPath = $derived(`/api/v1/decks/${encodeURIComponent(deckId)}/sharing`);
   async function load(): Promise<void> {
@@ -46,9 +42,9 @@
     catch (e) { failed = true; error = e instanceof ApiClientError && e.isForbidden ? 'deck.sharing.forbidden' : 'deck.sharing.failed'; }
     finally { loading = false; }
   }
-  async function change(method: string, path: string, body?: object, showLink = false): Promise<void> {
-    saving = true; error = ''; newLink = '';
-    try { const result = await apiClient.request<{link?:string}>(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) }); if (showLink && result?.link) newLink = result.link; await load(); }
+  async function change(method: string, path: string, body?: object): Promise<void> {
+    saving = true; error = '';
+    try { await apiClient.request<unknown>(path, { method, ...(body ? { body: JSON.stringify(body) } : {}) }); await load(); }
     catch (e) {
       // The other party set "do not accept shares": that is an explainable outcome, not a failure (the server's 409 recipient_refuses_shares).
       if (e instanceof ApiClientError && e.code === 'recipient_refuses_shares') error = 'deck.sharing.refused';
@@ -59,13 +55,7 @@
     finally { saving = false; }
   }
   async function grant(event: SubmitEvent): Promise<void> { event.preventDefault(); submitting = 'grant'; await change('POST', `${apiPath}/grants`, { username: username.trim(), role }); submitting = null; if (!error) username = ''; }
-  async function createLink(event: SubmitEvent): Promise<void> { event.preventDefault(); submitting = 'link'; await change('POST', `${apiPath}/links`, { password, expires_at: expiresAt }, true); submitting = null; password = ''; expiresAt = ''; }
-  async function copyLink(): Promise<void> {
-    try { await navigator.clipboard.writeText(newLink); toast.success($t('deck.sharing.link_copied')); }
-    catch { toast.error($t('notes.copy_failed')); }
-  }
   const roleOptions = $derived([{ value: 'reader', label: $t('deck.sharing.role.reader') }, { value: 'editor', label: $t('deck.sharing.role.editor') }]);
-  const activeLinks = $derived(data ? data.links.filter((link) => !link.revoked && !link.expired).length : 0);
   onMount(() => { void load(); });
 </script>
 
@@ -107,53 +97,6 @@
             </li>
           {/each}
         </ul>
-      {/if}
-    </SettingsSection>
-
-    <SettingsSection title={$t('deck.sharing.links')} description={$t('deck.sharing.links_hint')} testId="sharing-links">
-      <form class="flex flex-wrap items-end gap-2" onsubmit={createLink}>
-        <label class="min-w-40 flex-1 text-sm font-medium text-foreground">{$t('deck.sharing.password')}
-          <input type="password" bind:value={password} class="field-input mt-1.5 block w-full text-sm" />
-        </label>
-        <label class="text-sm font-medium text-foreground">{$t('deck.sharing.expiry')}
-          <input type="date" bind:value={expiresAt} class="field-input mt-1.5 block w-full text-sm" />
-        </label>
-        <Button type="submit" size="lg" variant="outline" loading={submitting === 'link'} disabled={saving} testId="sharing-create-link">{$t('deck.sharing.create_link')}</Button>
-      </form>
-
-      {#if newLink}
-        <!-- A new link is shown only this once: placed right below the form, with a copy button. -->
-        <div class="mt-4 rounded-lg border border-success/40 bg-success/5 p-3 animate-in fade-in-0 slide-in-from-top-1 duration-200" role="status">
-          <p class="text-xs text-muted-foreground">{$t('deck.sharing.link_once')}</p>
-          <div class="mt-2 flex items-center gap-2">
-            <input readonly value={newLink} class="field-input min-w-0 flex-1 font-mono text-xs" aria-label={$t('deck.sharing.links')} />
-            <Button variant="outline" size="lg" onclick={copyLink}><Copy class="size-4" aria-hidden="true" />{$t('deck.sharing.copy')}</Button>
-            <Button variant="ghost" size="icon" label={$t('deck.sharing.dismiss')} onclick={() => (newLink = '')}><X class="size-4" aria-hidden="true" /></Button>
-          </div>
-        </div>
-      {/if}
-
-      {#if data.links.length > 0}
-        <ul class="{listClasses.root} mt-4">
-          {#each data.links as link (link.prefix)}
-            {@const live = !link.revoked && !link.expired}
-            <li class="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0">
-              <span class="min-w-0 flex-1 truncate font-mono text-[13px] {live ? 'text-foreground' : 'text-muted-foreground'}">{link.prefix}</span>
-              {#if link.has_password}
-                <span class="inline-flex items-center gap-1 text-xs text-muted-foreground" title={$t('deck.sharing.password_set')}><KeyRound class="size-3.5" aria-hidden="true" />{$t('deck.sharing.password_set')}</span>
-              {/if}
-              <Badge variant={live ? 'success' : 'neutral'}>{$t(link.revoked ? 'deck.sharing.link_revoked' : link.expired ? 'deck.sharing.link_expired' : 'deck.sharing.link_active')}</Badge>
-              {#if live}
-                <Button variant="ghost" size="sm" class="hover:bg-destructive-soft hover:text-destructive-foreground" disabled={saving} onclick={() => change('DELETE', `${apiPath}/links/revoke/${link.prefix}`)}>{$t('deck.sharing.revoke')}</Button>
-              {/if}
-            </li>
-          {/each}
-        </ul>
-        {#if activeLinks > 1}
-          <div class="mt-3 flex justify-end">
-            <Button variant="danger-outline" size="sm" disabled={saving} onclick={() => change('DELETE', `${apiPath}/links`)}>{$t('deck.sharing.revoke_all')}</Button>
-          </div>
-        {/if}
       {/if}
     </SettingsSection>
   {/if}
