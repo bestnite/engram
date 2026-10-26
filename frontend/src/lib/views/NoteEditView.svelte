@@ -548,12 +548,16 @@
             id="note-preview-panel"
             data-testid="note-preview-panel"
             data-open={previewOpen ? 'true' : undefined}
+            role="region"
+            aria-labelledby="note-preview-heading"
             class={previewOpen
               ? 'fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] flex-col overflow-hidden rounded-t-xl border-t border-border bg-surface shadow-2xl max-lg:animate-in max-lg:fade-in-0 max-lg:slide-in-from-bottom-4 max-lg:duration-200 lg:static lg:z-auto lg:max-h-[calc(100vh-3rem)] lg:rounded-lg lg:border lg:shadow-none'
               : 'hidden max-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-lg border border-border bg-surface lg:flex'}
           >
             <div class="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
-              <h2 class="text-sm font-semibold text-foreground">{$t('note_preview.title')}</h2>
+              <!-- The panel is a region named by this heading at both breakpoints; it is not a modal dialog, since
+                   focus is never trapped inside it. -->
+              <h2 id="note-preview-heading" class="text-sm font-semibold text-foreground">{$t('note_preview.title')}</h2>
               <!-- The status copy gets a polite live region of its own: it only announces short phrases like "generating/incomplete/failed", while
                    the card body sits outside the live region so a reschedule does not read the whole HTML out again. -->
               <div aria-live="polite" class="ml-auto min-w-0 truncate text-right text-xs">

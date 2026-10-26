@@ -1094,6 +1094,13 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     expect(toggle().getAttribute('aria-controls')).toBe('note-preview-panel');
     // At lg and wider the panel is the sticky column, as before.
     expect(panel().parentElement?.className).toContain('lg:sticky');
+    // A named landmark at both breakpoints: the heading names the panel, and nothing claims to be modal.
+    expect(panel().getAttribute('role')).toBe('region');
+    const heading = panel().querySelector('h2');
+    expect(heading?.id).toBe('note-preview-heading');
+    expect(heading?.textContent?.trim()).toBe(formatMessage('zh-CN', 'note_preview.title'));
+    expect(panel().getAttribute('aria-labelledby')).toBe(heading?.id);
+    expect(panel().hasAttribute('aria-modal')).toBe(false);
   });
 
   it('opens from the header button and keeps updating the same preview while open', async () => {
