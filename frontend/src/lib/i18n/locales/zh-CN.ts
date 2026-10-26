@@ -1468,4 +1468,7 @@ export const zhCN: LocaleCatalog = {
   'shortcode.insert.error.ruby_reading_required': '注音不能为空。',
   'shortcode.insert.error.ruby_part': '原文和注音里都不能有 = 或 |。',
   'shortcode.insert.error.not_text_field': '这个字段是列表字段，不能插入短代码；请换一个字段。',
+  // ---- Audio shortcode progress track ----
+  'shortcode.audio.progress': '音频进度',
+  'shortcode.audio.progress.value': '第 {position} 秒，共 {total} 秒',
 };

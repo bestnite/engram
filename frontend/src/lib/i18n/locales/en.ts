@@ -1469,4 +1469,7 @@ export const en: LocaleCatalog = {
   'shortcode.insert.error.ruby_reading_required': 'The reading cannot be empty.',
   'shortcode.insert.error.ruby_part': 'Neither the base text nor the reading may contain = or |.',
   'shortcode.insert.error.not_text_field': 'This field holds a list, so a shortcode cannot go into it. Choose another field.',
+  // ---- Audio shortcode progress track ----
+  'shortcode.audio.progress': 'Audio progress',
+  'shortcode.audio.progress.value': '{position} of {total} seconds',
 };

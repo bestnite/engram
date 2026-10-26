@@ -91,6 +91,27 @@ function control(root: ParentNode): HTMLButtonElement {
   return button!;
 }
 
+function progress(root: ParentNode): HTMLInputElement {
+  const input = root.querySelector<HTMLInputElement>('input[data-shortcode-progress]');
+  expect(input).toBeTruthy();
+  return input!;
+}
+
+/** Gives the stubbed element a duration and runs the one-time metadata pass the module waits for. */
+function loaded(audio: HTMLAudioElement, duration: number): void {
+  Object.defineProperty(audio, 'duration', { value: duration, configurable: true });
+  audio.dispatchEvent(new Event('loadedmetadata'));
+}
+
+function seekInput(input: HTMLInputElement, value: number): void {
+  input.value = String(value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function press(input: HTMLInputElement, key: string): void {
+  input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+}
+
 beforeEach(() => {
   setLocale('en');
 });
@@ -288,6 +309,226 @@ describe('enhanceShortcodes — audio', () => {
 
     expect(root.querySelector('button')).toBeNull();
     expect(root.textContent).toContain(`/media/${SHA}`);
+  });
+});
+
+describe('enhanceShortcodes — audio progress', () => {
+  it('starts disabled and shows no position before the metadata arrives', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14"'));
+    enhanceShortcodes([root]);
+
+    const track = progress(root);
+    expect(track.disabled).toBe(true);
+    expect(track.getAttribute('aria-label')).toBe('Audio progress');
+    expect(track.getAttribute('aria-valuetext')).toBeNull();
+    expect(media.plays).toHaveLength(0);
+  });
+
+  it('fills from start to end when both are present', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14"'));
+    enhanceShortcodes([root]);
+    click(control(root));
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+    const track = progress(root);
+    expect(track.disabled).toBe(false);
+    expect(track.value).toBe('0');
+
+    audio.currentTime = 11;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(track.value).toBe('250');
+
+    audio.currentTime = 13;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(Number(track.value)).toBe(750);
+    expect(track.getAttribute('aria-valuetext')).toBe('3 of 4 seconds');
+  });
+
+  it('spans start to the media duration when end is absent', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10"'));
+    enhanceShortcodes([root]);
+    click(control(root));
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+
+    audio.currentTime = 15;
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(Number(progress(root).value)).toBe(500);
+    expect(progress(root).getAttribute('aria-valuetext')).toBe('5 of 10 seconds');
+  });
+
+  it('spans the whole file when neither start nor end is present', () => {
+    const media = installMedia();
+    const root = container(audioHTML());
+    enhanceShortcodes([root]);
+    click(control(root));
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+
+    audio.currentTime = 5;
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(progress(root).value).toBe('250');
+  });
+
+  it('never divides by zero when end equals start', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="10"'));
+    enhanceShortcodes([root]);
+    click(control(root));
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+
+    // The playback path already treats an end that is not later than the start as absent, so the track spans the
+    // rest of the file instead of producing a 0/0 ratio.
+    audio.currentTime = 15;
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(progress(root).value).toBe('500');
+    expect(progress(root).getAttribute('aria-valuetext')).toBe('5 of 10 seconds');
+  });
+
+  it('seeks inside the segment on a click or drag, and keeps playing', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14"'));
+    enhanceShortcodes([root]);
+    click(control(root));
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+
+    seekInput(progress(root), 250);
+
+    expect(audio.currentTime).toBeCloseTo(11);
+    expect(progress(root).value).toBe('250');
+    expect(control(root).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('seeks with Left/Right by five percent and Home/End to the edges', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14"'));
+    enhanceShortcodes([root]);
+    click(control(root));
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+    const track = progress(root);
+
+    press(track, 'ArrowRight');
+    expect(track.value).toBe('50');
+    expect(audio.currentTime).toBeCloseTo(10.2);
+
+    press(track, 'ArrowRight');
+    expect(track.value).toBe('100');
+    expect(audio.currentTime).toBeCloseTo(10.4);
+
+    press(track, 'ArrowLeft');
+    expect(track.value).toBe('50');
+    expect(audio.currentTime).toBeCloseTo(10.2);
+
+    press(track, 'End');
+    expect(track.value).toBe('1000');
+    expect(audio.currentTime).toBeCloseTo(14);
+    expect(track.getAttribute('aria-valuetext')).toBe('4 of 4 seconds');
+
+    press(track, 'Home');
+    expect(track.value).toBe('0');
+    expect(audio.currentTime).toBeCloseTo(10);
+  });
+
+  it('resets the track to the segment start when playback ends', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14"'));
+    enhanceShortcodes([root]);
+    click(control(root));
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+    audio.currentTime = 13;
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    audio.dispatchEvent(new Event('ended'));
+
+    expect(control(root).getAttribute('aria-pressed')).toBe('false');
+    expect(progress(root).value).toBe('0');
+    expect(progress(root).getAttribute('aria-valuetext')).toBe('0 of 4 seconds');
+  });
+
+  it('restarts at the segment start when the segment loops', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14" data-audio-loop="1"'));
+    enhanceShortcodes([root]);
+    click(control(root));
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+
+    audio.currentTime = 14;
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(audio.currentTime).toBeCloseTo(10);
+    expect(progress(root).value).toBe('0');
+    expect(control(root).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('seeks while stopped, and that position survives as the next play target', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="0" data-audio-end="8"'));
+    enhanceShortcodes([root]);
+    click(control(root));
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+    audio.dispatchEvent(new Event('ended'));
+
+    seekInput(progress(root), 500);
+    expect(audio.currentTime).toBeCloseTo(4);
+
+    click(control(root));
+    expect(media.play).toHaveBeenCalledTimes(2);
+    expect(audio.currentTime).toBeCloseTo(4);
+  });
+
+  it('adds no second track or listener on a second enhancement', () => {
+    installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14"'));
+    const added = vi.spyOn(root, 'addEventListener');
+
+    enhanceShortcodes([root]);
+    const bound = added.mock.calls.length;
+    expect(bound).toBeGreaterThan(0);
+
+    enhanceShortcodes([root]);
+
+    expect(root.querySelectorAll('input[data-shortcode-progress]')).toHaveLength(1);
+    expect(added.mock.calls.length).toBe(bound);
+  });
+
+  it('removes the track with the button when the media fails to load', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14"'));
+    enhanceShortcodes([root]);
+    click(control(root));
+    loaded(media.plays[0]!, 20);
+
+    media.plays[0]!.dispatchEvent(new Event('error'));
+
+    expect(root.querySelector('button')).toBeNull();
+    expect(root.querySelector('input[data-shortcode-progress]')).toBeNull();
+    const fallback = root.querySelector('[data-shortcode-fallback]');
+    expect(fallback!.classList.contains('sr-only')).toBe(false);
+    expect(root.textContent).toContain(`/media/${SHA}`);
+  });
+
+  it('relabels the track from the catalog when the locale changes', () => {
+    installMedia();
+    const root = container(audioHTML());
+    enhanceShortcodes([root]);
+    expect(progress(root).getAttribute('aria-label')).toBe('Audio progress');
+
+    setLocale('zh-CN');
+    enhanceShortcodes([root]);
+
+    expect(progress(root).getAttribute('aria-label')).toBe('音频进度');
   });
 });
 

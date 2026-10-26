@@ -124,5 +124,10 @@ describe('ReviewView shortcode controls', () => {
     const button = answer!.querySelector('button[data-shortcode-control="audio"]');
     expect(button).toBeTruthy();
     expect(answer!.textContent).toContain(`/media/${SHA}`);
+    // The call site gets the progress track beside the button as well, not just the module in isolation.
+    const track = answer!.querySelector<HTMLInputElement>('input[data-shortcode-progress]');
+    expect(track).toBeTruthy();
+    expect(track!.getAttribute('aria-label')).toBe('Audio progress');
+    expect(track!.disabled).toBe(true);
   });
 });

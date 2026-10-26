@@ -10,12 +10,13 @@
  * The visible body of each element stays in the output: a reader without JavaScript, without a speech engine, or on
  * a page whose media it may not read keeps the text. The audio shortcode's body is a bare `/media/<sha256>` path, so
  * once a play control exists the path is moved into a visually hidden wrapper - kept in the DOM, not deleted - and
- * moved back into view when the media turns out to be unplayable.
+ * moved back into view when the media turns out to be unplayable. Beside the audio button sits a native range track
+ * over the played segment, so the learner can see the position and seek within the same piece of audio.
  *
  * Idempotence: the marker attribute `data-shortcode-enhanced` on a shortcode element records that it was processed,
- * and a WeakSet records which containers already carry the delegated click listener. A second enhancement of the
- * same DOM therefore adds neither a second button nor a second listener, and re-rendering a container with new
- * server HTML works because the listener lives on the container, not on the elements inside it.
+ * and a WeakSet records which containers already carry the delegated listeners. A second enhancement of the same DOM
+ * therefore adds neither a second button nor a second track nor a second listener, and re-rendering a container with
+ * new server HTML works because the listeners live on the container, not on the elements inside it.
  */
 
 import { formatMessage, getLocale } from '../i18n';
@@ -23,7 +24,16 @@ import { formatMessage, getLocale } from '../i18n';
 const SOURCE_MARKER = 'data-shortcode-enhanced';
 const BUTTON_MARKER = 'data-shortcode-control';
 const FALLBACK_MARKER = 'data-shortcode-fallback';
+const PROGRESS_MARKER = 'data-shortcode-progress';
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * The progress track is a native range input whose value is a whole-number ratio over the played segment. A 0-1000
+ * scale keeps a click or a drag to a tenth of a percent; the keyboard step is fixed separately at five percent,
+ * because a native arrow press would otherwise move by one unit of the scale.
+ */
+const PROGRESS_MAX = 1000;
+const PROGRESS_KEY_STEP = PROGRESS_MAX / 20;
 
 /**
  * A shortcode inside one of these elements cannot host a control: a button inside a button (or a link) is invalid
@@ -52,8 +62,29 @@ const BUTTON_BASE = [
 const BUTTON_IDLE = `${BUTTON_BASE} border-border bg-surface text-muted-foreground hover:bg-muted hover:text-foreground`;
 const BUTTON_PLAYING = `${BUTTON_BASE} border-brand bg-brand text-brand-foreground`;
 
+/**
+ * The audio progress track: a compact native range on the text's centre line, so it sits beside the play button
+ * without taking the line. The unfilled part is the muted token and the filled part is the brand token; the fill
+ * boundary is an inline gradient written from the current ratio, which a class name cannot express.
+ */
+const PROGRESS_CLASS = [
+  'mr-1.5 inline-block h-1.5 w-16 max-w-[45%] shrink-0 cursor-pointer align-middle',
+  'appearance-none rounded-full bg-muted transition-opacity',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+  'disabled:cursor-not-allowed disabled:opacity-50',
+  '[&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-brand',
+  '[&::-moz-range-track]:bg-transparent [&::-moz-range-progress]:bg-transparent',
+  '[&::-moz-range-thumb]:size-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-brand',
+].join(' ');
+
 type ControlKind = 'tts' | 'audio';
 type Phase = 'idle' | 'playing';
+
+/** The part of the file the track spans: `start…end`, or `start…duration` when the shortcode has no end. */
+interface AudioSegment {
+  start: number;
+  end: number | null;
+}
 
 interface AudioHandlers {
   loadedmetadata: () => void;
@@ -73,6 +104,14 @@ interface ControlState {
   audio: HTMLAudioElement | null;
   handlers: AudioHandlers | null;
   loop: boolean;
+  /** For audio: the seekable track beside the button, absent only after a load failure removed the control. */
+  track: HTMLInputElement | null;
+  /** For audio: the file segment the track spans, read from the server's start/end attributes. */
+  segment: AudioSegment | null;
+  /** For audio: whether the media metadata has arrived, which is what makes the track seekable. */
+  ready: boolean;
+  /** For audio: a position chosen while stopped, used by the next play instead of the segment start. */
+  pendingSeek: number | null;
 }
 
 interface ActiveSpeech {
@@ -81,17 +120,19 @@ interface ActiveSpeech {
   utterance: SpeechSynthesisUtterance;
 }
 
-/** Containers that already carry the delegated click listener. */
+/** Containers that already carry the delegated listener. */
 const boundContainers = new WeakSet<Element>();
 /** State of every control, keyed by its button. */
 const controls = new WeakMap<HTMLButtonElement, ControlState>();
+/** State of every audio progress track, keyed by the track itself. */
+const tracks = new WeakMap<HTMLInputElement, ControlState>();
 
 /** At most one utterance and one audio play at a time, across the whole page. */
 let activeSpeech: ActiveSpeech | null = null;
 let activeAudio: ControlState | null = null;
 
-function label(key: string): string {
-  return formatMessage(getLocale(), key);
+function label(key: string, params?: Record<string, string | number>): string {
+  return formatMessage(getLocale(), key, params);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -229,6 +270,14 @@ function markUnavailable(state: ControlState): void {
     }
     state.audio = null;
   }
+  if (state.track) {
+    tracks.delete(state.track);
+    state.track.remove();
+    state.track = null;
+  }
+  state.segment = null;
+  state.ready = false;
+  state.pendingSeek = null;
   if (activeAudio === state) activeAudio = null;
   state.button.remove();
   controls.delete(state.button);
@@ -368,10 +417,106 @@ function toggleSpeech(state: ControlState): void {
 /* Audio                                                                                                             */
 /* ---------------------------------------------------------------------------------------------------------------- */
 
+/** Reads the segment the server described; an end that is not after the start means "no end". */
+function audioSegment(source: HTMLElement): AudioSegment {
+  const start = Math.max(0, numberAttr(source, 'data-audio-start') ?? 0);
+  const endValue = numberAttr(source, 'data-audio-end');
+  return { start, end: endValue !== null && endValue > start ? endValue : null };
+}
+
+/**
+ * Length of the segment in seconds. Zero means the track cannot be measured yet, or the segment is empty; every
+ * caller checks for zero before dividing by it.
+ */
+function segmentLength(segment: AudioSegment, duration: number): number {
+  const boundary = segment.end ?? (Number.isFinite(duration) && duration > 0 ? duration : null);
+  if (boundary === null) return 0;
+  return Math.max(0, boundary - segment.start);
+}
+
+/** One decimal place without a trailing `.0`; the catalog supplies the unit. */
+function seconds(value: number): string {
+  return String(Math.round(Math.max(0, value) * 10) / 10);
+}
+
+/**
+ * Builds the native range that represents the segment. It starts disabled: the media element exists but carries no
+ * source until the first play, and a track that cannot seek must not announce a position it does not have.
+ */
+function buildProgress(): HTMLInputElement {
+  const track = document.createElement('input');
+  track.type = 'range';
+  track.min = '0';
+  track.max = String(PROGRESS_MAX);
+  track.step = '1';
+  track.value = '0';
+  track.disabled = true;
+  track.className = PROGRESS_CLASS;
+  track.setAttribute(PROGRESS_MARKER, 'audio');
+  track.setAttribute('aria-label', label('shortcode.audio.progress'));
+  track.style.backgroundImage = 'linear-gradient(to right, var(--brand) 0%, var(--muted) 0%)';
+  return track;
+}
+
+/**
+ * Draws the track from the media position. `ratioOverride` is used when the position is no longer the media element's:
+ * a stop leaves the element at the segment end while the track belongs at the segment start.
+ */
+function renderProgress(state: ControlState, ratioOverride?: number): void {
+  const track = state.track;
+  const audio = state.audio;
+  if (!track) return;
+  const segment = state.segment;
+  const length = audio && segment ? segmentLength(segment, audio.duration) : 0;
+  const measured = audio && segment && length > 0 ? clamp((audio.currentTime - segment.start) / length, 0, 1) : 0;
+  const ratio = clamp(ratioOverride ?? measured, 0, 1);
+  const percent = Math.round(ratio * 1000) / 10;
+  track.value = String(Math.round(ratio * PROGRESS_MAX));
+  track.style.backgroundImage = `linear-gradient(to right, var(--brand) ${percent}%, var(--muted) ${percent}%)`;
+  track.disabled = !state.ready;
+  if (state.ready && audio && segment && length > 0) {
+    const position = ratioOverride === undefined ? audio.currentTime - segment.start : ratio * length;
+    track.setAttribute(
+      'aria-valuetext',
+      label('shortcode.audio.progress.value', {
+        position: seconds(clamp(position, 0, length)),
+        total: seconds(length),
+      })
+    );
+  } else {
+    track.removeAttribute('aria-valuetext');
+  }
+}
+
+/** Moves playback to the ratio the track shows; the caller has already clamped it. */
+function seekProgress(state: ControlState, ratio: number): void {
+  const audio = state.audio;
+  const segment = state.segment;
+  if (!state.ready || !audio || !segment) return;
+  const length = segmentLength(segment, audio.duration);
+  if (length <= 0) return;
+  const target = segment.start + clamp(ratio, 0, 1) * length;
+  try {
+    audio.currentTime = target;
+  } catch {
+    return;
+  }
+  // A seek taken while stopped has to survive the next play, which otherwise starts from the segment start.
+  if (state.phase !== 'playing') state.pendingSeek = target;
+  renderProgress(state);
+}
+
+/** Puts the track at the segment start without moving the paused element. */
+function resetProgress(state: ControlState): void {
+  state.pendingSeek = null;
+  renderProgress(state, 0);
+}
+
 function stopAudio(state: ControlState): void {
   detachAudio(state);
   if (activeAudio === state) activeAudio = null;
   resetPhase(state);
+  resetProgress(state);
 }
 
 function playAudio(state: ControlState): void {
@@ -403,21 +548,27 @@ function startAudio(state: ControlState): void {
   }
   if (activeAudio) stopAudio(activeAudio);
 
-  const start = numberAttr(state.source, 'data-audio-start') ?? 0;
-  const endValue = numberAttr(state.source, 'data-audio-end');
-  const end = endValue !== null && endValue > start ? endValue : null;
+  const segment = audioSegment(state.source);
+  const end = segment.end;
   const rate = numberAttr(state.source, 'data-audio-rate');
   state.loop = state.source.hasAttribute('data-audio-loop');
+  state.segment = segment;
+  state.ready = false;
+  // A track seek made while stopped wins over the segment start; it is consumed by this play only.
+  const initial = state.pendingSeek ?? segment.start;
+  state.pendingSeek = null;
 
   // The seek happens in the same click that starts playback. Assigning currentTime before metadata is best-effort;
   // the loadedmetadata listener repeats it once the duration is known.
-  const seek = (): void => {
-    if (start <= 0) return;
+  const seekTo = (time: number): void => {
     try {
-      audio.currentTime = start;
+      audio.currentTime = time;
     } catch {
       // Some engines refuse an early seek; the loadedmetadata pass runs again.
     }
+  };
+  const seekInitial = (): void => {
+    if (initial > 0) seekTo(initial);
   };
 
   audio.pause();
@@ -430,25 +581,34 @@ function startAudio(state: ControlState): void {
   audio.playbackRate = rate === null ? 1 : clamp(rate, 0.1, 16);
   // The loop flag is honoured as "loop the start..end segment", handled below instead of the element's whole-file loop.
   audio.loop = false;
-  seek();
+  seekInitial();
+  renderProgress(state);
 
   const handlers: AudioHandlers = {
-    loadedmetadata: seek,
+    loadedmetadata: () => {
+      state.ready = true;
+      seekInitial();
+      renderProgress(state);
+    },
     timeupdate: () => {
-      if (end === null) return;
-      if (audio.currentTime < end) return;
-      if (state.loop) {
-        seek();
+      if (end !== null && audio.currentTime >= end) {
+        if (state.loop) {
+          seekTo(segment.start);
+          renderProgress(state);
+          return;
+        }
+        stopAudio(state);
         return;
       }
-      stopAudio(state);
+      renderProgress(state);
     },
     ended: () => {
       if (!state.loop) {
         stopAudio(state);
         return;
       }
-      seek();
+      seekTo(segment.start);
+      renderProgress(state);
       playAudio(state);
     },
     error: () => markUnavailable(state),
@@ -490,6 +650,10 @@ function createControl(source: HTMLElement, kind: ControlKind): void {
     audio: null,
     handlers: null,
     loop: false,
+    track: null,
+    segment: null,
+    ready: false,
+    pendingSeek: null,
   };
   if (kind === 'audio') {
     state.fallback = hideFallback(source);
@@ -498,6 +662,14 @@ function createControl(source: HTMLElement, kind: ControlKind): void {
   }
   updateButton(state);
   source.insertBefore(button, source.firstChild);
+  if (kind === 'audio') {
+    const track = buildProgress();
+    state.segment = audioSegment(source);
+    state.track = track;
+    source.insertBefore(track, button.nextSibling);
+    tracks.set(track, state);
+    renderProgress(state);
+  }
   controls.set(button, state);
   source.setAttribute(SOURCE_MARKER, kind);
 }
@@ -534,6 +706,54 @@ function handleClick(event: Event): void {
   else toggleAudio(state);
 }
 
+/** The state of the track an event came from, or null when the target is some other element. */
+function trackStateOf(target: EventTarget | null): { track: HTMLInputElement; state: ControlState } | null {
+  if (!(target instanceof HTMLInputElement)) return null;
+  const state = tracks.get(target);
+  if (!state || state.track !== target) return null;
+  return { track: target, state };
+}
+
+/** A click or a drag on a native range has already set its value; this turns that value into a media seek. */
+function handleProgressInput(event: Event): void {
+  const found = trackStateOf(event.target);
+  if (!found) return;
+  seekProgress(found.state, Number(found.track.value) / PROGRESS_MAX);
+}
+
+/**
+ * Left/Right move by five percent of the segment and Home/End go to its edges, as the acceptance requires. The
+ * native press is cancelled because a native range would move by one unit of the 0-1000 click scale instead.
+ */
+function handleProgressKey(event: Event): void {
+  if (!(event instanceof KeyboardEvent)) return;
+  const found = trackStateOf(event.target);
+  if (!found) return;
+  const current = Number(found.track.value);
+  let next: number;
+  switch (event.key) {
+    case 'ArrowLeft':
+    case 'ArrowDown':
+      next = current - PROGRESS_KEY_STEP;
+      break;
+    case 'ArrowRight':
+    case 'ArrowUp':
+      next = current + PROGRESS_KEY_STEP;
+      break;
+    case 'Home':
+      next = 0;
+      break;
+    case 'End':
+      next = PROGRESS_MAX;
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+  found.track.value = String(clamp(Math.round(next), 0, PROGRESS_MAX));
+  seekProgress(found.state, Number(found.track.value) / PROGRESS_MAX);
+}
+
 /**
  * enhanceShortcodes attaches controls to every shortcode element below the given server-sanitized containers.
  *
@@ -549,12 +769,20 @@ export function enhanceShortcodes(nodes: Array<Element | null | undefined>): voi
   for (const container of containers) {
     if (!boundContainers.has(container)) {
       container.addEventListener('click', handleClick);
+      container.addEventListener('input', handleProgressInput);
+      container.addEventListener('keydown', handleProgressKey);
       boundContainers.add(container);
     }
     // Labels follow the active locale even when a card face is not re-rendered.
     for (const button of container.querySelectorAll<HTMLButtonElement>(`button[${BUTTON_MARKER}]`)) {
       const state = controls.get(button);
       if (state) updateButton(state);
+    }
+    for (const track of container.querySelectorAll<HTMLInputElement>(`input[${PROGRESS_MARKER}]`)) {
+      const state = tracks.get(track);
+      if (!state) continue;
+      track.setAttribute('aria-label', label('shortcode.audio.progress'));
+      renderProgress(state);
     }
     for (const source of container.querySelectorAll<HTMLElement>('[data-tts-text], [data-audio-src]')) {
       bindSource(source);
