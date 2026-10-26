@@ -75,6 +75,8 @@ import {
   type OIDCInfo,
   type RegistrationInfo,
   type CardTypesResponse,
+  type IdentitiesResponse,
+  type BindIdentityResponse,
 } from './types';
 
 /**
@@ -922,6 +924,38 @@ export class ApiClient {
       await this.getSession();
     }
     await this.request<void>('/api/v1/settings/password', { method: 'PATCH', body: JSON.stringify(data) });
+  }
+
+  /**
+   * Read the OIDC identities bound to the signed-in account (GET /api/v1/settings/identities, session only).
+   * oidc_enabled describes the instance, so the page can still list existing links while sign-in is off.
+   */
+  async getIdentities(): Promise<IdentitiesResponse> {
+    return this.request<IdentitiesResponse>('/api/v1/settings/identities');
+  }
+
+  /**
+   * Start linking a new OIDC identity (POST /api/v1/settings/identities/bind).
+   * The response carries the provider's authorize URL; the browser leaves the SPA to complete the flow there.
+   */
+  async beginIdentityBind(): Promise<BindIdentityResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    return this.request<BindIdentityResponse>('/api/v1/settings/identities/bind', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  /** Unlink one OIDC identity (DELETE /api/v1/settings/identities/:id); the server refuses the last credential with 409. */
+  async unlinkIdentity(id: string): Promise<void> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    await this.request<void>(`/api/v1/settings/identities/${encodeURIComponent(String(id))}`, {
+      method: 'DELETE',
+    });
   }
 
   /** Read the current user's TOTP status (GET /api/v1/settings/totp, session only); never returns the secret. */

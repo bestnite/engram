@@ -1458,6 +1458,30 @@ export interface ResendVerificationResponse {
   sent: boolean;
 }
 
+// ---- Linked sign-in identities (Go: internal/web/identity_api.go) ----
+
+/**
+ * One OIDC identity bound to the signed-in account. email is empty when the provider returned no email claim,
+ * and linked_at is an RFC3339 timestamp.
+ */
+export interface IdentityItem {
+  id: string;
+  provider: string;
+  email: string;
+  linked_at: string;
+}
+
+/** GET /api/v1/settings/identities: whether OIDC sign-in is enabled on this instance, plus the caller's own links. */
+export interface IdentitiesResponse {
+  oidc_enabled: boolean;
+  identities: IdentityItem[];
+}
+
+/** POST /api/v1/settings/identities/bind: the provider URL the browser must be sent to. */
+export interface BindIdentityResponse {
+  authorize_url: string;
+}
+
 // ---- OIDC login entry probing (Go: internal/web/oidc_api.go) ----
 
 /** GET /api/v1/auth/oidc: whether the entry is available and the initiation URL; contains no credentials. */
