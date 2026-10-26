@@ -55,22 +55,26 @@ const LABEL_KEYS = {
 } as const;
 
 /**
- * The control is a 28px circle whose ::before extends the touch target to 40px without taking layout space, so
- * adding a control never shifts the line box. `align-middle` and the negative block margin keep it on the text's
- * centre line.
+ * The control is a 40px square hit box whose circle is drawn on top of it at 1.25em of the surrounding text; the
+ * icon is 0.875em. `align-middle` puts the box on the text's centre line, so the circle shares that centre without a
+ * negative block margin. A line that holds a control grows to the hit box height, which keeps the whole pointer target
+ * inside its own line: the button paints a small circle in the middle of the box, never a 40px circle, and never
+ * reaches into the line above or below. The circle is capped at the box size so atypically large text (a heading that
+ * contains a shortcode) cannot make it paint outside the line either.
  */
 const BUTTON_BASE = [
-  'relative -my-1 mr-1.5 inline-flex size-7 shrink-0 cursor-pointer items-center justify-center',
-  'rounded-full border align-middle transition-colors',
-  'before:absolute before:-inset-1.5 before:content-[""]',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+  'relative isolate inline-flex size-10 shrink-0 cursor-pointer items-center justify-center align-middle transition-colors',
+  'before:absolute before:inset-0 before:-z-10 before:m-auto before:size-[min(1.25em,2.5rem)] before:rounded-full before:border',
+  'before:transition-colors before:content-[""]',
+  'focus-visible:outline-none focus-visible:before:ring-2 focus-visible:before:ring-ring focus-visible:before:ring-offset-2 focus-visible:before:ring-offset-background',
 ].join(' ');
-const BUTTON_IDLE = `${BUTTON_BASE} border-border bg-surface text-muted-foreground hover:bg-muted hover:text-foreground`;
-const BUTTON_PLAYING = `${BUTTON_BASE} border-brand bg-brand text-brand-foreground`;
+const BUTTON_IDLE = `${BUTTON_BASE} text-muted-foreground before:border-border before:bg-surface hover:text-foreground hover:before:bg-muted`;
+const BUTTON_PLAYING = `${BUTTON_BASE} text-brand-foreground before:border-brand before:bg-brand`;
 
 /**
- * The audio progress track: a compact native range on the text's centre line, so it sits beside the play button
- * without taking the line. The unfilled part is the muted token and the filled part is the brand token; the fill
+ * The audio progress track: a compact native range on the same centre line as the play button's circle, so it sits
+ * beside the button without taking the line. At 6px it is much shorter than the button's 40px hit box, so it never
+ * raises the line box on its own. The unfilled part is the muted token and the filled part is the brand token; the fill
  * boundary is an inline gradient written from the current ratio, which a class name cannot express.
  */
 const PROGRESS_CLASS = [
@@ -193,9 +197,10 @@ const ICONS: Record<IconName, IconPart[]> = {
 function makeIcon(name: IconName): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('width', '16');
-  svg.setAttribute('height', '16');
-  svg.setAttribute('class', 'size-4');
+  // The em-based class is what sizes the icon; the numeric attributes are the no-CSS fallback.
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('class', 'size-[0.875em]');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
   for (const part of ICONS[name]) {
