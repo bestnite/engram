@@ -73,6 +73,64 @@ var BuiltinMigrations = []Migration{
 		Name: "0008_drop_share_link_tables",
 		Up:   dropLegacyShareTables,
 	},
+	{
+		// Import used to copy the exporter's preset name verbatim, so every import of a deck on the default preset added another preset called
+		// "Default". The name is the default preset's identity: each duplicate was presented as a default preset by every reader that checks the
+		// name, and the delete protection refuses that name, so the user could not remove any of them.
+		// This renames the duplicates; it never deletes a row (see uniqueDefaultPresetNames).
+		Name: "0009_unique_default_preset_names",
+		Up:   uniqueDefaultPresetNames,
+	},
+}
+
+// uniqueDefaultPresetNames renames duplicate presets named DefaultPresetName, keeping one per owner.
+//
+// The oldest row of each owner keeps the name: it is the account's own default preset, created before any import, while every later row with that
+// name is a copy left by an import. The later rows are renamed, not deleted: decks and deck_member_settings still point at them by id, so deleting
+// would either orphan those references or force a repoint that changes a user's study settings. A renamed row stays attached to the decks that
+// already use it, and the user can delete it afterwards if those decks are repointed.
+//
+// Each rename takes the first free "Imported (N)" name for that owner, N starting at 2, considering names renamed earlier in the same run, so no
+// owner is left with two presets that share a name. Running the migration again finds no owner with more than one Default and renames nothing.
+func uniqueDefaultPresetNames(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable("presets") {
+		return nil
+	}
+	var owners []uint64
+	if err := tx.Model(&Preset{}).Where("name = ?", DefaultPresetName).
+		Group("owner_user_id").Having("COUNT(*) > 1").
+		Pluck("owner_user_id", &owners).Error; err != nil {
+		return fmt.Errorf("unique default preset names: list owners with duplicate defaults: %w", err)
+	}
+	now := time.Now().UTC()
+	for _, owner := range owners {
+		var rows []Preset
+		if err := tx.Select("id", "name", "created_at").
+			Where("owner_user_id = ?", owner).
+			Order("created_at ASC, id ASC").Find(&rows).Error; err != nil {
+			return fmt.Errorf("unique default preset names: list presets of owner %d: %w", owner, err)
+		}
+		taken := make(map[string]bool, len(rows))
+		defaults := make([]Preset, 0, 2)
+		for _, p := range rows {
+			taken[p.Name] = true
+			if p.Name == DefaultPresetName {
+				defaults = append(defaults, p)
+			}
+		}
+		if len(defaults) < 2 {
+			continue
+		}
+		for _, p := range defaults[1:] {
+			name := nextFreeSuffixedName("Imported", taken)
+			if err := tx.Model(&Preset{}).Where("id = ?", p.ID).
+				Updates(map[string]any{"name": name, "updated_at": now}).Error; err != nil {
+				return fmt.Errorf("unique default preset names: rename preset %d: %w", p.ID, err)
+			}
+			taken[name] = true
+		}
+	}
+	return nil
 }
 
 // dropLegacyShareTables drops the two tables of the removed anonymous share-link transport.

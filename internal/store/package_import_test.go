@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"gorm.io/gorm"
 )
 
 // ---- import: round-trip fidelity / idempotency / safety / progress ownership ----
@@ -173,6 +175,121 @@ func TestImportDiscardsOthersProgress(t *testing.T) {
 			}
 			if report2.ProgressApplied != 1 {
 				t.Fatalf("progress_applied = %d, want 1", report2.ProgressApplied)
+			}
+		})
+	}
+}
+
+// presetImportZip builds a minimal package whose preset.json carries presetName verbatim, the way an export of a deck on the default preset does.
+func presetImportZip(t *testing.T, deckName, presetName string) []byte {
+	t.Helper()
+	manifest := `{"format_version":1,"exported_at":"2026-10-06T00:00:00Z","app_version":"test",` +
+		`"deck":{"name":` + jsonQuote(t, deckName) + `},` +
+		`"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":0,"cards":0}}`
+	return buildZip(t, map[string]string{
+		"manifest.json": manifest,
+		"notes.json":    `[]`,
+		"cards.json":    `[]`,
+		"preset.json":   `{"name":` + jsonQuote(t, presetName) + `,"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":false,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
+	})
+}
+
+// presetOfDeck loads the preset attached to deckID.
+func presetOfDeck(t *testing.T, db *gorm.DB, deckID uint64) Preset {
+	t.Helper()
+	var d Deck
+	if err := db.First(&d, "id = ?", deckID).Error; err != nil {
+		t.Fatalf("load deck %d: %v", deckID, err)
+	}
+	var p Preset
+	if err := db.First(&p, "id = ?", d.PresetID).Error; err != nil {
+		t.Fatalf("load preset %d of deck %d: %v", d.PresetID, deckID, err)
+	}
+	return p
+}
+
+// presetNamesOf returns all of owner's preset names, so a test can assert both uniqueness and that a name was not taken from elsewhere.
+func presetNamesOf(t *testing.T, db *gorm.DB, owner uint64) []string {
+	t.Helper()
+	var names []string
+	if err := db.Model(&Preset{}).Where("owner_user_id = ?", owner).Order("id ASC").Pluck("name", &names).Error; err != nil {
+		t.Fatalf("list preset names of user %d: %v", owner, err)
+	}
+	return names
+}
+
+// TestImportPresetDefaultNameIsNotCopied covers the defect where an export of a deck on the default preset carries the literal "Default" in
+// preset.json, and the import inserted another preset under that name: the duplicate looked like a default preset and could not be deleted.
+// Importing twice must leave two distinct names and exactly one preset named Default, the account's own default.
+func TestImportPresetDefaultNameIsNotCopied(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			owner := seedUsers(t, db, "pkg_preset_owner")[0]
+			if _, err := EnsureDefaultPreset(ctx, db, owner); err != nil {
+				t.Fatalf("EnsureDefaultPreset: %v", err)
+			}
+			raw := presetImportZip(t, "Shared", DefaultPresetName)
+			store := NewDeckStore(db)
+
+			first, err := store.ImportPackage(ctx, owner, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck})
+			if err != nil {
+				t.Fatalf("first ImportPackage: %v", err)
+			}
+			firstName := presetOfDeck(t, db, first.DeckID).Name
+			if firstName == DefaultPresetName {
+				t.Fatalf("imported preset name = %q, want anything but the reserved default name", firstName)
+			}
+			if firstName != "Imported — Shared" {
+				t.Fatalf("first imported preset name = %q, want %q", firstName, "Imported — Shared")
+			}
+
+			second, err := store.ImportPackage(ctx, owner, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck})
+			if err != nil {
+				t.Fatalf("second ImportPackage: %v", err)
+			}
+			secondName := presetOfDeck(t, db, second.DeckID).Name
+			if secondName == DefaultPresetName || secondName == firstName {
+				t.Fatalf("second imported preset name = %q, want a name distinct from %q and the reserved default name", secondName, firstName)
+			}
+
+			var defaults int64
+			if err := db.Model(&Preset{}).Where("owner_user_id = ? AND name = ?", owner, DefaultPresetName).Count(&defaults).Error; err != nil {
+				t.Fatalf("count default presets: %v", err)
+			}
+			if defaults != 1 {
+				t.Fatalf("presets named %q = %d, want exactly 1 (names: %v)", DefaultPresetName, defaults, presetNamesOf(t, db, owner))
+			}
+		})
+	}
+}
+
+// TestImportPresetNameFallback asserts an absent or blank preset name still yields a name derived from the deck and never the reserved default name.
+func TestImportPresetNameFallback(t *testing.T) {
+	cases := []struct {
+		name       string
+		presetName string
+	}{
+		{"empty name", ""},
+		{"whitespace name", "   "},
+	}
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			for i, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					owner := seedUsers(t, db, fmt.Sprintf("pkg_preset_fallback_%d", i))[0]
+					deckName := fmt.Sprintf("Fallback %d", i)
+					report, err := NewDeckStore(db).ImportPackage(ctx, owner, bytes.NewReader(presetImportZip(t, deckName, tc.presetName)),
+						PackageImportOptions{Target: PackageTargetNewDeck})
+					if err != nil {
+						t.Fatalf("ImportPackage: %v", err)
+					}
+					name := presetOfDeck(t, db, report.DeckID).Name
+					if want := "Imported — " + deckName; name != want {
+						t.Fatalf("preset name = %q, want %q", name, want)
+					}
+				})
 			}
 		})
 	}

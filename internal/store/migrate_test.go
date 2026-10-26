@@ -576,9 +576,11 @@ func TestBuiltinDropLegacyShareTablesDropsPopulatedTables(t *testing.T) {
 				t.Fatalf("seed share session row: %v", err)
 			}
 
-			applied, err := Sync(ctx, db, BuiltinMigrations)
+			// Only migration 0008 is in scope here: later entries in the list have their own cases, and applying them would make
+			// "applied" count something other than the table drop this test asserts.
+			applied, err := Sync(ctx, db, BuiltinMigrations[:8])
 			if err != nil {
-				t.Fatalf("Sync(BuiltinMigrations) error = %v", err)
+				t.Fatalf("Sync(BuiltinMigrations[:8]) error = %v", err)
 			}
 			if applied != 1 {
 				t.Fatalf("Sync() applied = %d, want 1", applied)
@@ -606,12 +608,113 @@ func TestBuiltinDropLegacyShareTablesDropsPopulatedTables(t *testing.T) {
 				}
 			}
 
-			applied, err = Sync(ctx, db, BuiltinMigrations)
+			applied, err = Sync(ctx, db, BuiltinMigrations[:8])
 			if err != nil {
-				t.Fatalf("second Sync(BuiltinMigrations) error = %v", err)
+				t.Fatalf("second Sync(BuiltinMigrations[:8]) error = %v", err)
 			}
 			if applied != 0 {
 				t.Errorf("second Sync() applied = %d, want 0", applied)
+			}
+		})
+	}
+}
+
+// TestBuiltinUniqueDefaultPresetNamesMigration seeds an owner whose account accumulated three presets named Default (the shape an import left behind).
+// After the migration the oldest row keeps the name, the other two are renamed to free "Imported (N)" names, no row is deleted, the deck that
+// referenced the oldest keeps its preset_id, a different owner with a single Default is untouched, and a second run changes nothing.
+func TestBuiltinUniqueDefaultPresetNamesMigration(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			if err := setVersion(db, 8); err != nil {
+				t.Fatalf("set version: %v", err)
+			}
+			now := time.Now().UTC().Truncate(time.Second)
+			mk := func(owner uint64, name string, createdAt time.Time) uint64 {
+				p := Preset{OwnerUserID: owner, Name: name, DesiredRetention: 0.9, LearningSteps: "1m,10m",
+					RelearningSteps: "10m", MaximumIntervalDays: 100, EnableFuzz: Ptr(true),
+					CreatedAt: createdAt, UpdatedAt: createdAt}
+				if err := db.Create(&p).Error; err != nil {
+					t.Fatalf("create preset %q: %v", name, err)
+				}
+				return p.ID
+			}
+			owners := seedUsers(t, db, "preset_dup_owner", "preset_single_owner")
+			owner, singleOwner := owners[0], owners[1]
+			oldest := mk(owner, DefaultPresetName, now.Add(-3*time.Hour))
+			second := mk(owner, DefaultPresetName, now.Add(-2*time.Hour))
+			third := mk(owner, DefaultPresetName, now.Add(-time.Hour))
+			// A non-default preset already holding the first candidate name: the renames must step over it instead of colliding with it.
+			reserved := mk(owner, "Imported (2)", now)
+			single := mk(singleOwner, DefaultPresetName, now)
+			d := Deck{OwnerUserID: owner, Name: "dup deck", PresetID: oldest, CreatedAt: now}
+			if err := db.Create(&d).Error; err != nil {
+				t.Fatalf("create deck: %v", err)
+			}
+
+			if applied, err := Apply(ctx, db, BuiltinMigrations); err != nil || applied != 1 {
+				t.Fatalf("Apply(BuiltinMigrations) = %d, %v; want 1, nil", applied, err)
+			}
+
+			load := func(id uint64) Preset {
+				var p Preset
+				if err := db.First(&p, "id = ?", id).Error; err != nil {
+					t.Fatalf("load preset %d: %v", id, err)
+				}
+				return p
+			}
+			cases := []struct {
+				name  string
+				id    uint64
+				want  string
+				moved bool
+			}{
+				{"oldest default keeps the name", oldest, DefaultPresetName, false},
+				{"second default is renamed past the taken candidate", second, "Imported (3)", true},
+				{"third default is renamed to the next free candidate", third, "Imported (4)", true},
+				{"an existing non-default name is left alone", reserved, "Imported (2)", false},
+				{"single default of another owner is untouched", single, DefaultPresetName, false},
+			}
+			for _, tc := range cases {
+				p := load(tc.id)
+				if p.Name != tc.want {
+					t.Errorf("%s: name = %q, want %q", tc.name, p.Name, tc.want)
+				}
+				if tc.moved && p.UpdatedAt.Before(now) {
+					t.Errorf("%s: updated_at = %v, want it refreshed at or after %v", tc.name, p.UpdatedAt, now)
+				}
+			}
+
+			var total int64
+			if err := db.Model(&Preset{}).Where("owner_user_id = ?", owner).Count(&total).Error; err != nil {
+				t.Fatalf("count presets: %v", err)
+			}
+			if total != 4 {
+				t.Fatalf("owner preset rows = %d, want 4: the migration renames rows, it does not delete them", total)
+			}
+			var after Deck
+			if err := db.First(&after, "id = ?", d.ID).Error; err != nil {
+				t.Fatalf("load deck: %v", err)
+			}
+			if after.PresetID != oldest {
+				t.Errorf("deck preset_id = %d, want the unchanged %d", after.PresetID, oldest)
+			}
+
+			if applied, err := Apply(ctx, db, BuiltinMigrations); err != nil || applied != 0 {
+				t.Fatalf("second Apply(BuiltinMigrations) = %d, %v; want 0, nil", applied, err)
+			}
+			before := []string{load(second).Name, load(third).Name}
+			if err := uniqueDefaultPresetNames(db); err != nil {
+				t.Fatalf("rerun uniqueDefaultPresetNames: %v", err)
+			}
+			again := []string{load(second).Name, load(third).Name}
+			for i := range before {
+				if again[i] != before[i] {
+					t.Errorf("rerun renamed preset %d: %q -> %q, want no change", i, before[i], again[i])
+				}
 			}
 		})
 	}

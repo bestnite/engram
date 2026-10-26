@@ -778,7 +778,7 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 		if err != nil {
 			return 0, err
 		}
-		presetID, err := createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset, opts.ApplyWeights)
+		presetID, err := createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset, name, opts.ApplyWeights)
 		if err != nil {
 			return 0, err
 		}
@@ -805,10 +805,20 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 
 // uniqueDeckName appends a (2), (3)... suffix on a name clash.
 func uniqueDeckName(ctx context.Context, tx *gorm.DB, owner uint64, name string) (string, error) {
-	var names []string
-	if err := tx.WithContext(ctx).Model(&Deck{}).Where("owner_user_id = ?", owner).
-		Pluck("name", &names).Error; err != nil {
+	unique, err := uniqueOwnerName(ctx, tx, &Deck{}, owner, name)
+	if err != nil {
 		return "", fmt.Errorf("list deck names: %w", err)
+	}
+	return unique, nil
+}
+
+// uniqueOwnerName returns name itself when no row of model owned by owner uses it, otherwise the first free "name (N)" candidate with N >= 2.
+// Deck and preset names share this rule, so a name that avoids a clash does so in the same way for both.
+func uniqueOwnerName(ctx context.Context, tx *gorm.DB, model any, owner uint64, name string) (string, error) {
+	var names []string
+	if err := tx.WithContext(ctx).Model(model).Where("owner_user_id = ?", owner).
+		Pluck("name", &names).Error; err != nil {
+		return "", err
 	}
 	taken := map[string]bool{}
 	for _, n := range names {
@@ -817,27 +827,50 @@ func uniqueDeckName(ctx context.Context, tx *gorm.DB, owner uint64, name string)
 	if !taken[name] {
 		return name, nil
 	}
+	return nextFreeSuffixedName(name, taken), nil
+}
+
+// nextFreeSuffixedName returns the first "base (N)" candidate with N starting at 2 that taken does not hold.
+// It never returns base itself: callers use it when base is already taken or must not be written as the final name.
+func nextFreeSuffixedName(base string, taken map[string]bool) string {
 	for i := 2; ; i++ {
-		candidate := fmt.Sprintf("%s (%d)", name, i)
+		candidate := fmt.Sprintf("%s (%d)", base, i)
 		if !taken[candidate] {
-			return candidate, nil
+			return candidate
 		}
 	}
 }
 
 // createPresetFromPackage creates a new preset owned by actorUserID from the package's parameters.
+//
+// The package's preset name is only a hint, never the stored name: the exporter writes its own preset name verbatim, so a deck on the default
+// preset exports the literal "Default". Copying that name would create a second preset called "Default" in the importer's account, where the name
+// is the default preset's identity -- the duplicate would be presented as a default preset and could not be deleted. An absent, blank or
+// reserved name therefore becomes "Imported — <deck name>", and the result is made unique among the owner's presets like any other name.
+//
 // With applyWeights false the weights and their two metadata fields are not written: the importer's review log lacks the reviews that fitted these weights,
 // and keeping weights_review_count would make the preset show an optimization record with no traceable source in this account.
-func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset, applyWeights bool) (uint64, error) {
+func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset, deckName string, applyWeights bool) (uint64, error) {
 	now := time.Now().UTC()
+	base := strings.TrimSpace(pp.Name)
+	if base == "" || base == DefaultPresetName {
+		importedFrom := strings.TrimSpace(deckName)
+		if importedFrom == "" {
+			// resolveTargetDeck always passes a non-empty deck name; this keeps the fallback self-contained rather than relying on the caller.
+			importedFrom = "Imported"
+		}
+		base = "Imported — " + importedFrom
+	}
+	// base is never DefaultPresetName (the rule above replaces it) and the suffix candidates extend base, so the final name cannot be that literal either.
+	name, err := uniqueOwnerName(ctx, tx, &Preset{}, owner, base)
+	if err != nil {
+		return 0, fmt.Errorf("list preset names: %w", err)
+	}
 	p := Preset{
-		OwnerUserID: owner, Name: pp.Name, DesiredRetention: pp.DesiredRetention,
+		OwnerUserID: owner, Name: name, DesiredRetention: pp.DesiredRetention,
 		LearningSteps: pp.LearningSteps, RelearningSteps: pp.RelearningSteps,
 		MaximumIntervalDays: pp.MaximumIntervalDays, EnableFuzz: Ptr(pp.EnableFuzz),
 		CreatedAt: now, UpdatedAt: now,
-	}
-	if p.Name == "" {
-		p.Name = "Imported"
 	}
 	if p.DesiredRetention <= 0 || p.DesiredRetention > 1 {
 		p.DesiredRetention = DefaultDesiredRetention
