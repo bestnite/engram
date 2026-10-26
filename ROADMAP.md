@@ -51,169 +51,24 @@ release; a task moves into a release milestone when it is scheduled.
   settings read as the first row.
   *Do not start until the callback shape is decided.*
 
-### M11 — Card content shortcodes
-
-Card content is Markdown plus TeX rendered server-side by `internal/render`. Markdown cannot
-express inline audio, speech or ruby annotation, and the content allowlist deliberately forbids
-`style`, `data-*` and every script-capable element, so raw HTML is not an option either. This
-milestone adds one fixed set of single-line shortcodes, expanded at render time, plus the browser
-side that turns them into controls. Adding further shortcodes means adding a row to that table,
-not widening the allowlist.
-
-The agreed grammar, which every shortcode in this milestone follows:
-
-- one line, no nesting: `{{name:body|key=value|...}}`, and the body ends at the first `}}`;
-- a shortcode never fails a render: an unknown name, a malformed parameter, or a body that itself
-  contains `{{` is emitted as its source text, and the review flow never learns about it;
-- the expanded element carries data in named attributes and no behaviour: the server emits no
-  `<audio>`, no `<button>` and no event attribute, so the allowlist grows by exactly the
-  attributes a shortcode needs;
-- the visible body always stays in the output, so a client without JavaScript, without a speech
-  engine, or on a page whose media it may not read shows text instead of nothing;
-- the mail renderer turns every shortcode into plain text, because a mail body shares the same
-  pipeline and has no controls.
-
-Rejected, with the reason recorded so it is not re-litigated:
-
-- `style`, `size`, `color`: the allowlist forbids the `style` attribute on purpose, and one
-  shortcode emitting it would make every other constraint worthless;
-- conditionals, loops, variables, template expressions: a requirement that needs an expression is
-  a card type, and card types are registered;
-- cross-note references such as `{{card:<id>}}`: rendering takes one string and stays a pure
-  function of it, or the export, mail and share paths inherit a database read;
-- `video`: the media allowlist holds no video format;
-- server-side reading generation for ruby: it needs a dictionary and disambiguation, which is
-  another system rather than a shortcode;
-- `kbd`, `mark`, `ipa`: inline code and emphasis already express them.
-
-Deferred, not part of this milestone: `{{record:<seconds>}}`, which records and plays back the
-learner's own voice through `MediaRecorder`, and `{{timer:<seconds>}}`, a countdown for a spoken
-answer. Both are front-end only and need no server change; they wait until the first three
-shortcodes have been used on a real deck.
-
-- [ ] **M11-1 Shortcode layer in `internal/render` with `tts`, `audio` and `ruby`** — add a
-  goldmark inline parser and one fixed shortcode table in `internal/render` (a new file beside
-  `render.go`, sharing the existing pipeline). Syntax is single-line, non-nesting,
-  `{{name:body|key=value|...}}`.
-  - `{{tts:こんにちは|lang=ja-JP|rate=0.9}}` → `<span class="engram-tts" data-tts-text="…"
-    data-tts-lang="…" data-tts-rate="…">こんにちは</span>`, the body staying as visible text.
-  - `{{audio:/media/<sha256>|start=12.5|end=15|rate=0.75|loop}}` → `<span class="engram-audio"
-    data-audio-src="…" …>…</span>`, the same visible-text rule.
-  - `{{ruby:漢字|かんじ}}` → `<ruby>漢字<rt>かんじ</rt></ruby>`.
-  - An unknown name, a malformed parameter or a body containing `{{` emits the source text
-    unchanged: a shortcode never makes rendering fail.
-  - The server emits no `<audio>`, no `<button>` and no event attribute; the controls come from
-    M11-2.
-  - Allowlist changes are exactly: the elements `ruby`, `rt`, `rp`, and the named `data-tts-*` /
-    `data-audio-*` attributes on `span`, each with a value regex. A general `data-*`, `style`, or
-    any other attribute stays forbidden.
-  - `RenderMailMarkdown` renders each shortcode as plain text: `tts` and `audio` as their body,
-    `ruby` as `漢字(かんじ)`.
-  - Structural change: `ARCHITECTURE.md` gains the shortcode layer and its contract in the same
-    commit.
-
-  *Acceptance:* table-driven tests in `internal/render` prove each expansion, that a shortcode
-  inside a code span or a fenced block stays literal, that an unknown or malformed shortcode
-  returns its source verbatim, that a body carrying `"` or `<` cannot escape its attribute and
-  cannot introduce an attribute outside the allowlist, and that the mail renderer produces plain
-  text for all three. The existing `TestRenderMarkdown*` cases still pass unchanged. Evidence is
-  the raw output of `go test ./internal/render/... && go vet ./internal/render/...`.
-- [ ] **M11-2 Review, preview and share pages turn shortcodes into controls** — add one frontend
-  enhancement entry point in the pattern of `frontend/src/lib/mathjax/index.ts`: it takes the
-  HTML container already sanitized by the server and binds `[data-tts-*]` and `[data-audio-*]`
-  through event delegation, is idempotent when the same container is enhanced twice, and never
-  reads raw card text.
-  - `tts` speaks `data-tts-text` with `data-tts-lang` and `data-tts-rate` through the Web Speech
-    API, always from a click (no autoplay). Without `speechSynthesis`, or with no voice for that
-    language, the control is absent and the text stays visible.
-  - `audio` plays `data-audio-src` between `start` and `end`, honours `rate` and `loop`, seeks in
-    the same click. A failed load hides the control and keeps the text: a session that may not
-    read the bytes gets 404 from `/media` (`internal/web/media.go:267`), which is the limitation
-    images already have.
-  - Call it wherever `typeset(...)` already runs: `ReviewView.svelte`, `NoteEditView.svelte`
-    (preview only) and `ShareBrowseView.svelte`. If M12-1 has already landed, `ShareBrowseView`
-    no longer exists and that third call site simply does not apply.
-  - New control labels come from both catalogs under a `shortcode.` prefix appended at the end
-    of each file, with identical key sets; nothing is hardcoded.
-  - Depends on M11-1's DOM contract: do not start before M11-1 lands.
-
-  *Acceptance:* jsdom tests with stubbed `speechSynthesis` and media playback prove that each
-  call site enhances the container it typesets, that a second enhancement of the same DOM binds
-  nothing twice, that a missing speech API leaves only the visible text, and that a media load
-  error removes the control rather than showing a broken player. Evidence is the raw output of
-  the frontend test run and `npm --prefix frontend run build`.
-
-### M12 — Share link removal
-
-The owner has confirmed that no instance uses this feature, and every job it does is served by a
-better path: `POST /decks/:id/export` writes a self-contained `.edeck` that can inline media
-(`IncludeMedia`, `internal/store/package.go:97`), and sharing inside one instance already runs on
-`deck_grants` plus `share_invites`. A share link cannot serve a language deck at all, because an
-anonymous visitor can never read `/media`. Removing it also deletes the third branch of the media
-read rule, which is where the real simplification lies: three allow conditions become two, and a
-table and a grant concept disappear with them. Invites, grants and the receiving policy are a
-different feature and stay.
-
-- [ ] **M12-1 Remove share links end to end** — delete the anonymous read-only link transport, its
-  management endpoints, its two tables and the media authorization branch it fed. What stays:
-  `deck_grants`, `share_invites`, the accepting policy (`/api/v1/settings/share-policy`), the
-  sharing page at `/decks/:id/sharing`, the grant endpoints, and the `deck_share_invites`
-  retention sweep.
-  - Routes removed: `GET /s/:token`; `GET /api/v1/share/:token`;
-    `POST /api/v1/share/:token/unlock`; `POST /api/v1/share/:token/join`;
-    `POST /api/v1/decks/:id/sharing/links`; `DELETE /api/v1/decks/:id/sharing/links`; and
-    `DELETE /api/v1/decks/:id/sharing/links/revoke/:digest`.
-  - Files deleted whole: `internal/web/publicshare.go`, `internal/web/share_api.go`,
-    `internal/store/sharelink.go`, `internal/store/share_session.go`, and the tests that exist
-    only for them. Removed in place: the link handlers and link fields of
-    `internal/web/sharing_api.go`'s response, the link routes and the `ShareLinks` dependency and
-    field in `internal/web/server.go` and `internal/web/sharing.go`, the `ShareLink` and
-    `ShareSessionDeck` models and their `AllModels()` entries, and the frontend
-    `ShareBrowseView.svelte`, its client-router entry, the `getShare` / `unlockShare` /
-    `joinSharedDeck` client methods, the `ShareResponse` / `JoinShareResponse` types, and every
-    language-pack key used only by them.
-  - Media read rule: drop the share-session branch in `internal/store/media_mapping.go`
-    (`mediaReadableByUser`, `shareSessionDeckIDsQuery`) and the `sessionID` parameter that exists
-    only for it in `MediaAccessibleToUser` (`internal/store/media_access.go`) and in its caller
-    `internal/web/media.go`. Update the doc comments that enumerate the three conditions down to
-    two; a stale comment describing a branch that no longer exists is a defect.
-  - Migration: append `0008_drop_share_link_tables` to `BuiltinMigrations` in
-    `internal/store/migrate.go`, dropping `share_links` and `share_session_decks` on both drivers.
-    `AutoMigrate` is additive only, so a drop must be an explicit versioned migration.
-  - Audit rows: keep the `share_link_*` action constants and their labels. Historical audit rows
-    still reference them, and deleting the constants would render those rows unreadable.
-  - `ARCHITECTURE.md` loses the link transport, the two tables and the third read condition in the
-    same commit.
-
-  *Acceptance:* `grep -rn` over the repository finds no remaining reference to `share_links`,
-    `share_session_decks`, `ShareLink`, `ShareSessionDeck`, `resolveShareLink`, `shareUnlock`,
-    `shareJoin`, `recordShareGrant`, or `share-browse`, except the retained audit constants and
-    their labels. A test on a fresh database shows neither table exists, and the same test on a
-    database that already holds rows for both tables shows the migration drops them and leaves
-    `deck_grants`, `deck_share_invites` and the rest untouched. The media authorization tests that
-    covered the removed branch are deleted rather than weakened, and a positive case proves that a
-    deck member still reads the deck's media while a stranger still cannot. Evidence is the raw
-    output of `go test ./internal/web/... ./internal/store/... ./internal/auth/... &&
-    go vet ./internal/web/... ./internal/store/...`, the frontend test run,
-    `npm --prefix frontend run build`, and the grep above. If `TEST_PG_DSN` was unset, say so
-    explicitly instead of implying the PostgreSQL path of the migration was exercised.
-
-  Removal is breaking: seven REST routes disappear and two tables are dropped. The release that
-  carries it must say so in the ledger, and the commit message must name the removed routes.
-
 ---
 
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.1.10 (2026-10-20)
 
-**The machine surfaces are compatible with v0.1.10, with one tightened request check listed below.**
+**The release is not machine-compatible with v0.1.10: it removes seven REST routes and drops
+two tables. The shortcode elements and the render attributes it adds are additive.**
 
-- No REST route was added, removed or renamed, and no MCP tool was removed or renamed. One MCP
-  tool was added, `delete_deck`. `get_due_cards` keeps its name and its arguments; only its
-  description mentions the new field.
-- No database migration was added up to the point below: `BuiltinMigrations` held the same eight
-  entries as at the tag, in the same order; the ninth is the preset-name cleanup listed below.
+- Seven REST routes were removed and none was added or renamed: `GET /s/:token`,
+  `GET /api/v1/share/:token`, `POST /api/v1/share/:token/unlock`,
+  `POST /api/v1/share/:token/join`, `POST /api/v1/decks/:id/sharing/links`,
+  `DELETE /api/v1/decks/:id/sharing/links` and
+  `DELETE /api/v1/decks/:id/sharing/links/revoke/:digest`. No MCP tool was removed or renamed.
+  One MCP tool was added, `delete_deck`; `get_due_cards` keeps its name and its arguments, and
+  only its description mentions the new field.
+- Two migrations were added: `0008_drop_share_link_tables` drops the two share-link tables, and
+  `0009_unique_default_preset_names` renames duplicate default presets. Both are listed below.
 - No configuration key and no environment variable was added, removed or renamed.
 - The deck-package and note-import schemas keep their shape; the cloze description now documents
   the `\alt` separator.
@@ -241,6 +96,11 @@ different feature and stay.
 | API key expiry | The personal key page sets an expiry when creating a key: never, 7 / 30 / 90 days, one year (365 days), or a custom date meaning the end of that local day. The list shows each key's expiry date and puts already-expired keys in their own group with an `expired` badge, ranked below `revoked`; an expired key keeps the revoke action, so it can still be removed by its owner. | No — the field already existed and was already accepted on create |
 | Expiry on create must be in the future | `POST /api/v1/keys` now rejects an `expires_at` that is not strictly after the current time with `400 invalid_request` and creates nothing, instead of returning a key that is dead on arrival. A request that omits the field, or sends a future time, behaves exactly as before. | Tightened — a client that sent a past `expires_at` previously succeeded and now fails, though the key it received was unusable |
 | Imported presets stop duplicating the default preset | Importing a package into a new deck derives the preset name from the deck when the package carries no name or the reserved `Default`, and makes that name unique among the importer's presets, so an import can no longer add a preset named `Default`. Migration `0009_unique_default_preset_names` renames the duplicate `Default` rows earlier imports left behind, keeping the oldest row as the account's own default and leaving every `decks.preset_id` and `deck_member_settings.preset_id` reference in place. | No — preset names only. A deck that references a renamed preset keeps it, while a deck created afterwards starts from the account's own default preset again |
+| Card content shortcodes | Card text accepts `{{tts:…}}`, `{{audio:…}}` and `{{ruby:…}}`; the server expands each into an element carrying named `data-*` attributes and leaves the body visible, and the review page and editor preview attach speech and audio controls to those attributes. An unknown name, a malformed parameter or a body containing `{{` stays literal; code spans and fenced blocks stay literal; mail bodies render plain text. | No — content without a shortcode renders exactly as before |
+| Shortcode controls | Audio has a seekable progress track over the played segment; `tts` accepts the bare `hide` flag, which hides the body only while a speech control exists and restores it when it cannot be read aloud; both controls fit inside their line box with a 40×40 pointer target. | No — the added `data-tts-hide` attribute is additive; existing shortcodes and content are unchanged |
+| Shortcode reference and insertion tools | `/help/shortcodes` documents the grammar, parameters and fallback rules in both languages; each editor text field carries its own image and shortcode tools, with the media library and composer in dialogs. | No |
+| Note editor layout | Insertion tools sit on the field they write into; below `lg` the live preview is an on-demand drawer; the page-level field selector, upload area and standalone composer block are gone. | No — screen layout only |
+| Share links removed | The anonymous share-link transport is gone: seven REST routes, the `share_links` and `share_session_decks` tables (migration `0008_drop_share_link_tables`), and the share-session branch of the media read rule. `deck_grants`, `share_invites`, the sharing page and the grant endpoints remain. | Yes — the seven routes disappear and the two tables are dropped; clients and stored links that used them stop working |
 
 Not listed because neither a user nor an integration can observe them: the migration of code
 comments to English, the gitignored `.worktrees/` layout, the removal of dead SSR-era test
@@ -249,14 +109,19 @@ helpers, the review-day seeding fix inside a test, and the internal rename of
 
 ### 2.2 Version number for the next release
 
-- Section 2.1 adds, removes and renames no REST route, MCP tool, database schema item or
-  configuration key. It adds one data-only migration, `0009_unique_default_preset_names`, which
-  renames rows in `presets` and changes no table, column or index. One behaviour change is
-  visible to a client: `POST /api/v1/keys` now
+- Section 2.1 removes seven REST routes and drops two tables. Migration
+  `0008_drop_share_link_tables` drops `share_links` and `share_session_decks`; migration
+  `0009_unique_default_preset_names` renames duplicate `Default` presets and changes no table,
+  column or index. The shortcode renderer adds `ruby`/`rt`/`rp` elements and named `data-*`
+  attributes to card HTML, which is additive for existing content. No MCP tool, configuration
+  key or file format changes. One request is validated more strictly: `POST /api/v1/keys`
   rejects an `expires_at` that is not in the future with `400 invalid_request`, where it
-  previously returned a key that was already unusable. The next release is **v0.1.11**.
+  previously returned a key that was already unusable.
+- The next release is **v0.1.11**. The project has shipped breaking changes in `0.1.x` patches
+  before — the release that changed media identity and deleted `/media/<numeric id>` was a
+  patch — so the share-link removal does not by itself force a minor bump. Counting it as one
+  would make the same content **v0.2.0**.
 - The toolchain bump is breaking only for someone building from source with Go 1.26 or Node 22.
-  Counting that as breaking makes the same content **v0.2.0**. Every earlier release, including
-  the one that changed media identity and deleted `/media/<numeric id>`, shipped as a `0.1.x`
-  patch, so `v0.1.11` follows the project's own practice.
+  Counting that as breaking also points at **v0.2.0**; `v0.1.11` follows the project's own
+  practice for the content above.
 
