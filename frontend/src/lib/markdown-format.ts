@@ -36,22 +36,47 @@ function clampOffset(value: number, length: number): number {
   return Math.min(Math.max(0, Math.trunc(value)), length);
 }
 
-/** Whether the marker pair sits immediately outside the selected range. */
-function isWrappedOutside(text: string, start: number, end: number, marker: string): boolean {
-  return (
-    start >= marker.length &&
-    end + marker.length <= text.length &&
-    text.slice(start - marker.length, start) === marker &&
-    text.slice(end, end + marker.length) === marker
-  );
+/** Counts consecutive `char` characters immediately before `index`. */
+function runBefore(text: string, index: number, char: string): number {
+  let width = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === char; cursor -= 1) width += 1;
+  return width;
 }
 
-/** Whether the selected text itself begins and ends with the marker, i.e. the pair is inside the selection. */
-function isWrappedInside(selected: string, marker: string): boolean {
+/** Counts consecutive `char` characters starting at `index`. */
+function runAfter(text: string, index: number, char: string): number {
+  let width = 0;
+  for (let cursor = index; cursor < text.length && text[cursor] === char; cursor += 1) width += 1;
+  return width;
+}
+
+/**
+ * Whether a run of marker characters can stand as a pair for `marker`.
+ *
+ * A lone `*` is only italic when it stands alone: inside a `**` run it is half of a bold
+ * marker, and treating it as italic would replace bold instead of adding italic. A `**` pair
+ * is the two stars touching the content, so a three-star run holds bold plus italic and
+ * removing the bold pair leaves the italic star. Strikethrough is always exactly `~~`.
+ */
+function isPairRun(width: number, marker: MarkdownMarker): boolean {
+  if (marker === '*') return width === 1;
+  if (marker === '**') return width === 2 || width === 3;
+  return width === 2;
+}
+
+/** Whether a marker pair sits immediately outside the selected range, with both adjacent runs accepted as that marker. */
+function isWrappedOutside(text: string, start: number, end: number, marker: MarkdownMarker): boolean {
+  const char = marker.charAt(0);
+  return isPairRun(runBefore(text, start, char), marker) && isPairRun(runAfter(text, end, char), marker);
+}
+
+/** Whether the selected text's leading and trailing marker runs both stand as a pair for the marker. */
+function isWrappedInside(selected: string, marker: MarkdownMarker): boolean {
+  const char = marker.charAt(0);
   return (
     selected.length >= marker.length * 2 &&
-    selected.startsWith(marker) &&
-    selected.endsWith(marker)
+    isPairRun(runAfter(selected, 0, char), marker) &&
+    isPairRun(runBefore(selected, selected.length, char), marker)
   );
 }
 
@@ -82,7 +107,8 @@ export function toggleMarkdown(
   const after = text.slice(last);
 
   if (selected === '') {
-    if (before.endsWith(marker) && after.startsWith(marker)) {
+    const char = marker.charAt(0);
+    if (isPairRun(runBefore(text, first, char), marker) && isPairRun(runAfter(text, first, char), marker)) {
       const caret = first - marker.length;
       return {
         text: before.slice(0, -marker.length) + after.slice(marker.length),
