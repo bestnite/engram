@@ -166,11 +166,6 @@ func (s *Server) oidcCallback(c *gin.Context) {
 	// A state started from the settings page is a bind, not a login: it must attach the identity to the session that asked for it and
 	// must never establish a new session or touch the login policy.
 	if pending.Intent == auth.PendingIntentBind {
-		if perr != "" {
-			s.logger.Info("oidc: provider returned an error during bind", "error", perr, "description", c.Query("error_description"))
-			c.Redirect(http.StatusSeeOther, "/settings/security?identity=failed")
-			return
-		}
 		s.oidcBindCallback(c, cfg, pending)
 		return
 	}
@@ -239,6 +234,11 @@ func (s *Server) oidcBindCallback(c *gin.Context, cfg *auth.OIDCConfig, pending 
 	if !ok || !sessOK || current.ID != pending.UserID || currentSess.ID != pending.SessionID {
 		s.logger.Info("oidc: bind callback does not match the pending session")
 		c.Redirect(http.StatusSeeOther, "/settings/security?identity=session")
+		return
+	}
+	if perr := strings.TrimSpace(c.Query("error")); perr != "" {
+		s.logger.Info("oidc: provider returned an error during bind", "error", perr, "description", c.Query("error_description"))
+		c.Redirect(http.StatusSeeOther, "/settings/security?identity=failed")
 		return
 	}
 	code := strings.TrimSpace(c.Query("code"))

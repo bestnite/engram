@@ -365,20 +365,36 @@ func TestIdentityBindCallbackProviderError(t *testing.T) {
 	seedOIDC(t, srv, db, p, auth.PolicyClosed)
 	owner := createTestUser(t, srv, "owner", "Sup3rSecret!", store.RoleUser, true)
 	cookies, csrf := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
-	state, _ := bindURL(t, srv, cookies, csrf)
+	otherCookies, _ := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
 
-	rec := getWithCookies(t, srv, "/auth/oidc/callback?error=access_denied&state="+state, cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("cancelled bind callback = %d, want 303", rec.Code)
+	cases := []struct {
+		name      string
+		cookies   []*http.Cookie
+		wantValue string
+	}{
+		// The session check comes first: a bind-specific response must not leak to another session or to an anonymous caller.
+		{"matching session", cookies, "failed"},
+		{"different session", otherCookies, "session"},
+		{"no session", nil, "session"},
 	}
-	if loc := rec.Header().Get("Location"); loc != "/settings/security?identity=failed" {
-		t.Fatalf("cancelled bind Location = %q, want identity=failed", loc)
-	}
-	if _, ok := srv.oidc.TakePending(state); ok {
-		t.Fatal("cancelled bind left the pending state in the table")
-	}
-	if rows := identityRows(t, db, owner.ID); len(rows) != 0 {
-		t.Fatalf("cancelled bind wrote %d identities, want 0", len(rows))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state, _ := bindURL(t, srv, cookies, csrf)
+			rec := getWithCookies(t, srv, "/auth/oidc/callback?error=access_denied&state="+state, tc.cookies)
+			if rec.Code != http.StatusSeeOther {
+				t.Fatalf("cancelled bind callback = %d, want 303", rec.Code)
+			}
+			want := "/settings/security?identity=" + tc.wantValue
+			if loc := rec.Header().Get("Location"); loc != want {
+				t.Fatalf("cancelled bind Location = %q, want %q", loc, want)
+			}
+			if _, ok := srv.oidc.TakePending(state); ok {
+				t.Fatal("cancelled bind left the pending state in the table")
+			}
+			if rows := identityRows(t, db, owner.ID); len(rows) != 0 {
+				t.Fatalf("cancelled bind wrote %d identities, want 0", len(rows))
+			}
+		})
 	}
 }
 
