@@ -1491,4 +1491,9 @@ export const en: LocaleCatalog = {
   'shortcode.audio.resume': 'Resume audio',
   'shortcode.audio.back': 'Back {seconds} seconds',
   'shortcode.audio.forward': 'Forward {seconds} seconds',
+  // ---- Note editor: Markdown formatting on single-string fields ----
+  'note_edit.format.group': 'Formatting for “{field}”',
+  'note_edit.format.bold': 'Bold in “{field}”',
+  'note_edit.format.italic': 'Italic in “{field}”',
+  'note_edit.format.strike': 'Strikethrough in “{field}”',
 };

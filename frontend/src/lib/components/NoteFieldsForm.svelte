@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { t } from '../i18n';
   import { arrayToLines, linesToArray, type FieldSpec } from '../card-fields';
-  import { Braces, ImagePlus } from '@lucide/svelte';
+  import { Bold, Braces, ImagePlus, Italic, Strikethrough } from '@lucide/svelte';
+  import { markerForShortcut, toggleMarkdown, type MarkdownMarker } from '../markdown-format';
   import Checkbox from './ui/Checkbox.svelte';
   import Select from './ui/Select.svelte';
   import HelpTip from './ui/HelpTip.svelte';
@@ -12,9 +14,9 @@
    * Field order and control shape come from the server's card-kind self-description, and this component contains no per-kind branching
    * business logic; views therefore no longer hand fields to the user as raw JSON to edit.
    *
-   * A single-string field also carries its own insertion actions in the label row. The tools sit on the
-   * field they write into, so the author never leaves the field to find them, and a view that does not
-   * pass the two callbacks renders the same form without a toolbar.
+   * A single-string field also carries its own insertion and Markdown formatting actions. The tools sit
+   * on the field they write into, so the author never leaves the field to find them, and a view that does
+   * not pass the two insertion callbacks still renders the same form with formatting only.
    */
   interface Props {
     specs: FieldSpec[];
@@ -39,10 +41,28 @@
 
   let { specs, fields, testIdPrefix = 'note-field', oncaret, oninsertimage, oninsertshortcode }: Props = $props();
 
-  // The compact insertion controls share one look: small enough for a 390px label row, but a 28px
-  // target so a finger still hits it.
+  // The compact insertion and formatting controls share one look: small enough for a 390px row, but a
+  // 28px target so a finger still hits it.
   const toolbarButton =
     'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+  /**
+   * The live control per single-string field. A formatting action reads its selection, writes the
+   * toggled source into the form model, and puts the resulting selection back on the same element.
+   */
+  let textControls = $state<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
+
+  /** The three formatting actions, in the order a writer scans them: weight, slant, strike. */
+  const formatActions = [
+    { id: 'bold', marker: '**', Icon: Bold, shortcut: 'Control+B Meta+B' },
+    { id: 'italic', marker: '*', Icon: Italic, shortcut: 'Control+I Meta+I' },
+    { id: 'strike', marker: '~~', Icon: Strikethrough, shortcut: 'Control+Shift+X Meta+Shift+X' },
+  ] as const satisfies ReadonlyArray<{
+    id: string;
+    marker: MarkdownMarker;
+    Icon: typeof Bold;
+    shortcut: string;
+  }>;
 
 
   /**
@@ -101,6 +121,42 @@
     const { selectionStart, selectionEnd } = event.currentTarget;
     if (selectionStart === null || selectionEnd === null) return;
     oncaret(key, selectionStart, selectionEnd);
+  }
+
+  /**
+   * Applies one formatting marker to a field's current selection.
+   *
+   * The control's own value is the source of truth here rather than the form model: while the user
+   * types, the DOM value is the newest text, and reading it also gives the live selection. The new
+   * text goes into the model first, then the DOM value and the selection are restored after Svelte
+   * has written that change — restoring them before the state flush would let the framework move the
+   * caret to the end of the textarea.
+   */
+  async function applyFormat(key: string, marker: MarkdownMarker): Promise<void> {
+    const control = textControls[key];
+    if (!control) return;
+    const start = control.selectionStart ?? 0;
+    const end = control.selectionEnd ?? start;
+    const edit = toggleMarkdown(control.value, start, end, marker);
+    setString(key, edit.text);
+    await tick();
+    control.value = edit.text;
+    control.focus();
+    control.setSelectionRange(edit.start, edit.end);
+    oncaret?.(key, edit.start, edit.end);
+  }
+
+  /**
+   * Formatting shortcuts belong to the focused text control only; a key press anywhere else keeps
+   * its browser meaning. The default is prevented only when a binding matched, so a plain letter,
+   * a paste or a browser shortcut still behaves normally.
+   */
+  function handleFormatKeydown(event: KeyboardEvent, key: string): void {
+    if (event.isComposing) return;
+    const marker = markerForShortcut(event);
+    if (!marker) return;
+    event.preventDefault();
+    void applyFormat(key, marker);
   }
 
   function selectedIndexes(key: string): number[] {
@@ -173,12 +229,41 @@
           </div>
         {/if}
       </div>
+      <!-- The formatting actions sit on a row of their own: the label row already carries the field
+           name, the help button and up to two insertion tools, and five icons in one row cannot stay
+           readable next to a label at 390px. Keeping the row below the label also keeps every action
+           one click away instead of behind a popover. -->
+      {#if inlineInsertable}
+        <div
+          class="mt-1 flex items-center gap-0.5"
+          role="group"
+          aria-label={$t('note_edit.format.group', { field: fieldLabel })}
+          data-testid="{testIdPrefix}-{spec.key}-format-toolbar"
+        >
+          {#each formatActions as action (action.id)}
+            <button
+              type="button"
+              class={toolbarButton}
+              data-testid="{testIdPrefix}-{spec.key}-format-{action.id}"
+              aria-label={$t('note_edit.format.' + action.id, { field: fieldLabel })}
+              title={$t('note_edit.format.' + action.id, { field: fieldLabel })}
+              aria-keyshortcuts={action.shortcut}
+              onmousedown={(event) => event.preventDefault()}
+              onclick={() => void applyFormat(spec.key, action.marker)}
+            >
+              <action.Icon class="size-4" aria-hidden="true" />
+            </button>
+          {/each}
+        </div>
+      {/if}
       {#if spec.control === 'textarea'}
         <textarea
           data-testid="{testIdPrefix}-{spec.key}"
           rows={spec.key === 'extra' ? 3 : 5}
           spellcheck="false"
+          bind:this={textControls[spec.key]}
           value={asString(spec.key)}
+          onkeydown={(event) => handleFormatKeydown(event, spec.key)}
           oninput={(event) => {
             setString(spec.key, event.currentTarget.value);
             reportCaret(event, spec.key);
@@ -186,7 +271,7 @@
           onselect={(event) => reportCaret(event, spec.key)}
           onkeyup={(event) => reportCaret(event, spec.key)}
           onclick={(event) => reportCaret(event, spec.key)}
-          class="field-input text-sm mt-1.5 block w-full"></textarea>
+          class="field-input text-sm mt-1 block w-full"></textarea>
       {:else if spec.control === 'lines'}
         <textarea
           data-testid="{testIdPrefix}-{spec.key}"
@@ -239,7 +324,9 @@
         <input
           type="text"
           data-testid="{testIdPrefix}-{spec.key}"
+          bind:this={textControls[spec.key]}
           value={asString(spec.key)}
+          onkeydown={(event) => handleFormatKeydown(event, spec.key)}
           oninput={(event) => {
             setString(spec.key, event.currentTarget.value);
             reportCaret(event, spec.key);
@@ -247,7 +334,7 @@
           onselect={(event) => reportCaret(event, spec.key)}
           onkeyup={(event) => reportCaret(event, spec.key)}
           onclick={(event) => reportCaret(event, spec.key)}
-          class="field-input text-sm mt-1.5 block w-full"
+          class="field-input text-sm mt-1 block w-full"
         />
       {/if}
     {/if}

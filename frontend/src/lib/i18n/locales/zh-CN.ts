@@ -1489,4 +1489,9 @@ export const zhCN: LocaleCatalog = {
   'shortcode.audio.resume': '继续播放',
   'shortcode.audio.back': '后退 {seconds} 秒',
   'shortcode.audio.forward': '前进 {seconds} 秒',
+  // ---- Note editor: Markdown formatting on single-string fields ----
+  'note_edit.format.group': '「{field}」的文字格式',
+  'note_edit.format.bold': '将「{field}」设为粗体',
+  'note_edit.format.italic': '将「{field}」设为斜体',
+  'note_edit.format.strike': '将「{field}」设为删除线',
 };
