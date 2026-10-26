@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import Skeleton from './ui/Skeleton.svelte';
   import { t } from '../i18n';
   import { apiClient } from '../api';
@@ -18,7 +19,7 @@
     onselect: (item: MediaItem) => void;
     /** Only items whose mime starts with this prefix are listed, e.g. "audio/" for the audio shortcode panel. */
     mimePrefix?: string;
-    /** Prefix for every data-testid value: `<prefix>-picker-toggle`, `<prefix>-picker`, `<prefix>-item-<sha256>`, `<prefix>-next`. */
+    /** Prefix for every data-testid value: `<prefix>-picker`, `<prefix>-item-<sha256>`, `<prefix>-next`, and `<prefix>-picker-toggle` when not embedded. */
     idPrefix?: string;
     /** Toggle button size; the shortcode panel uses the compact one. */
     size?: 'sm' | 'md' | 'lg';
@@ -26,6 +27,13 @@
     openLabel?: string;
     /** Copy shown when a loaded page holds no item matching `mimePrefix`. */
     emptyLabel?: string;
+    /**
+     * Whether the picker is the content of its host rather than something the user opens: the library is
+     * on screen at once, without a toggle, and its first page loads on mount. The editor's image dialog
+     * uses this, so the library is one glance instead of one more click; a picker nested inside another
+     * surface keeps the toggle. A fixed choice per host, not a switch the user flips.
+     */
+    embedded?: boolean;
   }
 
   let {
@@ -35,6 +43,7 @@
     size = 'lg',
     openLabel = '',
     emptyLabel = '',
+    embedded = false,
   }: Props = $props();
 
   let open = $state(false);
@@ -43,6 +52,11 @@
   let items = $state<MediaItem[]>([]);
   let cursor = $state('');
   let hasMore = $state(false);
+  // An embedded picker has read nothing at first paint: the skeleton is then the truthful state, where a toggled
+  // picker simply is not on screen yet. `embedded` is a fixed choice of the host, so it is read as a dependency.
+  let started = $state(false);
+  const awaitingFirstPage = $derived(embedded && !started);
+  let disposed = false;
 
   // Filtering is done on the loaded page rather than in the query: the endpoint pages by cursor only,
   // so a page can legitimately hold no matching item and the "load more" control stays reachable.
@@ -53,15 +67,28 @@
     failed = false;
     try {
       const page = await apiClient.listMedia(reset ? '' : cursor);
+      if (disposed) return;
       items = reset ? page.items : [...items, ...page.items];
       cursor = page.next_cursor;
       hasMore = Boolean(page.next_cursor);
     } catch {
+      if (disposed) return;
       failed = true;
     } finally {
-      loading = false;
+      if (!disposed) {
+        loading = false;
+        started = true;
+      }
     }
   }
+
+  onMount(() => {
+    // A dialog can close while its first page is still on the way; the response then belongs to no one.
+    if (embedded) void load(true);
+    return () => {
+      disposed = true;
+    };
+  });
 
   async function toggle(): Promise<void> {
     open = !open;
@@ -74,19 +101,21 @@
 </script>
 
 <div class="space-y-2">
-  <Button testId="{idPrefix}-picker-toggle" variant="outline" {size} onclick={toggle}>
-    {openLabel || $t('media.open')}
-  </Button>
-  {#if open}
+  {#if !embedded}
+    <Button testId="{idPrefix}-picker-toggle" variant="outline" {size} onclick={toggle}>
+      {openLabel || $t('media.open')}
+    </Button>
+  {/if}
+  {#if embedded || open}
     <!-- A container query, not a viewport breakpoint: this picker is also used inside the shortcode
          panel, where the available width is well under the viewport's and four fixed columns would
          squeeze the tile caption into the border. -->
     <section data-testid="{idPrefix}-picker" class="@container rounded-xl border border-input p-4">
       <h2 class="text-lg font-semibold">{$t('media.heading')}</h2>
-      {#if loading}<Skeleton testId="{idPrefix}-loading" label={$t('media.loading')} lines={2} />{/if}
+      {#if loading || awaitingFirstPage}<Skeleton testId="{idPrefix}-loading" label={$t('media.loading')} lines={2} />{/if}
       {#if failed}<p role="alert">{$t('media.failed')}</p><button type="button" onclick={() => load(!cursor)}>{$t('media.retry')}</button>{/if}
-      {#if !loading && !failed && items.length === 0}<p>{$t('media.empty')}</p>{/if}
-      {#if !loading && !failed && items.length > 0 && visible.length === 0}
+      {#if !loading && !awaitingFirstPage && !failed && items.length === 0}<p>{$t('media.empty')}</p>{/if}
+      {#if !loading && !awaitingFirstPage && !failed && items.length > 0 && visible.length === 0}
         <p data-testid="{idPrefix}-empty" class="text-sm text-muted-foreground">{emptyLabel || $t('media.empty')}</p>
       {/if}
       {#if visible.length > 0}

@@ -772,8 +772,11 @@ describe('unified note editor — inserting content', () => {
 
     const trigger = openDialog('front', 'image');
     expect(dialog()).toBeTruthy();
-    click(inDialog('note-insert-image-picker-toggle'));
+    // The library is the dialog's content, not a second thing to open: its first page arrives without a click,
+    // and the embedded picker has no toggle at all.
     await flush();
+    expect(inDialog('note-insert-image-picker')).toBeTruthy();
+    expect(document.body.querySelector('[data-testid="note-insert-image-picker-toggle"]')).toBeNull();
 
     // The dialog writes the Markdown image form, so pictures are the only thing it offers.
     expect(document.body.querySelector(`[data-testid="note-insert-image-item-${SHA}"]`)).toBeTruthy();
@@ -824,6 +827,29 @@ describe('unified note editor — inserting content', () => {
     expect(dialog()).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.inserted'));
+  });
+
+  it('says the library holds no picture without asking for a click in the image dialog', async () => {
+    vi.spyOn(apiClient, 'listMedia').mockResolvedValue({
+      items: [
+        { sha256: 'b'.repeat(64), mime: 'audio/mpeg', bytes: 9, url: `/media/${'b'.repeat(64)}`, created_at: '' },
+      ],
+      next_cursor: '',
+    });
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    openDialog('front', 'image');
+    await flush();
+
+    // The page arrived but holds no picture: the dialog states that where the tiles would be, instead of
+    // offering a picture for a sound file or hiding the situation behind a toggle.
+    expect(inDialog('note-insert-image-empty').textContent).toBe(
+      formatMessage('zh-CN', 'note_edit.image_dialog.empty')
+    );
+    expect(document.body.querySelector('[data-testid^="note-insert-image-item-"]')).toBeNull();
   });
 
   it('writes no image reference when the server detects a different type in the bytes', async () => {

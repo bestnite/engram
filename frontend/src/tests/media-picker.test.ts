@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
+import { render } from 'svelte/server';
+import MediaPicker from '../lib/components/MediaPicker.svelte';
+import { setLocale } from '../lib/i18n';
 import { en } from '../lib/i18n/locales/en';
 
 /**
@@ -25,5 +28,37 @@ describe('SPA media picker catalog keys', () => {
       'media.upload.too_large',
       'media.upload.uploading',
     ]);
+  });
+});
+
+/**
+ * Two shapes of the same picker: a dialog shows the library as its own content, while a panel
+ * nested in another surface keeps the toggle that opens it. The shape is fixed by the host, so it
+ * is visible in the first render alone.
+ */
+describe('MediaPicker presence', () => {
+  beforeEach(() => {
+    setLocale('zh-CN');
+  });
+
+  it('renders the library at once, with no toggle, when its host is the dialog', () => {
+    const { html } = render(MediaPicker, {
+      props: { onselect: () => {}, embedded: true, idPrefix: 'note-insert-image' },
+    });
+
+    expect(html).toContain('data-testid="note-insert-image-picker"');
+    expect(html).not.toContain('data-testid="note-insert-image-picker-toggle"');
+    // The first paint is the loading state: before the page has been read, an "empty library" sentence
+    // would be a claim about a page nobody looked at.
+    expect(html).toContain('data-testid="note-insert-image-loading"');
+    expect(html).not.toContain('媒体库为空');
+  });
+
+  it('keeps the toggle for a picker that is opened on demand', () => {
+    const { html } = render(MediaPicker, { props: { onselect: () => {} } });
+
+    expect(html).toContain('data-testid="media-picker-toggle"');
+    expect(html).not.toContain('data-testid="media-picker"');
+    expect(html).toContain('从媒体库选择');
   });
 });

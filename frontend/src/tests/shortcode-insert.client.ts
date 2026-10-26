@@ -221,8 +221,11 @@ describe('ShortcodeInsert — audio', () => {
     setup();
     tab('audio');
 
+    // The composer keeps the on-demand picker: its library is opened from the path field, not shown under it.
+    expect(target.querySelector('[data-testid="shortcode-audio-picker"]')).toBeNull();
     click(el('shortcode-audio-picker-toggle'));
     for (let i = 0; i < 3; i++) await flush();
+    expect(target.querySelector('[data-testid="shortcode-audio-picker"]')).toBeTruthy();
 
     expect(target.querySelector(`[data-testid="shortcode-audio-item-${AUDIO_SHA}"]`)).toBeTruthy();
     // The picture is not offered: this section can only write an audio shortcode.

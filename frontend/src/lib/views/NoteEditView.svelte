@@ -652,11 +652,13 @@
               onfile={uploadImage}
             />
           </div>
-          <!-- Only pictures are listed: this dialog writes the Markdown image form, which cannot address a sound file. -->
+          <!-- Only pictures are listed: this dialog writes the Markdown image form, which cannot address a sound file.
+               The library is the dialog's content, not something to open: it is there the moment the dialog is. -->
           <MediaPicker
             mimePrefix="image/"
             idPrefix="note-insert-image"
             size="sm"
+            embedded
             emptyLabel={$t('note_edit.image_dialog.empty')}
             onselect={(item) => insertAtTarget(`![](${item.url})`)}
           />
