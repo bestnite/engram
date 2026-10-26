@@ -91,8 +91,11 @@
         <Copy class="size-3.5" aria-hidden="true" />
       </Button>
     </div>
-    <!-- Whitespace inside pre matters, so the code element stays on one line with its parent. -->
-    <pre class="overflow-x-auto px-3 py-2.5 font-mono text-[13px] leading-relaxed text-foreground"><code>{code}</code></pre>
+    <!-- Long samples wrap instead of scrolling sideways: on a phone a hidden horizontal scroll leaves the reader unable
+         to tell that the line continues, while wrapping only changes the display and never the string the copy button
+         hands over. Short samples still occupy a single line because they fit. The code element stays on one line with
+         its parent so the pre element owns the whitespace. -->
+    <pre class="whitespace-pre-wrap break-all px-3 py-2.5 font-mono text-[13px] leading-relaxed text-foreground"><code>{code}</code></pre>
   </div>
 {/snippet}
 
