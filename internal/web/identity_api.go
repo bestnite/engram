@@ -136,6 +136,7 @@ func (s *Server) identityBindStart(c *gin.Context) {
 		apiAuthError(c, http.StatusServiceUnavailable, "busy", "Too many pending sign-in requests. Try again later.")
 		return
 	}
+	s.setOIDCStateCookie(c, state)
 	c.JSON(http.StatusOK, gin.H{"authorize_url": auth.BuildAuthURL(party, state, nonce, pkce.Challenge)})
 }
 
