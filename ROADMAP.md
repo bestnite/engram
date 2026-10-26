@@ -143,6 +143,93 @@ shortcodes have been used on a real deck.
   error removes the control rather than showing a broken player. Evidence is the raw output of
   the frontend test run and `npm --prefix frontend run build`.
 
+- [ ] **M11-3 Seekable progress control for the audio shortcode** — the audio control in
+  `frontend/src/lib/shortcodes/index.ts` is a play/stop button only, so a learner cannot see the
+  position or jump inside the played segment. Add one progress control beside the button for
+  every `span.engram-audio` at every call site (`ReviewView.svelte` and the preview in
+  `NoteEditView.svelte`), without changing the server contract: `data-audio-src`,
+  `data-audio-start`, `data-audio-end`, `data-audio-rate` and `data-audio-loop` stay exactly as
+  `internal/render/shortcode.go` emits them.
+  - The track spans the played segment. With `start` and `end`, the filled ratio is
+    `(currentTime - start) / (end - start)`, clamped to 0–1. Without `end`, it spans
+    `start … duration`; without both, `0 … duration` once metadata has loaded.
+  - Click, drag and keyboard seek inside the segment: Left/Right move by 5% of its length, and
+    Home/End go to its edges. Seeking while playing continues playback from the new position.
+  - `timeupdate` moves the fill, `ended` resets it to the segment start, and `loop` restarts at
+    `start`. Enhancing the same container twice adds no second track or listener.
+  - A media load error removes the button and the track together and restores the visible path,
+    as the button-only failure path does today.
+  - The track is a native `<input type="range">` or an element with `role="slider"`. Its label
+    and value text come from both catalogs under a `shortcode.` prefix appended at the end of
+    each file, with identical key sets. Nothing is hardcoded and the module still reads only the
+    server's data attributes.
+
+  *Acceptance:* happy-dom tests with stubbed media playback prove the ratio with and without
+  `start`/`end`, that a click and each keyboard key set `currentTime` inside the segment, that
+  `ended` and `loop` reset or restart at the right position, that a second enhancement adds no
+  second track or listener, and that a load error removes the whole control. Evidence is the raw
+  output of the frontend test run and `npm --prefix frontend run build`.
+
+  *Order:* land this task before M11-4 and M11-5. All three modify
+  `frontend/src/lib/shortcodes/index.ts`, and only one may be edited at a time.
+- [ ] **M11-4 Optional `hide` flag for `tts` to suppress the body text** — `{{tts:…}}` always
+  shows the body. Add one bare flag to the `tts` entry in the fixed table of
+  `internal/render/shortcode.go`:
+  - `{{tts:こんにちは|lang=ja-JP|hide}}` emits the existing span plus `data-tts-hide="1"`. The
+    allowlist in `internal/render/render.go` allows exactly that attribute on `span` with the
+    value `1`; no general `data-*` is opened.
+  - `hide` is a bare flag like `loop`. `hide=1`, a `hide` flag on `audio` or `ruby`, and any
+    other placement stay literal source text.
+  - The body remains in the HTML, so the no-JavaScript and no-speech paths still show it. The
+    client hides it only after it has created a working speech control; without
+    `speechSynthesis`, or with no voice for the language, the body stays visible. Hiding is
+    presentational: keep the text in the DOM for assistive technology (a visually hidden
+    wrapper satisfies this) and restore it when the control is absent or removed.
+  - `RenderMailMarkdown` is unchanged: a mail renders the body as plain text, because a mail
+    has no speech control and hiding there would lose content.
+  - The insertion panel (`ShortcodeInsert.svelte`, `shortcode-source.ts`) gains a hide-body
+    checkbox for `tts` that appends `|hide`; the builder and validator accept the flag for
+    `tts` only and keep rejecting it elsewhere.
+  - The help page (`ShortcodesHelpView.svelte` and both catalogs) documents the flag in the
+    `tts` parameter table and shows it in the example. The page stays self-contained and
+    carries no design rationale.
+
+  *Acceptance:* table-driven `internal/render` tests prove the expansion carries
+  `data-tts-hide="1"`, that `hide=1` and `hide` on `audio`/`ruby` stay literal, and that the
+  mail renderer still emits the body. Frontend tests prove the body is hidden only after a
+  working control exists, remains visible without `speechSynthesis` or a matching voice, is
+  restored when the control is removed, and that the panel emits `{{tts:…|hide}}` only from the
+  checkbox. Evidence is the raw output of
+  `go test ./internal/render/... && go vet ./internal/render/...`, the frontend test run and
+  `npm --prefix frontend run build`.
+
+  *Order:* after M11-3, because both modify `frontend/src/lib/shortcodes/index.ts`.
+- [ ] **M11-5 Keep the shortcode controls inside their line box** — the `tts` and `audio`
+  controls draw a 28px circle (`size-7` and a negative block margin in
+  `frontend/src/lib/shortcodes/index.ts`) inside card text whose line box is smaller, so on a
+  multi-line card the button paints over the line above or below. Make the control fit its line
+  while keeping a usable pointer target:
+  - Size the visible circle from the current font size and align it on the text centre line.
+    Remove the negative block margin. The line box may become taller on a line that contains a
+    control; the rule is that the control never paints outside its own line box and never
+    overlaps the previous or next line's text.
+  - The hit area may exceed the visible circle only within the same line box; it must not
+    intercept a click in an adjacent line.
+  - Apply the same metrics to `tts`, `audio` and the audio progress track from M11-3, in the
+    review page and the editor preview.
+  - Autoplay, idempotence, fallback and one-at-a-time behaviour are unchanged. Catalog text
+    changes only if the accessible names need to mention the track; any new key is appended at
+    the end of both files with identical key sets.
+
+  *Acceptance:* a browser measurement at 16px card text and at 1.25× text size on a multi-line
+  paragraph shows that every control rectangle stays inside its line box, that no control
+  rectangle intersects the text rectangle of the previous or next line, and that a click one
+  line above and below the control does not reach the control. Keyboard focus stays visible and
+  the pointer target is at least 40×40px. Evidence is the captured geometry, screenshots at both
+  sizes, the frontend test run and `npm --prefix frontend run build`.
+
+  *Order:* last of the three; depends on M11-3's progress markup and M11-4's `tts` changes.
+
 ### M12 — Share link removal
 
 The owner has confirmed that no instance uses this feature, and every job it does is served by a
