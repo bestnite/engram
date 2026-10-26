@@ -48,6 +48,7 @@ describe('Auth store and SPA session management', () => {
         email: 'bob@example.com',
         role: 'user',
         locale: 'en',
+        has_password: true,
       },
       csrf_token: 'csrf_sess_tok',
     });
@@ -71,6 +72,7 @@ describe('Auth store and SPA session management', () => {
         email: 'carol@example.com',
         role: 'admin',
         locale: 'zh-CN',
+        has_password: true,
       },
       csrf_token: 'csrf_login_tok',
     });
@@ -111,6 +113,7 @@ describe('Auth store and SPA session management', () => {
         email: 'alice@example.com',
         role: 'user',
         locale: 'zh-CN',
+        has_password: true,
       },
       error: null,
     });
@@ -137,6 +140,7 @@ describe('Auth store and SPA session management', () => {
         email: 'alice@example.com',
         role: 'user',
         locale: 'zh-CN',
+        has_password: true,
       },
       csrf_token: 'sensitive_csrf_token',
     });

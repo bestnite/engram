@@ -1358,4 +1358,9 @@ export const en: LocaleCatalog = {
   'keys.expiry.error_required': 'Choose an expiry date.',
   'keys.expiry.error_past': 'Choose a date in the future.',
   'keys.state.expired': 'Expired',
+  // ---- Account security: first password for a passwordless (OIDC-created) account ----
+  'settings.password.set_heading': 'Set a password',
+  'settings.password.set_intro': 'This account currently signs in only through an OIDC identity. Set a password so you can also sign in without it.',
+  'settings.password.set_submit': 'Set password',
+  'settings.password.set_done': 'Password set.',
 };

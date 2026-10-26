@@ -1357,4 +1357,9 @@ export const zhCN: LocaleCatalog = {
   'keys.expiry.error_required': '请选择过期日期。',
   'keys.expiry.error_past': '请选择将来的日期。',
   'keys.state.expired': '已过期',
+  // ---- Account security: first password for a passwordless (OIDC-created) account ----
+  'settings.password.set_heading': '设置密码',
+  'settings.password.set_intro': '当前账号只能通过 OIDC 身份登录。设置密码后，也可以不用该身份登录。',
+  'settings.password.set_submit': '设置密码',
+  'settings.password.set_done': '密码已设置。',
 };

@@ -917,7 +917,10 @@ export class ApiClient {
   /**
    * Get session state and the security CSRF Token (GET /api/v1/auth/session)
    */
-  async changePassword(data: { old_password: string; new_password: string }): Promise<void> {
+  async changePassword(data: { old_password?: string; new_password: string }): Promise<void> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
     await this.request<void>('/api/v1/settings/password', { method: 'PATCH', body: JSON.stringify(data) });
   }
 

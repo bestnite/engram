@@ -676,6 +676,11 @@ export interface User {
   display_name?: string;
   role: string;
   locale: string;
+  /**
+   * Whether the account has a local password. An OIDC-created account starts without one; the security page uses this
+   * to show "set a password" instead of "change the password", and to explain why its only sign-in identity cannot be unlinked.
+   */
+  has_password: boolean;
 }
 
 /**
