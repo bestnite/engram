@@ -92,9 +92,21 @@
         ? ''
         : ISSUE_KEYS[result.issue.code]
   );
-  const invalidField = $derived(result.ok ? '' : result.issue.field);
+  // The marked input is only the one the shown reason is about; a reason about the target field marks
+  // no input at all.
+  const invalidField = $derived(!targetWritable || result.ok ? '' : result.issue.field);
   const canInsert = $derived(result.ok && targetWritable);
   const preview = $derived(result.ok ? result.source : '');
+
+  // Nothing typed in the current section yet: the reason is then written as guidance, not as an
+  // error, so a panel that was just opened does not greet the user with a red complaint.
+  const pristine = $derived(
+    name === 'tts'
+      ? ttsBody === '' && ttsLang === '' && ttsRate === ''
+      : name === 'audio'
+        ? audioSource === '' && audioStart === '' && audioEnd === '' && audioRate === ''
+        : rubyBase === '' && rubyReading === ''
+  );
 
   /** Marks the one input the current rejection is about, so the message and the field are linked. */
   function describedBy(field: string): string | undefined {
@@ -317,7 +329,11 @@
     >{preview || '—'}</code>
     <div aria-live="polite">
       {#if errorKey}
-        <p id="{uid}-error" data-testid="shortcode-insert-error" class="text-xs text-destructive-foreground">
+        <p
+          id="{uid}-error"
+          data-testid="shortcode-insert-error"
+          class="text-xs {pristine && targetWritable ? 'text-muted-foreground' : 'text-destructive-foreground'}"
+        >
           {$t(errorKey)}
         </p>
       {/if}
