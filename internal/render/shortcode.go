@@ -226,11 +226,41 @@ func expandShortcode(inner []byte, mode shortcodeMode) []byte {
 	return expandSpan(name, def, rest, mode)
 }
 
+// clozeSpanOpen is the exact opening tag the cloze card type emits around a highlighted deletion.
+// A ruby base accepts raw markup only in this one shape; see expandRuby.
+const clozeSpanOpen = `<span class="cloze">`
+
+// clozeSpanClose is the tag that ends that highlight span.
+const clozeSpanClose = `</span>`
+
+// shortcodeTagPattern matches one tag-shaped run. It is used only to remove the highlight wrapper
+// and any raw HTML the cloze content carries, so the mail form of a ruby-annotated cloze shows the
+// bare highlighted text.
+var shortcodeTagPattern = regexp.MustCompile(`</?[A-Za-z][^>]*>`)
+
 // expandRuby renders `{{ruby:base|reading}}`.
 //
 // The reading is positional, not a key=value parameter: ruby has exactly one extra field and no
 // parameters, so an `=` in either half is malformed rather than an unknown parameter.
+//
+// One nesting is accepted, and only one: a base that is a single complete cloze highlight span.
+// The cloze card type resolves its own marker before Markdown runs, so the body reaching this
+// function already contains `<span class="cloze">…</span>`, whose class attribute carries an `=`
+// that the plain rule would reject. That span is the card type's own output, not author markup, so
+// it is emitted as markup in card mode and reduced to its text in mail mode. No other raw HTML is
+// passed through, and no other shortcode may nest: a base with any other shape still follows the
+// plain rules and stays literal.
 func expandRuby(rest string, mode shortcodeMode) []byte {
+	if base, inner, reading, ok := splitClozeRubyBase(rest); ok {
+		if reading == "" || strings.ContainsAny(reading, "=|") {
+			return shortcodeLiteral("ruby:" + rest)
+		}
+		if mode == shortcodeModeMail {
+			return []byte(escapeShortcodeText(stripShortcodeTags(inner) + "(" + reading + ")"))
+		}
+		return []byte("<ruby>" + base + "<rt>" + escapeShortcodeText(reading) + "</rt></ruby>")
+	}
+
 	base, reading, found := strings.Cut(rest, "|")
 	if !found || base == "" || reading == "" {
 		return shortcodeLiteral("ruby:" + rest)
@@ -243,6 +273,36 @@ func expandRuby(rest string, mode shortcodeMode) []byte {
 		return []byte(escapeShortcodeText(base + "(" + reading + ")"))
 	}
 	return []byte("<ruby>" + escapeShortcodeText(base) + "<rt>" + escapeShortcodeText(reading) + "</rt></ruby>")
+}
+
+// splitClozeRubyBase splits a ruby body whose base is one complete cloze highlight span.
+//
+// The base must start with the exact opening tag the cloze card type emits. Its end is the first
+// `</span>` after that opening tag, and the very next byte must be the ruby separator `|`.
+// Requiring the separator at that position, rather than searching for the first `|`, is what keeps
+// a `|` or `=` inside the highlighted content from splitting the base. A highlighted span that
+// carries its own `</span>` is not a supported base: the first closing tag ends the span, so the
+// body falls through to the literal rules in expandRuby.
+func splitClozeRubyBase(rest string) (base, inner, reading string, ok bool) {
+	if !strings.HasPrefix(rest, clozeSpanOpen) {
+		return "", "", "", false
+	}
+	innerStart := len(clozeSpanOpen)
+	closeAt := strings.Index(rest[innerStart:], clozeSpanClose)
+	if closeAt < 0 {
+		return "", "", "", false
+	}
+	closeAt += innerStart
+	sep := closeAt + len(clozeSpanClose)
+	if sep >= len(rest) || rest[sep] != '|' {
+		return "", "", "", false
+	}
+	return rest[:sep], rest[innerStart:closeAt], rest[sep+1:], true
+}
+
+// stripShortcodeTags removes tag-shaped runs so a value can be emitted as plain text.
+func stripShortcodeTags(s string) string {
+	return shortcodeTagPattern.ReplaceAllString(s, "")
 }
 
 // expandSpan renders a span shortcode from shortcodeTable.

@@ -104,6 +104,100 @@ func TestRenderMarkdownShortcodeExpansion(t *testing.T) {
 	}
 }
 
+// TestRenderMarkdownRubyWrapsClozeHighlight pins the one nesting exception: a ruby base may be
+// exactly one complete cloze highlight span, because the cloze card type resolves its marker before
+// Markdown runs and hands this package that span as markup. Every other base keeps the plain rules,
+// and only the reading is escaped.
+func TestRenderMarkdownRubyWrapsClozeHighlight(t *testing.T) {
+	cases := []struct {
+		name      string
+		src       string
+		required  []string
+		forbidden []string
+	}{
+		{
+			name:      "cloze span base",
+			src:       `{{ruby:<span class="cloze">你好</span>|nǐ hǎo}}`,
+			required:  []string{`<ruby><span class="cloze">你好</span><rt>nǐ hǎo</rt></ruby>`},
+			forbidden: []string{"{{ruby", "&lt;span"},
+		},
+		{
+			name:      "front placeholder base",
+			src:       `{{ruby:<span class="cloze">[…]</span>|nǐ hǎo}}`,
+			required:  []string{`<ruby><span class="cloze">[…]</span><rt>nǐ hǎo</rt></ruby>`},
+			forbidden: []string{"{{ruby", "&lt;span"},
+		},
+		{
+			name:      "reading is escaped, not markup",
+			src:       `{{ruby:<span class="cloze">你好</span>|a<b&c}}`,
+			required:  []string{"<rt>a&lt;b&amp;c</rt>"},
+			forbidden: []string{"<rt>a<b", "<b&c"},
+		},
+		{
+			name:      "a pipe inside the highlight does not split the base",
+			src:       `{{ruby:<span class="cloze">a|b</span>|r}}`,
+			required:  []string{`<ruby><span class="cloze">a|b</span><rt>r</rt></ruby>`},
+			forbidden: []string{"{{ruby"},
+		},
+		{
+			name:      "an equals sign inside the highlight does not split the base",
+			src:       `{{ruby:<span class="cloze">a=b</span>|r}}`,
+			required:  []string{`<ruby><span class="cloze">a=b</span><rt>r</rt></ruby>`},
+			forbidden: []string{"{{ruby"},
+		},
+		{
+			name:      "a reading with a pipe stays literal",
+			src:       `{{ruby:<span class="cloze">x</span>|a|b}}`,
+			required:  []string{"{{ruby:", "|a|b}}"},
+			forbidden: []string{"<ruby>", "<rt>"},
+		},
+		{
+			name:      "a reading with an equals sign stays literal",
+			src:       `{{ruby:<span class="cloze">x</span>|a=b}}`,
+			required:  []string{"{{ruby:", "|a=b}}"},
+			forbidden: []string{"<ruby>", "<rt>"},
+		},
+		{
+			name:      "a non-cloze span base stays literal text",
+			src:       `{{ruby:<span>你好</span>|nǐ hǎo}}`,
+			required:  []string{`<ruby>&lt;span&gt;你好&lt;/span&gt;<rt>nǐ hǎo</rt></ruby>`},
+			forbidden: []string{`<span>你好</span>`, "{{ruby"},
+		},
+		{
+			name:      "text before the cloze span is not a cloze base",
+			src:       `{{ruby:先<span class="cloze">x</span>|r}}`,
+			required:  []string{"{{ruby:"},
+			forbidden: []string{"<ruby>"},
+		},
+		{
+			name:      "text after the cloze span is not a cloze base",
+			src:       `{{ruby:<span class="cloze">x</span>后|r}}`,
+			required:  []string{"{{ruby:"},
+			forbidden: []string{"<ruby>"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := RenderMarkdown(tc.src)
+			if err != nil {
+				t.Fatalf("RenderMarkdown() error = %v", err)
+			}
+			for _, want := range tc.required {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+			for _, bad := range tc.forbidden {
+				if strings.Contains(out, bad) {
+					t.Errorf("output contains forbidden %q:\n%s", bad, out)
+				}
+			}
+			assertSafeFragment(t, out)
+		})
+	}
+}
+
 // TestRenderMarkdownShortcodeEmitsSourceForRejection pins the "a shortcode never fails a render"
 // rule: every malformed form must come back as its own source text, with no element produced and
 // no error returned.
@@ -411,6 +505,18 @@ func TestRenderMailMarkdownShortcodesArePlainText(t *testing.T) {
 			src:       `{{ruby:漢字|かんじ}}`,
 			required:  []string{"漢字(かんじ)"},
 			forbidden: []string{"<ruby>", "<rt>", "<rp>"},
+		},
+		{
+			name:      "ruby over a cloze highlight",
+			src:       `{{ruby:<span class="cloze">你好</span>|nǐ hǎo}}`,
+			required:  []string{"你好(nǐ hǎo)"},
+			forbidden: []string{"<ruby>", "<rt>", "<span", "cloze"},
+		},
+		{
+			name:      "ruby over a cloze highlight drops raw html",
+			src:       `{{ruby:<span class="cloze"><b>你</b>好</span>|nǐ hǎo}}`,
+			required:  []string{"你好(nǐ hǎo)"},
+			forbidden: []string{"<ruby>", "<rt>", "<span", "<b>"},
 		},
 		{
 			name:      "mail body text is escaped",

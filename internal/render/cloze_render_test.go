@@ -131,6 +131,91 @@ func TestClozeInsideMathRendersAsBoxed(t *testing.T) {
 	}
 }
 
+// TestClozeRubyRendersHighlightedBase drives the real pipeline for the one nesting card content
+// needs: a ruby annotation whose base is the cloze highlight span. The cloze card type resolves its
+// marker before Markdown, so the ruby shortcode receives the exact span the card type emits. This
+// asserts the span stays markup inside <ruby>, that the reading is a text annotation, and that the
+// raw-base path cannot widen the allowlist for content inside the highlight.
+func TestClozeRubyRendersHighlightedBase(t *testing.T) {
+	ct, ok := cardtype.Lookup("cloze")
+	if !ok {
+		t.Fatal("cloze card type is not registered")
+	}
+	cases := []struct {
+		name      string
+		text      string
+		side      cardtype.Side
+		required  []string
+		forbidden []string
+	}{
+		{
+			name:      "front keeps the placeholder inside ruby",
+			text:      `{{ruby:{{c0::你好}}|nǐ hǎo}}`,
+			side:      cardtype.SideFront,
+			required:  []string{`<ruby><span class="cloze">[…]</span><rt>nǐ hǎo</rt></ruby>`},
+			forbidden: []string{"{{ruby", "{{c0", "&lt;span", "&lt;ruby"},
+		},
+		{
+			name:      "back reveals the answer inside ruby",
+			text:      `{{ruby:{{c0::你好}}|nǐ hǎo}}`,
+			side:      cardtype.SideBack,
+			required:  []string{`<ruby><span class="cloze">你好</span><rt>nǐ hǎo</rt></ruby>`},
+			forbidden: []string{"{{ruby", "{{c0", "&lt;span", "&lt;ruby"},
+		},
+		{
+			name:      "html in the highlighted content is sanitized",
+			text:      `{{ruby:{{c0::<img src=x onerror=alert(1)>}}|nǐ hǎo}}`,
+			side:      cardtype.SideBack,
+			required:  []string{`<ruby><span class="cloze"><img src="x"></span><rt>nǐ hǎo</rt></ruby>`},
+			forbidden: []string{"onerror", "alert(1)", "{{ruby", "{{c0"},
+		},
+		{
+			name:      "script in the highlighted content is sanitized",
+			text:      `{{ruby:{{c0::<script>alert(1)</script>}}|nǐ hǎo}}`,
+			side:      cardtype.SideBack,
+			required:  []string{`<rt>nǐ hǎo</rt>`},
+			forbidden: []string{"<script", "onerror", "{{ruby", "{{c0"},
+		},
+		{
+			name:      "a reading with an equals sign stays literal",
+			text:      `{{ruby:{{c0::你好}}|a=b}}`,
+			side:      cardtype.SideBack,
+			required:  []string{"{{ruby:", "|a=b}}"},
+			forbidden: []string{"<ruby>", "<rt>"},
+		},
+		{
+			name:      "a reading with a pipe stays literal",
+			text:      `{{ruby:{{c0::你好}}|a|b}}`,
+			side:      cardtype.SideBack,
+			required:  []string{"{{ruby:", "|a|b}}"},
+			forbidden: []string{"<ruby>", "<rt>"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := ct.Render(cardtype.Card{Template: "cloze:0", Fields: map[string]any{"text": tc.text}}, tc.side)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			out, err := RenderMarkdown(res.Body)
+			if err != nil {
+				t.Fatalf("RenderMarkdown: %v", err)
+			}
+			for _, want := range tc.required {
+				if !strings.Contains(out, want) {
+					t.Errorf("html = %q, want substring %q", out, want)
+				}
+			}
+			for _, bad := range tc.forbidden {
+				if strings.Contains(out, bad) {
+					t.Errorf("html = %q, must not contain %q", out, bad)
+				}
+			}
+			assertSafeFragment(t, out)
+		})
+	}
+}
+
 // TestListBackRendersAsList drives the real pipeline and asserts that the back of a list card renders as
 // <ol>/<ul> according to ordered, survives sanitizing, and no longer repeats the prompt.
 func TestListBackRendersAsList(t *testing.T) {
