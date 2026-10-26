@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import ShortcodeInsert from '../lib/components/ShortcodeInsert.svelte';
-import { apiClient } from '../lib/api';
+import { apiClient, ApiClientError } from '../lib/api';
 import { setLocale, formatMessage } from '../lib/i18n';
 
 /**
@@ -19,7 +19,9 @@ let instance: ReturnType<typeof mount> | null = null;
 let target: HTMLElement;
 let inserted: string[];
 
-function setup(props: { targetLabel?: string; targetWritable?: boolean; showHeading?: boolean } = {}): void {
+function setup(
+  props: { targetLabel?: string; targetWritable?: boolean; deckId?: string; showHeading?: boolean } = {}
+): void {
   target = document.createElement('div');
   document.body.appendChild(target);
   inserted = [];
@@ -28,6 +30,7 @@ function setup(props: { targetLabel?: string; targetWritable?: boolean; showHead
     props: {
       targetLabel: props.targetLabel ?? '正面',
       targetWritable: props.targetWritable ?? true,
+      deckId: props.deckId ?? '',
       showHeading: props.showHeading ?? true,
       oninsert: (source: string) => inserted.push(source),
     },
@@ -75,6 +78,13 @@ function errorText(): string {
 
 function insertButton(): HTMLButtonElement {
   return el<HTMLButtonElement>('shortcode-insert-submit');
+}
+
+function dropFile(testid: string, file: File): void {
+  const input = el<HTMLInputElement>(testid);
+  Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  flushSync();
 }
 
 beforeEach(() => {
@@ -275,6 +285,61 @@ describe('ShortcodeInsert — target and help', () => {
 
     expect(errorText()).toBe(formatMessage('zh-CN', 'shortcode.insert.error.not_text_field'));
     expect(insertButton().disabled).toBe(true);
+  });
+});
+
+describe('ShortcodeInsert — audio upload', () => {
+  it('offers no upload action when the host has no deck to upload into', () => {
+    setup();
+    tab('audio');
+    expect(target.querySelector('[data-testid="shortcode-audio-upload"]')).toBeNull();
+  });
+
+  it('uploads a sound file into the path field, so the composer still works without a page-level upload', async () => {
+    vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
+      sha256: AUDIO_SHA,
+      mime: 'audio/mpeg',
+      bytes: 9,
+      url: AUDIO_URL,
+    });
+    setup({ deckId: '5' });
+    tab('audio');
+
+    dropFile('shortcode-audio-upload', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
+    await flush();
+
+    expect(apiClient.uploadDeckMedia).toHaveBeenCalledWith('5', expect.any(File));
+    expect(el<HTMLInputElement>('shortcode-audio-source').value).toBe(AUDIO_URL);
+    expect(preview()).toBe(`{{audio:${AUDIO_URL}}}`);
+    // An uploaded sound never becomes the image form.
+    expect(preview()).not.toContain('![](');
+  });
+
+  it('refuses a picture before the request and leaves the path empty', async () => {
+    vi.spyOn(apiClient, 'uploadDeckMedia');
+    setup({ deckId: '5' });
+    tab('audio');
+
+    dropFile('shortcode-audio-upload', new File(['picture'], 'picture.png', { type: 'image/png' }));
+    await flush();
+
+    expect(apiClient.uploadDeckMedia).not.toHaveBeenCalled();
+    expect(el<HTMLInputElement>('shortcode-audio-source').value).toBe('');
+    expect(preview()).toBe('—');
+  });
+
+  it('keeps the path field empty and the panel usable when the upload fails', async () => {
+    vi.spyOn(apiClient, 'uploadDeckMedia').mockRejectedValue(
+      new ApiClientError('HTTP 413', { status: 413, code: 'media_too_large' })
+    );
+    setup({ deckId: '5' });
+    tab('audio');
+
+    dropFile('shortcode-audio-upload', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
+    await flush();
+
+    expect(el<HTMLInputElement>('shortcode-audio-source').value).toBe('');
+    expect(el<HTMLInputElement>('shortcode-audio-upload').disabled).toBe(false);
   });
 });
 

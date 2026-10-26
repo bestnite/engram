@@ -1481,4 +1481,8 @@ export const en: LocaleCatalog = {
   'note_edit.image_dialog.formats': 'PNG, JPEG, WebP or GIF. Uploads as soon as you choose it.',
   'note_edit.image_dialog.empty': 'No pictures in the media library yet.',
   'media.upload.image_only': 'Only a picture can be inserted here.',
+  // ---- Note editor: audio upload in the shortcode composer ----
+  'media.upload.audio_only': 'Only a sound file can be added here.',
+  'shortcode.insert.audio.upload': 'Upload an audio file',
+  'shortcode.insert.audio.upload_hint': 'MP3, OGG or M4A. Uploads as soon as you choose it.',
 };

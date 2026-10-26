@@ -955,4 +955,77 @@ describe('unified note editor — inserting content', () => {
     expect(target.querySelector('[data-testid="note-field-ordered-toolbar"]')).toBeNull();
   });
 
+  it('uploads audio inside the composer, fills the path and inserts the audio shortcode', async () => {
+    const AUDIO_SHA = 'd'.repeat(64);
+    const AUDIO_URL = `/media/${AUDIO_SHA}`;
+    const upload = vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
+      sha256: AUDIO_SHA,
+      mime: 'audio/mpeg',
+      bytes: 9,
+      url: AUDIO_URL,
+    });
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    openDialog('front', 'shortcode');
+    click(inDialog('shortcode-tab-audio'));
+
+    dropFile('shortcode-audio-upload', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
+    await flush();
+
+    expect(upload).toHaveBeenCalledWith('5', expect.any(File));
+    expect(inDialog<HTMLInputElement>('shortcode-audio-source').value).toBe(AUDIO_URL);
+    expect(inDialog('shortcode-insert-preview').textContent).toBe(`{{audio:${AUDIO_URL}}}`);
+
+    insertShortcode();
+    await flush();
+
+    // An uploaded sound becomes the audio shortcode, never the image form.
+    expect(fieldValue('note-field-front')).toBe(`{{audio:${AUDIO_URL}}}`);
+    expect(fieldValue('note-field-front')).not.toContain('![](');
+    await settleDialog();
+    expect(dialog()).toBeNull();
+  });
+
+  it('refuses a picture in the composer audio upload and keeps the dialog open', async () => {
+    const upload = vi.spyOn(apiClient, 'uploadDeckMedia');
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    openDialog('front', 'shortcode');
+    click(inDialog('shortcode-tab-audio'));
+
+    dropFile('shortcode-audio-upload', new File(['picture'], 'picture.png', { type: 'image/png' }));
+    await flush();
+
+    expect(upload).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.audio_only'));
+    expect(inDialog<HTMLInputElement>('shortcode-audio-source').value).toBe('');
+    expect(dialog()).toBeTruthy();
+  });
+
+  it('reports a failed upload with the server reason and leaves the path empty', async () => {
+    vi.spyOn(apiClient, 'uploadDeckMedia').mockRejectedValue(
+      new ApiClientError('HTTP 413', { status: 413, code: 'media_too_large' })
+    );
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    openDialog('front', 'shortcode');
+    click(inDialog('shortcode-tab-audio'));
+
+    dropFile('shortcode-audio-upload', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
+    await flush();
+
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.too_large'));
+    expect(inDialog<HTMLInputElement>('shortcode-audio-source').value).toBe('');
+    // The drop area is usable again, so the author can retry with another file.
+    expect(inDialog<HTMLInputElement>('shortcode-audio-upload').disabled).toBe(false);
+  });
 });

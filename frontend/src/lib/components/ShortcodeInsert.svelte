@@ -6,10 +6,14 @@
     type ShortcodeIssueCode,
     type ShortcodeName,
   } from '../shortcode-source';
+  import { apiClient } from '../api';
+  import { uploadErrorKeyFor } from '../media-upload';
   import Button from './ui/Button.svelte';
   import Checkbox from './ui/Checkbox.svelte';
+  import Dropzone from './ui/Dropzone.svelte';
   import SegmentedControl from './ui/SegmentedControl.svelte';
   import MediaPicker from './MediaPicker.svelte';
+  import { toast } from './ui/toast';
 
   /**
    * Insertion panel for the three shortcodes the renderer expands.
@@ -31,9 +35,14 @@
      * passes false, so the same heading is not printed twice.
      */
     showHeading?: boolean;
+    /**
+     * Deck whose media endpoint receives an audio upload. An empty id hides the upload action, for a host
+     * that has no deck to upload into.
+     */
+    deckId?: string;
   }
 
-  let { targetLabel, targetWritable, oninsert, showHeading = true }: Props = $props();
+  let { targetLabel, targetWritable, oninsert, showHeading = true, deckId = '' }: Props = $props();
 
   const uid = $props.id();
 
@@ -49,6 +58,7 @@
   let audioEnd = $state('');
   let audioRate = $state('');
   let audioLoop = $state(false);
+  let audioUploading = $state(false);
 
   let rubyBase = $state('');
   let rubyReading = $state('');
@@ -122,6 +132,33 @@
   function submit(): void {
     if (!result.ok || !targetWritable) return;
     oninsert(result.source);
+  }
+
+  /**
+   * Uploads one audio file and puts the returned path into the source field, so the composer keeps
+   * providing an upload path now that the editor has no page-level upload. An image is refused before
+   * the request: the server accepts pictures too, and a picture path would produce an audio shortcode
+   * pointing at a file the browser cannot play.
+   */
+  async function uploadAudio(file: File): Promise<void> {
+    if (!file.type.toLowerCase().startsWith('audio/')) {
+      toast.error($t('media.upload.audio_only'));
+      return;
+    }
+    audioUploading = true;
+    try {
+      const uploaded = await apiClient.uploadDeckMedia(deckId, file);
+      if (!uploaded.mime.toLowerCase().startsWith('audio/')) {
+        // The server decides the type from the bytes, so a file whose name said audio can come back as something else.
+        toast.error($t('media.upload.audio_only'));
+        return;
+      }
+      audioSource = uploaded.url;
+    } catch (err) {
+      toast.error($t(uploadErrorKeyFor(err)));
+    } finally {
+      audioUploading = false;
+    }
   }
 </script>
 
@@ -232,6 +269,21 @@
           class="field-input mt-1.5 w-full font-mono text-xs"
         />
         <p class="mt-1.5 text-xs text-muted-foreground">{$t('shortcode.insert.audio.source_hint')}</p>
+        {#if deckId}
+          <!-- Upload sits next to the path it fills: the editor no longer has a page-level upload area, and
+               this is the only way to add a sound while writing an audio shortcode. A file picked here is
+               never turned into the image form. -->
+          <div class="mt-2 space-y-1.5">
+            <span class="block text-sm font-medium text-foreground">{$t('shortcode.insert.audio.upload')}</span>
+            <Dropzone
+              testId="shortcode-audio-upload"
+              accept="audio/*"
+              disabled={audioUploading}
+              hint={audioUploading ? $t('media.upload.uploading') : $t('shortcode.insert.audio.upload_hint')}
+              onfile={uploadAudio}
+            />
+          </div>
+        {/if}
         <!-- Only audio items are listed, so picking one can only ever produce an audio shortcode. -->
         <div class="mt-2">
           <MediaPicker

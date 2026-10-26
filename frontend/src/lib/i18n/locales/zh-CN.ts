@@ -1479,4 +1479,8 @@ export const zhCN: LocaleCatalog = {
   'note_edit.image_dialog.formats': 'PNG、JPEG、WebP 或 GIF，选择后立即上传。',
   'note_edit.image_dialog.empty': '媒体库里还没有图片。',
   'media.upload.image_only': '这里只能插入图片。',
+  // ---- Note editor: audio upload in the shortcode composer ----
+  'media.upload.audio_only': '这里只能添加音频文件。',
+  'shortcode.insert.audio.upload': '上传音频文件',
+  'shortcode.insert.audio.upload_hint': 'MP3、OGG 或 M4A，选择后立即上传。',
 };

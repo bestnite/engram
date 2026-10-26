@@ -13,6 +13,7 @@ describe('SPA media picker catalog keys', () => {
   it('pins the complete set of media upload keys', () => {
     const keys = Object.keys(en).filter((key) => key.startsWith('media.upload.')).sort();
     expect(keys).toEqual([
+      'media.upload.audio_only',
       'media.upload.button',
       'media.upload.failed',
       'media.upload.file_required',

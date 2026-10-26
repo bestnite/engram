@@ -589,6 +589,7 @@
           showHeading={false}
           targetLabel={insertFieldLabel}
           targetWritable={fieldText(insertKey) !== null}
+          deckId={deckId}
           oninsert={insertAtTarget}
         />
       {/if}
