@@ -1487,4 +1487,9 @@ export const en: LocaleCatalog = {
   'shortcode.insert.audio.upload_hint': 'MP3, OGG or M4A. Uploads as soon as you choose it.',
   // ---- Note editor: preview drawer below the desktop breakpoint ----
   'note_preview.close': 'Close preview',
+  // ---- Audio player: pause, resume, and five-second seeks ----
+  'shortcode.audio.pause': 'Pause audio',
+  'shortcode.audio.resume': 'Resume audio',
+  'shortcode.audio.back': 'Back {seconds} seconds',
+  'shortcode.audio.forward': 'Forward {seconds} seconds',
 };

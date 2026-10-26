@@ -11,7 +11,13 @@
  * a page whose media it may not read keeps the text. The audio shortcode's body is a bare `/media/<sha256>` path, so
  * once a play control exists the path is moved into a visually hidden wrapper - kept in the DOM, not deleted - and
  * moved back into view when the media turns out to be unplayable. Beside the audio button sits a native range track
- * over the played segment, so the learner can see the position and seek within the same piece of audio.
+ * over the played segment, so the learner can see the position and seek within the same piece of audio. A pair of
+ * five-second buttons around the play button moves within that same segment, and a `m:ss` readout after the track
+ * names the elapsed position and the segment length.
+ *
+ * The audio play button pauses rather than stops: a pause keeps the media element, its source and its position, so
+ * the next click resumes the same element where it stood. Only an end of segment, a media error, a teardown, or a
+ * different piece of audio starting resets a control to its segment start.
  *
  * A tts element whose `data-tts-hide="1"` flag is present hides its body the same way, but only once a speech control
  * exists: the text stays in a visually hidden wrapper, so assistive technology still reads it and the card still says
@@ -31,6 +37,9 @@ const BUTTON_MARKER = 'data-shortcode-control';
 const FALLBACK_MARKER = 'data-shortcode-fallback';
 const BODY_MARKER = 'data-shortcode-body';
 const PROGRESS_MARKER = 'data-shortcode-progress';
+const PLAYER_MARKER = 'data-shortcode-player';
+const SEEK_MARKER = 'data-shortcode-seek';
+const TIME_MARKER = 'data-shortcode-time';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /**
@@ -41,6 +50,10 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const PROGRESS_MAX = 1000;
 const PROGRESS_KEY_STEP = PROGRESS_MAX / 20;
 
+/** One press of a seek button moves this far, and the buttons switch off when less than the tolerance remains. */
+const SEEK_STEP = 5;
+const SEEK_EDGE_TOLERANCE = 0.25;
+
 /**
  * A shortcode inside one of these elements cannot host a control: a button inside a button (or a link) is invalid
  * markup and splits one control into two focus stops for keyboard users. The review page's option rows are such
@@ -50,8 +63,18 @@ const INTERACTIVE_SELECTOR =
   'button, a[href], [role="button"], [role="link"], [role="radio"], [role="checkbox"], [role="switch"], [role="tab"], [role="menuitem"]';
 
 const LABEL_KEYS = {
-  tts: { play: 'shortcode.tts.play', stop: 'shortcode.tts.stop', unavailable: 'shortcode.tts.unavailable' },
-  audio: { play: 'shortcode.audio.play', stop: 'shortcode.audio.stop', unavailable: 'shortcode.audio.unavailable' },
+  tts: {
+    play: 'shortcode.tts.play',
+    active: 'shortcode.tts.stop',
+    resume: 'shortcode.tts.play',
+    unavailable: 'shortcode.tts.unavailable',
+  },
+  audio: {
+    play: 'shortcode.audio.play',
+    active: 'shortcode.audio.pause',
+    resume: 'shortcode.audio.resume',
+    unavailable: 'shortcode.audio.unavailable',
+  },
 } as const;
 
 /**
@@ -72,14 +95,34 @@ const BUTTON_IDLE = `${BUTTON_BASE} text-muted-foreground before:border-border b
 const BUTTON_PLAYING = `${BUTTON_BASE} text-brand-foreground before:border-brand before:bg-brand`;
 
 /**
- * The audio progress track: a compact native range on the same centre line as the play button's circle, so it sits
- * beside the button without taking the line. At 6px it is much shorter than the button's 40px hit box, so it never
- * raises the line box on its own. The unfilled part is the muted token and the filled part is the brand token; the fill
- * boundary is an inline gradient written from the current ratio, which a class name cannot express.
+ * The audio player is one inline group: a back button, the play button, a forward button, then the track and the
+ * readout. A paragraph cannot break inside an inline-level box, so the group moves to the next line as a whole instead
+ * of being split by the surrounding text. Inside the group the track and the readout share a box, so the only internal
+ * break puts that box under the three buttons; that happens only on a card too narrow for the entire player, and it
+ * keeps every target on screen.
+ */
+const PLAYER_CLASS = 'inline-flex max-w-full flex-wrap items-center gap-x-1 gap-y-1 align-middle';
+
+/**
+ * The seek buttons share the play button's 40px hit box and 1.25em circle, so all three targets sit on the text's
+ * centre line and none reaches into the line above or below; only their icon is smaller and only the play button is
+ * ever filled with the brand colour, which leaves one obvious primary action. A disabled button keeps its box but
+ * fades, so the pair does not shift when a segment edge is reached.
+ */
+const SEEK_BUTTON_CLASS = [
+  BUTTON_BASE,
+  'text-muted-foreground before:border-border before:bg-surface hover:text-foreground hover:before:bg-muted',
+  'disabled:cursor-not-allowed disabled:opacity-40',
+].join(' ');
+
+/**
+ * The audio progress track: a native range on the same centre line as the button circles. It is 8rem wide, and 10rem
+ * from the `lg` breakpoint, so a short segment is still easy to aim at; when the line is short the track is the item
+ * that gives way. The unfilled part is the muted token and the filled part the brand token; the fill boundary is an
+ * inline gradient written from the current ratio, which a class name cannot express.
  */
 const PROGRESS_CLASS = [
-  'mr-1.5 inline-block h-1.5 w-16 max-w-[45%] shrink-0 cursor-pointer align-middle',
-  'appearance-none rounded-full bg-muted transition-opacity',
+  'h-1.5 w-32 min-w-0 shrink cursor-pointer appearance-none rounded-full bg-muted align-middle transition-opacity lg:w-40',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
   'disabled:cursor-not-allowed disabled:opacity-50',
   '[&::-webkit-slider-thumb]:size-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-brand',
@@ -87,8 +130,24 @@ const PROGRESS_CLASS = [
   '[&::-moz-range-thumb]:size-2.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-brand',
 ].join(' ');
 
+/** The track and its readout move together when the group wraps, so the time never lands on a line of its own. */
+const TRACK_GROUP_CLASS = 'inline-flex min-w-0 items-center gap-1.5 align-middle';
+
+/**
+ * The readout is em-based so it follows the card's own text size, and tabular so a digits change does not change its
+ * width. It repeats what the track's `aria-valuetext` already announces, so assistive technology is told nothing twice.
+ */
+const TIME_CLASS = 'shrink-0 whitespace-nowrap text-[0.75em] leading-none tabular-nums text-muted-foreground';
+
+/** Placeholder for a length that is not known yet; a segment needs metadata before it has one. */
+const TIME_PLACEHOLDER = '--:--';
+
 type ControlKind = 'tts' | 'audio';
-type Phase = 'idle' | 'playing';
+/**
+ * `paused` exists only for audio: it is the state in which the media element still holds its position but is not
+ * advancing. Tts has no paused state, because a stopped utterance cannot be resumed.
+ */
+type Phase = 'idle' | 'playing' | 'paused';
 
 /** The part of the file the track spans: `start…end`, or `start…duration` when the shortcode has no end. */
 interface AudioSegment {
@@ -117,14 +176,27 @@ interface ControlState {
   audio: HTMLAudioElement | null;
   handlers: AudioHandlers | null;
   loop: boolean;
+  /** For audio: the inline group that holds the three buttons, the track and the readout. */
+  group: HTMLElement | null;
   /** For audio: the seekable track beside the button, absent only after a load failure removed the control. */
   track: HTMLInputElement | null;
+  /** For audio: the five-second buttons, disabled at their edge of the segment and before metadata arrives. */
+  seekBack: HTMLButtonElement | null;
+  seekForward: HTMLButtonElement | null;
+  /** For audio: the visible `position / total` readout; aria-hidden, because the track already announces the value. */
+  time: HTMLSpanElement | null;
   /** For audio: the file segment the track spans, read from the server's start/end attributes. */
   segment: AudioSegment | null;
   /** For audio: whether the media metadata has arrived, which is what makes the track seekable. */
   ready: boolean;
   /** For audio: a position chosen while stopped, used by the next play instead of the segment start. */
   pendingSeek: number | null;
+  /**
+   * For audio: which play attempt is current. A rejected `play()` promise removes the control only while its own
+   * attempt is still the latest one; a pause followed by a resume produces a new attempt, and the older rejection is
+   * the pause's own doing rather than a load failure.
+   */
+  playToken: number;
 }
 
 interface ActiveSpeech {
@@ -139,6 +211,8 @@ const boundContainers = new WeakSet<Element>();
 const controls = new WeakMap<HTMLButtonElement, ControlState>();
 /** State of every audio progress track, keyed by the track itself. */
 const tracks = new WeakMap<HTMLInputElement, ControlState>();
+/** The state and step behind each seek button, keyed by the button. */
+const seeks = new WeakMap<HTMLButtonElement, { state: ControlState; delta: number }>();
 
 /** At most one utterance and one audio play at a time, across the whole page. */
 let activeSpeech: ActiveSpeech | null = null;
@@ -164,7 +238,7 @@ function numberAttr(source: Element, name: string): number | null {
 /* Icons                                                                                                             */
 /* ---------------------------------------------------------------------------------------------------------------- */
 
-type IconName = 'speak' | 'stop' | 'play' | 'pause';
+type IconName = 'speak' | 'stop' | 'play' | 'pause' | 'rewind' | 'forward';
 
 interface IconPart {
   tag: 'path' | 'rect';
@@ -191,16 +265,42 @@ const ICONS: Record<IconName, IconPart[]> = {
     { tag: 'rect', attrs: { x: '6', y: '5', width: '4', height: '14', rx: '1', fill: 'currentColor' } },
     { tag: 'rect', attrs: { x: '14', y: '5', width: '4', height: '14', rx: '1', fill: 'currentColor' } },
   ],
+  rewind: [
+    {
+      tag: 'path',
+      attrs: {
+        d: 'M11 17 6 12l5-5M18 17l-5-5 5-5',
+        fill: 'none',
+        stroke: 'currentColor',
+        'stroke-width': '2',
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+      },
+    },
+  ],
+  forward: [
+    {
+      tag: 'path',
+      attrs: {
+        d: 'M13 7l5 5-5 5M6 7l5 5-5 5',
+        fill: 'none',
+        stroke: 'currentColor',
+        'stroke-width': '2',
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+      },
+    },
+  ],
 };
 
 /** Builds the icon from constant attribute maps; no card text ever passes through this path. */
-function makeIcon(name: IconName): SVGSVGElement {
+function makeIcon(name: IconName, size = 'size-[0.875em]'): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '0 0 24 24');
   // The em-based class is what sizes the icon; the numeric attributes are the no-CSS fallback.
   svg.setAttribute('width', '14');
   svg.setAttribute('height', '14');
-  svg.setAttribute('class', 'size-[0.875em]');
+  svg.setAttribute('class', size);
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
   for (const part of ICONS[name]) {
@@ -218,7 +318,7 @@ function makeIcon(name: IconName): SVGSVGElement {
 function updateButton(state: ControlState): void {
   const playing = state.phase === 'playing';
   const keys = LABEL_KEYS[state.kind];
-  const text = label(playing ? keys.stop : keys.play);
+  const text = label(playing ? keys.active : state.phase === 'paused' ? keys.resume : keys.play);
   state.button.className = playing ? BUTTON_PLAYING : BUTTON_IDLE;
   state.button.setAttribute('aria-pressed', playing ? 'true' : 'false');
   state.button.setAttribute('aria-label', text);
@@ -290,11 +390,19 @@ function markUnavailable(state: ControlState): void {
     }
     state.audio = null;
   }
+  // Removing the group takes the three buttons, the track and the readout with it; the fallback text sits outside it.
+  state.group?.remove();
+  state.group = null;
   if (state.track) {
     tracks.delete(state.track);
-    state.track.remove();
     state.track = null;
   }
+  for (const seek of [state.seekBack, state.seekForward]) {
+    if (seek) seeks.delete(seek);
+  }
+  state.seekBack = null;
+  state.seekForward = null;
+  state.time = null;
   state.segment = null;
   state.ready = false;
   state.pendingSeek = null;
@@ -460,6 +568,33 @@ function seconds(value: number): string {
 }
 
 /**
+ * The visible clock. Below an hour it is `m:ss`; a segment of an hour or more is written `h:mm:ss` for the position
+ * and the length alike, because a readout whose shape changes halfway through the segment is harder to read. The
+ * reference is the segment length, so a position and its total always share one format.
+ */
+function clock(value: number, reference: number): string {
+  const whole = Math.max(0, Math.floor(value + 1e-6));
+  const pad = (part: number): string => String(part).padStart(2, '0');
+  const minutes = Math.floor((whole % 3600) / 60);
+  const secs = whole % 60;
+  if (reference >= 3600) return `${Math.floor(whole / 3600)}:${pad(minutes)}:${pad(secs)}`;
+  return `${minutes}:${pad(secs)}`;
+}
+
+/**
+ * Where the player stands, on the segment's own timeline. A stopped control has no position of its own any more: its
+ * media element may sit at the segment end, while the next play will start at the chosen seek or at the segment start.
+ * Every caller that draws the track, the readout or the seek buttons reads this one value, so they agree with each
+ * other and with the position the next play uses.
+ */
+function anchorPosition(state: ControlState): number {
+  const segment = state.segment;
+  if (!segment) return 0;
+  if (state.phase === 'idle') return state.pendingSeek ?? segment.start;
+  return state.audio?.currentTime ?? segment.start;
+}
+
+/**
  * Builds the native range that represents the segment. It starts disabled: the media element exists but carries no
  * source until the first play, and a track that cannot seek must not announce a position it does not have.
  */
@@ -478,34 +613,118 @@ function buildProgress(): HTMLInputElement {
   return track;
 }
 
+/** The readout starts masked: no length is known until the media reports its duration. */
+function buildTime(): HTMLSpanElement {
+  const time = document.createElement('span');
+  time.className = TIME_CLASS;
+  time.setAttribute(TIME_MARKER, '');
+  // The track carries the same information in `aria-valuetext`; announcing it twice would repeat every second.
+  time.setAttribute('aria-hidden', 'true');
+  time.textContent = `${clock(0, 0)} / ${TIME_PLACEHOLDER}`;
+  return time;
+}
+
+/** Names a seek button after the step it takes; the sign of the step is the only thing that differs between the pair. */
+function updateSeekLabel(button: HTMLButtonElement, delta: number): void {
+  const text = label(delta < 0 ? 'shortcode.audio.back' : 'shortcode.audio.forward', { seconds: Math.abs(delta) });
+  button.setAttribute('aria-label', text);
+  button.setAttribute('title', text);
+}
+
 /**
- * Draws the track from the media position. `ratioOverride` is used when the position is no longer the media element's:
- * a stop leaves the element at the segment end while the track belongs at the segment start.
+ * Builds one seek button. It starts disabled because the media has no metadata yet; the label carries the step so the
+ * control is understandable without the icon, and a native button gives it Enter and Space for free.
  */
-function renderProgress(state: ControlState, ratioOverride?: number): void {
+function buildSeek(state: ControlState, delta: number): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.setAttribute(SEEK_MARKER, String(delta));
+  button.className = SEEK_BUTTON_CLASS;
+  button.disabled = true;
+  button.appendChild(makeIcon(delta < 0 ? 'rewind' : 'forward', 'size-[0.75em]'));
+  seeks.set(button, { state, delta });
+  updateSeekLabel(button, delta);
+  return button;
+}
+
+/**
+ * The segment's seekable bounds, or null while they cannot be measured. `position` is the anchor clamped into them, so
+ * the edge tests never depend on how the media engine rounded `currentTime`.
+ */
+function seekBounds(state: ControlState): { min: number; max: number; position: number } | null {
+  const audio = state.audio;
+  const segment = state.segment;
+  if (!state.ready || !audio || !segment) return null;
+  const length = segmentLength(segment, audio.duration);
+  if (length <= 0) return null;
+  const min = segment.start;
+  const max = segment.start + length;
+  return { min, max, position: clamp(anchorPosition(state), min, max) };
+}
+
+/** Sets the edge state of the two seek buttons: off before metadata, and at the end each of them would reach. */
+function updateSeekButtons(state: ControlState): void {
+  const bounds = seekBounds(state);
+  if (state.seekBack) {
+    state.seekBack.disabled = bounds === null || bounds.position <= bounds.min + SEEK_EDGE_TOLERANCE;
+  }
+  if (state.seekForward) {
+    state.seekForward.disabled = bounds === null || bounds.position >= bounds.max - SEEK_EDGE_TOLERANCE;
+  }
+}
+
+/**
+ * Draws the track, the readout and the seek buttons from the anchor. All three are written here because every event
+ * that moves the position - metadata, timeupdate, a seek, a stop - has to leave them in agreement.
+ */
+function renderProgress(state: ControlState): void {
   const track = state.track;
   const audio = state.audio;
   if (!track) return;
   const segment = state.segment;
   const length = audio && segment ? segmentLength(segment, audio.duration) : 0;
-  const measured = audio && segment && length > 0 ? clamp((audio.currentTime - segment.start) / length, 0, 1) : 0;
-  const ratio = clamp(ratioOverride ?? measured, 0, 1);
+  const measured = audio && segment && length > 0 ? anchorPosition(state) - segment.start : 0;
+  const position = clamp(measured, 0, length);
+  const ratio = length > 0 ? clamp(position / length, 0, 1) : 0;
   const percent = Math.round(ratio * 1000) / 10;
   track.value = String(Math.round(ratio * PROGRESS_MAX));
   track.style.backgroundImage = `linear-gradient(to right, var(--brand) ${percent}%, var(--muted) ${percent}%)`;
   track.disabled = !state.ready;
-  if (state.ready && audio && segment && length > 0) {
-    const position = ratioOverride === undefined ? audio.currentTime - segment.start : ratio * length;
+  if (state.ready && length > 0) {
     track.setAttribute(
       'aria-valuetext',
-      label('shortcode.audio.progress.value', {
-        position: seconds(clamp(position, 0, length)),
-        total: seconds(length),
-      })
+      label('shortcode.audio.progress.value', { position: seconds(position), total: seconds(length) })
     );
   } else {
     track.removeAttribute('aria-valuetext');
   }
+  if (state.time) {
+    state.time.textContent =
+      state.ready && length > 0
+        ? `${clock(position, length)} / ${clock(length, length)}`
+        : `${clock(0, 0)} / ${TIME_PLACEHOLDER}`;
+  }
+  updateSeekButtons(state);
+}
+
+/**
+ * Moves the element to `target`, clamped into the played segment. A seek taken while stopped is remembered as the next
+ * play's position; a seek while playing or paused is already the element's own position.
+ */
+function seekTo(state: ControlState, target: number): void {
+  const audio = state.audio;
+  const segment = state.segment;
+  if (!state.ready || !audio || !segment) return;
+  const length = segmentLength(segment, audio.duration);
+  if (length <= 0) return;
+  const time = clamp(target, segment.start, segment.start + length);
+  try {
+    audio.currentTime = time;
+  } catch {
+    return;
+  }
+  if (state.phase === 'idle') state.pendingSeek = time;
+  renderProgress(state);
 }
 
 /** Moves playback to the ratio the track shows; the caller has already clamped it. */
@@ -515,21 +734,20 @@ function seekProgress(state: ControlState, ratio: number): void {
   if (!state.ready || !audio || !segment) return;
   const length = segmentLength(segment, audio.duration);
   if (length <= 0) return;
-  const target = segment.start + clamp(ratio, 0, 1) * length;
-  try {
-    audio.currentTime = target;
-  } catch {
-    return;
-  }
-  // A seek taken while stopped has to survive the next play, which otherwise starts from the segment start.
-  if (state.phase !== 'playing') state.pendingSeek = target;
-  renderProgress(state);
+  seekTo(state, segment.start + clamp(ratio, 0, 1) * length);
 }
 
-/** Puts the track at the segment start without moving the paused element. */
+/** One press of a seek button; the edges are clamped by `seekTo`, and the buttons are disabled there anyway. */
+function seekBy(state: ControlState, delta: number): void {
+  const bounds = seekBounds(state);
+  if (!bounds) return;
+  seekTo(state, bounds.position + delta);
+}
+
+/** Puts the track at the segment start, which is where the next play will begin; the media element is left alone. */
 function resetProgress(state: ControlState): void {
   state.pendingSeek = null;
-  renderProgress(state, 0);
+  renderProgress(state);
 }
 
 function stopAudio(state: ControlState): void {
@@ -539,12 +757,42 @@ function stopAudio(state: ControlState): void {
   resetProgress(state);
 }
 
+/**
+ * Pauses without detaching or resetting: the element keeps its source, its handlers and its position, so the track,
+ * the readout and the next play all still point at where playback stood.
+ */
+function pauseAudio(state: ControlState): void {
+  if (state.phase !== 'playing') return;
+  state.phase = 'paused';
+  // The pause may reject the pending play() promise; that attempt is no longer the one the control reports on.
+  state.playToken += 1;
+  try {
+    state.audio?.pause();
+  } catch {
+    // A detached element has nothing to pause; the state change is what the control shows either way.
+  }
+  updateButton(state);
+  renderProgress(state);
+}
+
+/** Resumes the same element from its paused position: no new source, no load, no seek back to the segment start. */
+function resumeAudio(state: ControlState): void {
+  if (state.phase !== 'paused') return;
+  // The control reports playing while the promise is pending, so a rejection of this attempt counts as a load failure;
+  // the attempt token taken inside playAudio is what tells it apart from an abort of an older attempt.
+  state.phase = 'playing';
+  updateButton(state);
+  renderProgress(state);
+  playAudio(state);
+}
+
 function playAudio(state: ControlState): void {
   const audio = state.audio;
   if (!audio) {
     markUnavailable(state);
     return;
   }
+  const token = ++state.playToken;
   let result: Promise<void> | undefined;
   try {
     result = audio.play();
@@ -553,8 +801,10 @@ function playAudio(state: ControlState): void {
     return;
   }
   // A rejected play means the bytes could not be decoded or fetched: the control goes, the text comes back. A
-  // rejection that arrives after the user stopped playback (AbortError from the pause) is not a load failure.
+  // rejection that arrives for an attempt a pause or a later play has superseded is that action's own doing, not a
+  // load failure, so only the current attempt may remove the control.
   void Promise.resolve(result).catch(() => {
+    if (token !== state.playToken) return;
     if (state.phase === 'playing' && state.audio === audio) markUnavailable(state);
   });
 }
@@ -580,7 +830,7 @@ function startAudio(state: ControlState): void {
 
   // The seek happens in the same click that starts playback. Assigning currentTime before metadata is best-effort;
   // the loadedmetadata listener repeats it once the duration is known.
-  const seekTo = (time: number): void => {
+  const seekElement = (time: number): void => {
     try {
       audio.currentTime = time;
     } catch {
@@ -588,7 +838,7 @@ function startAudio(state: ControlState): void {
     }
   };
   const seekInitial = (): void => {
-    if (initial > 0) seekTo(initial);
+    if (initial > 0) seekElement(initial);
   };
 
   audio.pause();
@@ -611,9 +861,15 @@ function startAudio(state: ControlState): void {
       renderProgress(state);
     },
     timeupdate: () => {
+      // A paused element reports a position only because the learner seeked it. Reaching the end there is where they
+      // put it, not playback finishing, so the control must stay paused at that position instead of resetting.
+      if (state.phase === 'paused') {
+        renderProgress(state);
+        return;
+      }
       if (end !== null && audio.currentTime >= end) {
         if (state.loop) {
-          seekTo(segment.start);
+          seekElement(segment.start);
           renderProgress(state);
           return;
         }
@@ -627,7 +883,7 @@ function startAudio(state: ControlState): void {
         stopAudio(state);
         return;
       }
-      seekTo(segment.start);
+      seekElement(segment.start);
       renderProgress(state);
       playAudio(state);
     },
@@ -647,7 +903,11 @@ function startAudio(state: ControlState): void {
 
 function toggleAudio(state: ControlState): void {
   if (state.phase === 'playing') {
-    stopAudio(state);
+    pauseAudio(state);
+    return;
+  }
+  if (state.phase === 'paused') {
+    resumeAudio(state);
     return;
   }
   startAudio(state);
@@ -670,10 +930,15 @@ function createControl(source: HTMLElement, kind: ControlKind): void {
     audio: null,
     handlers: null,
     loop: false,
+    group: null,
     track: null,
+    seekBack: null,
+    seekForward: null,
+    time: null,
     segment: null,
     ready: false,
     pendingSeek: null,
+    playToken: 0,
   };
   if (kind === 'audio') {
     state.fallback = hideIntoWrapper(source, FALLBACK_MARKER);
@@ -685,14 +950,27 @@ function createControl(source: HTMLElement, kind: ControlKind): void {
     state.fallback = hideIntoWrapper(source, BODY_MARKER);
   }
   updateButton(state);
-  source.insertBefore(button, source.firstChild);
   if (kind === 'audio') {
-    const track = buildProgress();
+    // The group keeps the three buttons, the track and the readout together on one line of card text. The track and
+    // the readout share a nested box so a wrap moves them as one piece instead of leaving the time alone on a line.
+    const group = document.createElement('span');
+    group.className = PLAYER_CLASS;
+    group.setAttribute(PLAYER_MARKER, 'audio');
+    const trackGroup = document.createElement('span');
+    trackGroup.className = TRACK_GROUP_CLASS;
     state.segment = audioSegment(source);
-    state.track = track;
-    source.insertBefore(track, button.nextSibling);
-    tracks.set(track, state);
+    state.track = buildProgress();
+    state.time = buildTime();
+    state.seekBack = buildSeek(state, -SEEK_STEP);
+    state.seekForward = buildSeek(state, SEEK_STEP);
+    trackGroup.append(state.track, state.time);
+    group.append(state.seekBack, button, state.seekForward, trackGroup);
+    state.group = group;
+    source.insertBefore(group, source.firstChild);
+    tracks.set(state.track, state);
     renderProgress(state);
+  } else {
+    source.insertBefore(button, source.firstChild);
   }
   controls.set(button, state);
   source.setAttribute(SOURCE_MARKER, kind);
@@ -720,6 +998,17 @@ function reconcilePlayback(): void {
 function handleClick(event: Event): void {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  const seekButton = target.closest<HTMLButtonElement>(`button[${SEEK_MARKER}]`);
+  if (seekButton) {
+    const action = seeks.get(seekButton);
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // A disabled button swallows its own clicks in a browser; the guard also covers a synthetic dispatch.
+    if (seekButton.disabled) return;
+    seekBy(action.state, action.delta);
+    return;
+  }
   const button = target.closest<HTMLButtonElement>(`button[${BUTTON_MARKER}]`);
   if (!button) return;
   const state = controls.get(button);
@@ -801,6 +1090,10 @@ export function enhanceShortcodes(nodes: Array<Element | null | undefined>): voi
     for (const button of container.querySelectorAll<HTMLButtonElement>(`button[${BUTTON_MARKER}]`)) {
       const state = controls.get(button);
       if (state) updateButton(state);
+    }
+    for (const seek of container.querySelectorAll<HTMLButtonElement>(`button[${SEEK_MARKER}]`)) {
+      const action = seeks.get(seek);
+      if (action) updateSeekLabel(seek, action.delta);
     }
     for (const track of container.querySelectorAll<HTMLInputElement>(`input[${PROGRESS_MARKER}]`)) {
       const state = tracks.get(track);

@@ -129,5 +129,11 @@ describe('ReviewView shortcode controls', () => {
     expect(track).toBeTruthy();
     expect(track!.getAttribute('aria-label')).toBe('Audio progress');
     expect(track!.disabled).toBe(true);
+    // The same call site also gets the seek pair and the position readout that the module builds in one group.
+    expect(answer!.querySelectorAll('button[data-shortcode-seek]')).toHaveLength(2);
+    const time = answer!.querySelector('[data-shortcode-time]');
+    expect(time).toBeTruthy();
+    expect(time!.textContent).toBe('0:00 / --:--');
+    expect(time!.getAttribute('aria-hidden')).toBe('true');
   });
 });

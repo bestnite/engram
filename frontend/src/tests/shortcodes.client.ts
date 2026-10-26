@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { enhanceShortcodes } from '../lib/shortcodes';
+import { enhanceShortcodes, stopShortcodePlayback } from '../lib/shortcodes';
 import { setLocale } from '../lib/i18n';
 
 /**
@@ -100,6 +100,19 @@ function progress(root: ParentNode): HTMLInputElement {
   const input = root.querySelector<HTMLInputElement>('input[data-shortcode-progress]');
   expect(input).toBeTruthy();
   return input!;
+}
+
+/** One of the two five-second buttons; the step is the marker the module dispatches on. */
+function seekButton(root: ParentNode, step: number): HTMLButtonElement {
+  const button = root.querySelector<HTMLButtonElement>(`button[data-shortcode-seek="${step}"]`);
+  expect(button).toBeTruthy();
+  return button!;
+}
+
+function timeText(root: ParentNode): string {
+  const time = root.querySelector<HTMLElement>('[data-shortcode-time]');
+  expect(time).toBeTruthy();
+  return time!.textContent ?? '';
 }
 
 /** Gives the stubbed element a duration and runs the one-time metadata pass the module waits for. */
@@ -605,6 +618,354 @@ describe('enhanceShortcodes — audio progress', () => {
     enhanceShortcodes([root]);
 
     expect(progress(root).getAttribute('aria-label')).toBe('音频进度');
+  });
+});
+
+describe('enhanceShortcodes — audio pause and resume', () => {
+  it('pauses in place: the element, its position and the fill all stay', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="30"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+    loaded(audio, 40);
+    audio.currentTime = 20;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(progress(root).value).toBe('500');
+
+    click(button);
+
+    expect(audio.currentTime).toBeCloseTo(20);
+    expect(progress(root).value).toBe('500');
+    expect(timeText(root)).toBe('0:10 / 0:20');
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.getAttribute('aria-label')).toBe('Resume audio');
+    // Nothing was reloaded: a pause is not a teardown.
+    expect(media.load).toHaveBeenCalledTimes(1);
+    expect(media.plays).toHaveLength(1);
+  });
+
+  it('resumes the same element from the paused position without a new source or a load', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="30"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+    loaded(audio, 40);
+    audio.currentTime = 20;
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    click(button);
+    click(button);
+
+    expect(media.plays).toHaveLength(2);
+    expect(media.plays[1]).toBe(audio);
+    expect(media.load).toHaveBeenCalledTimes(1);
+    expect(audio.getAttribute('src')).toBe(`/media/${SHA}`);
+    expect(audio.currentTime).toBeCloseTo(20);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.getAttribute('aria-label')).toBe('Pause audio');
+
+    audio.currentTime = 24;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(progress(root).value).toBe('700');
+    expect(timeText(root)).toBe('0:14 / 0:20');
+  });
+
+  it('resumes from a position that changed while paused', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="30"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+    loaded(audio, 40);
+    audio.currentTime = 20;
+    audio.dispatchEvent(new Event('timeupdate'));
+    click(button);
+
+    audio.currentTime = 26;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(timeText(root)).toBe('0:16 / 0:20');
+
+    click(button);
+
+    // A resume must not fall back to the segment start the first play used.
+    expect(audio.currentTime).toBeCloseTo(26);
+    expect(media.play).toHaveBeenCalledTimes(2);
+  });
+
+  it('resets a paused control to its segment start when a different audio starts', () => {
+    const media = installMedia();
+    const root = container(
+      `<p>${audioHTML('data-audio-start="10" data-audio-end="20"')}</p><p>${audioHTML('data-audio-start="2"')}</p>`
+    );
+    enhanceShortcodes([root]);
+    const buttons = root.querySelectorAll<HTMLButtonElement>('button[data-shortcode-control="audio"]');
+    expect(buttons).toHaveLength(2);
+    click(buttons[0]!);
+    const first = media.plays[0]!;
+    loaded(first, 40);
+    first.currentTime = 15;
+    first.dispatchEvent(new Event('timeupdate'));
+
+    click(buttons[0]!);
+    expect(timeText(root)).toBe('0:05 / 0:10');
+
+    click(buttons[1]!);
+
+    expect(timeText(root)).toBe('0:00 / 0:10');
+    expect(progress(root).value).toBe('0');
+    expect(buttons[0]!.getAttribute('aria-pressed')).toBe('false');
+
+    click(buttons[0]!);
+    expect(media.plays.at(-1)).toBe(first);
+    expect(first.currentTime).toBeCloseTo(10);
+  });
+
+  it('keeps the control when the pause aborts the play attempt it superseded', async () => {
+    const media = installMedia();
+    let rejectFirst: (reason: unknown) => void = () => {};
+    // The first play never settles inside the test: it is the attempt the pause aborts.
+    media.play.mockImplementationOnce(function (this: HTMLAudioElement) {
+      media.plays.push(this);
+      return new Promise<void>((_resolve, reject) => {
+        rejectFirst = reject;
+      });
+    });
+    const root = container(audioHTML('data-audio-start="0" data-audio-end="10"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+
+    click(button);
+    click(button);
+    click(button);
+    rejectFirst(new Error('aborted by pause'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The abort belongs to an attempt a resume has since replaced; removing the player here would lose the control.
+    expect(root.querySelector('button[data-shortcode-control="audio"]')).toBe(button);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('resets a paused control when the page stops shortcode playback', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="20"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+    loaded(audio, 40);
+    audio.currentTime = 15;
+    audio.dispatchEvent(new Event('timeupdate'));
+    click(button);
+
+    stopShortcodePlayback();
+
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.getAttribute('aria-label')).toBe('Play audio');
+    expect(progress(root).value).toBe('0');
+    expect(timeText(root)).toBe('0:00 / 0:10');
+  });
+});
+
+describe('enhanceShortcodes — audio readout', () => {
+  it('masks the length before metadata and uses tabular numbers', () => {
+    installMedia();
+    const root = container(audioHTML('data-audio-start="0" data-audio-end="65"'));
+    enhanceShortcodes([root]);
+    const time = root.querySelector<HTMLElement>('[data-shortcode-time]')!;
+
+    expect(time.textContent).toBe('0:00 / --:--');
+    // Repeating the track's own value would make a screen reader announce the position twice a second.
+    expect(time.getAttribute('aria-hidden')).toBe('true');
+    expect(time.className).toContain('tabular-nums');
+    expect(seekButton(root, -5).disabled).toBe(true);
+    expect(seekButton(root, 5).disabled).toBe(true);
+  });
+
+  it('writes m:ss and updates on metadata and timeupdate', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+
+    expect(timeText(root)).toBe('0:00 / --:--');
+
+    loaded(audio, 20);
+    expect(timeText(root)).toBe('0:00 / 0:04');
+
+    audio.currentTime = 11.9;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(timeText(root)).toBe('0:01 / 0:04');
+
+    audio.currentTime = 13.99;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(timeText(root)).toBe('0:03 / 0:04');
+  });
+
+  it('writes h:mm:ss when the segment reaches an hour', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="0" data-audio-end="3900"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+    loaded(audio, 4000);
+
+    expect(timeText(root)).toBe('0:00:00 / 1:05:00');
+
+    audio.currentTime = 3725;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(timeText(root)).toBe('1:02:05 / 1:05:00');
+  });
+
+  it('resets the readout at the segment end', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="1" data-audio-end="5"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+    loaded(audio, 20);
+    audio.currentTime = 4;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(timeText(root)).toBe('0:03 / 0:04');
+
+    audio.dispatchEvent(new Event('ended'));
+
+    expect(timeText(root)).toBe('0:00 / 0:04');
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('enhanceShortcodes — five-second seek', () => {
+  it('steps by five seconds and clamps at both edges', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="30"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+    loaded(audio, 40);
+    const back = seekButton(root, -5);
+    const forward = seekButton(root, 5);
+
+    expect(back.disabled).toBe(true);
+    expect(forward.disabled).toBe(false);
+    expect(back.getAttribute('aria-label')).toBe('Back 5 seconds');
+    expect(forward.getAttribute('aria-label')).toBe('Forward 5 seconds');
+    // The same 40px pointer target as the play button.
+    expect(back.className).toContain('size-10');
+
+    click(forward);
+    expect(audio.currentTime).toBeCloseTo(15);
+    expect(back.disabled).toBe(false);
+
+    click(back);
+    expect(audio.currentTime).toBeCloseTo(10);
+    expect(back.disabled).toBe(true);
+
+    press(progress(root), 'End');
+    expect(audio.currentTime).toBeCloseTo(30);
+    expect(forward.disabled).toBe(true);
+
+    // A press on a disabled edge button changes nothing.
+    click(forward);
+    expect(audio.currentTime).toBeCloseTo(30);
+    click(back);
+    expect(audio.currentTime).toBeCloseTo(25);
+    expect(timeText(root)).toBe('0:15 / 0:20');
+  });
+
+  it('seeks while paused and stays paused', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="30"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+    loaded(audio, 40);
+    audio.currentTime = 20;
+    audio.dispatchEvent(new Event('timeupdate'));
+    click(button);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+
+    click(seekButton(root, 5));
+
+    expect(audio.currentTime).toBeCloseTo(25);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(media.plays).toHaveLength(1);
+    expect(timeText(root)).toBe('0:15 / 0:20');
+
+    click(button);
+    expect(media.plays).toHaveLength(2);
+    expect(audio.currentTime).toBeCloseTo(25);
+  });
+
+  it('keeps a paused seek at the segment end instead of resetting it', () => {
+    const media = installMedia();
+    const root = container(audioHTML('data-audio-start="2" data-audio-end="8"'));
+    enhanceShortcodes([root]);
+    const button = control(root);
+    click(button);
+    const audio = media.plays[0]!;
+    loaded(audio, 30);
+    audio.currentTime = 3;
+    audio.dispatchEvent(new Event('timeupdate'));
+    click(button);
+    const back = seekButton(root, -5);
+    const forward = seekButton(root, 5);
+
+    // The browser fires timeupdate after the seek; a paused element is being positioned, not finishing playback.
+    click(forward);
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(audio.currentTime).toBeCloseTo(8);
+    expect(progress(root).value).toBe('1000');
+    expect(timeText(root)).toBe('0:06 / 0:06');
+    expect(button.getAttribute('aria-label')).toBe('Resume audio');
+    expect(forward.disabled).toBe(true);
+    expect(back.disabled).toBe(false);
+  });
+
+  it('relabels both buttons from the catalog on a locale change', () => {
+    installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="30"'));
+    enhanceShortcodes([root]);
+    expect(seekButton(root, -5).getAttribute('aria-label')).toBe('Back 5 seconds');
+    expect(seekButton(root, 5).getAttribute('aria-label')).toBe('Forward 5 seconds');
+
+    setLocale('zh-CN');
+    enhanceShortcodes([root]);
+
+    expect(seekButton(root, -5).getAttribute('aria-label')).toBe('后退 5 秒');
+    expect(seekButton(root, 5).getAttribute('aria-label')).toBe('前进 5 秒');
+  });
+
+  it('draws a longer track and keeps the whole player in one group', () => {
+    installMedia();
+    const root = container(audioHTML('data-audio-start="10" data-audio-end="14"'));
+    enhanceShortcodes([root]);
+    const track = progress(root);
+
+    // 8rem at the narrow end and 10rem from the large breakpoint; the old track was 4rem (w-16).
+    expect(track.className).toContain('w-32');
+    expect(track.className).toContain('lg:w-40');
+    expect(track.className).not.toContain('w-16');
+
+    const group = root.querySelector<HTMLElement>('[data-shortcode-player]')!;
+    expect(group.className).toContain('inline-flex');
+    expect(group.className).toContain('flex-wrap');
+    // The three buttons, the track and the readout all sit in that one group.
+    expect(group.querySelectorAll('button')).toHaveLength(3);
+    expect(group.contains(track)).toBe(true);
+    expect(group.querySelector('[data-shortcode-time]')).toBeTruthy();
   });
 });
 

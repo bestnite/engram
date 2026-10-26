@@ -1485,4 +1485,9 @@ export const zhCN: LocaleCatalog = {
   'shortcode.insert.audio.upload_hint': 'MP3、OGG 或 M4A，选择后立即上传。',
   // ---- Note editor: preview drawer below the desktop breakpoint ----
   'note_preview.close': '关闭预览',
+  // ---- Audio player: pause, resume, and five-second seeks ----
+  'shortcode.audio.pause': '暂停播放',
+  'shortcode.audio.resume': '继续播放',
+  'shortcode.audio.back': '后退 {seconds} 秒',
+  'shortcode.audio.forward': '前进 {seconds} 秒',
 };
