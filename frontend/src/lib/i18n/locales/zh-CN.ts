@@ -1391,7 +1391,7 @@ export const zhCN: LocaleCatalog = {
   'help.shortcode.intro': '在卡片内容中书写短代码，可在复习时朗读文字、播放音频或标注读音。',
   'help.shortcode.grammar.title': '语法',
   'help.shortcode.grammar.intro': '短代码是卡片内容中的行内标记。',
-  'help.shortcode.grammar.line': '单行书写，至第一个 }} 结束；不能嵌套。',
+  'help.shortcode.grammar.line': '单行书写；内容在与其起始 {{ 配对的 }} 处结束，并按行内 Markdown 解析。',
   'help.shortcode.grammar.names': '可用名称仅 tts、audio、ruby。',
   'help.shortcode.grammar.params': '参数以 | 分隔，写作 key=value；开关参数只写名称，如 loop。',
   'help.shortcode.example': '示例',
@@ -1414,10 +1414,10 @@ export const zhCN: LocaleCatalog = {
   'help.shortcode.audio.loop': '写入 loop 时循环播放该片段。',
   'help.shortcode.ruby.title': '注音',
   'help.shortcode.ruby.summary': '在原文上方标注读音。',
-  'help.shortcode.ruby.form': '| 前为原文，| 后为读音；共两段，不写 key=value。',
-  'help.shortcode.ruby.chars': '两段均不得包含 | 或 =。',
+  'help.shortcode.ruby.form': '| 之前是基文，按行内 Markdown 解析；| 之后是读音，为纯文本且必须是最后一个字段。',
+  'help.shortcode.ruby.chars': '读音不能包含 | 或 =。',
   'help.shortcode.rules.title': '行为与限制',
-  'help.shortcode.rule.fallback': '名称未知、参数无效、缺少读音或正文含 {{ 时，按原文显示。',
+  'help.shortcode.rule.fallback': '未知名称、无效参数、缺少读音，以及不被允许的嵌套，都按原文显示。',
   'help.shortcode.rule.code': '行内代码与围栏代码块中的短代码按字面显示。',
   'help.shortcode.rule.text_kept': '朗读或播放不可用时，正文文字仍然显示。',
   'help.shortcode.rule.options': '单选题与多选题的选项仅显示文字，不显示朗读或播放控件。',
@@ -1450,7 +1450,7 @@ export const zhCN: LocaleCatalog = {
   'shortcode.insert.action': '插入',
   'shortcode.insert.error.body_required': '内容不能为空。',
   'shortcode.insert.error.body_single_line': '内容不能换行。',
-  'shortcode.insert.error.body_nested': '内容不能包含 {{。',
+  'shortcode.insert.error.body_nested': '此面板一次只能插入一个短代码；嵌套短代码请直接在输入框中输入。',
   'shortcode.insert.error.body_closing': '内容不能包含 }}。',
   'shortcode.insert.error.body_separator': '内容不能包含「|名称=」这样的写法，它会被当成参数。',
   'shortcode.insert.error.body_control': '内容里有不可见的控制字符，请删掉它们。',
@@ -1494,4 +1494,9 @@ export const zhCN: LocaleCatalog = {
   'note_edit.format.bold': '将「{field}」设为粗体',
   'note_edit.format.italic': '将「{field}」设为斜体',
   'note_edit.format.strike': '将「{field}」设为删除线',
+  // ---- Shortcode reference: nested shortcodes and what speech reads ----
+  'help.shortcode.rule.nesting':
+    '只有 tts 包裹 ruby、tts 包裹 cloze、tts 包裹 ruby 再包裹 cloze 可以嵌套，最多两层短代码；其他嵌套都按原文显示。',
+  'help.shortcode.rule.speech':
+    '朗读只读可见文字：ruby 的读音不会被读出；cloze 在正面读占位或提示，在背面读答案。',
 };

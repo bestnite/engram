@@ -49,6 +49,8 @@ const RENDERED_KEYS = [
   'help.shortcode.ruby.chars',
   'help.shortcode.rules.title',
   'help.shortcode.rule.fallback',
+  'help.shortcode.rule.nesting',
+  'help.shortcode.rule.speech',
   'help.shortcode.rule.code',
   'help.shortcode.rule.text_kept',
   'help.shortcode.rule.options',

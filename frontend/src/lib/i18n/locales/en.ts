@@ -1392,7 +1392,7 @@ export const en: LocaleCatalog = {
   'help.shortcode.intro': 'Write shortcodes in card content to read text aloud, play audio, or add a reading annotation during review.',
   'help.shortcode.grammar.title': 'Syntax',
   'help.shortcode.grammar.intro': 'A shortcode is an inline marker in card content.',
-  'help.shortcode.grammar.line': 'One line, ending at the first }}; shortcodes do not nest.',
+  'help.shortcode.grammar.line': 'One line; the body ends at the }} that matches its opening {{, and it is inline Markdown.',
   'help.shortcode.grammar.names': 'Only tts, audio, and ruby are available.',
   'help.shortcode.grammar.params': 'Separate parameters with | and write them as key=value; a flag parameter is a bare word such as loop.',
   'help.shortcode.example': 'Example',
@@ -1415,10 +1415,10 @@ export const en: LocaleCatalog = {
   'help.shortcode.audio.loop': 'The bare word loop repeats this segment.',
   'help.shortcode.ruby.title': 'Ruby annotation',
   'help.shortcode.ruby.summary': 'Places a reading above the base text.',
-  'help.shortcode.ruby.form': 'The text before | is the base and the text after | is the reading; exactly two parts, with no key=value.',
-  'help.shortcode.ruby.chars': 'Neither part may contain | or =.',
+  'help.shortcode.ruby.form': 'The text before | is the base, which is inline Markdown; the text after | is the reading, which is plain text and must be the last field.',
+  'help.shortcode.ruby.chars': 'The reading may not contain | or =.',
   'help.shortcode.rules.title': 'Behavior and limits',
-  'help.shortcode.rule.fallback': 'An unknown name, an invalid parameter, a missing reading, or a body containing {{ is shown verbatim.',
+  'help.shortcode.rule.fallback': 'An unknown name, an invalid parameter, a missing reading, or a nesting that is not allowed is shown verbatim.',
   'help.shortcode.rule.code': 'Inside inline code and fenced code blocks, a shortcode is shown literally.',
   'help.shortcode.rule.text_kept': 'When speech or playback is unavailable, the body text remains visible.',
   'help.shortcode.rule.options': 'Options in single- and multiple-choice questions show text only, without speech or playback controls.',
@@ -1451,7 +1451,7 @@ export const en: LocaleCatalog = {
   'shortcode.insert.action': 'Insert',
   'shortcode.insert.error.body_required': 'The text cannot be empty.',
   'shortcode.insert.error.body_single_line': 'The text cannot contain a line break.',
-  'shortcode.insert.error.body_nested': 'The text cannot contain {{.',
+  'shortcode.insert.error.body_nested': 'This panel inserts one shortcode; type a nested shortcode directly in the field.',
   'shortcode.insert.error.body_closing': 'The text cannot contain }}.',
   'shortcode.insert.error.body_separator': 'The text cannot contain “|name=”: that is read as a parameter.',
   'shortcode.insert.error.body_control': 'The text contains an invisible control character. Remove it.',
@@ -1496,4 +1496,9 @@ export const en: LocaleCatalog = {
   'note_edit.format.bold': 'Bold in “{field}”',
   'note_edit.format.italic': 'Italic in “{field}”',
   'note_edit.format.strike': 'Strikethrough in “{field}”',
+  // ---- Shortcode reference: nested shortcodes and what speech reads ----
+  'help.shortcode.rule.nesting':
+    'Only tts around ruby, tts around a cloze, and tts around ruby around a cloze nest, which is at most two shortcodes deep; every other nesting is shown as source text.',
+  'help.shortcode.rule.speech':
+    'Speech reads the visible text only: a ruby reading is not spoken, and a cloze is spoken as its placeholder or hint on the front and its answer on the back.',
 };

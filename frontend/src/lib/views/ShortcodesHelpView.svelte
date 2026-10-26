@@ -11,8 +11,10 @@
    * Reference page for the three card-content shortcodes.
    *
    * The grammar described here is the one the server's parser implements (`internal/render/shortcode.go`): one line
-   * `{{name:body|key=value|...}}` ending at the first `}}`, exactly the names tts, audio and ruby, and a malformed
-   * shortcode emitted as its source text instead of an error.
+   * `{{name:body|key=value|...}}` whose body ends at the `}}` matching its opening `{{`, a body parsed as inline
+   * Markdown, exactly the names tts, audio and ruby, and a malformed shortcode emitted as its source text instead of
+   * an error. Nesting is limited to `tts` around `ruby`, `tts` around a cloze highlight, and `tts` around `ruby`
+   * around a cloze highlight, which is at most two shortcode levels; every other nesting stays source text.
    *
    * Every example is shown as literal text, never rendered: rendering it here would demonstrate the expansion instead
    * of the syntax, and the reader could not copy it. For the same reason the examples are constants rather than
@@ -48,6 +50,8 @@
   /** Every rule in the same order on every screen size; each entry is one catalog key. */
   const RULES = [
     'help.shortcode.rule.fallback',
+    'help.shortcode.rule.nesting',
+    'help.shortcode.rule.speech',
     'help.shortcode.rule.code',
     'help.shortcode.rule.text_kept',
     'help.shortcode.rule.options',
