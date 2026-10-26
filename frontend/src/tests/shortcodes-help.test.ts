@@ -12,7 +12,7 @@ import { en } from '../lib/i18n/locales/en';
  */
 
 // The examples are code: they are identical in both locales and must not be translated.
-const TTS_EXAMPLE = '{{tts:こんにちは|lang=ja-JP|rate=0.9}}';
+const TTS_EXAMPLE = '{{tts:こんにちは|lang=ja-JP|rate=0.9|hide}}';
 const RUBY_EXAMPLE = '{{ruby:漢字|かんじ}}';
 // `<sha256>` is a placeholder in the example; Svelte escapes the opening angle bracket, so the rendered text
 // carries `&lt;` and must never appear as real markup.
@@ -34,6 +34,7 @@ const RENDERED_KEYS = [
   'help.shortcode.tts.play',
   'help.shortcode.tts.lang',
   'help.shortcode.tts.rate',
+  'help.shortcode.tts.hide',
   'help.shortcode.audio.title',
   'help.shortcode.audio.summary',
   'help.shortcode.audio.play',

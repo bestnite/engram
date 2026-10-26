@@ -1474,4 +1474,6 @@ export const en: LocaleCatalog = {
   'shortcode.audio.progress.value': '{position} of {total} seconds',
   // ---- TTS shortcode hide flag ----
   'shortcode.insert.tts.hide': 'Hide the text while it can be read aloud',
+  'help.shortcode.tts.hide':
+    'The bare word hide keeps the body out of sight while it can be read aloud, and shows it again whenever it cannot.',
 };

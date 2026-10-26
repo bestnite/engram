@@ -1473,4 +1473,5 @@ export const zhCN: LocaleCatalog = {
   'shortcode.audio.progress.value': '第 {position} 秒，共 {total} 秒',
   // ---- TTS shortcode hide flag ----
   'shortcode.insert.tts.hide': '朗读时隐藏内容',
+  'help.shortcode.tts.hide': '写成单独的 hide 时，能朗读的时候隐藏内容，不能朗读的时候照常显示。',
 };

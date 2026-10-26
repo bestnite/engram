@@ -8,7 +8,7 @@ import { toast } from '../lib/components/ui/toast';
 // The result of a copy is reported only through a toast, so the stand-in records the calls.
 vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 
-const TTS_EXAMPLE = '{{tts:こんにちは|lang=ja-JP|rate=0.9}}';
+const TTS_EXAMPLE = '{{tts:こんにちは|lang=ja-JP|rate=0.9|hide}}';
 
 function stubClipboard(writeText: ((text: string) => Promise<void>) | undefined): void {
   Object.defineProperty(navigator, 'clipboard', { value: writeText ? { writeText } : undefined, configurable: true });

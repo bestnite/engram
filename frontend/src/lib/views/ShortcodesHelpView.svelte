@@ -28,13 +28,14 @@
   }
 
   const FORM = '{{name:body|key=value|...}}';
-  const TTS_EXAMPLE = '{{tts:こんにちは|lang=ja-JP|rate=0.9}}';
+  const TTS_EXAMPLE = '{{tts:こんにちは|lang=ja-JP|rate=0.9|hide}}';
   const AUDIO_EXAMPLE = '{{audio:/media/<sha256>|start=12.5|end=15|rate=0.75|loop}}';
   const RUBY_EXAMPLE = '{{ruby:漢字|かんじ}}';
 
   const TTS_PARAMS: ParamRow[] = [
     { key: 'lang', description: 'help.shortcode.tts.lang', optional: true },
     { key: 'rate', description: 'help.shortcode.tts.rate', optional: true },
+    { key: 'hide', description: 'help.shortcode.tts.hide', optional: true },
   ];
 
   const AUDIO_PARAMS: ParamRow[] = [
