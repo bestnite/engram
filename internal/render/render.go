@@ -10,8 +10,10 @@
 // gains a <br>.
 //
 // The shortcode form `{{name:body|key=value}}` expands during the goldmark step into an element that
-// carries data attributes but no behaviour (see shortcode.go). Card content gets the element; a mail
-// body gets plain text for the same shortcode, because a mail has no client-side controls.
+// carries data attributes but no behaviour (see shortcode.go). A body is inline Markdown, so
+// emphasis, code spans, links and a cloze highlight render inside it, and speech may wrap a ruby
+// annotation. Card content gets the element; a mail body gets plain text for the same shortcode,
+// because a mail has no client-side controls.
 //
 // Why a separate package: rendering is used by the web pages and will also be reused by a future
 // deck package export; living inside internal/web would make the export path depend on the HTTP

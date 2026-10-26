@@ -104,10 +104,10 @@ func TestRenderMarkdownShortcodeExpansion(t *testing.T) {
 	}
 }
 
-// TestRenderMarkdownRubyWrapsClozeHighlight pins the one nesting exception: a ruby base may be
-// exactly one complete cloze highlight span, because the cloze card type resolves its marker before
-// Markdown runs and hands this package that span as markup. Every other base keeps the plain rules,
-// and only the reading is escaped.
+// TestRenderMarkdownRubyWrapsClozeHighlight pins the ruby base rules: the base is inline Markdown,
+// so a cloze highlight span inside it stays markup and its surrounding text stays text. The span is
+// the cloze card type's own output, which it emits before Markdown runs. Every other raw tag in the
+// base is shown as source text, and only the reading is escaped.
 func TestRenderMarkdownRubyWrapsClozeHighlight(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -164,15 +164,89 @@ func TestRenderMarkdownRubyWrapsClozeHighlight(t *testing.T) {
 			forbidden: []string{`<span>你好</span>`, "{{ruby"},
 		},
 		{
-			name:      "text before the cloze span is not a cloze base",
+			name:      "text before the cloze span is part of the base",
 			src:       `{{ruby:先<span class="cloze">x</span>|r}}`,
-			required:  []string{"{{ruby:"},
-			forbidden: []string{"<ruby>"},
+			required:  []string{`<ruby>先<span class="cloze">x</span><rt>r</rt></ruby>`},
+			forbidden: []string{"{{ruby"},
 		},
 		{
-			name:      "text after the cloze span is not a cloze base",
+			name:      "text after the cloze span is part of the base",
 			src:       `{{ruby:<span class="cloze">x</span>后|r}}`,
-			required:  []string{"{{ruby:"},
+			required:  []string{`<ruby><span class="cloze">x</span>后<rt>r</rt></ruby>`},
+			forbidden: []string{"{{ruby"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := RenderMarkdown(tc.src)
+			if err != nil {
+				t.Fatalf("RenderMarkdown() error = %v", err)
+			}
+			for _, want := range tc.required {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+			for _, bad := range tc.forbidden {
+				if strings.Contains(out, bad) {
+					t.Errorf("output contains forbidden %q:\n%s", bad, out)
+				}
+			}
+			assertSafeFragment(t, out)
+		})
+	}
+}
+
+// TestRenderMarkdownNestedShortcodes pins the supported nesting set and the text projection.
+//
+// A body is inline Markdown, so emphasis, links and code spans render inside it. The full element
+// is asserted rather than a fragment because the point is the projection: data-tts-text carries the
+// visible text without the ruby reading, while the visible body carries the rendered structure.
+func TestRenderMarkdownNestedShortcodes(t *testing.T) {
+	cases := []struct {
+		name      string
+		src       string
+		required  []string
+		forbidden []string
+	}{
+		{
+			name:     "tts around ruby",
+			src:      `{{tts:{{ruby:漢字|かんじ}}}}`,
+			required: []string{`<span class="engram-tts" data-tts-text="漢字"><ruby>漢字<rt>かんじ</rt></ruby></span>`},
+		},
+		{
+			name:     "tts around ruby with parameters",
+			src:      `{{tts:{{ruby:漢字|かんじ}}|lang=zh|hide}}`,
+			required: []string{`<span class="engram-tts" data-tts-text="漢字" data-tts-lang="zh" data-tts-hide="1"><ruby>漢字<rt>かんじ</rt></ruby></span>`},
+		},
+		{
+			name:     "markdown in a tts body",
+			src:      `{{tts:**hi**}}`,
+			required: []string{`<span class="engram-tts" data-tts-text="hi"><strong>hi</strong></span>`},
+		},
+		{
+			name:     "link label is the spoken text",
+			src:      `{{tts:[docs](https://example.com)}}`,
+			required: []string{`data-tts-text="docs"`, `<a href="https://example.com">docs</a>`},
+		},
+		{
+			name:     "autolink is spoken by its label",
+			src:      `{{tts:<https://example.com>}}`,
+			required: []string{`data-tts-text="https://example.com"`},
+		},
+		{
+			name:     "code span text is spoken and stays literal",
+			src:      "{{tts:a `{{ruby:x|y}}` b}}",
+			required: []string{`data-tts-text="a {{ruby:x|y}} b"`, "<code>{{ruby:x|y}}</code>"},
+			forbidden: []string{
+				"<ruby>",
+			},
+		},
+		{
+			name:      "malformed inner ruby stays text inside a working tts",
+			src:       `{{tts:{{ruby:漢字}}}}`,
+			required:  []string{`<span class="engram-tts" data-tts-text="{{ruby:漢字}}">{{ruby:漢字}}</span>`},
 			forbidden: []string{"<ruby>"},
 		},
 	}
@@ -191,6 +265,44 @@ func TestRenderMarkdownRubyWrapsClozeHighlight(t *testing.T) {
 			for _, bad := range tc.forbidden {
 				if strings.Contains(out, bad) {
 					t.Errorf("output contains forbidden %q:\n%s", bad, out)
+				}
+			}
+			assertSafeFragment(t, out)
+		})
+	}
+}
+
+// TestRenderMarkdownNestedShortcodeRejections pins the nesting set from the other side: a body that
+// expands a shortcode of a kind not allowed in that position makes the outer shortcode literal
+// source, and no element or attribute of either shortcode may survive. An inner shortcode is a
+// violation only when it expanded; TestRenderMarkdownNestedShortcodes covers the malformed case.
+func TestRenderMarkdownNestedShortcodeRejections(t *testing.T) {
+	audioSrc := "/media/" + shortcodeAudioSHA
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{name: "tts inside tts", src: `{{tts:{{tts:x}}}}`},
+		{name: "audio inside tts", src: `{{tts:{{audio:` + audioSrc + `}}}}`},
+		{name: "tts inside ruby", src: `{{ruby:{{tts:x}}|r}}`},
+		{name: "audio inside ruby", src: `{{ruby:{{audio:` + audioSrc + `}}|r}}`},
+		{name: "ruby inside ruby", src: `{{ruby:{{ruby:a|b}}|r}}`},
+		{name: "audio body holds a shortcode", src: `{{audio:{{tts:x}}}}`},
+		{name: "audio body holds an audio shortcode", src: `{{audio:{{audio:` + audioSrc + `}}}}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := RenderMarkdown(tc.src)
+			if err != nil {
+				t.Fatalf("RenderMarkdown() error = %v", err)
+			}
+			if !strings.Contains(out, tc.src) {
+				t.Errorf("output lost the literal source %q:\n%s", tc.src, out)
+			}
+			for _, bad := range []string{"engram-", "<ruby>", "<rt>", "data-"} {
+				if strings.Contains(out, bad) {
+					t.Errorf("rejected nesting still produced %q:\n%s", bad, out)
 				}
 			}
 			assertSafeFragment(t, out)
@@ -227,6 +339,8 @@ func TestRenderMarkdownShortcodeEmitsSourceForRejection(t *testing.T) {
 		{name: "audio source is not a path", src: `{{audio:a.mp3}}`, want: `{{audio:a.mp3}}`},
 		{name: "empty body", src: `{{tts:}}`, want: `{{tts:}}`},
 		{name: "body opens another shortcode", src: `{{tts:a{{b}}`, want: `{{tts:a{{b}}`},
+		{name: "list body is not one paragraph", src: `{{tts:- x}}`, want: `{{tts:- x}}`},
+		{name: "heading body is not one paragraph", src: `{{tts:# x}}`, want: `{{tts:# x}}`},
 		{name: "ruby without reading", src: `{{ruby:漢字}}`, want: `{{ruby:漢字}}`},
 		{name: "ruby reading given as a parameter", src: `{{ruby:漢字|かんじ=x}}`, want: `{{ruby:漢字|かんじ=x}}`},
 		{name: "ruby with a third field", src: `{{ruby:a|b|c}}`, want: `{{ruby:a|b|c}}`},
@@ -262,7 +376,9 @@ func TestRenderMarkdownShortcodeStaysLiteralInCode(t *testing.T) {
 		want string
 	}{
 		{name: "code span", src: "`{{tts:x}}`", want: "<code>{{tts:x}}</code>"},
+		{name: "code span with a nested shortcode", src: "`{{tts:{{ruby:a|b}}}}`", want: "<code>{{tts:{{ruby:a|b}}}}</code>"},
 		{name: "fenced block", src: "```\n{{tts:x}}\n```\n", want: "{{tts:x}}"},
+		{name: "fenced block with a nested shortcode", src: "```\n{{tts:{{ruby:a|b}}}}\n```\n", want: "{{tts:{{ruby:a|b}}}}"},
 		{name: "indented code block", src: "    {{tts:x}}\n", want: "{{tts:x}}"},
 	}
 	for _, tc := range cases {
@@ -274,8 +390,10 @@ func TestRenderMarkdownShortcodeStaysLiteralInCode(t *testing.T) {
 			if !strings.Contains(out, tc.want) {
 				t.Errorf("output missing literal %q:\n%s", tc.want, out)
 			}
-			if strings.Contains(out, "engram-tts") {
-				t.Errorf("a shortcode expanded inside code:\n%s", out)
+			for _, bad := range []string{"engram-", "<ruby>", "<rt>"} {
+				if strings.Contains(out, bad) {
+					t.Errorf("a shortcode expanded inside code (%q):\n%s", bad, out)
+				}
 			}
 		})
 	}
@@ -523,6 +641,36 @@ func TestRenderMailMarkdownShortcodesArePlainText(t *testing.T) {
 			src:       `{{tts:a<b&c}}`,
 			required:  []string{"a&lt;b&amp;c"},
 			forbidden: []string{"<b>", "a<b"},
+		},
+		{
+			name:      "plain tts body",
+			src:       `{{tts:hello}}`,
+			required:  []string{"hello"},
+			forbidden: []string{"<span", "data-"},
+		},
+		{
+			name:      "markdown in a tts body flattens to its text",
+			src:       `{{tts:**hi**}}`,
+			required:  []string{"hi"},
+			forbidden: []string{"<strong", "data-"},
+		},
+		{
+			name:      "tts around ruby flattens the annotation",
+			src:       `{{tts:{{ruby:漢字|かんじ}}}}`,
+			required:  []string{"漢字(かんじ)"},
+			forbidden: []string{"<span", "data-", "<ruby", "<rt>"},
+		},
+		{
+			name:      "tts around ruby with parameters flattens the annotation",
+			src:       `{{tts:{{ruby:漢字|かんじ}}|lang=zh|hide}}`,
+			required:  []string{"漢字(かんじ)"},
+			forbidden: []string{"<span", "data-", "<ruby", "<rt>"},
+		},
+		{
+			name:      "tts around a cloze highlight flattens to its text",
+			src:       `{{tts:<span class="cloze">你好</span>}}`,
+			required:  []string{"你好"},
+			forbidden: []string{"<span", "data-", "cloze"},
 		},
 		{
 			name:      "rejected shortcode stays source text",

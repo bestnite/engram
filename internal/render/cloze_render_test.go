@@ -216,6 +216,100 @@ func TestClozeRubyRendersHighlightedBase(t *testing.T) {
 	}
 }
 
+// TestClozeInsideNestedShortcodes drives the real card type for the nesting content needs: speech
+// around a cloze, and speech around a ruby annotation whose base is a cloze. The cloze marker is
+// gone before Markdown runs, so these exercise the span the card type emits, not a shortcode.
+func TestClozeInsideNestedShortcodes(t *testing.T) {
+	ct, ok := cardtype.Lookup("cloze")
+	if !ok {
+		t.Fatal("cloze card type is not registered")
+	}
+	cases := []struct {
+		name      string
+		text      string
+		template  string
+		side      cardtype.Side
+		required  []string
+		forbidden []string
+	}{
+		{
+			name:     "tts around cloze front keeps the placeholder",
+			text:     `{{tts:{{c0::你好}}}}`,
+			template: "cloze:0",
+			side:     cardtype.SideFront,
+			required: []string{`<span class="engram-tts" data-tts-text="[…]"><span class="cloze">[…]</span></span>`},
+		},
+		{
+			name:     "tts around cloze back speaks and shows the answer",
+			text:     `{{tts:{{c0::你好}}}}`,
+			template: "cloze:0",
+			side:     cardtype.SideBack,
+			required: []string{`<span class="engram-tts" data-tts-text="你好"><span class="cloze">你好</span></span>`},
+		},
+		{
+			name:      "tts around ruby around cloze front",
+			text:      `{{tts:{{ruby:{{c0::漢字}}|かんじ}}}}`,
+			template:  "cloze:0",
+			side:      cardtype.SideFront,
+			required:  []string{`<span class="engram-tts" data-tts-text="[…]"><ruby><span class="cloze">[…]</span><rt>かんじ</rt></ruby></span>`},
+			forbidden: []string{"{{"},
+		},
+		{
+			name:      "tts around ruby around cloze back speaks the base only",
+			text:      `{{tts:{{ruby:{{c0::漢字}}|かんじ}}}}`,
+			template:  "cloze:0",
+			side:      cardtype.SideBack,
+			required:  []string{`<span class="engram-tts" data-tts-text="漢字"><ruby><span class="cloze">漢字</span><rt>かんじ</rt></ruby></span>`},
+			forbidden: []string{"{{"},
+		},
+		{
+			name:     "markdown inside a cloze inside ruby front",
+			text:     `{{ruby:{{c0::**你好**}}|nǐ hǎo}}`,
+			template: "cloze:0",
+			side:     cardtype.SideFront,
+			required: []string{`<ruby><span class="cloze">[…]</span><rt>nǐ hǎo</rt></ruby>`},
+		},
+		{
+			name:     "markdown inside a cloze inside ruby back",
+			text:     `{{ruby:{{c0::**你好**}}|nǐ hǎo}}`,
+			template: "cloze:0",
+			side:     cardtype.SideBack,
+			required: []string{`<ruby><span class="cloze"><strong>你好</strong></span><rt>nǐ hǎo</rt></ruby>`},
+		},
+		{
+			name:      "formula inside a cloze inside ruby back",
+			text:      `{{ruby:{{c0::\(x^2\)}}|r}}`,
+			template:  "cloze:0",
+			side:      cardtype.SideBack,
+			required:  []string{`<ruby><span class="cloze">\(x^2\)</span><rt>r</rt></ruby>`},
+			forbidden: []string{"MJXFORMULATOKEN", "{{c0", "{{ruby"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := ct.Render(cardtype.Card{Template: tc.template, Fields: map[string]any{"text": tc.text}}, tc.side)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			out, err := RenderMarkdown(res.Body)
+			if err != nil {
+				t.Fatalf("RenderMarkdown: %v", err)
+			}
+			for _, want := range tc.required {
+				if !strings.Contains(out, want) {
+					t.Errorf("html = %q, want substring %q", out, want)
+				}
+			}
+			for _, bad := range tc.forbidden {
+				if strings.Contains(out, bad) {
+					t.Errorf("html = %q, must not contain %q", out, bad)
+				}
+			}
+			assertSafeFragment(t, out)
+		})
+	}
+}
+
 // TestListBackRendersAsList drives the real pipeline and asserts that the back of a list card renders as
 // <ol>/<ul> according to ordered, survives sanitizing, and no longer repeats the prompt.
 func TestListBackRendersAsList(t *testing.T) {

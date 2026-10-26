@@ -22,9 +22,12 @@ import (
 //
 // The syntax is intentionally minimal:
 //
-//   - one line, no nesting, and the body ends at the first `}}` on the line;
-//   - an unknown name, a malformed parameter, or a body that itself contains `{{` is emitted as
-//     its source text, so a shortcode never makes a render fail;
+//   - one line, and the body ends at the `}}` that balances its opening `{{`, so a body may
+//     itself contain a shortcode;
+//   - a body is inline Markdown, parsed by the same shared parser, so emphasis, code spans,
+//     links and a cloze highlight read normally inside it;
+//   - an unknown name, a malformed body, or a nesting combination outside the allowed set is
+//     emitted as its source text, so a shortcode never makes a render fail;
 //   - only the names in shortcodeTable exist; there is no per-card or per-deployment extension
 //     point, because an allowlist that can grow from content is not an allowlist.
 
@@ -123,6 +126,17 @@ var shortcodeTable = map[string]shortcodeDef{
 // second configured instance.
 var shortcodeModeKey = parser.NewContextKey()
 
+// shortcodeDepthKey is the parser context key that carries how many shortcode bodies enclose the
+// text currently being parsed. It bounds the recursion: a body is parsed by the same inline
+// parser that produced its parent, so without the bound a self-referential body would never end.
+var shortcodeDepthKey = parser.NewContextKey()
+
+// shortcodeMaxDepth is the number of shortcode levels a render may expand. The top-level
+// shortcode is depth 0 and its body is depth 1; at depth 2 the parser leaves the source as text.
+// Two levels cover every combination content needs, including a spoken ruby annotation around a
+// cloze highlight, whose marker is already an HTML span by the time Markdown runs.
+const shortcodeMaxDepth = 2
+
 // shortcodeMode selects how a shortcode expands. Card content gets the element; a mail body gets
 // plain text, because a mail renders in clients this service does not control and has no
 // client-side controls to attach.
@@ -150,10 +164,27 @@ func (shortcodeExtension) Extend(m goldmark.Markdown) {
 // kindShortcode is the AST node kind of an expanded or rejected shortcode.
 var kindShortcode = ast.NewNodeKind("EngramShortcode")
 
-// shortcodeNode holds the already-rendered fragment for one shortcode.
+// shortcodeNode holds one expanded or rejected shortcode.
+//
+// The node is a leaf: its body is not attached as AST children, because it was parsed in a
+// separate parse with its own source buffer and is kept here as the output fragment and its two
+// text projections.
 type shortcodeNode struct {
 	ast.BaseInline
+
+	// name is the shortcode name; empty for a rejected source literal.
+	name string
+	// rejected marks a node that shows its own source text. A parent uses it to tell a literal
+	// inner shortcode from one that expanded: only an expanded one is a nesting violation.
+	rejected bool
+	// output is the fragment the renderer writes raw, already in the parse's output mode.
 	output []byte
+	// flat is the fully flattened plain text: the mail form of this node, and its contribution
+	// to a parent's flat text.
+	flat string
+	// speech is the visible text without an annotation reading: the value of data-tts-text, and
+	// this node's contribution to a parent's speech text.
+	speech string
 }
 
 // Kind implements ast.Node.
@@ -176,157 +207,381 @@ func (s *shortcodeParser) Trigger() []byte { return []byte{'{'} }
 //
 // A shortcode has to start and end on the current line. Anything that does not fit the form is
 // left to the surrounding text parsers, which keeps the source visible instead of swallowing it.
+// Once the depth bound is reached the parser declines, so the inner source stays text.
 func (s *shortcodeParser) Parse(parent ast.Node, block text.Reader, pc parser.Context) ast.Node {
 	line, _ := block.PeekLine()
 	if !bytes.HasPrefix(line, []byte("{{")) {
 		return nil
 	}
-	end := bytes.Index(line, []byte("}}"))
-	if end < 0 {
-		// No closing brace on this line: not a shortcode, so the text is parsed normally.
+
+	depth := shortcodeDepth(pc)
+	if depth >= shortcodeMaxDepth {
 		return nil
 	}
 
-	inner := line[2:end]
+	end, ok := shortcodeEnd(line)
+	if !ok {
+		// No balanced closing brace on this line: not a shortcode, so the text is parsed normally.
+		return nil
+	}
+
 	mode := shortcodeModeCard
 	if v, ok := pc.Get(shortcodeModeKey).(shortcodeMode); ok {
 		mode = v
 	}
 
-	output := expandShortcode(inner, mode)
+	node := expandShortcode(string(line[2:end]), mode, depth)
 	block.Advance(end + 2)
-	return &shortcodeNode{output: output}
+	return node
 }
 
-// expandShortcode turns the bytes between `{{` and `}}` into the output fragment for mode.
-//
-// Every rejection path returns the source text, escaped: a shortcode is content, and content must
-// never be able to make the render fail or disappear.
-func expandShortcode(inner []byte, mode shortcodeMode) []byte {
-	content := string(inner)
-	// A shortcode does not nest: a body that opens another `{{` is emitted as source text instead
-	// of being read as a name, so no shortcode can ever expand another shortcode's payload.
-	if strings.Contains(content, "{{") {
-		return shortcodeLiteral(content)
+// shortcodeDepth returns the nesting depth stored in the parser context, defaulting to zero.
+func shortcodeDepth(pc parser.Context) int {
+	if v, ok := pc.Get(shortcodeDepthKey).(int); ok {
+		return v
 	}
+	return 0
+}
 
+// shortcodeEnd returns the index of the `}}` that closes the shortcode whose opening `{{` starts
+// line.
+//
+// Braces are counted instead of taking the first `}}`, because a body may itself contain a
+// shortcode and the first `}}` then belongs to the innermost body. Bodies are single-line, so the
+// scan never crosses a line break.
+func shortcodeEnd(line []byte) (int, bool) {
+	depth := 1
+	for i := 2; i+1 < len(line); i++ {
+		switch {
+		case line[i] == '{' && line[i+1] == '{':
+			depth++
+			i++
+		case line[i] == '}' && line[i+1] == '}':
+			depth--
+			if depth == 0 {
+				return i, true
+			}
+			i++
+		}
+	}
+	return 0, false
+}
+
+// expandShortcode turns the bytes between `{{` and `}}` into a node for mode, at nesting depth.
+//
+// Every rejection path returns a literal node, escaped: a shortcode is content, and content must
+// never be able to make the render fail or disappear.
+func expandShortcode(content string, mode shortcodeMode, depth int) *shortcodeNode {
 	name, rest, hasBody := strings.Cut(content, ":")
 	if !hasBody {
-		return shortcodeLiteral(content)
+		return newShortcodeLiteral(content)
 	}
 
 	if name == "ruby" {
-		return expandRuby(rest, mode)
+		return expandRuby(rest, mode, depth)
 	}
 
 	def, ok := shortcodeTable[name]
 	if !ok {
-		return shortcodeLiteral(content)
+		return newShortcodeLiteral(content)
 	}
-	return expandSpan(name, def, rest, mode)
+	return expandSpan(name, def, rest, mode, depth)
+}
+
+// newShortcodeLiteral returns a node that shows a rejected shortcode as its own source text.
+//
+// The node is marked rejected so a parent can distinguish "this inner shortcode is plain text"
+// from "this inner shortcode expanded": an unknown or malformed inner shortcode is text and does
+// not invalidate the outer one, while an expanded inner shortcode of a disallowed kind does.
+func newShortcodeLiteral(content string) *shortcodeNode {
+	source := "{{" + content + "}}"
+	return &shortcodeNode{
+		rejected: true,
+		output:   []byte(escapeShortcodeText(source)),
+		flat:     source,
+		speech:   source,
+	}
 }
 
 // clozeSpanOpen is the exact opening tag the cloze card type emits around a highlighted deletion.
-// A ruby base accepts raw markup only in this one shape; see expandRuby.
+// A body accepts raw markup only in this one region; see rewriteShortcodeRawHTML.
 const clozeSpanOpen = `<span class="cloze">`
 
 // clozeSpanClose is the tag that ends that highlight span.
 const clozeSpanClose = `</span>`
 
-// shortcodeTagPattern matches one tag-shaped run. It is used only to remove the highlight wrapper
-// and any raw HTML the cloze content carries, so the mail form of a ruby-annotated cloze shows the
-// bare highlighted text.
-var shortcodeTagPattern = regexp.MustCompile(`</?[A-Za-z][^>]*>`)
-
-// expandRuby renders `{{ruby:base|reading}}`.
+// parseInlineBody parses one shortcode body as inline Markdown with the shared parser.
 //
-// The reading is positional, not a key=value parameter: ruby has exactly one extra field and no
-// parameters, so an `=` in either half is malformed rather than an unknown parameter.
+// A body is a single paragraph: a list, heading, fenced block, reference definition or empty
+// document is not a body, and the shortcode then stays literal source. Bodies are single-line,
+// so no construct that needs a blank line or an indented block can be a body.
 //
-// One nesting is accepted, and only one: a base that is a single complete cloze highlight span.
-// The cloze card type resolves its own marker before Markdown runs, so the body reaching this
-// function already contains `<span class="cloze">…</span>`, whose class attribute carries an `=`
-// that the plain rule would reject. That span is the card type's own output, not author markup, so
-// it is emitted as markup in card mode and reduced to its text in mail mode. No other raw HTML is
-// passed through, and no other shortcode may nest: a base with any other shape still follows the
-// plain rules and stays literal.
-func expandRuby(rest string, mode shortcodeMode) []byte {
-	if base, inner, reading, ok := splitClozeRubyBase(rest); ok {
-		if reading == "" || strings.ContainsAny(reading, "=|") {
-			return shortcodeLiteral("ruby:" + rest)
-		}
-		if mode == shortcodeModeMail {
-			return []byte(escapeShortcodeText(stripShortcodeTags(inner) + "(" + reading + ")"))
-		}
-		return []byte("<ruby>" + base + "<rt>" + escapeShortcodeText(reading) + "</rt></ruby>")
+// The one exception is a body that starts with a block-level HTML tag: goldmark classifies that
+// line as an HTML block, while the body is inline content here, so it is reparsed behind a text
+// prefix and the prefix is dropped. Every tag in it still goes through rewriteShortcodeRawHTML, so
+// the tag text ends up visible instead of being emitted as markup.
+//
+// The parse re-enters this package's inline parser for nested shortcodes at depth+1, which is
+// intended; the depth bound is what keeps a self-referential body finite. A fresh parser context
+// isolates the body's delimiter state from the enclosing document.
+func parseInlineBody(src string, depth int) (*ast.Paragraph, []byte, bool) {
+	source := []byte(src)
+	doc := markdown.Parser().Parse(text.NewReader(source), parser.WithContext(newBodyContext(depth)))
+	if para, ok := singleBodyParagraph(doc); ok {
+		return para, source, true
 	}
 
-	base, reading, found := strings.Cut(rest, "|")
-	if !found || base == "" || reading == "" {
-		return shortcodeLiteral("ruby:" + rest)
+	// A single-line body that begins with a block-level tag (`<script>`, `<div>`, a heading-style
+	// element only if it were alone on the line) is classified as an HTML block even though it is
+	// inline content of the shortcode body. Reparse it behind a one-character text prefix, which
+	// cannot start a block, and drop that prefix from the AST again.
+	if doc.ChildCount() == 1 {
+		if _, isHTMLBlock := doc.FirstChild().(*ast.HTMLBlock); isHTMLBlock {
+			return parsePrefixedInlineBody(src, depth)
+		}
 	}
-	if strings.ContainsAny(base, "=|") || strings.ContainsAny(reading, "=|") {
-		return shortcodeLiteral("ruby:" + rest)
-	}
-
-	if mode == shortcodeModeMail {
-		return []byte(escapeShortcodeText(base + "(" + reading + ")"))
-	}
-	return []byte("<ruby>" + escapeShortcodeText(base) + "<rt>" + escapeShortcodeText(reading) + "</rt></ruby>")
+	return nil, nil, false
 }
 
-// splitClozeRubyBase splits a ruby body whose base is one complete cloze highlight span.
-//
-// The base must start with the exact opening tag the cloze card type emits. Its end is the first
-// `</span>` after that opening tag, and the very next byte must be the ruby separator `|`.
-// Requiring the separator at that position, rather than searching for the first `|`, is what keeps
-// a `|` or `=` inside the highlighted content from splitting the base. A highlighted span that
-// carries its own `</span>` is not a supported base: the first closing tag ends the span, so the
-// body falls through to the literal rules in expandRuby.
-func splitClozeRubyBase(rest string) (base, inner, reading string, ok bool) {
-	if !strings.HasPrefix(rest, clozeSpanOpen) {
-		return "", "", "", false
-	}
-	innerStart := len(clozeSpanOpen)
-	closeAt := strings.Index(rest[innerStart:], clozeSpanClose)
-	if closeAt < 0 {
-		return "", "", "", false
-	}
-	closeAt += innerStart
-	sep := closeAt + len(clozeSpanClose)
-	if sep >= len(rest) || rest[sep] != '|' {
-		return "", "", "", false
-	}
-	return rest[:sep], rest[innerStart:closeAt], rest[sep+1:], true
+// bodyPrefix is the plain text prepended to a body that goldmark would otherwise read as an HTML
+// block. It is ordinary text, so it cannot open any block; the AST drops it again after parsing.
+const bodyPrefix = "x"
+
+// newBodyContext builds the parser context for one body parse: card output, one level deeper and
+// a fresh delimiter state.
+func newBodyContext(depth int) parser.Context {
+	pc := parser.NewContext()
+	pc.Set(shortcodeModeKey, shortcodeModeCard)
+	pc.Set(shortcodeDepthKey, depth+1)
+	return pc
 }
 
-// stripShortcodeTags removes tag-shaped runs so a value can be emitted as plain text.
-func stripShortcodeTags(s string) string {
-	return shortcodeTagPattern.ReplaceAllString(s, "")
+// singleBodyParagraph returns the document's only child when that child is a paragraph.
+func singleBodyParagraph(doc ast.Node) (*ast.Paragraph, bool) {
+	if doc.ChildCount() != 1 {
+		return nil, false
+	}
+	para, ok := doc.FirstChild().(*ast.Paragraph)
+	return para, ok
+}
+
+// parsePrefixedInlineBody parses a body behind bodyPrefix and removes the prefix from the resulting
+// paragraph. Every remaining segment points into the same buffer at its original offset, so the
+// rendered fragment and the text projections contain exactly the body.
+func parsePrefixedInlineBody(src string, depth int) (*ast.Paragraph, []byte, bool) {
+	source := []byte(bodyPrefix + src)
+	doc := markdown.Parser().Parse(text.NewReader(source), parser.WithContext(newBodyContext(depth)))
+	para, ok := singleBodyParagraph(doc)
+	if !ok {
+		return nil, nil, false
+	}
+
+	first, ok := para.FirstChild().(*ast.Text)
+	if !ok || first.Segment.Start != 0 || first.Segment.Stop < len(bodyPrefix) {
+		return nil, nil, false
+	}
+	first.Segment.Start = len(bodyPrefix)
+	if first.Segment.Start >= first.Segment.Stop {
+		para.RemoveChild(para, first)
+	}
+	return para, source, true
+}
+
+// bodyNestedShortcodes returns the expanded shortcode nodes inside a parsed body, in document
+// order. Rejected literals are text, so they are not nesting.
+func bodyNestedShortcodes(n ast.Node) []*shortcodeNode {
+	var out []*shortcodeNode
+	var walk func(ast.Node)
+	walk = func(node ast.Node) {
+		for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+			if s, ok := c.(*shortcodeNode); ok {
+				if !s.rejected {
+					out = append(out, s)
+				}
+				continue
+			}
+			walk(c)
+		}
+	}
+	walk(n)
+	return out
+}
+
+// shortcodeNestingAllowed reports whether a body of parent may expand a child shortcode.
+//
+// The allowed set is tiny and one-directional: speech may announce a ruby annotation, and nothing
+// else nests. Ruby already spends its one extra field on the reading, and audio's body is an
+// opaque media path, so a shortcode inside either has no meaning the renderer could honour. A
+// cloze is not a shortcode at this stage: the cloze card type replaces its marker with an HTML
+// span before Markdown runs, so a shortcode inside a cloze is an ordinary top-level shortcode
+// and is not affected by this rule.
+func shortcodeNestingAllowed(parent, child string) bool {
+	return parent == "tts" && child == "ruby"
+}
+
+// prepareBody applies the body raw-HTML rule and renders the body fragment with its two text
+// projections.
+func prepareBody(para *ast.Paragraph, source []byte) (fragment, speech, flat string, ok bool) {
+	rewriteShortcodeRawHTML(para, source, false)
+
+	var buf bytes.Buffer
+	if err := markdown.Renderer().Render(&buf, source, para); err != nil {
+		return "", "", "", false
+	}
+	rendered := buf.String()
+	// The fragment is the paragraph's content without its wrapper. A body whose render is not
+	// exactly one paragraph is not a body, so the shortcode stays literal rather than embedding a
+	// wrapper element inside an inline span.
+	if !strings.HasPrefix(rendered, "<p>") || !strings.HasSuffix(rendered, "</p>\n") {
+		return "", "", "", false
+	}
+	fragment = rendered[len("<p>") : len(rendered)-len("</p>\n")]
+	speech = inlineVisibleText(para, source, shortcodeTextSpeech)
+	flat = inlineVisibleText(para, source, shortcodeTextFlat)
+	return fragment, speech, flat, true
+}
+
+// rewriteShortcodeRawHTML applies the body raw-HTML rule in document order and returns whether
+// the traversal ended inside a cloze highlight.
+//
+// A cloze highlight is the one raw markup a body may keep. The cloze card type emits it before
+// Markdown runs, and its content may itself be Markdown or sanitized HTML, so the tags must stay
+// raw for the inner Markdown to render and for the final allowlist pass to trim them the same way
+// it trims a flat cloze. Any other tag is author text, so it is replaced by a string node and
+// renders as escaped source: `{{tts:<script>x</script>}}` shows the tags as text instead of
+// letting them through. The test compares exact tag text with the two tags the card type emits;
+// it is not a general HTML parser.
+func rewriteShortcodeRawHTML(n ast.Node, source []byte, inCloze bool) bool {
+	for c := n.FirstChild(); c != nil; {
+		next := c.NextSibling()
+		if raw, ok := c.(*ast.RawHTML); ok {
+			tag := string(raw.Segments.Value(source))
+			switch {
+			case tag == clozeSpanOpen:
+				inCloze = true
+			case tag == clozeSpanClose && inCloze:
+				inCloze = false
+			case !inCloze:
+				n.ReplaceChild(n, c, ast.NewString([]byte(tag)))
+			}
+		} else {
+			inCloze = rewriteShortcodeRawHTML(c, source, inCloze)
+		}
+		c = next
+	}
+	return inCloze
+}
+
+// shortcodeTextProjection selects which text a shortcode node contributes to its parent.
+type shortcodeTextProjection int
+
+const (
+	// shortcodeTextSpeech is visible text without an annotation reading.
+	shortcodeTextSpeech shortcodeTextProjection = iota
+	// shortcodeTextFlat is the mail form: ruby keeps its reading in parentheses.
+	shortcodeTextFlat
+)
+
+// inlineVisibleText returns the visible text of a parsed body under the given projection.
+func inlineVisibleText(n ast.Node, source []byte, projection shortcodeTextProjection) string {
+	var b strings.Builder
+	appendInlineVisibleText(&b, n, source, projection)
+	return b.String()
+}
+
+// appendInlineVisibleText walks an inline AST in document order and writes its visible text.
+//
+// Tags contribute nothing (their inner text does), and a nested shortcode contributes its own
+// projection, so a spoken ruby around a cloze yields the base without the reading. Unknown inline
+// kinds are transparent: walking their children covers GFM strikethrough and any later inline
+// container without this function having to know it.
+func appendInlineVisibleText(b *strings.Builder, n ast.Node, source []byte, projection shortcodeTextProjection) {
+	switch v := n.(type) {
+	case *shortcodeNode:
+		if projection == shortcodeTextSpeech {
+			b.WriteString(v.speech)
+		} else {
+			b.WriteString(v.flat)
+		}
+	case *ast.Text:
+		b.Write(v.Segment.Value(source))
+	case *ast.String:
+		b.Write(v.Value)
+	case *ast.CodeSpan:
+		for c := v.FirstChild(); c != nil; c = c.NextSibling() {
+			if t, ok := c.(*ast.Text); ok {
+				b.Write(t.Segment.Value(source))
+			}
+		}
+	case *ast.AutoLink:
+		b.Write(v.Label(source))
+	case *ast.RawHTML:
+		// A tag is markup, not text.
+	default:
+		for c := v.FirstChild(); c != nil; c = c.NextSibling() {
+			appendInlineVisibleText(b, c, source, projection)
+		}
+	}
 }
 
 // expandSpan renders a span shortcode from shortcodeTable.
-func expandSpan(name string, def shortcodeDef, rest string, mode shortcodeMode) []byte {
+func expandSpan(name string, def shortcodeDef, rest string, mode shortcodeMode, depth int) *shortcodeNode {
 	body, params := splitShortcodeBody(def, rest)
 	if body == "" {
-		return shortcodeLiteral(name + ":" + rest)
+		return newShortcodeLiteral(name + ":" + rest)
 	}
 
 	values, ok := parseShortcodeParams(def, params)
 	if !ok {
-		return shortcodeLiteral(name + ":" + rest)
+		return newShortcodeLiteral(name + ":" + rest)
 	}
 
-	if def.bodyRe != nil && !def.bodyRe.MatchString(body) {
-		return shortcodeLiteral(name + ":" + rest)
+	if def.bodyRe != nil {
+		// A body validated by a pattern is an opaque value, not Markdown. The audio path is the
+		// only such body, and a body that does not match its shape stays source text.
+		if !def.bodyRe.MatchString(body) {
+			return newShortcodeLiteral(name + ":" + rest)
+		}
+		n := &shortcodeNode{name: name, speech: body, flat: body}
+		if mode == shortcodeModeMail {
+			n.output = []byte(escapeShortcodeText(body))
+			return n
+		}
+		n.output = spanMarkup(def, values, escapeShortcodeText(body), escapeShortcodeText(body))
+		return n
 	}
 
-	// A mail body has no controls to attach, so the shortcode degrades to its visible text: the
-	// body for a span shortcode, and the annotated form for ruby (handled above).
+	para, bodySource, ok := parseInlineBody(body, depth)
+	if !ok {
+		return newShortcodeLiteral(name + ":" + rest)
+	}
+	for _, nested := range bodyNestedShortcodes(para) {
+		if !shortcodeNestingAllowed(name, nested.name) {
+			return newShortcodeLiteral(name + ":" + rest)
+		}
+	}
+
+	fragment, speech, flat, ok := prepareBody(para, bodySource)
+	if !ok {
+		return newShortcodeLiteral(name + ":" + rest)
+	}
+
+	n := &shortcodeNode{name: name, speech: speech, flat: flat}
+	// A mail body has no controls to attach, so the shortcode degrades to its visible text.
 	if mode == shortcodeModeMail {
-		return []byte(escapeShortcodeText(body))
+		n.output = []byte(escapeShortcodeText(flat))
+		return n
 	}
+	n.output = spanMarkup(def, values, fragment, escapeShortcodeText(speech))
+	return n
+}
 
+// spanMarkup builds a span shortcode element.
+//
+// visible is the already-rendered visible fragment and text is the escaped value shared by the
+// body and text attributes. Attribute order is fixed by the table, so the output contract stays
+// stable regardless of the order the parameter list was written in.
+func spanMarkup(def shortcodeDef, values map[string]string, visible, text string) []byte {
 	var b strings.Builder
 	b.WriteString(`<span class="`)
 	b.WriteString(def.class)
@@ -335,14 +590,14 @@ func expandSpan(name string, def shortcodeDef, rest string, mode shortcodeMode) 
 		b.WriteString(` `)
 		b.WriteString(def.bodyAttr)
 		b.WriteString(`="`)
-		b.WriteString(escapeShortcodeText(body))
+		b.WriteString(text)
 		b.WriteByte('"')
 	}
 	if def.textAttr != "" {
 		b.WriteString(` `)
 		b.WriteString(def.textAttr)
 		b.WriteString(`="`)
-		b.WriteString(escapeShortcodeText(body))
+		b.WriteString(text)
 		b.WriteByte('"')
 	}
 	for _, p := range def.params {
@@ -367,26 +622,108 @@ func expandSpan(name string, def shortcodeDef, rest string, mode shortcodeMode) 
 		b.WriteByte('"')
 	}
 	b.WriteString(`>`)
-	b.WriteString(escapeShortcodeText(body))
+	b.WriteString(visible)
 	b.WriteString(`</span>`)
 	return []byte(b.String())
 }
 
+// expandRuby renders `{{ruby:base|reading}}`.
+//
+// The reading is positional, not a key=value parameter: ruby has exactly one extra field and no
+// parameters, so an `=` in the reading is malformed rather than an unknown parameter. The base is
+// inline Markdown: it may carry emphasis, a code span, or a cloze highlight (the cloze card type
+// resolves its own marker before Markdown runs, so the body reaching this function already
+// contains `<span class="cloze">…</span>`).
+//
+// No shortcode may nest inside the base: ruby already uses its extra field for the reading, so a
+// base that expands another shortcode makes the whole ruby literal source. In mail mode the
+// annotation becomes `base(reading)` with no markup.
+func expandRuby(rest string, mode shortcodeMode, depth int) *shortcodeNode {
+	base, reading, ok := splitRubyBody(rest)
+	if !ok || base == "" {
+		return newShortcodeLiteral("ruby:" + rest)
+	}
+	if reading == "" || strings.ContainsAny(reading, "=|") || strings.Contains(reading, "{{") {
+		return newShortcodeLiteral("ruby:" + rest)
+	}
+
+	para, source, ok := parseInlineBody(base, depth)
+	if !ok {
+		return newShortcodeLiteral("ruby:" + rest)
+	}
+	if len(bodyNestedShortcodes(para)) > 0 {
+		return newShortcodeLiteral("ruby:" + rest)
+	}
+
+	fragment, speech, flat, ok := prepareBody(para, source)
+	if !ok {
+		return newShortcodeLiteral("ruby:" + rest)
+	}
+
+	node := &shortcodeNode{name: "ruby", speech: speech, flat: flat + "(" + reading + ")"}
+	if mode == shortcodeModeMail {
+		node.output = []byte(escapeShortcodeText(node.flat))
+		return node
+	}
+	node.output = []byte("<ruby>" + fragment + "<rt>" + escapeShortcodeText(reading) + "</rt></ruby>")
+	return node
+}
+
+// splitRubyBody splits a ruby body into its base and reading at the first `|` outside a nested
+// shortcode and outside a cloze highlight.
+//
+// Skipping a complete `<span class="cloze">…</span>` region is what keeps a `|` inside the
+// highlighted content from splitting the base. A cloze region opened but never closed is not a
+// body this function can split, so the ruby stays literal. A `|` inside a nested shortcode
+// belongs to that shortcode's own parameter list, so brace depth decides which separator is
+// ruby's.
+func splitRubyBody(rest string) (base, reading string, ok bool) {
+	depth := 0
+	for i := 0; i < len(rest); i++ {
+		switch {
+		case strings.HasPrefix(rest[i:], "{{"):
+			depth++
+			i++
+		case depth > 0 && strings.HasPrefix(rest[i:], "}}"):
+			depth--
+			i++
+		case depth == 0 && strings.HasPrefix(rest[i:], clozeSpanOpen):
+			innerStart := i + len(clozeSpanOpen)
+			closeAt := strings.Index(rest[innerStart:], clozeSpanClose)
+			if closeAt < 0 {
+				return "", "", false
+			}
+			i = innerStart + closeAt + len(clozeSpanClose) - 1
+		case depth == 0 && rest[i] == '|':
+			return rest[:i], rest[i+1:], true
+		}
+	}
+	return "", "", false
+}
+
 // splitShortcodeBody splits a name's argument text into the visible body and the parameter list.
 //
-// The rule is: the parameter list starts at the first `|` that is followed by a parameter field of
-// this shortcode -- either a `name=` value field, or a bare flag word the table declares. A body is
-// free text, so a bare `|` inside it (a table separator, a quoted snippet) belongs to the body.
-// The consequence is that a body cannot itself contain the sequence `|word=`, or a `|` followed by
-// this shortcode's flag word, because those are exactly the separator shapes. The rule is stated
-// here because the grammar gives no other way to tell the two apart.
+// The rule is: the parameter list starts at the first `|` that sits outside a nested shortcode and
+// is followed by a parameter field of this shortcode -- either a `name=` value field, or a bare
+// flag word the table declares. A body is free text, so a bare `|` inside it (a table separator, a
+// quoted snippet) belongs to the body. The consequence is that a body cannot itself contain the
+// sequence `|word=`, or a `|` followed by this shortcode's flag word, because those are exactly
+// the separator shapes. A `|` inside a nested `{{…}}` belongs to that shortcode, so brace depth
+// decides which one is the separator.
 func splitShortcodeBody(def shortcodeDef, rest string) (body, params string) {
+	depth := 0
 	for i := 0; i < len(rest); i++ {
-		if rest[i] != '|' {
-			continue
-		}
-		if isShortcodeParamStart(rest[i+1:]) || isShortcodeFlagWord(def, rest[i+1:]) {
-			return rest[:i], rest[i+1:]
+		switch {
+		case strings.HasPrefix(rest[i:], "{{"):
+			depth++
+			i++
+		case depth > 0 && strings.HasPrefix(rest[i:], "}}"):
+			depth--
+			i++
+		case depth == 0 && rest[i] == '|':
+			if isShortcodeParamStart(rest[i+1:]) || isShortcodeFlagWord(def, rest[i+1:]) {
+				return rest[:i], rest[i+1:]
+			}
 		}
 	}
 	return rest, ""
@@ -469,11 +806,6 @@ func isShortcodeFlag(def shortcodeDef, key string) bool {
 	return false
 }
 
-// shortcodeLiteral renders the source form of a rejected shortcode as escaped text.
-func shortcodeLiteral(content string) []byte {
-	return []byte(escapeShortcodeText("{{" + content + "}}"))
-}
-
 // shortcodeEscaper escapes the four characters that would break HTML structure when a body or a
 // parameter value is written into a text node or a double-quoted attribute value.
 //
@@ -503,9 +835,10 @@ func (r *shortcodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 
 // renderShortcode writes the fragment raw.
 //
-// The fragment is already escaped by expandShortcode, and every attribute in it is fixed by the
-// shortcode table, so it is written raw only because the surrounding goldmark renderer runs with
-// html.WithUnsafe; writing it as text would escape the markup the client needs.
+// The fragment is built by expandShortcode: its markup is fixed by the shortcode table and every
+// text and attribute value in it is escaped, so it is written raw only because the surrounding
+// goldmark renderer runs with html.WithUnsafe; writing it as text would escape the markup the
+// client needs.
 func (r *shortcodeRenderer) renderShortcode(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
 		n := node.(*shortcodeNode)
