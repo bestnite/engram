@@ -8,7 +8,7 @@
  *     rejected (shown literally), so a shortcode never expands another one's payload;
  *   - the parameter list starts at the first `|` that is followed by `name=` (or, for audio, by
  *     the bare word `loop`); any other `|` stays part of the body;
- *   - `tts` takes `lang` (a BCP-47-like tag) and `rate` (a non-negative decimal);
+ *   - `tts` takes `lang` (a BCP-47-like tag), `rate` (a non-negative decimal), and the bare flag `hide`;
  *   - `audio` takes a body pinned to this service's own content-addressed media path, the
  *     parameters `start`, `end`, `rate`, and the bare flag `loop`;
  *   - `ruby` takes exactly two positional parts and no parameters.
@@ -58,9 +58,9 @@ export interface ShortcodeIssue {
   code: ShortcodeIssueCode;
 }
 
-/** What the panel's three sections collect; the absent optionals are the ones left empty. */
+/** What the panel's three sections collect; an absent optional is one the user left empty or unchecked. */
 export type ShortcodeInput =
-  | { name: 'tts'; body: string; lang?: string; rate?: string }
+  | { name: 'tts'; body: string; lang?: string; rate?: string; hide?: boolean }
   | { name: 'audio'; source: string; start?: string; end?: string; rate?: string; loop?: boolean }
   | { name: 'ruby'; base: string; reading: string };
 
@@ -122,7 +122,9 @@ export function buildShortcode(input: ShortcodeInput): ShortcodeBuild {
     const rate = token(input.rate);
     if (lang !== '' && !LANG_PATTERN.test(lang)) return { ok: false, issue: { field: 'lang', code: 'lang_shape' } };
     if (rate !== '' && !NUMBER_PATTERN.test(rate)) return { ok: false, issue: { field: 'rate', code: 'rate_shape' } };
-    const params = `${lang === '' ? '' : `|lang=${lang}`}${rate === '' ? '' : `|rate=${rate}`}`;
+    const params = `${lang === '' ? '' : `|lang=${lang}`}${rate === '' ? '' : `|rate=${rate}`}${
+      input.hide ? '|hide' : ''
+    }`;
     return { ok: true, source: `{{tts:${input.body}${params}}}` };
   }
 

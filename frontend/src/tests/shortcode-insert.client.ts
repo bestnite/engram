@@ -118,6 +118,43 @@ describe('ShortcodeInsert — tts', () => {
     expect(inserted).toEqual(['{{tts:こんにちは|lang=ja-JP|rate=0.9}}']);
   });
 
+  it('writes the hide flag only when its checkbox is checked', () => {
+    setup();
+    const hide = el('shortcode-tts-hide');
+
+    click(hide);
+    // The flag does not make an empty body valid: the button stays unavailable.
+    expect(preview()).toBe('—');
+    expect(insertButton().disabled).toBe(true);
+
+    setInput('shortcode-tts-body', '你好');
+    expect(preview()).toBe('{{tts:你好|hide}}');
+    expect(insertButton().disabled).toBe(false);
+    click(insertButton());
+    expect(inserted).toEqual(['{{tts:你好|hide}}']);
+
+    click(hide);
+    expect(preview()).toBe('{{tts:你好}}');
+  });
+
+  it('keeps the flag last and shows the checkbox on the tts tab only', () => {
+    setup();
+    setInput('shortcode-tts-body', 'こんにちは');
+    setInput('shortcode-tts-lang', 'ja-JP');
+    setInput('shortcode-tts-rate', '0.9');
+    click(el('shortcode-tts-hide'));
+
+    expect(preview()).toBe('{{tts:こんにちは|lang=ja-JP|rate=0.9|hide}}');
+
+    tab('audio');
+    expect(target.querySelector('[data-testid="shortcode-tts-hide"]')).toBeNull();
+    tab('ruby');
+    expect(target.querySelector('[data-testid="shortcode-tts-hide"]')).toBeNull();
+    tab('tts');
+    // The choice survives a round trip through the other tabs.
+    expect(preview()).toBe('{{tts:こんにちは|lang=ja-JP|rate=0.9|hide}}');
+  });
+
   it('reports the shape of a rejected rate instead of inserting', () => {
     setup();
     setInput('shortcode-tts-body', 'Hi');

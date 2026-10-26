@@ -1471,4 +1471,6 @@ export const zhCN: LocaleCatalog = {
   // ---- Audio shortcode progress track ----
   'shortcode.audio.progress': '音频进度',
   'shortcode.audio.progress.value': '第 {position} 秒，共 {total} 秒',
+  // ---- TTS shortcode hide flag ----
+  'shortcode.insert.tts.hide': '朗读时隐藏内容',
 };

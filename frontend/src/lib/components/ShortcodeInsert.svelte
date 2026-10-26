@@ -37,6 +37,7 @@
   let ttsBody = $state('');
   let ttsLang = $state('');
   let ttsRate = $state('');
+  let ttsHide = $state(false);
 
   let audioSource = $state('');
   let audioStart = $state('');
@@ -75,7 +76,7 @@
 
   const input = $derived<ShortcodeInput>(
     name === 'tts'
-      ? { name: 'tts', body: ttsBody, lang: ttsLang, rate: ttsRate }
+      ? { name: 'tts', body: ttsBody, lang: ttsLang, rate: ttsRate, hide: ttsHide }
       : name === 'audio'
         ? { name: 'audio', source: audioSource, start: audioStart, end: audioEnd, rate: audioRate, loop: audioLoop }
         : { name: 'ruby', base: rubyBase, reading: rubyReading }
@@ -195,6 +196,16 @@
             class="field-input mt-1.5 w-full text-sm"
           />
         </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- The flag hides the spoken text while a speech control exists; it writes a bare `|hide`, never `hide=`. -->
+        <Checkbox
+          testId="shortcode-tts-hide"
+          checked={ttsHide}
+          onCheckedChange={(checked) => (ttsHide = checked)}
+          label={$t('shortcode.insert.tts.hide')}
+        />
+        <span class="text-sm text-foreground/80">{$t('shortcode.insert.tts.hide')}</span>
       </div>
     </div>
   {:else if name === 'audio'}

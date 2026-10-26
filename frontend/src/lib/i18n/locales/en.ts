@@ -1472,4 +1472,6 @@ export const en: LocaleCatalog = {
   // ---- Audio shortcode progress track ----
   'shortcode.audio.progress': 'Audio progress',
   'shortcode.audio.progress.value': '{position} of {total} seconds',
+  // ---- TTS shortcode hide flag ----
+  'shortcode.insert.tts.hide': 'Hide the text while it can be read aloud',
 };

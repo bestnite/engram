@@ -52,6 +52,21 @@ describe('buildShortcode — what the server accepts', () => {
       source: '{{tts:Hi|lang=ja-JP|rate=0.9}}',
     },
     {
+      name: 'tts with the hide flag alone',
+      input: { name: 'tts', body: 'Hi', hide: true },
+      source: '{{tts:Hi|hide}}',
+    },
+    {
+      name: 'tts hide is written after every parameter',
+      input: { name: 'tts', body: 'Hello', lang: 'ja-JP', rate: '0.9', hide: true },
+      source: '{{tts:Hello|lang=ja-JP|rate=0.9|hide}}',
+    },
+    {
+      name: 'tts with the hide flag unset keeps the plain source',
+      input: { name: 'tts', body: 'Hi', lang: 'ja-JP', hide: false },
+      source: '{{tts:Hi|lang=ja-JP}}',
+    },
+    {
       name: 'audio source alone',
       input: { name: 'audio', source: MEDIA },
       source: `{{audio:${MEDIA}}}`,
@@ -119,6 +134,13 @@ describe('buildShortcode — what the server would print verbatim', () => {
     {
       name: 'tts body starting a parameter list',
       input: { name: 'tts', body: 'a|note=b' },
+      field: 'body',
+      code: 'body_separator',
+    },
+    {
+      // `hide` is a bare flag: written as `hide=1` the server prints the whole shortcode verbatim.
+      name: 'tts body carrying hide as a valued parameter',
+      input: { name: 'tts', body: 'a|hide=1' },
       field: 'body',
       code: 'body_separator',
     },
@@ -262,6 +284,20 @@ describe('buildShortcode — what the server would print verbatim', () => {
       rejected(buildShortcode(item.input), item.field, item.code);
     });
   }
+});
+
+describe('buildShortcode — the hide flag belongs to tts', () => {
+  // The panel cannot construct these shapes, but the builder must never turn a stray flag into source the server
+  // prints verbatim: `hide` on audio or ruby is not part of their grammar.
+  it('writes no hide flag for audio', () => {
+    const input = { name: 'audio', source: MEDIA, start: '2', loop: true, hide: true } as unknown as ShortcodeInput;
+    expect(buildShortcode(input)).toEqual({ ok: true, source: `{{audio:${MEDIA}|start=2|loop}}` });
+  });
+
+  it('writes no hide flag for ruby', () => {
+    const input = { name: 'ruby', base: '漢字', reading: 'かんじ', hide: true } as unknown as ShortcodeInput;
+    expect(buildShortcode(input)).toEqual({ ok: true, source: '{{ruby:漢字|かんじ}}' });
+  });
 });
 
 describe('insertSource', () => {
