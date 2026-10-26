@@ -133,10 +133,25 @@ func parseOIDCBool(raw string) bool {
 }
 
 // splitOIDCScopes splits a comma / whitespace separated scope list; an empty value falls back to the default scopes.
+//
+// The openid scope is mandatory for this client: the login and bind flows validate an ID token, and a provider that is
+// asked for email/profile without openid answers with a plain OAuth token response that has no id_token. A configured
+// list that omits openid therefore always gets it added (and the canonical lowercase spelling enforced), so a partial
+// scope list cannot make every sign-in fail at the token exchange.
 func splitOIDCScopes(raw string) []string {
 	fields := strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' })
 	if len(fields) == 0 {
 		fields = strings.Split(defaultOIDCScopes, ",")
+	}
+	hasOpenID := false
+	for i, scope := range fields {
+		if strings.EqualFold(scope, "openid") {
+			fields[i] = "openid"
+			hasOpenID = true
+		}
+	}
+	if !hasOpenID {
+		fields = append([]string{"openid"}, fields...)
 	}
 	return fields
 }
