@@ -17,6 +17,11 @@ function ttsHTML(text = 'こんにちは', attrs = 'data-tts-lang="ja-JP" data-t
   return `<span class="engram-tts" data-tts-text="${text}" ${attrs}>${text}</span>`;
 }
 
+/** A tts element written with `|hide`: the server keeps the body and marks it as one the client may hide. */
+function ttsHideHTML(text = 'こんにちは', attrs = 'data-tts-lang="ja-JP"'): string {
+  return ttsHTML(text, `${attrs} data-tts-hide="1"`);
+}
+
 function audioHTML(attrs = ''): string {
   return `<span class="engram-audio" data-audio-src="/media/${SHA}" ${attrs}>/media/${SHA}</span>`;
 }
@@ -210,6 +215,77 @@ describe('enhanceShortcodes — speech', () => {
     enhanceShortcodes([root]);
 
     expect(synth.cancel).toHaveBeenCalled();
+  });
+});
+
+describe('enhanceShortcodes — tts body hide', () => {
+  it('moves the body into a visually hidden wrapper only with the hide flag', () => {
+    installSpeech();
+    const root = container(`<p>${ttsHideHTML()}</p><p>${ttsHTML('そのまま')}</p>`);
+
+    enhanceShortcodes([root]);
+
+    const hidden = root.querySelectorAll('[data-shortcode-body]');
+    expect(hidden).toHaveLength(1);
+    expect(hidden[0]!.classList.contains('sr-only')).toBe(true);
+    // The body is hidden, not removed: the text and the data attribute stay in the DOM.
+    expect(hidden[0]!.textContent).toBe('こんにちは');
+    expect(root.querySelectorAll('button[data-shortcode-control="tts"]')).toHaveLength(2);
+
+    // Without the flag the body stays in normal flow and no wrapper is created.
+    const plain = root.querySelectorAll('.engram-tts')[1]!;
+    expect(plain.querySelector('[data-shortcode-body]')).toBeNull();
+    expect(plain.textContent).toBe('そのまま');
+  });
+
+  it('keeps the body visible and adds no control without the speech API', () => {
+    const root = container(`<p>${ttsHideHTML()}</p>`);
+
+    enhanceShortcodes([root]);
+
+    expect(root.querySelector('button')).toBeNull();
+    expect(root.querySelector('[data-shortcode-body]')).toBeNull();
+    expect(root.textContent).toContain('こんにちは');
+  });
+
+  it('leaves the body visible when no voice speaks the requested language', () => {
+    installSpeech([{ lang: 'en-US' }]);
+    const root = container(`<p>${ttsHideHTML()}</p>`);
+
+    enhanceShortcodes([root]);
+
+    expect(root.querySelector('button')).toBeNull();
+    expect(root.querySelector('[data-shortcode-body]')).toBeNull();
+    expect(root.textContent).toContain('こんにちは');
+  });
+
+  it('restores the body when a click finds no voice for the language', () => {
+    const { synth } = installSpeech([]);
+    const root = container(`<p>${ttsHideHTML()}</p>`);
+    enhanceShortcodes([root]);
+    const body = root.querySelector('[data-shortcode-body]')!;
+    expect(body.classList.contains('sr-only')).toBe(true);
+    synth.getVoices.mockReturnValue([
+      { lang: 'en-US', name: 'voice-en', default: true, localService: true, voiceURI: 'voice-en' },
+    ]);
+
+    click(control(root));
+
+    expect(root.querySelector('button')).toBeNull();
+    expect(body.classList.contains('sr-only')).toBe(false);
+    expect(root.textContent).toContain('こんにちは');
+    expect(root.textContent).toContain('Reading aloud is not available here');
+  });
+
+  it('adds no second wrapper or control on a second enhancement', () => {
+    installSpeech();
+    const root = container(`<p>${ttsHideHTML()}</p>`);
+
+    enhanceShortcodes([root]);
+    enhanceShortcodes([root]);
+
+    expect(root.querySelectorAll('[data-shortcode-body]')).toHaveLength(1);
+    expect(root.querySelectorAll('button[data-shortcode-control]')).toHaveLength(1);
   });
 });
 

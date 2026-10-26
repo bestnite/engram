@@ -13,6 +13,11 @@
  * moved back into view when the media turns out to be unplayable. Beside the audio button sits a native range track
  * over the played segment, so the learner can see the position and seek within the same piece of audio.
  *
+ * A tts element whose `data-tts-hide="1"` flag is present hides its body the same way, but only once a speech control
+ * exists: the text stays in a visually hidden wrapper, so assistive technology still reads it and the card still says
+ * what was written, while the control takes the line. Without the flag the body is never hidden, and a control that is
+ * removed because speech turned out to be unavailable puts the body back into view.
+ *
  * Idempotence: the marker attribute `data-shortcode-enhanced` on a shortcode element records that it was processed,
  * and a WeakSet records which containers already carry the delegated listeners. A second enhancement of the same DOM
  * therefore adds neither a second button nor a second track nor a second listener, and re-rendering a container with
@@ -24,6 +29,7 @@ import { formatMessage, getLocale } from '../i18n';
 const SOURCE_MARKER = 'data-shortcode-enhanced';
 const BUTTON_MARKER = 'data-shortcode-control';
 const FALLBACK_MARKER = 'data-shortcode-fallback';
+const BODY_MARKER = 'data-shortcode-body';
 const PROGRESS_MARKER = 'data-shortcode-progress';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -99,7 +105,10 @@ interface ControlState {
   source: HTMLElement;
   button: HTMLButtonElement;
   phase: Phase;
-  /** For audio: the wrapper that holds the media path out of sight while a control exists. */
+  /**
+   * The visually hidden wrapper that holds the text a control replaced: the media path for audio, the body for a
+   * tts element that carries the hide flag. Null when nothing is hidden.
+   */
   fallback: HTMLElement | null;
   audio: HTMLAudioElement | null;
   handlers: AudioHandlers | null;
@@ -213,16 +222,22 @@ function updateButton(state: ControlState): void {
   state.button.replaceChildren(makeIcon(icon));
 }
 
-/** Moves the audio path out of sight while keeping it in the DOM for the no-control cases. */
-function hideFallback(source: HTMLElement): HTMLElement {
+/**
+ * Moves every child of the source into a visually hidden wrapper and keeps it in the DOM: the text stays available to
+ * assistive technology while the control takes the line. Nothing is deleted, so the same text is restored by removing
+ * the hidden class. `marker` records what was hidden: the media path for audio, the body for a tts element with the
+ * hide flag.
+ */
+function hideIntoWrapper(source: HTMLElement, marker: string): HTMLElement {
   const wrapper = document.createElement('span');
   wrapper.className = 'sr-only';
-  wrapper.setAttribute(FALLBACK_MARKER, '');
+  wrapper.setAttribute(marker, '');
   while (source.firstChild) wrapper.appendChild(source.firstChild);
   source.appendChild(wrapper);
   return wrapper;
 }
 
+/** Puts the hidden text back into normal flow. The wrapper stays; without the hidden class it is an inline span. */
 function showFallback(state: ControlState): void {
   state.fallback?.classList.remove('sr-only');
 }
@@ -656,9 +671,13 @@ function createControl(source: HTMLElement, kind: ControlKind): void {
     pendingSeek: null,
   };
   if (kind === 'audio') {
-    state.fallback = hideFallback(source);
+    state.fallback = hideIntoWrapper(source, FALLBACK_MARKER);
     state.audio = document.createElement('audio');
     state.audio.preload = 'none';
+  } else if (source.getAttribute('data-tts-hide') === '1') {
+    // The hide flag is the card author asking for the body to give way to the control; the wrapper keeps the text in
+    // the DOM, and markUnavailable puts it back into view when the control cannot work.
+    state.fallback = hideIntoWrapper(source, BODY_MARKER);
   }
   updateButton(state);
   source.insertBefore(button, source.firstChild);
