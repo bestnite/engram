@@ -491,28 +491,21 @@ describe('unified note editor — create mode', () => {
     expect(get(routeStore).path).toBe(pathBefore);
   });
 
-  it('inserts a picked media item into the focused field and re-runs the preview', async () => {
-    vi.spyOn(apiClient, 'listMedia').mockResolvedValue({
-      items: [{ sha256: SHA, mime: 'image/png', bytes: 4, url: PREVIEW_URL, created_at: '' }],
-      next_cursor: '',
-    });
-    const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+  it('carries no page-level insertion section: each field has its own tools instead', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
 
     mountEditor({ id: '5' });
     await flush();
 
-    (target.querySelector('[data-testid="media-picker-toggle"]') as HTMLButtonElement).click();
-    await flush();
-    (target.querySelector(`[data-testid="media-item-${SHA}"]`) as HTMLButtonElement).click();
-    await flush();
-
-    expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe(
-      `![](${PREVIEW_URL})`
-    );
-
-    await vi.advanceTimersByTimeAsync(500);
-    await flush();
-    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: `![](${PREVIEW_URL})` });
+    // The field selector, the page-level upload, the library picker and the standalone composer are gone.
+    expect(target.querySelector('[data-testid="media-field"]')).toBeNull();
+    expect(target.querySelector('[data-testid="media-upload-input"]')).toBeNull();
+    expect(target.querySelector('[data-testid="media-picker-toggle"]')).toBeNull();
+    expect(target.querySelector('[data-testid="shortcode-insert"]')).toBeNull();
+    // The tools sit in the label row of the field they write into, and no dialog is open until one is asked for.
+    expect(target.querySelector('[data-testid="note-field-front-insert-image"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="note-field-front-insert-shortcode"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="note-insert-dialog"]')).toBeNull();
   });
 });
 
@@ -691,9 +684,9 @@ describe('unified note editor — lifecycle and routes', () => {
 });
 
 /**
- * Insertion into a card field, from both directions: the shortcode panel (caret-aware, invalid
- * input refuses), and the media controls (the written form depends on the file's mime type, so an
- * audio pick or upload becomes the audio shortcode instead of a broken image reference).
+ * Insertion into a card field. Both tools are opened from the label row of the field they write into,
+ * and the caret that field reported decides where the text lands. The image dialog writes the Markdown
+ * image form, the composer writes source text, and neither introduces a second field selector.
  */
 describe('unified note editor — inserting content', () => {
   function fieldValue(testid: string): string {
@@ -709,25 +702,154 @@ describe('unified note editor — inserting content', () => {
     flushSync();
   }
 
+  function toolbarButton(key: string, action: 'image' | 'shortcode'): HTMLButtonElement {
+    return target.querySelector(`[data-testid="note-field-${key}-insert-${action}"]`) as HTMLButtonElement;
+  }
+
+  /** The dialog is portalled to body, so its own queries never start at the mounted view. */
+  function dialog(): HTMLElement | null {
+    return document.body.querySelector('[data-testid="note-insert-dialog"]');
+  }
+
+  function inDialog<T extends Element = HTMLElement>(testid: string): T {
+    const node = document.body.querySelector(`[data-testid="${testid}"]`);
+    if (!node) throw new Error(`missing [data-testid="${testid}"] inside the insertion dialog`);
+    return node as T;
+  }
+
+  /** Opens the dialog from a field's own toolbar and hands back the button that must regain focus. */
+  function openDialog(key: string, action: 'image' | 'shortcode'): HTMLButtonElement {
+    const button = toolbarButton(key, action);
+    button.focus();
+    button.click();
+    flushSync();
+    return button;
+  }
+
+  function click(node: Element): void {
+    node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+    node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    flushSync();
+  }
+
   function typeTtsBody(body: string): void {
-    const input = target.querySelector('[data-testid="shortcode-tts-body"]') as HTMLInputElement;
+    const input = inDialog<HTMLInputElement>('shortcode-tts-body');
     input.value = body;
     input.dispatchEvent(new Event('input', { bubbles: true }));
     flushSync();
   }
 
   function insertShortcode(): void {
-    (target.querySelector('[data-testid="shortcode-insert-submit"]') as HTMLButtonElement).click();
-    flushSync();
+    click(inDialog('shortcode-insert-submit'));
   }
 
   function dropFile(testid: string, file: File): void {
-    const input = target.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement;
+    const input = inDialog<HTMLInputElement>(testid);
     Object.defineProperty(input, 'files', { configurable: true, value: [file] });
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  it('splices the shortcode at the caret of the field chosen by the existing selector', async () => {
+  /** A closed dialog leaves the DOM one animation frame later, and the fake clock owns that frame. */
+  async function settleDialog(): Promise<void> {
+    await vi.advanceTimersByTimeAsync(50);
+    await flush();
+  }
+
+  it('inserts a picked library picture into the field whose toolbar opened the dialog', async () => {
+    vi.spyOn(apiClient, 'listMedia').mockResolvedValue({
+      items: [
+        { sha256: 'b'.repeat(64), mime: 'audio/mpeg', bytes: 9, url: `/media/${'b'.repeat(64)}`, created_at: '' },
+        { sha256: SHA, mime: 'image/png', bytes: 4, url: PREVIEW_URL, created_at: '' },
+      ],
+      next_cursor: '',
+    });
+    const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+    setCaret('note-field-front', 0, 0);
+
+    const trigger = openDialog('front', 'image');
+    expect(dialog()).toBeTruthy();
+    click(inDialog('note-insert-image-picker-toggle'));
+    await flush();
+
+    // The dialog writes the Markdown image form, so pictures are the only thing it offers.
+    expect(document.body.querySelector(`[data-testid="note-insert-image-item-${SHA}"]`)).toBeTruthy();
+    expect(document.body.querySelector(`[data-testid="note-insert-image-item-${'b'.repeat(64)}"]`)).toBeNull();
+
+    click(inDialog(`note-insert-image-item-${SHA}`));
+    await flush();
+
+    expect(fieldValue('note-field-front')).toBe(`![](${PREVIEW_URL})`);
+    await settleDialog();
+    expect(dialog()).toBeNull();
+    // The dialog closes on the insert and hands focus back to the button that opened it.
+    expect(document.activeElement).toBe(trigger);
+
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+    expect(previewNote).toHaveBeenLastCalledWith('5', 'basic', { front: `![](${PREVIEW_URL})` });
+  });
+
+  it('uploads a picture into the field and refuses a non-image in the image dialog', async () => {
+    const upload = vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
+      sha256: SHA,
+      mime: 'image/png',
+      bytes: 4,
+      url: PREVIEW_URL,
+    });
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    const trigger = openDialog('front', 'image');
+    dropFile('note-insert-image-input', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
+    await flush();
+
+    // Refused before any request, with a reason, and the dialog stays open on this field.
+    expect(upload).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.image_only'));
+    expect(dialog()).toBeTruthy();
+    expect(fieldValue('note-field-front')).toBe('');
+
+    dropFile('note-insert-image-input', new File(['picture'], 'picture.png', { type: 'image/png' }));
+    await flush();
+
+    expect(upload).toHaveBeenCalledWith('5', expect.any(File));
+    expect(fieldValue('note-field-front')).toBe(`![](${PREVIEW_URL})`);
+    await settleDialog();
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.inserted'));
+  });
+
+  it('writes no image reference when the server detects a different type in the bytes', async () => {
+    // The upload endpoint accepts audio too: a file named .png can come back as a sound, and the image
+    // form would then point at bytes the browser cannot draw.
+    vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
+      sha256: 'b'.repeat(64),
+      mime: 'audio/mpeg',
+      bytes: 9,
+      url: `/media/${'b'.repeat(64)}`,
+    });
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    openDialog('front', 'image');
+    dropFile('note-insert-image-input', new File(['sound'], 'sound.png', { type: 'image/png' }));
+    await flush();
+
+    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.image_only'));
+    expect(fieldValue('note-field-front')).toBe('');
+    expect(dialog()).toBeTruthy();
+  });
+
+  it('splices a shortcode at the caret of the field whose toolbar opened the dialog', async () => {
     vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
 
     mountEditor({ id: '5' });
@@ -736,11 +858,24 @@ describe('unified note editor — inserting content', () => {
     await flush();
     setCaret('note-field-front', 2, 2);
 
+    const trigger = openDialog('front', 'shortcode');
+    // The dialog names the one field it writes into, and there is no field selector anywhere in it.
+    expect(dialog()!.textContent).toContain(
+      formatMessage('zh-CN', 'shortcode.insert.target', { field: formatMessage('zh-CN', 'note.fields.front') })
+    );
+    expect(dialog()!.querySelector('[data-testid="media-field"]')).toBeNull();
+    // The composer is titled by the dialog, so it does not print its own heading a second time.
+    expect(dialog()!.querySelector('h2')).toBeNull();
+
     typeTtsBody('x');
-    expect(target.querySelector('[data-testid="shortcode-insert-preview"]')?.textContent).toBe('{{tts:x}}');
+    expect(inDialog('shortcode-insert-preview').textContent).toBe('{{tts:x}}');
     insertShortcode();
+    await flush();
 
     expect(fieldValue('note-field-front')).toBe('ab{{tts:x}}cdef');
+    await settleDialog();
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('replaces the selected text of the target field', async () => {
@@ -752,6 +887,7 @@ describe('unified note editor — inserting content', () => {
     await flush();
     setCaret('note-field-front', 1, 4);
 
+    openDialog('front', 'shortcode');
     typeTtsBody('x');
     insertShortcode();
 
@@ -765,6 +901,7 @@ describe('unified note editor — inserting content', () => {
     mountEditor({ id: '5', noteId: '9' });
     await flush();
 
+    openDialog('front', 'shortcode');
     typeTtsBody('x');
     insertShortcode();
     await flush();
@@ -776,70 +913,46 @@ describe('unified note editor — inserting content', () => {
     expect(apiClient.previewNote).toHaveBeenLastCalledWith('5', 'basic', { front: 'Q\n{{tts:x}}', back: 'A' });
   });
 
-  it('keeps the insert button unavailable while the panel input is invalid', async () => {
+  it('writes into the field whose own toolbar was used, not the one holding the caret', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+    setField('note-field-front', 'front-text');
+    await flush();
+    setCaret('note-field-front', 5, 5);
+
+    openDialog('back', 'shortcode');
+    typeTtsBody('x');
+    insertShortcode();
+    await flush();
+
+    expect(fieldValue('note-field-back')).toBe('{{tts:x}}');
+    expect(fieldValue('note-field-front')).toBe('front-text');
+  });
+
+  it('keeps the insert button unavailable while the dialog input is invalid', async () => {
     vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
 
     mountEditor({ id: '5' });
     await flush();
 
-    const button = target.querySelector('[data-testid="shortcode-insert-submit"]') as HTMLButtonElement;
+    openDialog('front', 'shortcode');
+    const button = inDialog<HTMLButtonElement>('shortcode-insert-submit');
     expect(button.disabled).toBe(true);
     typeTtsBody('x');
     expect(button.disabled).toBe(false);
   });
 
-  it('inserts the audio shortcode for a picked audio file and keeps the image form for a picture', async () => {
-    vi.spyOn(apiClient, 'listMedia').mockResolvedValue({
-      items: [
-        { sha256: 'b'.repeat(64), mime: 'audio/mpeg', bytes: 9, url: `/media/${'b'.repeat(64)}`, created_at: '' },
-        { sha256: SHA, mime: 'image/png', bytes: 4, url: PREVIEW_URL, created_at: '' },
-      ],
-      next_cursor: '',
-    });
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
+  it('offers no toolbar on a lines field, which stores an array', async () => {
     mountEditor({ id: '5' });
     await flush();
 
-    (target.querySelector('[data-testid="media-picker-toggle"]') as HTMLButtonElement).click();
-    await flush();
-    (target.querySelector(`[data-testid="media-item-${'b'.repeat(64)}"]`) as HTMLButtonElement).click();
-    await flush();
-    expect(fieldValue('note-field-front')).toBe(`{{audio:/media/${'b'.repeat(64)}}}`);
+    await selectKind(formatMessage('zh-CN', 'notes.kind.list'));
 
-    setField('note-field-front', '');
-    await flush();
-    (target.querySelector(`[data-testid="media-item-${SHA}"]`) as HTMLButtonElement).click();
-    await flush();
-    expect(fieldValue('note-field-front')).toBe(`![](${PREVIEW_URL})`);
+    expect(target.querySelector('[data-testid="note-field-prompt-toolbar"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="note-field-items-toolbar"]')).toBeNull();
+    expect(target.querySelector('[data-testid="note-field-ordered-toolbar"]')).toBeNull();
   });
 
-  it('inserts the audio shortcode for an uploaded audio file and the image form for an uploaded picture', async () => {
-    const AUDIO_SHA = 'd'.repeat(64);
-    vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
-      sha256: AUDIO_SHA,
-      mime: 'audio/mpeg',
-      bytes: 9,
-      url: `/media/${AUDIO_SHA}`,
-    });
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-
-    dropFile('media-upload-input', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
-    await flush();
-    expect(fieldValue('note-field-front')).toBe(`{{audio:/media/${AUDIO_SHA}}}`);
-
-    vi.mocked(apiClient.uploadDeckMedia).mockResolvedValue({
-      sha256: SHA,
-      mime: 'image/png',
-      bytes: 4,
-      url: PREVIEW_URL,
-    });
-    setField('note-field-front', '');
-    dropFile('media-upload-input', new File(['picture'], 'picture.png', { type: 'image/png' }));
-    await flush();
-    expect(fieldValue('note-field-front')).toBe(`![](${PREVIEW_URL})`);
-  });
 });

@@ -315,13 +315,11 @@ export const zhCN: LocaleCatalog = {
   'notes.bulk_failed': '批量操作失败',
   'media.open': '从媒体库选择',
   'media.heading': '媒体库',
-  'media.field': '插入到字段',
   'media.loading': '正在加载媒体...',
   'media.failed': '无法加载媒体库。',
   'media.retry': '重试',
   'media.empty': '媒体库为空。',
   'media.next': '加载更多',
-  'media.upload.label': '上传图片或音频',
   'media.upload.button': '上传',
   'media.upload.uploading': '上传中...',
   'media.upload.inserted': '已插入。',
@@ -1181,7 +1179,6 @@ export const zhCN: LocaleCatalog = {
   'dropzone.release': '松开即可添加',
   'dropzone.remove': '移除文件',
   'dropzone.import_hint': '支持 .edeck 与 .zip',
-  'dropzone.media_hint': '选中后立即上传，并插入到上面选择的字段',
   // Lists and the batch action bar.
   'selection.toolbar': '批量操作',
   'selection.count': '已选 {count} 项',
@@ -1474,4 +1471,12 @@ export const zhCN: LocaleCatalog = {
   // ---- TTS shortcode hide flag ----
   'shortcode.insert.tts.hide': '隐藏朗读内容',
   'help.shortcode.tts.hide': '单独写 hide 时，可朗读时隐藏正文，不可朗读时恢复显示。',
+  // ---- Note editor: insertion tools on the field itself ----
+  'note_edit.insert_image': '在「{field}」插入图片',
+  'note_edit.insert_shortcode': '在「{field}」插入短代码',
+  'note_edit.image_dialog.hint': '图片会插入到这个字段中光标所在的位置。',
+  'note_edit.image_dialog.upload': '上传图片',
+  'note_edit.image_dialog.formats': 'PNG、JPEG、WebP 或 GIF，选择后立即上传。',
+  'note_edit.image_dialog.empty': '媒体库里还没有图片。',
+  'media.upload.image_only': '这里只能插入图片。',
 };

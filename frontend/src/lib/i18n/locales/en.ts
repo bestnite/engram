@@ -315,13 +315,11 @@ export const en: LocaleCatalog = {
   'notes.bulk_failed': 'Bulk action failed',
   'media.open': 'Choose from library',
   'media.heading': 'Media library',
-  'media.field': 'Insert into field',
   'media.loading': 'Loading media...',
   'media.failed': 'Could not load the media library.',
   'media.retry': 'Retry',
   'media.empty': 'No media yet.',
   'media.next': 'Load more',
-  'media.upload.label': 'Upload an image or audio file',
   'media.upload.button': 'Upload',
   'media.upload.uploading': 'Uploading...',
   'media.upload.inserted': 'Inserted.',
@@ -1182,7 +1180,6 @@ export const en: LocaleCatalog = {
   'dropzone.release': 'Release to add the file',
   'dropzone.remove': 'Remove file',
   'dropzone.import_hint': 'Accepts .edeck and .zip',
-  'dropzone.media_hint': 'Uploads right away and inserts into the field selected above',
   // Lists and the batch action bar.
   'selection.toolbar': 'Bulk actions',
   'selection.count': '{count} selected',
@@ -1476,4 +1473,12 @@ export const en: LocaleCatalog = {
   'shortcode.insert.tts.hide': 'Hide the spoken text',
   'help.shortcode.tts.hide':
     'The bare word hide keeps the body out of sight while it can be read aloud, and shows it again whenever it cannot.',
+  // ---- Note editor: insertion tools on the field itself ----
+  'note_edit.insert_image': 'Insert an image into “{field}”',
+  'note_edit.insert_shortcode': 'Insert a shortcode into “{field}”',
+  'note_edit.image_dialog.hint': 'The picture goes in where the cursor sat in this field.',
+  'note_edit.image_dialog.upload': 'Upload an image',
+  'note_edit.image_dialog.formats': 'PNG, JPEG, WebP or GIF. Uploads as soon as you choose it.',
+  'note_edit.image_dialog.empty': 'No pictures in the media library yet.',
+  'media.upload.image_only': 'Only a picture can be inserted here.',
 };

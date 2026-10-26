@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildShortcode,
   insertSource,
-  mediaInsertion,
   type ShortcodeBuild,
   type ShortcodeInput,
 } from '../lib/shortcode-source';
@@ -383,16 +382,4 @@ describe('insertSource', () => {
       });
     });
   }
-});
-
-describe('mediaInsertion', () => {
-  it('writes the audio shortcode for an audio file', () => {
-    expect(mediaInsertion(MEDIA, 'audio/mpeg')).toBe(`{{audio:${MEDIA}}}`);
-    expect(mediaInsertion(MEDIA, 'audio/ogg')).toBe(`{{audio:${MEDIA}}}`);
-  });
-
-  it('keeps the Markdown image form for a picture', () => {
-    expect(mediaInsertion(MEDIA, 'image/png')).toBe(`![](${MEDIA})`);
-    expect(mediaInsertion(MEDIA, 'image/svg+xml')).toBe(`![](${MEDIA})`);
-  });
 });

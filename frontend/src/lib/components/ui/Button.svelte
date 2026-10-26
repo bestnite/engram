@@ -25,6 +25,10 @@
     /** Icon-only buttons must have a label: it replaces visible text for screen readers. */
     label?: string;
     title?: string;
+    /** Disclosure state, for a button that shows and hides another element. */
+    ariaExpanded?: boolean;
+    /** Id of the element that button shows and hides. */
+    ariaControls?: string;
     onclick?: (event: MouseEvent) => void;
     children?: Snippet;
   }
@@ -40,6 +44,8 @@
     testId,
     label,
     title,
+    ariaExpanded,
+    ariaControls,
     onclick,
     children,
   }: Props = $props();
@@ -51,7 +57,7 @@
 </script>
 
 {#if href}
-  <a {href} class={classes} data-testid={testId} aria-label={label} {title}>
+  <a {href} class={classes} data-testid={testId} aria-label={label} {title} aria-expanded={ariaExpanded} aria-controls={ariaControls}>
     {@render children?.()}
   </a>
 {:else}
@@ -63,6 +69,8 @@
     data-testid={testId}
     aria-label={label}
     {title}
+    aria-expanded={ariaExpanded}
+    aria-controls={ariaControls}
     onclick={onclick}
   >
     {#if loading}

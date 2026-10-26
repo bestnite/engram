@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../i18n';
   import { arrayToLines, linesToArray, type FieldSpec } from '../card-fields';
+  import { Braces, ImagePlus } from '@lucide/svelte';
   import Checkbox from './ui/Checkbox.svelte';
   import Select from './ui/Select.svelte';
   import HelpTip from './ui/HelpTip.svelte';
@@ -10,6 +11,10 @@
    *
    * Field order and control shape come from the server's card-kind self-description, and this component contains no per-kind branching
    * business logic; views therefore no longer hand fields to the user as raw JSON to edit.
+   *
+   * A single-string field also carries its own insertion actions in the label row. The tools sit on the
+   * field they write into, so the author never leaves the field to find them, and a view that does not
+   * pass the two callbacks renders the same form without a toolbar.
    */
   interface Props {
     specs: FieldSpec[];
@@ -23,9 +28,22 @@
      * view that always appends simply omits the prop.
      */
     oncaret?: (key: string, start: number, end: number) => void;
+    /**
+     * Opens the image insertion dialog for one field. The button is handed over as the second argument so
+     * the view can put focus back on it when the dialog closes.
+     */
+    oninsertimage?: (key: string, trigger: HTMLButtonElement) => void;
+    /** Opens the shortcode dialog for one field; the same trigger hand-back as `oninsertimage`. */
+    oninsertshortcode?: (key: string, trigger: HTMLButtonElement) => void;
   }
 
-  let { specs, fields, testIdPrefix = 'note-field', oncaret }: Props = $props();
+  let { specs, fields, testIdPrefix = 'note-field', oncaret, oninsertimage, oninsertshortcode }: Props = $props();
+
+  // The compact insertion controls share one look: small enough for a 390px label row, but a 28px
+  // target so a finger still hits it.
+  const toolbarButton =
+    'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
 
   /**
    * Fields needing syntax help → the language pack key for the help text. The help goes into a question-mark popover next to the label instead of into the label:
@@ -100,6 +118,11 @@
 
 {#each specs as spec (spec.key)}
   {@const helpKey = fieldHelp[spec.key]}
+  <!-- Only a control that holds one string can take an inline insertion: a `lines` field stores an
+       array, and neither an image reference nor a shortcode can address one element of it. -->
+  {@const inlineInsertable = spec.control === 'text' || spec.control === 'textarea'}
+  {@const showToolbar = inlineInsertable && Boolean(oninsertimage || oninsertshortcode)}
+  {@const fieldLabel = $t('note.fields.' + spec.key)}
   <div class="block">
     {#if spec.control === 'bool'}
       <div class="flex items-center gap-2">
@@ -107,21 +130,49 @@
           testId="{testIdPrefix}-{spec.key}"
           checked={Boolean(fields[spec.key])}
           onCheckedChange={(checked) => (fields[spec.key] = checked)}
-          label={$t('note.fields.' + spec.key)}
+          label={fieldLabel}
         />
-        <span class="text-sm text-foreground/80">{$t('note.fields.' + spec.key)}</span>
+        <span class="text-sm text-foreground/80">{fieldLabel}</span>
       </div>
     {:else}
-      <span class="flex items-center gap-1 text-sm font-medium text-foreground">
-        {$t('note.fields.' + spec.key)}
+      <div class="flex items-center gap-1">
+        <span class="min-w-0 text-sm font-medium text-foreground">{fieldLabel}</span>
         {#if helpKey}
           <HelpTip
             testId="{testIdPrefix}-{spec.key}-help"
-            label={$t('note.fields.' + spec.key)}
+            label={fieldLabel}
             text={$t(helpKey)}
           />
         {/if}
-      </span>
+        {#if showToolbar}
+          <div class="ml-auto flex shrink-0 items-center gap-0.5" data-testid="{testIdPrefix}-{spec.key}-toolbar">
+            {#if oninsertimage}
+              <button
+                type="button"
+                class={toolbarButton}
+                data-testid="{testIdPrefix}-{spec.key}-insert-image"
+                aria-label={$t('note_edit.insert_image', { field: fieldLabel })}
+                title={$t('note_edit.insert_image', { field: fieldLabel })}
+                onclick={(event) => oninsertimage(spec.key, event.currentTarget)}
+              >
+                <ImagePlus class="size-4" aria-hidden="true" />
+              </button>
+            {/if}
+            {#if oninsertshortcode}
+              <button
+                type="button"
+                class={toolbarButton}
+                data-testid="{testIdPrefix}-{spec.key}-insert-shortcode"
+                aria-label={$t('note_edit.insert_shortcode', { field: fieldLabel })}
+                title={$t('note_edit.insert_shortcode', { field: fieldLabel })}
+                onclick={(event) => oninsertshortcode(spec.key, event.currentTarget)}
+              >
+                <Braces class="size-4" aria-hidden="true" />
+              </button>
+            {/if}
+          </div>
+        {/if}
+      </div>
       {#if spec.control === 'textarea'}
         <textarea
           data-testid="{testIdPrefix}-{spec.key}"

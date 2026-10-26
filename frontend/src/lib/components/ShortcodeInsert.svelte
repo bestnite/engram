@@ -14,10 +14,10 @@
   /**
    * Insertion panel for the three shortcodes the renderer expands.
    *
-   * It writes source text only — never rendered HTML — into the field the editor's own "insert into
-   * field" select points at, so the panel carries no second field selector. The exact source is
-   * shown before insertion, and insertion is unavailable while the current input would be printed
-   * verbatim by the server instead of expanding.
+   * It writes source text only — never rendered HTML — into the field the host opened it for, so the
+   * panel carries no field selector of its own. The exact source is shown before insertion, and
+   * insertion is unavailable while the current input would be printed verbatim by the server instead
+   * of expanding.
    */
   interface Props {
     /** Localized label of the field the insertion targets, shown so the target is unambiguous. */
@@ -26,9 +26,14 @@
     targetWritable: boolean;
     /** Receives the finished source text; the view owns caret handling and writes the field. */
     oninsert: (source: string) => void;
+    /**
+     * Whether the panel prints its own heading and rule. A dialog that already carries the panel's title
+     * passes false, so the same heading is not printed twice.
+     */
+    showHeading?: boolean;
   }
 
-  let { targetLabel, targetWritable, oninsert }: Props = $props();
+  let { targetLabel, targetWritable, oninsert, showHeading = true }: Props = $props();
 
   const uid = $props.id();
 
@@ -122,15 +127,17 @@
 
 <section
   data-testid="shortcode-insert"
-  aria-labelledby="{uid}-heading"
-  class="space-y-4 rounded-xl border border-input p-4"
+  aria-labelledby={showHeading ? `${uid}-heading` : undefined}
+  class="space-y-4 {showHeading ? 'rounded-xl border border-input p-4' : ''}"
 >
   <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-    <h2 id="{uid}-heading" class="text-lg font-semibold">{$t('shortcode.insert.heading')}</h2>
+    {#if showHeading}
+      <h2 id="{uid}-heading" class="text-lg font-semibold">{$t('shortcode.insert.heading')}</h2>
+    {/if}
     <a
       href="/help/shortcodes"
       data-testid="shortcode-insert-help"
-      class="rounded-sm text-sm text-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      class="ml-auto rounded-sm text-sm text-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       {$t('shortcode.insert.help')}
     </a>

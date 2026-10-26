@@ -175,14 +175,6 @@ export interface Caret {
 }
 
 /**
- * The text to write for one media item: an audio file becomes the audio shortcode (the Markdown
- * image form produced a broken image before), everything else keeps the image reference.
- */
-export function mediaInsertion(url: string, mime: string): string {
-  return mime.toLowerCase().startsWith('audio/') ? `{{audio:${url}}}` : `![](${url})`;
-}
-
-/**
  * Splices `source` into `text` at a known caret, or appends it on its own line when no caret is
  * known. A known caret from before the text changed is clamped into the current length, so a
  * stale position can never corrupt the field.

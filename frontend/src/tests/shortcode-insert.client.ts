@@ -19,7 +19,7 @@ let instance: ReturnType<typeof mount> | null = null;
 let target: HTMLElement;
 let inserted: string[];
 
-function setup(props: { targetLabel?: string; targetWritable?: boolean } = {}): void {
+function setup(props: { targetLabel?: string; targetWritable?: boolean; showHeading?: boolean } = {}): void {
   target = document.createElement('div');
   document.body.appendChild(target);
   inserted = [];
@@ -28,6 +28,7 @@ function setup(props: { targetLabel?: string; targetWritable?: boolean } = {}): 
     props: {
       targetLabel: props.targetLabel ?? '正面',
       targetWritable: props.targetWritable ?? true,
+      showHeading: props.showHeading ?? true,
       oninsert: (source: string) => inserted.push(source),
     },
   });
@@ -274,5 +275,14 @@ describe('ShortcodeInsert — target and help', () => {
 
     expect(errorText()).toBe(formatMessage('zh-CN', 'shortcode.insert.error.not_text_field'));
     expect(insertButton().disabled).toBe(true);
+  });
+});
+
+describe('ShortcodeInsert — heading', () => {
+  it('prints no heading when a dialog already titles the panel, and keeps the syntax link', () => {
+    setup({ showHeading: false });
+
+    expect(target.querySelector('h2')).toBeNull();
+    expect(el<HTMLAnchorElement>('shortcode-insert-help').getAttribute('href')).toBe('/help/shortcodes');
   });
 });

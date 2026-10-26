@@ -12,16 +12,18 @@
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import Select from '../components/ui/Select.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Dialog from '../components/ui/Dialog.svelte';
   import { toast } from '../components/ui/toast';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import Dropzone from '../components/ui/Dropzone.svelte';
   import { emptyFields, toFormFields, toPayloadFields } from '../card-fields';
   import { cardTypes, fieldsForKind, kindOrder, loadCardTypes } from '../card-types';
-  import { insertSource, mediaInsertion, type Caret } from '../shortcode-source';
+  import { insertSource, type Caret } from '../shortcode-source';
+  import { uploadErrorKeyFor } from '../media-upload';
 
   // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
-  // (card type, fields, tags, media and live preview). A successful create always jumps back to the deck page, leaving no second "create another" path.
+  // (card type, fields with their own insertion tools, tags and live preview). A successful create always jumps back to the deck page, leaving no second "create another" path.
   const deckId = $derived($routeStore.params.id || '');
   const noteId = $derived($routeStore.params.noteId || '');
   const isCreate = $derived(noteId === '');
@@ -41,12 +43,18 @@
   let loadError = $state(false);
   let metaError = $state(false);
 
-  let selectedField = $state('');
-  // Upload control state: it shares the insertion path with the media library picker (the editor's media facet).
-  let uploading = $state(false);
   // Last known caret per field, reported by NoteFieldsForm. A field the user never placed the caret in has
   // no entry, so an insertion there appends to the end instead of guessing a position.
   let carets = $state<Record<string, Caret>>({});
+
+  // Insertion dialog: the field its toolbar opened it for, which of the two actions is on offer, and the
+  // button that asked for it, so focus goes back to that button when the dialog closes. The toolbar's
+  // field is the target, which is why the dialog carries no field selector.
+  let insertKey = $state('');
+  let insertMode = $state<'image' | 'shortcode'>('image');
+  let insertOpen = $state(false);
+  let insertTrigger = $state<HTMLButtonElement | null>(null);
+  let imageUploading = $state(false);
 
   // Preview state machine: empty nothing entered yet / loading generating (the previous result may still be attached) / ready has a result /
   // incomplete fields are not complete (server 400) / error fetching failed.
@@ -68,33 +76,18 @@
     kindOrder($cardTypes).map((value) => ({ value, label: $t(`notes.kind.${value}` as never) }))
   );
 
-  // Fields that can take media: only text-type fields can carry Markdown image references.
-  const textFields = $derived(
-    fieldsForKind($cardTypes, kind)
-      .filter((spec) => spec.control === 'text' || spec.control === 'textarea' || spec.control === 'lines')
-      .map((spec) => ({ value: spec.key, label: $t('note.fields.' + spec.key) }))
-  );
-
   // Stable signature of the field contents: a change to kind or any field yields a new string, and the live preview reschedules off it.
   const signature = $derived(JSON.stringify({ kind, fields: collectFields() }));
 
-  // The shortcode panel writes into the same field the media controls do; its heading names that field
-  // so the target is never in doubt, and a field that does not hold one string cannot take an insertion.
-  const selectedFieldLabel = $derived(textFields.find((option) => option.value === selectedField)?.label ?? '');
-  const targetWritable = $derived(fieldText(selectedField) !== null);
+  // Localized name of the field the open dialog writes into; the dialog titles itself with it, so the
+  // target is never in doubt even though nothing on screen is a field selector any more.
+  const insertFieldLabel = $derived(insertKey === '' ? '' : $t('note.fields.' + insertKey));
 
   // Draft signature: a change to kind, the submitted fields or the tags yields a new string (tags use the parsed array, so changing only whitespace
   // does not count as a new change either). Saving is only responsible for the snapshot at the moment of submission, so it is used to tell whether the draft was already changed when the response lands.
   const draftSignature = $derived(
     JSON.stringify({ kind, fields: collectFields(), tags: parseTags() })
   );
-
-  function firstTextField(nextKind: string): string {
-    const spec = fieldsForKind($cardTypes, nextKind).find(
-      (item) => item.control === 'text' || item.control === 'textarea' || item.control === 'lines'
-    );
-    return spec ? spec.key : '';
-  }
 
   function parseTags(): string[] {
     return tagsText.split(',').map((tag) => tag.trim()).filter(Boolean);
@@ -131,7 +124,6 @@
     const known = new Set(fieldsForKind($cardTypes, loaded.kind).map((spec) => spec.key));
     unknownKeys = Object.fromEntries(Object.entries(loaded.fields).filter(([key]) => !known.has(key)));
     tagsText = loaded.tags.join(', ');
-    selectedField = firstTextField(loaded.kind);
   }
 
   async function load(): Promise<void> {
@@ -156,7 +148,6 @@
         kind = initialKind;
         fields = emptyFields(fieldsForKind($cardTypes, initialKind));
         unknownKeys = {};
-        selectedField = firstTextField(initialKind);
         previewReady = catalogReady;
       } else {
         // Read the target card directly by its public id; a card that does not belong to the deck in the address is treated as "does not exist", and cross-deck editing is forbidden.
@@ -186,7 +177,6 @@
   function changeKind(next: string): void {
     kind = next;
     fields = emptyFields(fieldsForKind($cardTypes, next));
-    selectedField = firstTextField(next);
     // The caret offsets belonged to the previous field set; keeping them would splice into unrelated text.
     carets = {};
   }
@@ -224,39 +214,59 @@
   }
 
   /**
-   * Inserts the selected media item into the selected field. A sound file has to become the audio
-   * shortcode: the Markdown image form would request bytes the browser cannot decode as an image, so
-   * choosing audio used to produce a broken picture and no way to write the shortcode at all.
+   * Opens one of the two insertion dialogs for a field. The dialog's target is the field whose label row
+   * holds the button, so neither dialog carries a field selector of its own.
    */
-  function insertMedia(item: { url: string; mime: string }): boolean {
-    return insertInto(selectedField, mediaInsertion(item.url, item.mime));
+  function openInsert(mode: 'image' | 'shortcode', key: string, trigger: HTMLButtonElement): void {
+    insertMode = mode;
+    insertKey = key;
+    insertTrigger = trigger;
+    insertOpen = true;
   }
 
-  // uploadErrorKeyFor maps the server's stable error code to a localized key; unknown codes fall back to the generic failure message.
-  function uploadErrorKeyFor(err: unknown): string {
-    const code = err instanceof ApiClientError ? err.code : '';
-    const map: Record<string, string> = {
-      media_too_large: 'media.upload.too_large',
-      media_mime_not_allowed: 'media.upload.mime_not_allowed',
-      media_magic_mismatch: 'media.upload.magic_mismatch',
-      media_quota_exceeded: 'media.upload.quota_exceeded',
-      media_missing_file: 'media.upload.file_required',
-    };
-    return map[code] || 'media.upload.failed';
+  /** Closes the dialog and puts focus back on the toolbar button that opened it. */
+  function closeInsert(): void {
+    insertOpen = false;
+    const trigger = insertTrigger;
+    insertTrigger = null;
+    if (trigger) void tick().then(() => trigger.focus());
   }
 
-  // Selecting or dropping a file uploads right away: on success it is inserted into the selected field, sharing the same insertMedia as the media library picker.
-  async function uploadMedia(file: File): Promise<void> {
-    uploading = true;
+  /**
+   * Writes one source string into the dialog's field, then closes the dialog. The toolbar only exists on
+   * fields that hold a single string, so the write is not refusable; the result is still honoured so a
+   * field that cannot take it never closes a dialog as if something had been written.
+   */
+  function insertAtTarget(source: string): void {
+    if (insertInto(insertKey, source)) closeInsert();
+  }
+
+  /**
+   * Uploads one picture and inserts its Markdown image reference into the dialog's field. A file that is
+   * not an image is refused before any request: the upload endpoint also accepts audio, and an audio file
+   * written as an image would produce a picture the browser cannot decode.
+   */
+  async function uploadImage(file: File): Promise<void> {
+    if (!file.type.toLowerCase().startsWith('image/')) {
+      toast.error($t('media.upload.image_only'));
+      return;
+    }
+    imageUploading = true;
     try {
-      const result = await apiClient.uploadDeckMedia(deckId, file);
+      const uploaded = await apiClient.uploadDeckMedia(deckId, file);
       if (disposed) return;
-      if (insertMedia(result)) toast.success($t('media.upload.inserted'));
+      // The server decides the type from the bytes, so a file whose name promised an image can come back as something else.
+      if (!uploaded.mime.toLowerCase().startsWith('image/')) {
+        toast.error($t('media.upload.image_only'));
+        return;
+      }
+      insertAtTarget(`![](${uploaded.url})`);
+      toast.success($t('media.upload.inserted'));
     } catch (err) {
       if (disposed) return;
       toast.error($t(uploadErrorKeyFor(err)));
     } finally {
-      if (!disposed) uploading = false;
+      if (!disposed) imageUploading = false;
     }
   }
 
@@ -440,7 +450,8 @@
   {:else}
     <form onsubmit={submit} data-testid="note-editor-form">
       <div class="grid gap-8 lg:grid-cols-2 lg:items-start">
-        <!-- Left column: input. Card type, fields, tags and media, separated into sections by headings and dividers, no longer nested in cards. -->
+        <!-- Left column: input. Card type, its fields (each with its own insertion tools) and the tags; the
+             insertion tools sit on the field they write into, so nothing has to be scrolled to on a phone. -->
         <div class="min-w-0 space-y-8">
           <div class="space-y-5">
             <div>
@@ -460,43 +471,13 @@
               {fields}
               testIdPrefix="note-field"
               oncaret={trackCaret}
+              oninsertimage={(key, trigger) => openInsert('image', key, trigger)}
+              oninsertshortcode={(key, trigger) => openInsert('shortcode', key, trigger)}
             />
 
             <label class="block text-sm font-medium text-foreground">{$t('note_edit.tags')}
               <input data-testid="note-tags-editor" bind:value={tagsText} class="field-input text-sm mt-1.5 w-full" />
             </label>
-          </div>
-
-          <!-- The picker only references the original image; lazy loading and the height cap are handled by CSS. -->
-          <div class="space-y-4 border-t border-border pt-6">
-            <label class="block text-sm font-medium text-foreground">{$t('media.field')}
-              <Select
-                class="mt-1.5 w-full"
-                bind:value={selectedField}
-                testId="media-field"
-                options={textFields}
-              />
-            </label>
-            <!-- Upload area: the outer element is already the note form, so a form cannot be nested here; selecting uploads immediately, and success goes through the same insertMedia as the picker. -->
-            <div class="space-y-2">
-              <span class="block text-sm font-medium text-foreground">{$t('media.upload.label')}</span>
-              <Dropzone
-                testId="media-upload-input"
-                name="file"
-                disabled={uploading}
-                hint={uploading ? $t('media.upload.uploading') : $t('dropzone.media_hint')}
-                onfile={uploadMedia}
-              />
-            </div>
-            <!-- Media library picker: data comes from GET /api/v1/media JSON; after selection it shares the same insertMedia as upload. -->
-            <MediaPicker onselect={insertMedia} />
-            <!-- Shortcode panel: it writes into the field chosen just above, which is why it sits inside this
-                 section instead of carrying a second field selector of its own. -->
-            <ShortcodeInsert
-              targetLabel={selectedFieldLabel}
-              targetWritable={targetWritable}
-              oninsert={(source) => insertInto(selectedField, source)}
-            />
           </div>
         </div>
 
@@ -566,5 +547,51 @@
         </Button>
       </div>
     </form>
+
+    <!-- One dialog serves both insertion actions; which one is open, and for which field, is the state above.
+         Its content is not inside the form element: an upload or a pick writes into the form model, and neither
+         panel submits anything. -->
+    <Dialog
+      bind:open={insertOpen}
+      onOpenChange={(open) => {
+        if (!open) closeInsert();
+      }}
+      title={insertMode === 'image' ? $t('note_edit.insert_image', { field: insertFieldLabel }) : $t('shortcode.insert.heading')}
+      description={insertMode === 'image' ? $t('note_edit.image_dialog.hint') : undefined}
+      size="lg"
+      testId="note-insert-dialog"
+    >
+      {#if insertMode === 'image'}
+        <div class="space-y-4">
+          <div class="space-y-2">
+            <span class="block text-sm font-medium text-foreground">{$t('note_edit.image_dialog.upload')}</span>
+            <!-- Uploading right away keeps the dialog to one decision: the file is inserted where the caret was, and the
+                 dialog closes. A file that is not an image is refused with a message and the dialog stays open. -->
+            <Dropzone
+              testId="note-insert-image-input"
+              accept="image/*"
+              disabled={imageUploading}
+              hint={imageUploading ? $t('media.upload.uploading') : $t('note_edit.image_dialog.formats')}
+              onfile={uploadImage}
+            />
+          </div>
+          <!-- Only pictures are listed: this dialog writes the Markdown image form, which cannot address a sound file. -->
+          <MediaPicker
+            mimePrefix="image/"
+            idPrefix="note-insert-image"
+            size="sm"
+            emptyLabel={$t('note_edit.image_dialog.empty')}
+            onselect={(item) => insertAtTarget(`![](${item.url})`)}
+          />
+        </div>
+      {:else}
+        <ShortcodeInsert
+          showHeading={false}
+          targetLabel={insertFieldLabel}
+          targetWritable={fieldText(insertKey) !== null}
+          oninsert={insertAtTarget}
+        />
+      {/if}
+    </Dialog>
   {/if}
 </Page>
