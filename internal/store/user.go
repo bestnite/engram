@@ -68,6 +68,20 @@ func (s *UserStore) SetPasswordHash(ctx context.Context, id uint64, hash string)
 	return s.SetPasswordHashTx(ctx, s.db, id, hash)
 }
 
+// SetInitialPasswordHash sets the password hash only while the column is still NULL, and reports whether a row changed.
+//
+// The "still NULL" condition lives in the UPDATE rather than in a read-then-write: a concurrent first-password request must not overwrite
+// a hash written after the caller's read, because that would reset a credential without asking for it.
+func (s *UserStore) SetInitialPasswordHash(ctx context.Context, id uint64, hash string) (bool, error) {
+	res := s.db.WithContext(ctx).Model(&User{}).
+		Where("id = ? AND password_hash IS NULL", id).
+		Update("password_hash", hash)
+	if res.Error != nil {
+		return false, fmt.Errorf("set initial password hash: %w", res.Error)
+	}
+	return res.RowsAffected > 0, nil
+}
+
 // SetPasswordHashTx changes the password hash column inside the transaction given by the caller.
 // A password reset needs it: the password write and the session/API key revocation in the same transaction must either all take effect or none.
 func (s *UserStore) SetPasswordHashTx(ctx context.Context, tx *gorm.DB, id uint64, hash string) error {

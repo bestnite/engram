@@ -279,6 +279,47 @@ func TestIdentityUnlink(t *testing.T) {
 	}
 }
 
+func TestIdentityBindCallbackProviderError(t *testing.T) {
+	srv, db := newAuthServer(t)
+	p := newStubOIDC(t)
+	seedOIDC(t, srv, db, p, auth.PolicyClosed)
+	owner := createTestUser(t, srv, "owner", "Sup3rSecret!", store.RoleUser, true)
+	cookies, csrf := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+	state, _ := bindURL(t, srv, cookies, csrf)
+
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?error=access_denied&state="+state, cookies)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("cancelled bind callback = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/settings/security?identity=failed" {
+		t.Fatalf("cancelled bind Location = %q, want identity=failed", loc)
+	}
+	if _, ok := srv.oidc.TakePending(state); ok {
+		t.Fatal("cancelled bind left the pending state in the table")
+	}
+	if rows := identityRows(t, db, owner.ID); len(rows) != 0 {
+		t.Fatalf("cancelled bind wrote %d identities, want 0", len(rows))
+	}
+}
+
+func TestOIDCLoginProviderErrorStillGoesToLogin(t *testing.T) {
+	srv, db := newAuthServer(t)
+	p := newStubOIDC(t)
+	seedOIDC(t, srv, db, p, auth.PolicyClosed)
+	state, _ := startOIDCLogin(t, srv)
+
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?error=access_denied&state="+state, nil)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("cancelled login callback = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/login" {
+		t.Fatalf("cancelled login Location = %q, want /login", loc)
+	}
+	if _, ok := srv.oidc.TakePending(state); ok {
+		t.Fatal("cancelled login left the pending state in the table")
+	}
+}
+
 func TestIdentityUnlinkLastCredential(t *testing.T) {
 	ctx := context.Background()
 	srv, db := newAuthServer(t)

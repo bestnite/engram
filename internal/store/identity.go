@@ -12,6 +12,9 @@ import (
 // ErrIdentityNotFound means no link was found under the given conditions; upper layers use it to tell this apart from a real database failure.
 var ErrIdentityNotFound = errors.New("identity not found")
 
+// ErrLastCredential means removing the identity would leave a passwordless account with no way to sign in.
+var ErrLastCredential = errors.New("last sign-in credential")
+
 // IdentityStore wraps GORM access to the identities table.
 // The (provider, subject) unique constraint is defined by the model, so a duplicate link errors on Create.
 type IdentityStore struct {
@@ -94,4 +97,47 @@ func (s *IdentityStore) Delete(ctx context.Context, id uint64) error {
 		return ErrIdentityNotFound
 	}
 	return nil
+}
+
+// DeleteForUser deletes identity id when it belongs to userID, refusing to remove the last sign-in method of a passwordless account.
+//
+// The guard and the delete share one transaction. Counting the user's identities and then deleting outside a transaction is a write-skew
+// race: two concurrent unlinks both see two rows and both delete, leaving an account with no local password and no identity. The no-op
+// update on the user row is the lock: PostgreSQL takes a row lock on that row and SQLite upgrades the transaction to a writer lock, so the
+// second transaction waits and then observes the first one's delete. A no-op write is used instead of SELECT ... FOR UPDATE because SQLite
+// has no row locks and rejects that syntax, while a plain UPDATE works on both drivers.
+func (s *IdentityStore) DeleteForUser(ctx context.Context, id, userID uint64) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("UPDATE users SET password_hash = password_hash WHERE id = ?", userID).Error; err != nil {
+			return fmt.Errorf("lock user row: %w", err)
+		}
+		var user User
+		if err := tx.Select("id", "password_hash").First(&user, "id = ?", userID).Error; err != nil {
+			return fmt.Errorf("load user for identity unlink: %w", err)
+		}
+		var target Identity
+		if err := tx.First(&target, "id = ? AND user_id = ?", id, userID).Error; err != nil {
+			if IsNotFound(err) {
+				return ErrIdentityNotFound
+			}
+			return fmt.Errorf("load identity for unlink: %w", err)
+		}
+		if user.PasswordHash == nil {
+			var count int64
+			if err := tx.Model(&Identity{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
+				return fmt.Errorf("count user identities: %w", err)
+			}
+			if count <= 1 {
+				return ErrLastCredential
+			}
+		}
+		res := tx.Delete(&Identity{}, "id = ? AND user_id = ?", id, userID)
+		if res.Error != nil {
+			return fmt.Errorf("delete identity: %w", res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return ErrIdentityNotFound
+		}
+		return nil
+	})
 }

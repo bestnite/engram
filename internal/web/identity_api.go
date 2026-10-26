@@ -153,31 +153,16 @@ func (s *Server) identityUnlink(c *gin.Context) {
 		apiAuthError(c, http.StatusNotFound, "identity_not_found", "Identity not found.")
 		return
 	}
-	fresh, err := s.users.ByID(ctx, u.ID)
-	if err != nil {
-		s.logger.Error("identity unlink: load user failed", "user_id", u.ID, "error", err)
-		apiAuthError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
-		return
-	}
-	if fresh.PasswordHash == nil {
-		rows, err := s.identities.ListForUser(ctx, u.ID)
-		if err != nil {
-			s.logger.Error("identity unlink: list identities failed", "user_id", u.ID, "error", err)
-			apiAuthError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
-			return
-		}
-		if len(rows) <= 1 {
+	if err := s.identities.DeleteForUser(ctx, ident.ID, u.ID); err != nil {
+		switch {
+		case errors.Is(err, store.ErrLastCredential):
 			apiAuthError(c, http.StatusConflict, "last_credential", "This is the last way to sign in; set a password before unlinking.")
-			return
-		}
-	}
-	if err := s.identities.Delete(ctx, ident.ID); err != nil {
-		if errors.Is(err, store.ErrIdentityNotFound) {
+		case errors.Is(err, store.ErrIdentityNotFound):
 			apiAuthError(c, http.StatusNotFound, "identity_not_found", "Identity not found.")
-			return
+		default:
+			s.logger.Error("identity unlink: delete identity failed", "user_id", u.ID, "identity_id", ident.ID, "error", err)
+			apiAuthError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		}
-		s.logger.Error("identity unlink: delete identity failed", "user_id", u.ID, "identity_id", ident.ID, "error", err)
-		apiAuthError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		return
 	}
 	s.audit(ctx, store.AuditEntry{

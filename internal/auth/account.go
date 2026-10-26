@@ -249,8 +249,13 @@ func (s *AccountService) SetInitialPassword(ctx context.Context, userID uint64, 
 	if err != nil {
 		return err
 	}
-	if err := s.users.SetPasswordHash(ctx, userID, hash); err != nil {
+	changed, err := s.users.SetInitialPasswordHash(ctx, userID, hash)
+	if err != nil {
 		return err
+	}
+	if !changed {
+		// The conditional update matched no row: another request set the hash after the read above.
+		return ErrPasswordAlreadySet
 	}
 	if keepSessionID != "" {
 		return s.sessions.RevokeAllForUserExcept(ctx, userID, keepSessionID, s.now())

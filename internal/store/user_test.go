@@ -6,6 +6,36 @@ import (
 	"time"
 )
 
+func TestUserStoreSetInitialPasswordHash(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			users := NewUserStore(db)
+			u := &User{Username: "oidc", Email: "oidc@example.com", DisplayName: "OIDC",
+				Role: RoleUser, Status: StatusActive, Locale: "zh-CN", Timezone: "UTC", CreatedAt: time.Now().UTC()}
+			if err := users.Create(ctx, u); err != nil {
+				t.Fatalf("Create() error = %v", err)
+			}
+			first := "$argon2id$v=19$m=1024,t=1,p=1$c2FsdA$aGFzaA"
+			changed, err := users.SetInitialPasswordHash(ctx, u.ID, first)
+			if err != nil || !changed {
+				t.Fatalf("first SetInitialPasswordHash() = (%v, %v), want (true, nil)", changed, err)
+			}
+			changed, err = users.SetInitialPasswordHash(ctx, u.ID, "$argon2id$v=19$m=1024,t=1,p=1$c2FsdA$b3RoZXI")
+			if err != nil || changed {
+				t.Fatalf("second SetInitialPasswordHash() = (%v, %v), want (false, nil)", changed, err)
+			}
+			got, err := users.ByID(ctx, u.ID)
+			if err != nil || got.PasswordHash == nil || *got.PasswordHash != first {
+				t.Fatalf("stored hash = %v (err %v), want the first hash", got.PasswordHash, err)
+			}
+		})
+	}
+}
+
 func TestUserStoreCRUD(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

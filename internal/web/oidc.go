@@ -32,6 +32,12 @@ func (s *Server) oidcFailToLogin(c *gin.Context, reason string) {
 	c.Redirect(http.StatusSeeOther, "/login")
 }
 
+// oidcProviderError reports the error the provider returned on the authorization request and sends the browser back to the login page.
+func (s *Server) oidcProviderError(c *gin.Context) {
+	s.logger.Info("oidc: provider returned an error", "error", c.Query("error"), "description", c.Query("error_description"))
+	s.oidcFailToLogin(c, "provider_error")
+}
+
 // oidcLoadConfig reads the effective OIDC configuration; with no database wired up it counts as unconfigured.
 func (s *Server) oidcLoadConfig(c *gin.Context) (*auth.OIDCConfig, error) {
 	if s.db == nil {
@@ -131,21 +137,26 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		return
 	}
 
-	// The provider itself returned an error (user cancelled, insufficient scope, etc.): carry it into the log verbatim and go back to the login page.
-	if perr := strings.TrimSpace(c.Query("error")); perr != "" {
-		s.logger.Info("oidc: provider returned an error", "error", perr, "description", c.Query("error_description"))
-		s.oidcFailToLogin(c, "provider_error")
-		return
-	}
-
+	// Read the provider error and the state first: a bind that the user cancelled at the provider must still consume its one-time state
+	// and go back to the settings page, not to the login page (the user is still signed in). For an unusable state the provider error keeps
+	// today's precedence, because no intent can be recovered from it.
+	perr := strings.TrimSpace(c.Query("error"))
 	state := strings.TrimSpace(c.Query("state"))
 	if state == "" {
+		if perr != "" {
+			s.oidcProviderError(c)
+			return
+		}
 		s.oidcFailToLogin(c, "missing_state")
 		return
 	}
 	// state is one-time: unknown (forged or replayed) or expired are both refused here (negative case).
 	pending, ok := s.oidc.TakePending(state)
 	if !ok {
+		if perr != "" {
+			s.oidcProviderError(c)
+			return
+		}
 		s.logger.Info("oidc: callback with an unknown or expired state")
 		s.oidcRecordFailure(ctx, "state")
 		s.oidcFailToLogin(c, "state_rejected")
@@ -155,7 +166,16 @@ func (s *Server) oidcCallback(c *gin.Context) {
 	// A state started from the settings page is a bind, not a login: it must attach the identity to the session that asked for it and
 	// must never establish a new session or touch the login policy.
 	if pending.Intent == auth.PendingIntentBind {
+		if perr != "" {
+			s.logger.Info("oidc: provider returned an error during bind", "error", perr, "description", c.Query("error_description"))
+			c.Redirect(http.StatusSeeOther, "/settings/security?identity=failed")
+			return
+		}
 		s.oidcBindCallback(c, cfg, pending)
+		return
+	}
+	if perr != "" {
+		s.oidcProviderError(c)
 		return
 	}
 
