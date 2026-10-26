@@ -7,13 +7,34 @@ into any Engram instance through the web UI, the CLI or MCP. A package carries d
 content only — the exporter's review progress and history stay behind unless the export
 explicitly included them.
 
-## Decks
+## Layout
+
+Decks are grouped by the language their content is written in, one directory per
+language tag: `decks/<language>/`. A deck for learning Japanese sits under `ja/` because
+its cards are Japanese; a general-knowledge deck written in English sits under `en/`.
+
+## Library
+
+### 中文 — [`decks/zh-CN/`](./zh-CN/)
 
 | File | Deck | Content | Notes | Cards | Tags |
 | :--- | :--- | :--- | ---: | ---: | :--- |
-| [`百化分.edeck`](./百化分.edeck) | 百化分 | 资料分析 percentage ↔ fraction drills, 36 prompts each way (`50% = 1/？` and `1/2.8 ≈ ？（百分数）`) | 72 | 72 | `百化分` |
-| [`平方数与常用幂.edeck`](./平方数与常用幂.edeck) | 平方数与常用幂 | Speed-arithmetic recall: perfect squares 11²–30², the growth powers \((1+r)^{n}\) for r = 1–10% and 15–50%, and five common square roots | 89 | 89 | `平方数` `常用幂` `开方` |
-| [`花生十三高频成语 1000 词.edeck`](./花生十三高频成语%201000%20词.edeck) | 花生十三高频成语 1000 词 | 993 high-frequency idioms and content words from the 花生十三 lecture handout, tagged by the handout's own category and sub-category names | 993 | 993 | 291 tags, e.g. `中华文明传统文化`, `搭档配合`, `需要积累的其他词语` |
+| [`百化分.edeck`](./zh-CN/百化分.edeck) | 百化分 | 资料分析 percentage ↔ fraction drills, 36 prompts each way (`50% = 1/？` and `1/2.8 ≈ ？（百分数）`) | 72 | 72 | `百化分` |
+| [`平方数与常用幂.edeck`](./zh-CN/平方数与常用幂.edeck) | 平方数与常用幂 | Speed-arithmetic recall: perfect squares 11²–30², the growth powers \\((1+r)^{n}\\) for r = 1–10% and 15–50%, and five common square roots | 89 | 89 | `平方数` `常用幂` `开方` |
+| [`花生十三高频成语 1000 词.edeck`](./zh-CN/花生十三高频成语%201000%20词.edeck) | 花生十三高频成语 1000 词 | 993 high-frequency idioms and content words from the 花生十三 lecture handout, tagged by the handout's own category and sub-category names | 993 | 993 | 291 tags, e.g. `中华文明传统文化`, `搭档配合`, `需要积累的其他词语` |
+
+Every deck above is validated twice before it is committed: the four JSON entries are
+checked against [`schema/deck-package.schema.json`](../schema/deck-package.schema.json),
+and the package is imported with `--dry-run` into a local instance, which must report
+zero errors.
+
+### Content licences
+
+A deck's note text carries whatever licence its source imposes, which is not necessarily
+the licence of the code in this repository. Every deck in the library today was written for
+this repository from the maintainer's own study material, so the note text carries the
+repository's licence. A deck derived from an external word list or dictionary must record
+its source and licence here.
 
 ## Importing a deck
 
@@ -42,10 +63,10 @@ do for `serve`.
 
 ```bash
 # validate the package without writing anything
-engram import --package decks/百化分.edeck --user <id|username> --dry-run
+engram import --package decks/zh-CN/百化分.edeck --user <id|username> --dry-run
 
 # import it as a new deck
-engram import --package decks/百化分.edeck --user <id|username>
+engram import --package decks/zh-CN/百化分.edeck --user <id|username>
 ```
 
 `--user` is required: the package is filed under one account and the CLI never guesses
@@ -87,4 +108,6 @@ The format is described, with validation instructions, in
    was exported from. Drop the field, or replace it with a neutral key.
 3. Validate it: import with `--dry-run` as shown above, and check the JSON form with
    `check-jsonschema` as described in [`schema/README.md`](../schema/README.md).
-4. Add a row to the table above.
+4. Put the file in the directory of the language its content is written in
+   (`decks/en/`, `decks/ja/`, `decks/zh-CN/`, …), creating the directory if this is the
+   first deck in that language, and add a row to that language's table above.
