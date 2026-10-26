@@ -18,6 +18,8 @@ import (
 var (
 	// ErrIdentityLinkDenied means that under the closed policy there is neither an existing link nor an automatic match, so only an administrator can link manually.
 	ErrIdentityLinkDenied = errors.New("identity link denied by registration policy")
+	// ErrIdentityAlreadyLinked means the (provider, subject) pair is already bound to a different internal account.
+	ErrIdentityAlreadyLinked = errors.New("identity already linked to another user")
 )
 
 // oidcPlaceholderEmailSuffix is the placeholder email suffix synthesized for OIDC accounts when there is no email claim.
@@ -199,9 +201,71 @@ func (s *IdentityLinkService) Resolve(ctx context.Context, profile OAuthProfile,
 	}
 }
 
+// Bind attaches one external identity to an already authenticated internal account.
+//
+// It is the self-service counterpart of Resolve: the caller has decided which account the identity belongs to, so no registration policy
+// and no email matching take part. Binding the same pair to the same account is idempotent and writes no second audit row; binding it to
+// another account is refused, because one external identity can only ever name one internal user.
+func (s *IdentityLinkService) Bind(ctx context.Context, profile OAuthProfile, userID uint64) error {
+	if userID == 0 {
+		return errors.New("auth: user id is required")
+	}
+	provider := strings.TrimSpace(profile.Provider)
+	subject := strings.TrimSpace(profile.Subject)
+	if provider == "" || subject == "" {
+		return errors.New("auth: provider and subject are required")
+	}
+
+	existing, err := s.store.FindIdentity(ctx, provider, subject)
+	if err != nil {
+		return fmt.Errorf("find identity: %w", err)
+	}
+	if existing != nil {
+		if existing.UserID == userID {
+			return nil
+		}
+		return ErrIdentityAlreadyLinked
+	}
+
+	email := normalizeEmail(profile.Email)
+	if err := s.createLink(ctx, profile, userID, email); err != nil {
+		// A concurrent bind can win the unique constraint between the lookup above and the insert: re-read to tell a duplicate
+		// from a genuine failure, and answer with the same decision the pre-check would have produced.
+		again, findErr := s.store.FindIdentity(ctx, provider, subject)
+		if findErr == nil && again != nil {
+			if again.UserID == userID {
+				return nil
+			}
+			return ErrIdentityAlreadyLinked
+		}
+		return err
+	}
+	s.recordLinkAudit(ctx, userID, profile, map[string]any{
+		"provider":       provider,
+		"subject":        subject,
+		"email_verified": profile.EmailVerified,
+		"via":            "self_bind",
+		"user_id":        userID,
+	})
+	return nil
+}
+
 // link writes one identities row and records an audit entry; an audit failure only logs in English and does not roll back the link, because
 // the audit trail is best effort.
 func (s *IdentityLinkService) link(ctx context.Context, profile OAuthProfile, userID uint64, email string) error {
+	if err := s.createLink(ctx, profile, userID, email); err != nil {
+		return err
+	}
+	s.recordLinkAudit(ctx, userID, profile, map[string]any{
+		"provider":       profile.Provider,
+		"subject":        profile.Subject,
+		"email_verified": profile.EmailVerified,
+	})
+	return nil
+}
+
+// createLink writes the identities row only; audit is the caller's job, because a self-bind and a first login record different details.
+func (s *IdentityLinkService) createLink(ctx context.Context, profile OAuthProfile, userID uint64, email string) error {
 	ident := &store.Identity{
 		UserID:   userID,
 		Provider: profile.Provider,
@@ -214,25 +278,25 @@ func (s *IdentityLinkService) link(ctx context.Context, profile OAuthProfile, us
 	if err := s.store.LinkIdentity(ctx, ident); err != nil {
 		return fmt.Errorf("link identity: %w", err)
 	}
+	return nil
+}
+
+// recordLinkAudit writes one identity.link row; an audit failure only logs in English and does not affect a link already made.
+func (s *IdentityLinkService) recordLinkAudit(ctx context.Context, userID uint64, profile OAuthProfile, detail map[string]any) {
 	if s.audit == nil {
-		return nil
+		return
 	}
 	err := s.audit.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		Action:     store.ActionIdentityLink,
 		TargetType: "user",
 		TargetID:   store.Ptr(userID),
-		Detail: map[string]any{
-			"provider":       profile.Provider,
-			"subject":        profile.Subject,
-			"email_verified": profile.EmailVerified,
-		},
+		Detail:     detail,
 	})
 	if err != nil {
 		s.logger.Error("record identity link audit failed",
 			"user_id", userID, "provider", profile.Provider, "error", err)
 	}
-	return nil
 }
 
 // oidcUsername generates a deterministic and unique login name for auto-created accounts: the email local part (oidc when there is no email)

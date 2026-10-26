@@ -332,6 +332,10 @@ func New(addr string, deps Deps) (*Server, error) {
 		profile.GET("/profile", s.profileGet)
 		profile.PATCH("/profile", deps.Sessions.CSRFMiddleware(), s.profilePatch)
 		profile.PATCH("/settings/locale", deps.Sessions.CSRFMiddleware(), s.localePatch)
+		// A user's own external identities: reading is a plain authenticated read, binding and unlinking are credential changes.
+		profile.GET("/settings/identities", s.identityList)
+		profile.POST("/settings/identities/bind", deps.Sessions.CSRFMiddleware(), s.identityBindStart)
+		profile.DELETE("/settings/identities/:id", deps.Sessions.CSRFMiddleware(), s.identityUnlink)
 		if deps.Accounts != nil {
 			profile.PATCH("/settings/password", deps.Sessions.CSRFMiddleware(), s.passwordPatch)
 		}

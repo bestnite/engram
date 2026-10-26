@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -99,6 +100,7 @@ func (s *Server) oidcStart(c *gin.Context) {
 		Verifier:    pkce.Verifier,
 		RedirectURI: redirectURI,
 		ExpiresAt:   time.Now().UTC().Add(10 * time.Minute),
+		Intent:      auth.PendingIntentLogin,
 	}) {
 		// The pending-login table is full: refuse new starts, so anonymous requests cannot grow the in-memory table.
 		// Log only in English with a generic hint; never echo state / nonce.
@@ -150,6 +152,13 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		return
 	}
 
+	// A state started from the settings page is a bind, not a login: it must attach the identity to the session that asked for it and
+	// must never establish a new session or touch the login policy.
+	if pending.Intent == auth.PendingIntentBind {
+		s.oidcBindCallback(c, cfg, pending)
+		return
+	}
+
 	code := strings.TrimSpace(c.Query("code"))
 	if code == "" {
 		s.oidcFailToLogin(c, "missing_code")
@@ -198,6 +207,47 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		Detail: map[string]any{"method": "oidc", "provider": profile.Provider, "decision": string(decision.Kind)},
 	})
 	c.Redirect(http.StatusSeeOther, "/")
+}
+
+// oidcBindCallback finishes an identity bind started from the settings page. The caller must be the same account that started the flow:
+// a bind attaches credentials to an account, so a state completed under another browser session must be refused before the code is exchanged.
+// Every outcome redirects back to the settings page with a stable query value; no session, login audit or login policy is involved.
+func (s *Server) oidcBindCallback(c *gin.Context, cfg *auth.OIDCConfig, pending auth.PendingAuth) {
+	ctx := c.Request.Context()
+	current, ok := auth.CurrentUser(c)
+	if !ok || current.ID != pending.UserID {
+		s.logger.Info("oidc: bind callback does not match the pending session")
+		c.Redirect(http.StatusSeeOther, "/settings/security?identity=session")
+		return
+	}
+	code := strings.TrimSpace(c.Query("code"))
+	if code == "" {
+		s.logger.Info("oidc: bind callback has no authorization code")
+		c.Redirect(http.StatusSeeOther, "/settings/security?identity=failed")
+		return
+	}
+	party, err := s.oidc.Client(ctx, cfg, pending.RedirectURI)
+	if err != nil {
+		s.logger.Error("oidc: discovery failed during bind callback", "issuer", cfg.Issuer, "error", err)
+		c.Redirect(http.StatusSeeOther, "/settings/security?identity=failed")
+		return
+	}
+	claims, err := s.oidc.ExchangeCode(ctx, party, code, pending.Verifier, pending.Nonce)
+	if err != nil {
+		s.logger.Error("oidc: bind token exchange or id_token verification failed", "error", err)
+		c.Redirect(http.StatusSeeOther, "/settings/security?identity=failed")
+		return
+	}
+	profile := cfg.ProfileFromClaims(party.Issuer(), claims.Claims)
+	switch err := s.identityLink.Bind(ctx, profile, current.ID); {
+	case err == nil:
+		c.Redirect(http.StatusSeeOther, "/settings/security?identity=linked")
+	case errors.Is(err, auth.ErrIdentityAlreadyLinked):
+		c.Redirect(http.StatusSeeOther, "/settings/security?identity=taken")
+	default:
+		s.logger.Error("oidc: bind identity failed", "user_id", current.ID, "error", err)
+		c.Redirect(http.StatusSeeOther, "/settings/security?identity=failed")
+	}
 }
 
 // oidcRecordFailure leaves an audit record for a state validation failure (no user_id: identity is unknown at this point).

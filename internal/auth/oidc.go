@@ -149,13 +149,22 @@ func orDefault(raw, def string) string {
 	return def
 }
 
-// PendingAuth is the temporary state saved when a login is started, retrieved by state at callback time.
+// Pending-intent values. An empty Intent on a pending entry is treated as a login, so entries written before this field existed keep working.
+const (
+	PendingIntentLogin = "login"
+	PendingIntentBind  = "bind"
+)
+
+// PendingAuth is the temporary state saved when a login or an identity bind is started, retrieved by state at callback time.
 // Nonce / Verifier are sensitive values that live only in memory and go neither into a cookie nor into the database.
+// Intent selects what the callback does; UserID names the caller on a bind and is zero for a login.
 type PendingAuth struct {
 	Nonce       string
 	Verifier    string
 	RedirectURI string
 	ExpiresAt   time.Time
+	Intent      string
+	UserID      uint64
 }
 
 // cachedRelyingParty is a TTL'd cache entry for the library client; issuer is used for invalidation per issuer.
