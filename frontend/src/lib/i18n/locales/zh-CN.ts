@@ -1337,7 +1337,6 @@ export const zhCN: LocaleCatalog = {
   'shortcode.tts.stop': '停止朗读',
   'shortcode.tts.unavailable': '此设备暂不支持朗读',
   'shortcode.audio.play': '播放音频',
-  'shortcode.audio.stop': '停止播放',
   'shortcode.audio.unavailable': '无法加载这段音频',
   // ---- API 密钥过期时间 (/settings/keys) ----
   'keys.expiry.label': '有效期',

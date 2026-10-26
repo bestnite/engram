@@ -1338,7 +1338,6 @@ export const en: LocaleCatalog = {
   'shortcode.tts.stop': 'Stop reading',
   'shortcode.tts.unavailable': 'Reading aloud is not available here',
   'shortcode.audio.play': 'Play audio',
-  'shortcode.audio.stop': 'Stop audio',
   'shortcode.audio.unavailable': 'This audio could not be loaded',
   // ---- API key expiry (/settings/keys) ----
   'keys.expiry.label': 'Expires',
