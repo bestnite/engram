@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { matchRoute, parseQuery, viewKey } from '../lib/router';
 import type { RouteDefinition } from '../lib/router/types';
+import ShortcodesHelpView from '../lib/views/ShortcodesHelpView.svelte';
 
 describe('SPA router matching and query parsing', () => {
   it('parses query strings correctly', () => {
@@ -106,6 +107,19 @@ describe('auth entry routes after the SPA cutover', () => {
     expect(matchRoute('/login', prodRoutes).route?.name).toBe('login');
     expect(matchRoute('/register', prodRoutes).route?.name).toBe('register');
     expect(matchRoute('/setup', prodRoutes).route?.name).toBe('setup');
+  });
+});
+
+describe('shortcode reference route', () => {
+  it('serves /help/shortcodes from the help view', async () => {
+    const { routes: prodRoutes } = await import('../lib/router/routes');
+    const match = matchRoute('/help/shortcodes', prodRoutes);
+
+    expect(match.route?.name).toBe('help-shortcodes');
+    expect(match.route?.component).toBe(ShortcodesHelpView);
+    expect(match.params).toEqual({});
+    // A neighbouring help path is not swallowed by the new route.
+    expect(matchRoute('/help', prodRoutes).route).toBeNull();
   });
 });
 

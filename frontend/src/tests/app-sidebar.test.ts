@@ -81,6 +81,28 @@ describe('AppSidebar', () => {
     expect(html).toContain('href="/admin/users"');
   });
 
+  it('shows the help entry to every signed-in user, not only to admins', () => {
+    // The documentation entry sits beside settings and must never be gated by the admin-only condition.
+    signIn('user');
+    const { html } = render(AppSidebar);
+    expect(html).toContain('href="/help/shortcodes"');
+    expect(html).toContain('帮助');
+    expect(html).not.toContain('href="/admin/users"');
+  });
+
+  it('marks the help entry as the current page on /help and /help/shortcodes', () => {
+    signIn('user');
+    routeStore.set(matchRoute('/help/shortcodes'));
+    expect(render(AppSidebar).html).toMatch(/href="\/help\/shortcodes"[^>]*aria-current="page"/);
+
+    // /help has no view of its own yet, but a visit there still belongs to the help section.
+    routeStore.set({ path: '/help', params: {}, query: {}, search: '', route: null });
+    expect(render(AppSidebar).html).toMatch(/href="\/help\/shortcodes"[^>]*aria-current="page"/);
+
+    routeStore.set(matchRoute('/settings'));
+    expect(render(AppSidebar).html).not.toMatch(/href="\/help\/shortcodes"[^>]*aria-current="page"/);
+  });
+
   it('lists deck shortcuts and marks the current deck as the active page', () => {
     signIn('user');
     sidebarDecks.set({ decks: [{ id: 'd1', name: '日语 N2 词汇', due: 36 }], totalDue: 36 });
@@ -99,6 +121,7 @@ describe('AppSidebar', () => {
     const { html } = render(AppSidebar, { props: { collapsed: true, onToggleCollapse: () => {} } });
     expect(html).not.toContain('data-testid="sidebar-decks"');
     expect(html).toContain('title="统计"');
+    expect(html).toContain('title="帮助"');
     expect(html).toContain('展开侧边栏');
   });
 });
