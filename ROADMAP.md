@@ -72,8 +72,12 @@ two tables. The shortcode elements and the render attributes it adds are additiv
 - No configuration key and no environment variable was added, removed or renamed.
 - The deck-package and note-import schemas keep their shape; the cloze description now documents
   the `\alt` separator.
-- The only payload change is additive: the optional `option_order` field on due cards (REST and
-  the `get_due_cards` MCP result) and on the `POST /api/v1/review/render` response.
+- The only payload shape change is additive: the optional `option_order` field on due cards (REST
+  and the `get_due_cards` MCP result) and on the `POST /api/v1/review/render` response.
+- The rendered card and mail HTML now follows GitHub Flavored Markdown: tables, strikethrough,
+  bare-URL links and task-list checkboxes are rendered, and a single newline inside a paragraph
+  becomes `<br>`. The response shapes and the schema are unchanged; content with no single newline
+  and no GFM syntax renders as before.
 - One request is validated more strictly, with no shape change: `POST /api/v1/keys` rejects an
   `expires_at` that is not strictly after the current time, where it previously created a key
   that was already unusable. Omitting the field, or sending a future time, behaves as before.
@@ -97,9 +101,10 @@ two tables. The shortcode elements and the render attributes it adds are additiv
 | Expiry on create must be in the future | `POST /api/v1/keys` now rejects an `expires_at` that is not strictly after the current time with `400 invalid_request` and creates nothing, instead of returning a key that is dead on arrival. A request that omits the field, or sends a future time, behaves exactly as before. | Tightened — a client that sent a past `expires_at` previously succeeded and now fails, though the key it received was unusable |
 | Imported presets stop duplicating the default preset | Importing a package into a new deck derives the preset name from the deck when the package carries no name or the reserved `Default`, and makes that name unique among the importer's presets, so an import can no longer add a preset named `Default`. Migration `0009_unique_default_preset_names` renames the duplicate `Default` rows earlier imports left behind, keeping the oldest row as the account's own default and leaving every `decks.preset_id` and `deck_member_settings.preset_id` reference in place. | No — preset names only. A deck that references a renamed preset keeps it, while a deck created afterwards starts from the account's own default preset again |
 | Card content shortcodes | Card text accepts `{{tts:…}}`, `{{audio:…}}` and `{{ruby:…}}`; the server expands each into an element carrying named `data-*` attributes and leaves the body visible, and the review page and editor preview attach speech and audio controls to those attributes. An unknown name, a malformed parameter or a body containing `{{` stays literal; code spans and fenced blocks stay literal; mail bodies render plain text. | No — content without a shortcode renders exactly as before |
-| Shortcode controls | Audio has a seekable progress track over the played segment; `tts` accepts the bare `hide` flag, which hides the body only while a speech control exists and restores it when it cannot be read aloud; both controls fit inside their line box with a 40×40 pointer target. | No — the added `data-tts-hide` attribute is additive; existing shortcodes and content are unchanged |
+| Shortcode controls | Audio has a seekable progress track with a visible elapsed/total clock, pause/resume from the paused position, and five-second back/forward buttons; `tts` accepts the bare `hide` flag, which hides the body only while a speech control exists and restores it when it cannot be read aloud; both controls fit inside their line box with a 40×40 pointer target. | No — the added `data-tts-hide` attribute is additive; existing shortcodes and content are unchanged |
 | Shortcode reference and insertion tools | `/help/shortcodes` documents the grammar, parameters and fallback rules in both languages; each editor text field carries its own image and shortcode tools, with the media library and composer in dialogs. | No |
 | Note editor layout | Insertion tools sit on the field they write into; below `lg` the live preview is an on-demand drawer; the page-level field selector, upload area and standalone composer block are gone. | No — screen layout only |
+| Markdown dialect | Card content and mail templates render GitHub Flavored Markdown: tables, strikethrough, bare-URL autolinks and task lists with read-only checkboxes. A single newline inside a paragraph becomes `<br>`; a blank line still starts a paragraph and a fenced block keeps its newlines. | No machine surface — visible rendering change for paragraphs that contain single newlines; existing single-line content is unchanged |
 | Share links removed | The anonymous share-link transport is gone: seven REST routes, the `share_links` and `share_session_decks` tables (migration `0008_drop_share_link_tables`), and the share-session branch of the media read rule. `deck_grants`, `share_invites`, the sharing page and the grant endpoints remain. | Yes — the seven routes disappear and the two tables are dropped; clients and stored links that used them stop working |
 
 Not listed because neither a user nor an integration can observe them: the migration of code
@@ -113,10 +118,12 @@ helpers, the review-day seeding fix inside a test, and the internal rename of
   `0008_drop_share_link_tables` drops `share_links` and `share_session_decks`; migration
   `0009_unique_default_preset_names` renames duplicate `Default` presets and changes no table,
   column or index. The shortcode renderer adds `ruby`/`rt`/`rp` elements and named `data-*`
-  attributes to card HTML, which is additive for existing content. No MCP tool, configuration
-  key or file format changes. One request is validated more strictly: `POST /api/v1/keys`
-  rejects an `expires_at` that is not in the future with `400 invalid_request`, where it
-  previously returned a key that was already unusable.
+  attributes to card HTML, which is additive for existing content. The Markdown dialect adds
+  GFM task-list checkboxes and turns a single newline into `<br>`: the checkbox is additive, the
+  line break is a visible rendering change. No MCP tool, configuration key or file format
+  changes. One request is validated more strictly: `POST /api/v1/keys` rejects an `expires_at`
+  that is not in the future with `400 invalid_request`, where it previously returned a key that
+  was already unusable.
 - The next release is **v0.1.11**. The project has shipped breaking changes in `0.1.x` patches
   before — the release that changed media identity and deleted `/media/<numeric id>` was a
   patch — so the share-link removal does not by itself force a minor bump. Counting it as one
