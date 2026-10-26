@@ -22,7 +22,7 @@ function deck(id: string, name: string, extra: Partial<Deck> = {}): Deck {
 }
 
 function signIn(role: string): void {
-  const user: User = { id: '1', username: 'demo', email: 'demo@example.com', role, locale: 'zh-CN' };
+  const user: User = { id: '1', username: 'demo', email: 'demo@example.com', role, locale: 'zh-CN', has_password: true };
   authStore.set({ initialized: true, loading: false, authenticated: true, user, error: null });
 }
 

@@ -169,6 +169,18 @@ export async function logout(): Promise<LogoutResponse> {
 }
 
 /**
+ * Record that the signed-in account now has a local password.
+ *
+ * Called after the passwordless "set first password" form succeeds. Refetching the session would be a second round
+ * trip for one boolean that the successful write already established, so the store is updated in place instead.
+ */
+export function markPasswordSet(): void {
+  authStore.update((state) =>
+    state.user ? { ...state, user: { ...state.user, has_password: true } } : state
+  );
+}
+
+/**
  * SPA self-registration: after a successful registration the server issues no session (consistent with SSR), so authStore is left untouched and
  * the caller redirects to the login page. The CSRF token is filled in automatically by apiClient when needed.
  */
