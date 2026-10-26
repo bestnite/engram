@@ -1405,7 +1405,7 @@ export const en: LocaleCatalog = {
   'help.shortcode.copy_failed': 'Copy failed. Select the text and copy it manually.',
   'help.shortcode.param.optional': 'optional',
   'help.shortcode.tts.title': 'Speech',
-  'help.shortcode.tts.summary': 'Reads the body aloud; the body is both displayed and spoken.',
+  'help.shortcode.tts.summary': 'Reads the body aloud; the body is shown by default.',
   'help.shortcode.tts.play': 'Reads on click; playback never starts automatically.',
   'help.shortcode.tts.lang': 'A language tag such as ja-JP, using letters, digits, and hyphens only.',
   'help.shortcode.tts.rate': 'Speaking rate as a non-negative decimal, such as 0.9; 0.5–2 is typical.',
@@ -1473,7 +1473,7 @@ export const en: LocaleCatalog = {
   'shortcode.audio.progress': 'Audio progress',
   'shortcode.audio.progress.value': '{position} of {total} seconds',
   // ---- TTS shortcode hide flag ----
-  'shortcode.insert.tts.hide': 'Hide the text while it can be read aloud',
+  'shortcode.insert.tts.hide': 'Hide the spoken text',
   'help.shortcode.tts.hide':
     'The bare word hide keeps the body out of sight while it can be read aloud, and shows it again whenever it cannot.',
 };

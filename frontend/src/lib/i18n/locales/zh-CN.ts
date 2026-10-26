@@ -1404,7 +1404,7 @@ export const zhCN: LocaleCatalog = {
   'help.shortcode.copy_failed': '复制失败，请手动选择文本复制。',
   'help.shortcode.param.optional': '可选',
   'help.shortcode.tts.title': '朗读',
-  'help.shortcode.tts.summary': '朗读正文；正文同时用于显示与朗读。',
+  'help.shortcode.tts.summary': '朗读正文；正文默认同时显示。',
   'help.shortcode.tts.play': '点击后朗读，不自动播放。',
   'help.shortcode.tts.lang': '语言标签，如 ja-JP；仅含字母、数字与连字符。',
   'help.shortcode.tts.rate': '朗读速度，非负小数，如 0.9；常用范围 0.5–2。',
@@ -1472,6 +1472,6 @@ export const zhCN: LocaleCatalog = {
   'shortcode.audio.progress': '音频进度',
   'shortcode.audio.progress.value': '第 {position} 秒，共 {total} 秒',
   // ---- TTS shortcode hide flag ----
-  'shortcode.insert.tts.hide': '朗读时隐藏内容',
-  'help.shortcode.tts.hide': '写成单独的 hide 时，能朗读的时候隐藏内容，不能朗读的时候照常显示。',
+  'shortcode.insert.tts.hide': '隐藏朗读内容',
+  'help.shortcode.tts.hide': '单独写 hide 时，可朗读时隐藏正文，不可朗读时恢复显示。',
 };
