@@ -108,13 +108,41 @@ dockers_v2:
 
 changelog:
   sort: asc
+  # Seven characters identify a commit unambiguously in a repository this size; the default prints all 40,
+  # which makes every bullet in a release body unreadable.
+  abbrev: 7
   filters:
-    # Only user-perceptible changes are worth the release notes; repository housekeeping (docs, tests, CI) stays in the git log.
+    # Only user-perceptible changes are worth the release notes; repository housekeeping (docs, tests, CI)
+    # and merge commits stay in the git log.
+    #
+    # The pattern matches the subject both with and without a scope (`docs: subject` and `docs(scope): subject`),
+    # because almost every subject in this repository carries a scope and a bare `^docs:` therefore matched nothing.
+    #
+    # `chore` is deliberately not excluded: dependency and toolchain bumps are committed as `chore(deps)`, and a
+    # from-source builder has to know about those. They land under "Other changes" instead of disappearing.
     exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
-      - "^ci:"
+      - "^(docs|test|ci)(\\(|:)"
+      # Two merge styles reach the log here: `merge: <summary>` commits and `Merge branch '<branch>'` commits.
+      - "^(merge|Merge)(:| |\\(|$)"
+  groups:
+    - title: Features
+      regexp: "^feat(\\(|:)"
+      order: 0
+    - title: Bug fixes
+      regexp: "^fix(\\(|:)"
+      order: 1
+    - title: Performance
+      regexp: "^perf(\\(|:)"
+      order: 2
+    - title: Refactors
+      regexp: "^refactor(\\(|:)"
+      order: 3
+    - title: Build and dependencies
+      regexp: "^(build|chore)\\((deps|ci|build)\\)"
+      order: 4
+    - title: Other changes
+      regexp: ".*"
+      order: 9
 
 release:
   github:
