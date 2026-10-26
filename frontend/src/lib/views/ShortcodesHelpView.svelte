@@ -52,7 +52,6 @@
     'help.shortcode.rule.options',
     'help.shortcode.rule.mail',
     'help.shortcode.rule.metadata',
-    'help.shortcode.rule.no_more',
   ];
 
   /**
@@ -207,11 +206,7 @@
     </div>
   </section>
 
-  <SettingsSection
-    title={$t('help.shortcode.rules.title')}
-    description={$t('help.shortcode.rules.intro')}
-    testId="shortcode-rules"
-  >
+  <SettingsSection title={$t('help.shortcode.rules.title')} testId="shortcode-rules">
     <ul class="list-disc space-y-2 pl-4 text-[13px] leading-relaxed text-muted-foreground marker:text-muted-foreground/40">
       {#each RULES as key (key)}
         <li>{$t(key)}</li>
