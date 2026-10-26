@@ -288,6 +288,50 @@ different feature and stay.
   Removal is breaking: seven REST routes disappear and two tables are dropped. The release that
   carries it must say so in the ledger, and the commit message must name the removed routes.
 
+### M14 — Note editor input layout
+
+- [ ] **M14-1 Put insertion tools on each field and collapse the preview on narrow screens** — the
+  editor keeps one page-level insertion block (field selector, upload, media library, shortcode
+  panel) below the card fields, so on a phone the author scrolls between `front`/`back` and the
+  tools for every insertion. Move the tools to the field they write into, and make the preview
+  an on-demand drawer below the desktop breakpoint.
+  - Every field whose control is `text` or `textarea` in `NoteFieldsForm.svelte` gets a compact
+    toolbar in its label row with two icon actions: image (opens a dialog with a dropzone and
+    the media library filtered to `image/`) and shortcode (opens the existing composer in a
+    dialog). Both write into that field at its caret. A `lines` field stores an array and gets
+    no toolbar: an inline insertion cannot address one element of it.
+  - Remove the page-level field selector (`media.field`), the page-level `Dropzone`, the
+    page-level `MediaPicker`, and the standalone `ShortcodeInsert` block from
+    `NoteEditView.svelte`. The dialog reuses `Dialog.svelte` (focus moves in, Esc closes, focus
+    returns to the trigger), `MediaPicker` with its mime filter, and `ShortcodeInsert`; no
+    second field selector is introduced, because the toolbar's field is the target.
+  - The image dialog accepts image files only. The composer's audio tab gains an upload action
+    that reuses `apiClient.uploadDeckMedia` and fills the path field, so audio uploads keep
+    working after the page-level upload disappears; an audio upload never produces the image
+    form.
+  - At `lg` and wider the two columns and the sticky preview stay as they are. Below `lg` the
+    preview becomes a drawer opened by a "Preview" button in the page header, closed by
+    default, closed by Esc or its close control, live while open, and opened without losing the
+    focused field, its caret, or unsaved text.
+  - All new labels come from both catalogs, appended at the end of each file with identical key
+    sets. Delete catalog keys that no longer have a reference (`media.field` and any upload or
+    heading key used only by the removed section) after confirming no other view reads them.
+  - No server, API or shortcode-contract change; the rendered HTML the editor previews is
+    unchanged.
+
+  *Acceptance:* at 390px, with the first text field focused, its image and shortcode buttons are
+  visible in that field's label row without scrolling, and the page has no page-level insertion
+  section. Selecting a library image inserts `![](<url>)` at that field's caret; choosing an
+  audio file from the composer's audio tab inserts `{{audio:<url>}}`; the composer still builds
+  all three forms. A `lines` field shows no toolbar. The preview drawer opens from its button,
+  reflects edits made while open, closes by Esc and by its close control, and returns focus to
+  its trigger. At 1280px the two-column layout and the sticky preview are unchanged. Evidence
+  is the raw frontend test run, `npm --prefix frontend run build`, and screenshots with the
+  measured positions at 390, 900 and 1280px.
+
+  *Order:* last; after M11-3, M11-4 and M11-5, whose control markup and composer props this task
+  consumes.
+
 ---
 
 ## 2. Release ledger
