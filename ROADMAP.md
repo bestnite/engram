@@ -201,6 +201,50 @@ different feature and stay.
   Removal is breaking: seven REST routes disappear and two tables are dropped. The release that
   carries it must say so in the ledger, and the commit message must name the removed routes.
 
+### M13 — Deck import and preset identity
+
+- [ ] **M13-1 A deck import must never create a second preset named `Default`** — an export
+  writes the exporter's preset name verbatim into `preset.json`
+  (`presetToPackage`, `internal/store/package.go:518`), and importing into a new deck always
+  inserts a preset row carrying that name (`createPresetFromPackage`,
+  `internal/store/package_import.go:828`). A deck that uses the default preset therefore exports
+  the literal `Default`, and every import adds one more row named `Default`. The consequence is
+  not cosmetic: `is_default` is name equality (`internal/web/presets_api.go:437`), so every copy
+  is presented as a default preset, and deletion refuses that name
+  (`internal/store/preset.go:276`), so the user cannot remove any of them. `EnsureDefaultPreset`
+  then returns one of them while a deck points at another.
+
+  - `createPresetFromPackage` derives the name instead of copying it: the base name is the
+    package preset name after trimming whitespace, except that an empty base name and the base
+    name `store.DefaultPresetName` are both replaced by `"Imported — "` followed by the deck
+    name that `uniqueDeckName` already returned for this import. The base name is then made
+    unique for that owner by appending `" (2)"`, `" (3)"`, … until no preset of that owner has
+    the candidate name. The reserved name `store.DefaultPresetName` therefore can never be
+    written by an import. The function gains the deck name as a parameter, so its call site in
+    `resolveTargetDeck` passes the name after the uniqueness step.
+  - Append `0009_unique_default_preset_names` to `BuiltinMigrations` in
+    `internal/store/migrate.go`. For each owner that owns more than one preset named `Default`,
+    keep the **oldest** one (ordered by `created_at`, then `id`) as the account's own default and
+    rename every other one to a name that owner does not already use, of the form
+    `"Imported (2)"`, `"Imported (3)"`, … with the same reserved-name avoidance as above.
+    `decks.preset_id` and `deck_member_settings.preset_id` are never modified and no row is
+    deleted: a renamed preset stays attached to the decks that reference it and becomes
+    deletable once those decks are repointed. A second run renames nothing.
+  - `ARCHITECTURE.md` needs no change: no package, transport or data-model shape changes.
+  - The parent records the ninth migration in the release ledger of this file; a subagent must
+    not edit `ROADMAP.md`.
+
+  *Acceptance:* importing a package whose `preset.json` carries `name: "Default"` into a new
+  deck leaves exactly one preset of that owner reporting `is_default`, and the imported preset's
+  name is not `Default`; importing the same package twice yields two distinct preset names and
+  still exactly one `is_default`. A migration test seeds one owner with three presets named
+  `Default` (with distinct `created_at`) and a deck referencing the oldest of them, runs the
+  migration, and shows that the oldest keeps its name, the other two are renamed to names that
+  owner does not already hold, the deck's `preset_id` is unchanged, and a second run changes
+  nothing. The cases run on SQLite, and on PostgreSQL when `TEST_PG_DSN` is set. Verification is
+  the raw output of `go test ./internal/store/... && go vet ./internal/store/...`, with the
+  PostgreSQL run reported explicitly or its absence stated.
+
 ---
 
 ## 2. Release ledger
