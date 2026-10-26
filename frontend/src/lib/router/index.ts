@@ -242,6 +242,10 @@ export function initRouter(): () => void {
     }
 
     if (href.startsWith('/')) {
+      // Take over only links this router can render. A same-origin link to a server endpoint such as
+      // /auth/oidc/start or /api/... must reach the server as a normal navigation; proxying it would
+      // match no client route and show the SPA 404 instead of starting the server-side flow.
+      if (matchRoute(href).route === null) return;
       e.preventDefault();
       navigate(href);
     }
