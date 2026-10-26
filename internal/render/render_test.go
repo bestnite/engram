@@ -337,13 +337,17 @@ var allowedElementNames = map[string]bool{
 	"code": true, "pre": true,
 	"ul": true, "ol": true, "li": true,
 	"table": true, "thead": true, "tbody": true, "tr": true, "th": true, "td": true,
-	"a": true, "img": true, "span": true,
+	"span": true, "a": true, "img": true,
 	"ruby": true, "rt": true, "rp": true,
+	"input": true,
 }
 
 // allowedAttrNames is the set of attribute names the allowlist permits (consistent with buildPolicy).
+// input's type/checked/disabled are the GFM task-list checkbox attributes; buildPolicy allows them
+// on input only, requires the value checkbox for type and an empty value for checked/disabled.
 var allowedAttrNames = map[string]bool{
 	"class": true, "href": true, "src": true, "alt": true, "start": true,
+	"type": true, "checked": true, "disabled": true,
 	"data-tts-text": true, "data-tts-lang": true, "data-tts-rate": true, "data-tts-hide": true,
 	"data-audio-src": true, "data-audio-start": true, "data-audio-end": true,
 	"data-audio-rate": true, "data-audio-loop": true,

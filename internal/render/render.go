@@ -2,6 +2,13 @@
 // Markdown + TeX + shortcode source -> goldmark to HTML -> bluemonday allowlist sanitizing -> HTML
 // that can be embedded into a page safely.
 //
+// The Markdown dialect is GitHub Flavored Markdown: tables, strikethrough, bare URLs turned into
+// links and task-list checkboxes. A single newline inside a paragraph renders as <br>, because card
+// authors write one thought per line and expect that line break to be visible; a blank line still
+// starts a new paragraph. A fenced block keeps its newlines as literal text, and an inline code span
+// follows the Markdown code-span rule, which turns its line ending into a space. Neither of those
+// gains a <br>.
+//
 // The shortcode form `{{name:body|key=value}}` expands during the goldmark step into an element that
 // carries data attributes but no behaviour (see shortcode.go). Card content gets the element; a mail
 // body gets plain text for the same shortcode, because a mail has no client-side controls.
@@ -12,7 +19,9 @@
 //
 // Why bluemonday is mandatory: card content allows a subset of HTML (the last item),
 // so goldmark lets raw HTML through with WithUnsafe and safety rests entirely on this package's
-// allowlist sanitizing.
+// allowlist sanitizing. The soft-break rule does not widen that: a <br> can only be produced by the
+// renderer, and every tag that reaches the output -- rendered or author-written raw HTML -- passes
+// the same allowlist.
 package render
 
 import (
@@ -29,18 +38,23 @@ import (
 
 // markdown is the shared goldmark instance.
 //
-// The Table and Strikethrough extensions are enabled because the card allowlist permits
-// table/tbody/del (the table structure comes from the Table extension, del from the Strikethrough
-// ~~strike~~ syntax). WithUnsafe is deliberate: raw HTML has to be trimmed by bluemonday against
-// the allowlist instead of being escaped into text at the goldmark stage -- otherwise the HTML
-// subset would be impossible.
+// extension.GFM is the whole GitHub Flavored Markdown set in one extender: Table, Strikethrough,
+// Linkify (a bare https://example.com or www.example.com becomes a link) and TaskList (the
+// `- [ ]`/`- [x]` checkbox). The allowlist in buildPolicy permits the elements that set produces,
+// including the task-list checkbox input.
+//
+// WithHardWraps renders a single newline inside a paragraph as <br>. The option only affects soft
+// line breaks: a blank line still separates paragraphs, a fenced block keeps literal newlines, and
+// an inline code span turns its line ending into a space by the code-span rule.
+//
+// WithUnsafe is deliberate: raw HTML has to be trimmed by bluemonday against the allowlist instead
+// of being escaped into text at the goldmark stage -- otherwise the HTML subset would be impossible.
 var markdown = goldmark.New(
 	goldmark.WithExtensions(
-		extension.Table,
-		extension.Strikethrough,
+		extension.GFM,
 		shortcodeExtension{},
 	),
-	goldmark.WithRendererOptions(html.WithUnsafe()),
+	goldmark.WithRendererOptions(html.WithUnsafe(), html.WithHardWraps()),
 )
 
 // policy is the shared bluemonday sanitizing policy for card content, built once at package init.
@@ -119,8 +133,8 @@ func renderWith(src string, pol *bluemonday.Policy, mode shortcodeMode) (string,
 	return string(pol.SanitizeBytes([]byte(restored))), nil
 }
 
-// buildPolicy builds the content allowlist: img/a/code/pre/table/span[class] are allowed, scripts
-// never. withHeadings adds h1-h3, which only the mail body needs.
+// buildPolicy builds the content allowlist: img/a/code/pre/table/span[class] and the GFM checkbox
+// input are allowed, scripts never. withHeadings adds h1-h3, which only the mail body needs.
 func buildPolicy(withHeadings bool) *bluemonday.Policy {
 	p := bluemonday.NewPolicy()
 
@@ -168,6 +182,18 @@ func buildPolicy(withHeadings bool) *bluemonday.Policy {
 	// img.src allows only https and site-relative paths (no http); alt improves accessibility.
 	p.AllowAttrs("src").Matching(imgSrcPattern).OnElements("img")
 	p.AllowAttrs("alt").OnElements("img")
+
+	// The GFM task-list checkbox, which goldmark renders as
+	// <input checked="" disabled="" type="checkbox"> for a checked item and without checked for an
+	// unchecked one. A task-list checkbox is therefore read-only and out of the tab order. Only these
+	// three attributes are allowed -- type must be checkbox, and checked/disabled are valueless in
+	// goldmark's output, so only the empty value passes. An author-written input can carry no name,
+	// value, form target or event handler, so even an enabled checkbox cannot submit data or run
+	// code; an input left with no attribute at all is dropped by bluemonday.
+	p.AllowElements("input")
+	p.AllowAttrs("type").Matching(regexp.MustCompile(`^checkbox$`)).OnElements("input")
+	p.AllowAttrs("checked").Matching(regexp.MustCompile(`^$`)).OnElements("input")
+	p.AllowAttrs("disabled").Matching(regexp.MustCompile(`^$`)).OnElements("input")
 
 	// ol.start: when an ordered list starts at something other than 1 goldmark emits a start attribute,
 	// and not allowing it would produce wrong numbering; the value is restricted to positive integers,
