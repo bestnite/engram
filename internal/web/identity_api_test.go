@@ -195,6 +195,25 @@ func TestIdentityBindCallbackLinksToCaller(t *testing.T) {
 	}
 }
 
+func TestIdentityBindCallbackRejectsOtherSessionOfSameUser(t *testing.T) {
+	srv, db := newAuthServer(t)
+	p := newStubOIDC(t)
+	seedOIDC(t, srv, db, p, auth.PolicyClosed)
+	owner := createTestUser(t, srv, "owner", "Sup3rSecret!", store.RoleUser, true)
+	cookiesA, csrfA := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+	cookiesB, _ := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+	state, nonce := bindURL(t, srv, cookiesA, csrfA)
+	p.nonce = nonce
+
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, cookiesB)
+	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=session" {
+		t.Fatalf("second-session callback = (%d, %q), want 303 to identity=session", rec.Code, loc)
+	}
+	if rows := identityRows(t, db, owner.ID); len(rows) != 0 {
+		t.Fatalf("second session wrote %d identities, want 0", len(rows))
+	}
+}
+
 func TestIdentityBindCallbackRejectsOtherSession(t *testing.T) {
 	srv, db := newAuthServer(t)
 	p := newStubOIDC(t)
@@ -243,6 +262,67 @@ func TestIdentityBindCallbackSubjectTaken(t *testing.T) {
 	ident, err := store.NewIdentityStore(db).ByProviderSubject(context.Background(), p.srv.URL, p.sub)
 	if err != nil || ident.UserID != other.ID {
 		t.Fatalf("taken identity moved: %+v, err=%v", ident, err)
+	}
+}
+
+func TestIdentityRoutesRequireSessionAndCSRF(t *testing.T) {
+	srv, db := newAuthServer(t)
+	owner := createTestUser(t, srv, "owner", "Sup3rSecret!", store.RoleUser, true)
+	ident := &store.Identity{UserID: owner.ID, Provider: "https://issuer.example.com", Subject: "sub-owner"}
+	if err := store.NewIdentityStore(db).Create(context.Background(), ident); err != nil {
+		t.Fatalf("seed identity: %v", err)
+	}
+	cookies, _ := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+
+	if rec := getWithCookies(t, srv, "/api/v1/settings/identities", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("anonymous list = %d, want 401", rec.Code)
+	}
+	if rec := postJSONWithSession(srv, "/api/v1/settings/identities/bind", map[string]string{}, nil, ""); rec.Code != http.StatusForbidden {
+		t.Errorf("anonymous bind = %d, want 403", rec.Code)
+	}
+	if rec := jsonRequest(t, srv, http.MethodDelete, "/api/v1/settings/identities/"+ident.PublicID, "", nil, ""); rec.Code != http.StatusForbidden {
+		t.Errorf("anonymous unlink = %d, want 403", rec.Code)
+	}
+	if rec := jsonRequest(t, srv, http.MethodDelete, "/api/v1/settings/identities/"+ident.PublicID, "", cookies, ""); rec.Code != http.StatusForbidden {
+		t.Errorf("unlink without CSRF = %d, want 403", rec.Code)
+	}
+	if _, err := store.NewIdentityStore(db).ByPublicID(context.Background(), ident.PublicID); err != nil {
+		t.Fatalf("identity removed by a rejected unlink: %v", err)
+	}
+}
+
+func TestIdentityBindCallbackFailures(t *testing.T) {
+	srv, db := newAuthServer(t)
+	p := newStubOIDC(t)
+	seedOIDC(t, srv, db, p, auth.PolicyClosed)
+	owner := createTestUser(t, srv, "owner", "Sup3rSecret!", store.RoleUser, true)
+	cookies, csrf := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+
+	// No session: the pending bind belongs to a session, so even the right user id is not enough.
+	state, _ := bindURL(t, srv, cookies, csrf)
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, nil)
+	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=session" {
+		t.Fatalf("no-session bind callback = (%d, %q), want identity=session", rec.Code, loc)
+	}
+
+	// No code: the state is valid and the session matches, but there is nothing to exchange.
+	state, nonce := bindURL(t, srv, cookies, csrf)
+	p.nonce = nonce
+	rec = getWithCookies(t, srv, "/auth/oidc/callback?state="+state, cookies)
+	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=failed" {
+		t.Fatalf("no-code bind callback = (%d, %q), want identity=failed", rec.Code, loc)
+	}
+
+	// Wrong nonce: the ID token is rejected before any link is written.
+	state, _ = bindURL(t, srv, cookies, csrf)
+	p.nonce = "wrong-nonce"
+	rec = getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, cookies)
+	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=failed" {
+		t.Fatalf("wrong-nonce bind callback = (%d, %q), want identity=failed", rec.Code, loc)
+	}
+
+	if rows := identityRows(t, db, owner.ID); len(rows) != 0 {
+		t.Fatalf("failed bind callbacks wrote %d identities, want 0", len(rows))
 	}
 }
 

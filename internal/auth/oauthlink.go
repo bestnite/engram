@@ -210,13 +210,11 @@ func (s *IdentityLinkService) Bind(ctx context.Context, profile OAuthProfile, us
 	if userID == 0 {
 		return errors.New("auth: user id is required")
 	}
-	provider := strings.TrimSpace(profile.Provider)
-	subject := strings.TrimSpace(profile.Subject)
-	if provider == "" || subject == "" {
+	if strings.TrimSpace(profile.Provider) == "" || strings.TrimSpace(profile.Subject) == "" {
 		return errors.New("auth: provider and subject are required")
 	}
 
-	existing, err := s.store.FindIdentity(ctx, provider, subject)
+	existing, err := s.store.FindIdentity(ctx, profile.Provider, profile.Subject)
 	if err != nil {
 		return fmt.Errorf("find identity: %w", err)
 	}
@@ -231,7 +229,7 @@ func (s *IdentityLinkService) Bind(ctx context.Context, profile OAuthProfile, us
 	if err := s.createLink(ctx, profile, userID, email); err != nil {
 		// A concurrent bind can win the unique constraint between the lookup above and the insert: re-read to tell a duplicate
 		// from a genuine failure, and answer with the same decision the pre-check would have produced.
-		again, findErr := s.store.FindIdentity(ctx, provider, subject)
+		again, findErr := s.store.FindIdentity(ctx, profile.Provider, profile.Subject)
 		if findErr == nil && again != nil {
 			if again.UserID == userID {
 				return nil
@@ -241,8 +239,8 @@ func (s *IdentityLinkService) Bind(ctx context.Context, profile OAuthProfile, us
 		return err
 	}
 	s.recordLinkAudit(ctx, userID, profile, map[string]any{
-		"provider":       provider,
-		"subject":        subject,
+		"provider":       profile.Provider,
+		"subject":        profile.Subject,
 		"email_verified": profile.EmailVerified,
 		"via":            "self_bind",
 		"user_id":        userID,

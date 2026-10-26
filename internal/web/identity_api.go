@@ -77,6 +77,11 @@ func (s *Server) identityBindStart(c *gin.Context) {
 	if !ok {
 		return
 	}
+	sess, ok := auth.CurrentSession(c)
+	if !ok {
+		apiAuthError(c, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
+		return
+	}
 	ctx := c.Request.Context()
 	cfg, err := s.oidcLoadConfig(c)
 	if err != nil {
@@ -125,6 +130,7 @@ func (s *Server) identityBindStart(c *gin.Context) {
 		ExpiresAt:   time.Now().UTC().Add(10 * time.Minute),
 		Intent:      auth.PendingIntentBind,
 		UserID:      u.ID,
+		SessionID:   sess.ID,
 	}) {
 		s.logger.Warn("identity bind: pending state table is full, rejecting a new bind start")
 		apiAuthError(c, http.StatusServiceUnavailable, "busy", "Too many pending sign-in requests. Try again later.")

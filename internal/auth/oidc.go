@@ -165,6 +165,9 @@ type PendingAuth struct {
 	ExpiresAt   time.Time
 	Intent      string
 	UserID      uint64
+	// SessionID binds a pending bind to the browser session that started it. A user can have several sessions, and completing the flow
+	// under a different one must not attach an identity to the account. It is empty for a login.
+	SessionID string
 }
 
 // cachedRelyingParty is a TTL'd cache entry for the library client; issuer is used for invalidation per issuer.

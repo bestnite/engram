@@ -235,7 +235,8 @@ func (s *Server) oidcCallback(c *gin.Context) {
 func (s *Server) oidcBindCallback(c *gin.Context, cfg *auth.OIDCConfig, pending auth.PendingAuth) {
 	ctx := c.Request.Context()
 	current, ok := auth.CurrentUser(c)
-	if !ok || current.ID != pending.UserID {
+	currentSess, sessOK := auth.CurrentSession(c)
+	if !ok || !sessOK || current.ID != pending.UserID || currentSess.ID != pending.SessionID {
 		s.logger.Info("oidc: bind callback does not match the pending session")
 		c.Redirect(http.StatusSeeOther, "/settings/security?identity=session")
 		return

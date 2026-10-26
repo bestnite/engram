@@ -51,6 +51,32 @@ func TestIdentityLinkServiceBind(t *testing.T) {
 	}
 }
 
+// TestIdentityLinkServiceBindKeepsRawSubject asserts that trimming is only used to reject empty values: the raw provider and subject are the
+// identity keys everywhere in the flow, exactly as in Resolve, so whitespace variants are distinct identities rather than the same one.
+func TestIdentityLinkServiceBindKeepsRawSubject(t *testing.T) {
+	ctx := context.Background()
+	e := newLinkEnv(t)
+	alice := e.seedLocalUser(t, "alice", "alice@example.com")
+
+	for _, subject := range []string{"abc", " abc "} {
+		if err := e.svc.Bind(ctx, OAuthProfile{Provider: "issuer.example.com", Subject: subject}, alice.ID); err != nil {
+			t.Fatalf("Bind(%q) error = %v", subject, err)
+		}
+	}
+	rows, err := e.identities.ListForUser(ctx, alice.ID)
+	if err != nil {
+		t.Fatalf("ListForUser() error = %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("identities = %d, want 2 distinct subjects", len(rows))
+	}
+	for _, want := range []string{"abc", " abc "} {
+		if _, err := e.identities.ByProviderSubject(ctx, "issuer.example.com", want); err != nil {
+			t.Fatalf("identity with subject %q not stored: %v", want, err)
+		}
+	}
+}
+
 // TestIdentityLinkServiceBindRejectsEmptyProfile covers the validation of the normalized profile input.
 func TestIdentityLinkServiceBindRejectsEmptyProfile(t *testing.T) {
 	e := newLinkEnv(t)
