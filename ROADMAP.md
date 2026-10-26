@@ -201,50 +201,6 @@ different feature and stay.
   Removal is breaking: seven REST routes disappear and two tables are dropped. The release that
   carries it must say so in the ledger, and the commit message must name the removed routes.
 
-### M13 — Deck import and preset identity
-
-- [ ] **M13-1 A deck import must never create a second preset named `Default`** — an export
-  writes the exporter's preset name verbatim into `preset.json`
-  (`presetToPackage`, `internal/store/package.go:518`), and importing into a new deck always
-  inserts a preset row carrying that name (`createPresetFromPackage`,
-  `internal/store/package_import.go:828`). A deck that uses the default preset therefore exports
-  the literal `Default`, and every import adds one more row named `Default`. The consequence is
-  not cosmetic: `is_default` is name equality (`internal/web/presets_api.go:437`), so every copy
-  is presented as a default preset, and deletion refuses that name
-  (`internal/store/preset.go:276`), so the user cannot remove any of them. `EnsureDefaultPreset`
-  then returns one of them while a deck points at another.
-
-  - `createPresetFromPackage` derives the name instead of copying it: the base name is the
-    package preset name after trimming whitespace, except that an empty base name and the base
-    name `store.DefaultPresetName` are both replaced by `"Imported — "` followed by the deck
-    name that `uniqueDeckName` already returned for this import. The base name is then made
-    unique for that owner by appending `" (2)"`, `" (3)"`, … until no preset of that owner has
-    the candidate name. The reserved name `store.DefaultPresetName` therefore can never be
-    written by an import. The function gains the deck name as a parameter, so its call site in
-    `resolveTargetDeck` passes the name after the uniqueness step.
-  - Append `0009_unique_default_preset_names` to `BuiltinMigrations` in
-    `internal/store/migrate.go`. For each owner that owns more than one preset named `Default`,
-    keep the **oldest** one (ordered by `created_at`, then `id`) as the account's own default and
-    rename every other one to a name that owner does not already use, of the form
-    `"Imported (2)"`, `"Imported (3)"`, … with the same reserved-name avoidance as above.
-    `decks.preset_id` and `deck_member_settings.preset_id` are never modified and no row is
-    deleted: a renamed preset stays attached to the decks that reference it and becomes
-    deletable once those decks are repointed. A second run renames nothing.
-  - `ARCHITECTURE.md` needs no change: no package, transport or data-model shape changes.
-  - The parent records the ninth migration in the release ledger of this file; a subagent must
-    not edit `ROADMAP.md`.
-
-  *Acceptance:* importing a package whose `preset.json` carries `name: "Default"` into a new
-  deck leaves exactly one preset of that owner reporting `is_default`, and the imported preset's
-  name is not `Default`; importing the same package twice yields two distinct preset names and
-  still exactly one `is_default`. A migration test seeds one owner with three presets named
-  `Default` (with distinct `created_at`) and a deck referencing the oldest of them, runs the
-  migration, and shows that the oldest keeps its name, the other two are renamed to names that
-  owner does not already hold, the deck's `preset_id` is unchanged, and a second run changes
-  nothing. The cases run on SQLite, and on PostgreSQL when `TEST_PG_DSN` is set. Verification is
-  the raw output of `go test ./internal/store/... && go vet ./internal/store/...`, with the
-  PostgreSQL run reported explicitly or its absence stated.
-
 ---
 
 ## 2. Release ledger
@@ -256,8 +212,8 @@ different feature and stay.
 - No REST route was added, removed or renamed, and no MCP tool was removed or renamed. One MCP
   tool was added, `delete_deck`. `get_due_cards` keeps its name and its arguments; only its
   description mentions the new field.
-- No database migration was added: `BuiltinMigrations` holds the same eight entries as at the
-  tag, in the same order.
+- No database migration was added up to the point below: `BuiltinMigrations` held the same eight
+  entries as at the tag, in the same order; the ninth is the preset-name cleanup listed below.
 - No configuration key and no environment variable was added, removed or renamed.
 - The deck-package and note-import schemas keep their shape; the cloze description now documents
   the `\alt` separator.
@@ -284,6 +240,7 @@ different feature and stay.
 | Default mail templates | The built-in body of every mail type is designed Markdown rendered through the same pipeline as an admin template: a title, a primary action, a note and a footer, a derived plain-text part, and a shell that survives clients without rounded corners or `<style>`. Saving the pre-filled default unchanged sends exactly that mail, and the copy of all thirteen types was rewritten in both languages. | No — an added HTML part; the template variables and the stored templates are unchanged |
 | API key expiry | The personal key page sets an expiry when creating a key: never, 7 / 30 / 90 days, one year (365 days), or a custom date meaning the end of that local day. The list shows each key's expiry date and puts already-expired keys in their own group with an `expired` badge, ranked below `revoked`; an expired key keeps the revoke action, so it can still be removed by its owner. | No — the field already existed and was already accepted on create |
 | Expiry on create must be in the future | `POST /api/v1/keys` now rejects an `expires_at` that is not strictly after the current time with `400 invalid_request` and creates nothing, instead of returning a key that is dead on arrival. A request that omits the field, or sends a future time, behaves exactly as before. | Tightened — a client that sent a past `expires_at` previously succeeded and now fails, though the key it received was unusable |
+| Imported presets stop duplicating the default preset | Importing a package into a new deck derives the preset name from the deck when the package carries no name or the reserved `Default`, and makes that name unique among the importer's presets, so an import can no longer add a preset named `Default`. Migration `0009_unique_default_preset_names` renames the duplicate `Default` rows earlier imports left behind, keeping the oldest row as the account's own default and leaving every `decks.preset_id` and `deck_member_settings.preset_id` reference in place. | No — preset names only. A deck that references a renamed preset keeps it, while a deck created afterwards starts from the account's own default preset again |
 
 Not listed because neither a user nor an integration can observe them: the migration of code
 comments to English, the gitignored `.worktrees/` layout, the removal of dead SSR-era test
@@ -293,7 +250,9 @@ helpers, the review-day seeding fix inside a test, and the internal rename of
 ### 2.2 Version number for the next release
 
 - Section 2.1 adds, removes and renames no REST route, MCP tool, database schema item or
-  configuration key. One behaviour change is visible to a client: `POST /api/v1/keys` now
+  configuration key. It adds one data-only migration, `0009_unique_default_preset_names`, which
+  renames rows in `presets` and changes no table, column or index. One behaviour change is
+  visible to a client: `POST /api/v1/keys` now
   rejects an `expires_at` that is not in the future with `400 invalid_request`, where it
   previously returned a key that was already unusable. The next release is **v0.1.11**.
 - The toolchain bump is breaking only for someone building from source with Go 1.26 or Node 22.
