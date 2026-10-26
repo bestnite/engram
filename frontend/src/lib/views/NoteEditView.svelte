@@ -81,7 +81,7 @@
   // The shortcode panel writes into the same field the media controls do; its heading names that field
   // so the target is never in doubt, and a field that does not hold one string cannot take an insertion.
   const selectedFieldLabel = $derived(textFields.find((option) => option.value === selectedField)?.label ?? '');
-  const targetWritable = $derived(typeof fields[selectedField] === 'string');
+  const targetWritable = $derived(fieldText(selectedField) !== null);
 
   // Draft signature: a change to kind, the submitted fields or the tags yields a new string (tags use the parsed array, so changing only whitespace
   // does not count as a new change either). Saving is only responsible for the snapshot at the moment of submission, so it is used to tell whether the draft was already changed when the response lands.
@@ -197,13 +197,24 @@
   }
 
   /**
+   * The text of a field, or null when the field is not a single string. A cleared text field has no
+   * key at all — the form model deletes empty strings — and that is an empty text field, not a field
+   * of another type, so clearing a field must not make insertion refuse to write into it.
+   */
+  function fieldText(key: string): string | null {
+    const value = fields[key];
+    if (typeof value === 'string') return value;
+    return value === undefined || value === null ? '' : null;
+  }
+
+  /**
    * Writes one source string into a field: at the last known caret when there is one (replacing the
    * selection), otherwise appended on a new line. Only single-string fields can take it, so an array
    * field (the list card's items) reports failure and the caller leaves the content untouched.
    */
   function insertInto(key: string, source: string): boolean {
-    const current = fields[key];
-    if (typeof current !== 'string') return false;
+    const current = fieldText(key);
+    if (current === null) return false;
     const next = insertSource(current, source, carets[key] ?? null);
     // One assignment: the live preview reschedules off the field contents, and the previous caret is
     // kept as the position just after what was written so a second insertion continues from there.
