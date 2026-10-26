@@ -1362,6 +1362,7 @@ export const zhCN: LocaleCatalog = {
   'settings.password.set_intro': '当前账号只能通过 OIDC 身份登录。设置密码后，也可以不用该身份登录。',
   'settings.password.set_submit': '设置密码',
   'settings.password.set_done': '密码已设置。',
+  'settings.password.already_set': '密码已被设置，请刷新页面。',
   // ---- Account security: linked sign-in identities ----
   'settings.identity.heading': '已绑定的登录身份',
   'settings.identity.intro': '绑定后可以直接用该 OIDC 身份登录。',

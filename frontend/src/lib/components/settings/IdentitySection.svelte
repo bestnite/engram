@@ -156,37 +156,42 @@
       {#if data.identities.length === 0}
         <p data-testid="identities-empty" class="text-sm text-muted-foreground">{$t('settings.identity.empty')}</p>
       {:else}
-        <table class="w-full max-w-2xl text-sm">
-          <thead>
-            <tr class="text-left text-xs text-muted-foreground">
-              <th class="pb-2 pr-4 font-medium">{$t('settings.identity.col.provider')}</th>
-              <th class="pb-2 pr-4 font-medium">{$t('settings.identity.col.email')}</th>
-              <th class="pb-2 pr-4 font-medium">{$t('settings.identity.col.linked')}</th>
-              <th class="pb-2"><span class="sr-only">{$t('settings.identity.unlink')}</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each data.identities as identity (identity.id)}
-              <tr class="border-t border-border align-middle" data-testid={`identity-row-${identity.id}`}>
-                <td class="py-2.5 pr-4 font-medium text-foreground">{identity.provider}</td>
-                <td class="py-2.5 pr-4 text-muted-foreground">{identity.email || '—'}</td>
-                <td class="py-2.5 pr-4 text-muted-foreground">{formatLinkedAt(identity.linked_at)}</td>
-                <td class="py-2.5 text-right">
-                  <Button
-                    testId={`identity-unlink-${identity.id}`}
-                    variant="danger-outline"
-                    size="sm"
-                    disabled={lastCredential}
-                    loading={unlinkingId === identity.id}
-                    onclick={() => unlink(identity)}
-                  >
-                    {$t('settings.identity.unlink')}
-                  </Button>
-                </td>
+        <!-- The settings column can be narrower than this table, and a provider name or email may be one long unbroken
+             token. The wrapper scrolls rather than squeezing the columns, and cells wrap mid-word instead of pushing the
+             unlink button out of reach. -->
+        <div class="-mx-1 overflow-x-auto px-1">
+          <table class="w-full min-w-[34rem] max-w-2xl text-sm">
+            <thead>
+              <tr class="text-left text-xs text-muted-foreground">
+                <th class="pb-2 pr-4 font-medium">{$t('settings.identity.col.provider')}</th>
+                <th class="pb-2 pr-4 font-medium">{$t('settings.identity.col.email')}</th>
+                <th class="pb-2 pr-4 font-medium">{$t('settings.identity.col.linked')}</th>
+                <th class="pb-2"><span class="sr-only">{$t('settings.identity.unlink')}</span></th>
               </tr>
-            {/each}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {#each data.identities as identity (identity.id)}
+                <tr class="border-t border-border align-middle" data-testid={`identity-row-${identity.id}`}>
+                  <td class="min-w-0 break-all py-2.5 pr-4 font-medium text-foreground">{identity.provider}</td>
+                  <td class="min-w-0 break-all py-2.5 pr-4 text-muted-foreground">{identity.email || '—'}</td>
+                  <td class="whitespace-nowrap py-2.5 pr-4 text-muted-foreground">{formatLinkedAt(identity.linked_at)}</td>
+                  <td class="whitespace-nowrap py-2.5 text-right">
+                    <Button
+                      testId={`identity-unlink-${identity.id}`}
+                      variant="danger-outline"
+                      size="sm"
+                      disabled={lastCredential}
+                      loading={unlinkingId === identity.id}
+                      onclick={() => unlink(identity)}
+                    >
+                      {$t('settings.identity.unlink')}
+                    </Button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {/if}
 
       {#if lastCredential}

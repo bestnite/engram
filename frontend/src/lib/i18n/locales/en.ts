@@ -1363,6 +1363,7 @@ export const en: LocaleCatalog = {
   'settings.password.set_intro': 'This account currently signs in only through an OIDC identity. Set a password so you can also sign in without it.',
   'settings.password.set_submit': 'Set password',
   'settings.password.set_done': 'Password set.',
+  'settings.password.already_set': 'A password has already been set. Refresh the page.',
   // ---- Account security: linked sign-in identities ----
   'settings.identity.heading': 'Linked sign-in identities',
   'settings.identity.intro': 'Once linked, you can sign in with that OIDC identity.',

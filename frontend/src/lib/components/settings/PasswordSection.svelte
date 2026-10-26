@@ -25,6 +25,7 @@
     password_rejected: 'settings.password.rejected',
     password_unchanged: 'settings.password.unchanged',
     password_unavailable: 'settings.password.unavailable',
+    password_already_set: 'settings.password.already_set',
     invalid_request: 'settings.password.invalid',
   };
 
@@ -45,6 +46,11 @@
       }
     } catch (err) {
       const code = err instanceof ApiClientError ? err.code : '';
+      // Another request set the password between this page's read and this write. The store still says "no password",
+      // so without this the form would keep offering the first-password variant and fail the same way on every retry.
+      if (code === 'password_already_set' && passwordless) {
+        markPasswordSet();
+      }
       toast.error($t(errorKeys[code] || getApiErrorMessageKey(err)));
     } finally {
       saving = false;
