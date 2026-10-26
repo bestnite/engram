@@ -17,9 +17,15 @@
     fields: Record<string, unknown>;
     /** Prefix for generating data-testid: `<prefix>-<field name>`. */
     testIdPrefix?: string;
+    /**
+     * Reports the caret of a text control as (field key, selection start, selection end) on focus moves,
+     * clicks, key presses and edits. A view that inserts at the caret keeps the last report per field; a
+     * view that always appends simply omits the prop.
+     */
+    oncaret?: (key: string, start: number, end: number) => void;
   }
 
-  let { specs, fields, testIdPrefix = 'note-field' }: Props = $props();
+  let { specs, fields, testIdPrefix = 'note-field', oncaret }: Props = $props();
 
   /**
    * Fields needing syntax help → the language pack key for the help text. The help goes into a question-mark popover next to the label instead of into the label:
@@ -65,10 +71,25 @@
     else fields[key] = raw;
   }
 
+  /**
+   * Reports where the caret sits in one text control. Only single-string controls report: a "lines"
+   * field is edited as several lines in one box, so its offsets do not map onto the stored array.
+   */
+  function reportCaret(
+    event: Event & { currentTarget: HTMLInputElement | HTMLTextAreaElement },
+    key: string
+  ): void {
+    if (!oncaret) return;
+    const { selectionStart, selectionEnd } = event.currentTarget;
+    if (selectionStart === null || selectionEnd === null) return;
+    oncaret(key, selectionStart, selectionEnd);
+  }
+
   function selectedIndexes(key: string): number[] {
     const value = fields[key];
     return Array.isArray(value) ? value.map((item) => Number(item)).filter((n) => Number.isInteger(n)) : [];
   }
+
 
   function toggleIndex(key: string, index: number, checked: boolean): void {
     const current = selectedIndexes(key);
@@ -107,7 +128,13 @@
           rows={spec.key === 'extra' ? 3 : 5}
           spellcheck="false"
           value={asString(spec.key)}
-          oninput={(event) => setString(spec.key, event.currentTarget.value)}
+          oninput={(event) => {
+            setString(spec.key, event.currentTarget.value);
+            reportCaret(event, spec.key);
+          }}
+          onselect={(event) => reportCaret(event, spec.key)}
+          onkeyup={(event) => reportCaret(event, spec.key)}
+          onclick={(event) => reportCaret(event, spec.key)}
           class="field-input text-sm mt-1.5 block w-full"></textarea>
       {:else if spec.control === 'lines'}
         <textarea
@@ -162,7 +189,13 @@
           type="text"
           data-testid="{testIdPrefix}-{spec.key}"
           value={asString(spec.key)}
-          oninput={(event) => setString(spec.key, event.currentTarget.value)}
+          oninput={(event) => {
+            setString(spec.key, event.currentTarget.value);
+            reportCaret(event, spec.key);
+          }}
+          onselect={(event) => reportCaret(event, spec.key)}
+          onkeyup={(event) => reportCaret(event, spec.key)}
+          onclick={(event) => reportCaret(event, spec.key)}
           class="field-input text-sm mt-1.5 block w-full"
         />
       {/if}

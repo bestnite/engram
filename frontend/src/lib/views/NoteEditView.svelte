@@ -8,6 +8,7 @@
   import { typeset } from '../mathjax';
   import { enhanceShortcodes, stopShortcodePlayback } from '../shortcodes';
   import MediaPicker from '../components/MediaPicker.svelte';
+  import ShortcodeInsert from '../components/ShortcodeInsert.svelte';
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import Select from '../components/ui/Select.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -17,6 +18,7 @@
   import Dropzone from '../components/ui/Dropzone.svelte';
   import { emptyFields, toFormFields, toPayloadFields } from '../card-fields';
   import { cardTypes, fieldsForKind, kindOrder, loadCardTypes } from '../card-types';
+  import { insertSource, mediaInsertion, type Caret } from '../shortcode-source';
 
   // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
   // (card type, fields, tags, media and live preview). A successful create always jumps back to the deck page, leaving no second "create another" path.
@@ -40,8 +42,11 @@
   let metaError = $state(false);
 
   let selectedField = $state('');
-  // Upload control state: it shares insertMedia's insertion path with the media library picker (the editor's media facet).
+  // Upload control state: it shares the insertion path with the media library picker (the editor's media facet).
   let uploading = $state(false);
+  // Last known caret per field, reported by NoteFieldsForm. A field the user never placed the caret in has
+  // no entry, so an insertion there appends to the end instead of guessing a position.
+  let carets = $state<Record<string, Caret>>({});
 
   // Preview state machine: empty nothing entered yet / loading generating (the previous result may still be attached) / ready has a result /
   // incomplete fields are not complete (server 400) / error fetching failed.
@@ -72,6 +77,11 @@
 
   // Stable signature of the field contents: a change to kind or any field yields a new string, and the live preview reschedules off it.
   const signature = $derived(JSON.stringify({ kind, fields: collectFields() }));
+
+  // The shortcode panel writes into the same field the media controls do; its heading names that field
+  // so the target is never in doubt, and a field that does not hold one string cannot take an insertion.
+  const selectedFieldLabel = $derived(textFields.find((option) => option.value === selectedField)?.label ?? '');
+  const targetWritable = $derived(typeof fields[selectedField] === 'string');
 
   // Draft signature: a change to kind, the submitted fields or the tags yields a new string (tags use the parsed array, so changing only whitespace
   // does not count as a new change either). Saving is only responsible for the snapshot at the moment of submission, so it is used to tell whether the draft was already changed when the response lands.
@@ -177,15 +187,38 @@
     kind = next;
     fields = emptyFields(fieldsForKind($cardTypes, next));
     selectedField = firstTextField(next);
+    // The caret offsets belonged to the previous field set; keeping them would splice into unrelated text.
+    carets = {};
   }
 
-  // insertMedia appends a Markdown image reference to the currently selected field; upload and the picker share the same piece of logic.
-  // String concatenation only, never render url as HTML; returns whether it actually inserted (content is left untouched when the field is invalid).
-  function insertMedia(url: string): boolean {
-    const current = fields[selectedField];
+  /** Records the caret NoteFieldsForm reported for one field. */
+  function trackCaret(key: string, start: number, end: number): void {
+    carets[key] = { start, end };
+  }
+
+  /**
+   * Writes one source string into a field: at the last known caret when there is one (replacing the
+   * selection), otherwise appended on a new line. Only single-string fields can take it, so an array
+   * field (the list card's items) reports failure and the caller leaves the content untouched.
+   */
+  function insertInto(key: string, source: string): boolean {
+    const current = fields[key];
     if (typeof current !== 'string') return false;
-    fields[selectedField] = `${current}${current && !current.endsWith('\n') ? '\n' : ''}![](${url})`;
+    const next = insertSource(current, source, carets[key] ?? null);
+    // One assignment: the live preview reschedules off the field contents, and the previous caret is
+    // kept as the position just after what was written so a second insertion continues from there.
+    fields[key] = next.text;
+    carets[key] = next.caret;
     return true;
+  }
+
+  /**
+   * Inserts the selected media item into the selected field. A sound file has to become the audio
+   * shortcode: the Markdown image form would request bytes the browser cannot decode as an image, so
+   * choosing audio used to produce a broken picture and no way to write the shortcode at all.
+   */
+  function insertMedia(item: { url: string; mime: string }): boolean {
+    return insertInto(selectedField, mediaInsertion(item.url, item.mime));
   }
 
   // uploadErrorKeyFor maps the server's stable error code to a localized key; unknown codes fall back to the generic failure message.
@@ -207,7 +240,7 @@
     try {
       const result = await apiClient.uploadDeckMedia(deckId, file);
       if (disposed) return;
-      if (insertMedia(result.url)) toast.success($t('media.upload.inserted'));
+      if (insertMedia(result)) toast.success($t('media.upload.inserted'));
     } catch (err) {
       if (disposed) return;
       toast.error($t(uploadErrorKeyFor(err)));
@@ -411,7 +444,12 @@
               <p class="mt-1.5 text-xs text-muted-foreground">{$t('note_edit.kind_hint')}</p>
             </div>
 
-            <NoteFieldsForm specs={fieldsForKind($cardTypes, kind)} {fields} testIdPrefix="note-field" />
+            <NoteFieldsForm
+              specs={fieldsForKind($cardTypes, kind)}
+              {fields}
+              testIdPrefix="note-field"
+              oncaret={trackCaret}
+            />
 
             <label class="block text-sm font-medium text-foreground">{$t('note_edit.tags')}
               <input data-testid="note-tags-editor" bind:value={tagsText} class="field-input text-sm mt-1.5 w-full" />
@@ -441,6 +479,13 @@
             </div>
             <!-- Media library picker: data comes from GET /api/v1/media JSON; after selection it shares the same insertMedia as upload. -->
             <MediaPicker onselect={insertMedia} />
+            <!-- Shortcode panel: it writes into the field chosen just above, which is why it sits inside this
+                 section instead of carrying a second field selector of its own. -->
+            <ShortcodeInsert
+              targetLabel={selectedFieldLabel}
+              targetWritable={targetWritable}
+              oninsert={(source) => insertInto(selectedField, source)}
+            />
           </div>
         </div>
 
