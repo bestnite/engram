@@ -689,3 +689,157 @@ describe('unified note editor — lifecycle and routes', () => {
     expect(byName('note-create-legacy')!.component).toBe(editor);
   });
 });
+
+/**
+ * Insertion into a card field, from both directions: the shortcode panel (caret-aware, invalid
+ * input refuses), and the media controls (the written form depends on the file's mime type, so an
+ * audio pick or upload becomes the audio shortcode instead of a broken image reference).
+ */
+describe('unified note editor — inserting content', () => {
+  function fieldValue(testid: string): string {
+    return (target.querySelector(`[data-testid="${testid}"]`) as HTMLTextAreaElement).value;
+  }
+
+  /** Places a real caret and reports it, the way a click inside the field does. */
+  function setCaret(testid: string, start: number, end: number): void {
+    const field = target.querySelector(`[data-testid="${testid}"]`) as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(start, end);
+    field.dispatchEvent(new Event('select', { bubbles: true }));
+    flushSync();
+  }
+
+  function typeTtsBody(body: string): void {
+    const input = target.querySelector('[data-testid="shortcode-tts-body"]') as HTMLInputElement;
+    input.value = body;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+  }
+
+  function insertShortcode(): void {
+    (target.querySelector('[data-testid="shortcode-insert-submit"]') as HTMLButtonElement).click();
+    flushSync();
+  }
+
+  function dropFile(testid: string, file: File): void {
+    const input = target.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement;
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  it('splices the shortcode at the caret of the field chosen by the existing selector', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+    setField('note-field-front', 'abcdef');
+    await flush();
+    setCaret('note-field-front', 2, 2);
+
+    typeTtsBody('x');
+    expect(target.querySelector('[data-testid="shortcode-insert-preview"]')?.textContent).toBe('{{tts:x}}');
+    insertShortcode();
+
+    expect(fieldValue('note-field-front')).toBe('ab{{tts:x}}cdef');
+  });
+
+  it('replaces the selected text of the target field', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+    setField('note-field-front', 'abcdef');
+    await flush();
+    setCaret('note-field-front', 1, 4);
+
+    typeTtsBody('x');
+    insertShortcode();
+
+    expect(fieldValue('note-field-front')).toBe('a{{tts:x}}ef');
+  });
+
+  it('appends on a new line when the target field has no known caret', async () => {
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture());
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5', noteId: '9' });
+    await flush();
+
+    typeTtsBody('x');
+    insertShortcode();
+    await flush();
+
+    expect(fieldValue('note-field-front')).toBe('Q\n{{tts:x}}');
+    // One assignment per insertion is enough for the live preview to reschedule.
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+    expect(apiClient.previewNote).toHaveBeenLastCalledWith('5', 'basic', { front: 'Q\n{{tts:x}}', back: 'A' });
+  });
+
+  it('keeps the insert button unavailable while the panel input is invalid', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    const button = target.querySelector('[data-testid="shortcode-insert-submit"]') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    typeTtsBody('x');
+    expect(button.disabled).toBe(false);
+  });
+
+  it('inserts the audio shortcode for a picked audio file and keeps the image form for a picture', async () => {
+    vi.spyOn(apiClient, 'listMedia').mockResolvedValue({
+      items: [
+        { sha256: 'b'.repeat(64), mime: 'audio/mpeg', bytes: 9, url: `/media/${'b'.repeat(64)}`, created_at: '' },
+        { sha256: SHA, mime: 'image/png', bytes: 4, url: PREVIEW_URL, created_at: '' },
+      ],
+      next_cursor: '',
+    });
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    (target.querySelector('[data-testid="media-picker-toggle"]') as HTMLButtonElement).click();
+    await flush();
+    (target.querySelector(`[data-testid="media-item-${'b'.repeat(64)}"]`) as HTMLButtonElement).click();
+    await flush();
+    expect(fieldValue('note-field-front')).toBe(`{{audio:/media/${'b'.repeat(64)}}}`);
+
+    setField('note-field-front', '');
+    await flush();
+    (target.querySelector(`[data-testid="media-item-${SHA}"]`) as HTMLButtonElement).click();
+    await flush();
+    expect(fieldValue('note-field-front')).toBe(`![](${PREVIEW_URL})`);
+  });
+
+  it('inserts the audio shortcode for an uploaded audio file and the image form for an uploaded picture', async () => {
+    const AUDIO_SHA = 'd'.repeat(64);
+    vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
+      sha256: AUDIO_SHA,
+      mime: 'audio/mpeg',
+      bytes: 9,
+      url: `/media/${AUDIO_SHA}`,
+    });
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    dropFile('media-upload-input', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
+    await flush();
+    expect(fieldValue('note-field-front')).toBe(`{{audio:/media/${AUDIO_SHA}}}`);
+
+    vi.mocked(apiClient.uploadDeckMedia).mockResolvedValue({
+      sha256: SHA,
+      mime: 'image/png',
+      bytes: 4,
+      url: PREVIEW_URL,
+    });
+    setField('note-field-front', '');
+    dropFile('media-upload-input', new File(['picture'], 'picture.png', { type: 'image/png' }));
+    await flush();
+    expect(fieldValue('note-field-front')).toBe(`![](${PREVIEW_URL})`);
+  });
+});
