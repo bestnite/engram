@@ -97,6 +97,11 @@ var shortcodeTable = map[string]shortcodeDef{
 			{key: "lang", attr: "data-tts-lang", re: shortcodeLangPattern},
 			{key: "rate", attr: "data-tts-rate", re: shortcodeNumberPattern},
 		},
+		// `hide` marks the body as one the client may hide in favour of its own speech control.
+		// The body is still rendered, so a reader without JavaScript keeps the text.
+		flags: []shortcodeFlag{
+			{key: "hide", attr: "data-tts-hide"},
+		},
 	},
 	"audio": {
 		class:    "engram-audio",

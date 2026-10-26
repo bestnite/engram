@@ -154,6 +154,7 @@ func buildPolicy(withHeadings bool) *bluemonday.Policy {
 	p.AllowAttrs("data-tts-text").Matching(shortcodeTextPattern).OnElements("span")
 	p.AllowAttrs("data-tts-lang").Matching(shortcodeLangPattern).OnElements("span")
 	p.AllowAttrs("data-tts-rate").Matching(shortcodeNumberPattern).OnElements("span")
+	p.AllowAttrs("data-tts-hide").Matching(regexp.MustCompile(`^1$`)).OnElements("span")
 	p.AllowAttrs("data-audio-src").Matching(shortcodeAudioSrcPattern).OnElements("span")
 	p.AllowAttrs("data-audio-start").Matching(shortcodeNumberPattern).OnElements("span")
 	p.AllowAttrs("data-audio-end").Matching(shortcodeNumberPattern).OnElements("span")

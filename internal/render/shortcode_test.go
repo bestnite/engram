@@ -35,6 +35,16 @@ func TestRenderMarkdownShortcodeExpansion(t *testing.T) {
 			required: []string{`<span class="engram-tts" data-tts-text="hello">hello</span>`},
 		},
 		{
+			name:     "tts with language and the hide flag",
+			src:      `{{tts:こんにちは|lang=ja-JP|hide}}`,
+			required: []string{`<span class="engram-tts" data-tts-text="こんにちは" data-tts-lang="ja-JP" data-tts-hide="1">こんにちは</span>`},
+		},
+		{
+			name:     "tts hide flag is emitted after the parameters",
+			src:      `{{tts:x|hide|rate=1}}`,
+			required: []string{`<span class="engram-tts" data-tts-text="x" data-tts-rate="1" data-tts-hide="1">x</span>`},
+		},
+		{
 			name:     "tts parameters are emitted in table order regardless of source order",
 			src:      `{{tts:x|rate=1|lang=en}}`,
 			required: []string{`<span class="engram-tts" data-tts-text="x" data-tts-lang="en" data-tts-rate="1">x</span>`},
@@ -113,6 +123,11 @@ func TestRenderMarkdownShortcodeEmitsSourceForRejection(t *testing.T) {
 		{name: "repeated parameter", src: `{{tts:x|rate=1|rate=2}}`, want: `{{tts:x|rate=1|rate=2}}`},
 		{name: "bare word after the audio body", src: `{{audio:` + audioSrc + `|rewind}}`, want: `{{audio:` + audioSrc + `|rewind}}`},
 		{name: "flag written as a parameter", src: `{{audio:` + audioSrc + `|loop=1}}`, want: `{{audio:` + audioSrc + `|loop=1}}`},
+		{name: "tts hide written as a parameter", src: `{{tts:x|hide=1}}`, want: `{{tts:x|hide=1}}`},
+		{name: "tts hide flag with an empty value", src: `{{tts:x|hide=}}`, want: `{{tts:x|hide=}}`},
+		{name: "repeated tts hide flag", src: `{{tts:x|hide|hide}}`, want: `{{tts:x|hide|hide}}`},
+		{name: "hide flag on audio", src: `{{audio:` + audioSrc + `|hide}}`, want: `{{audio:` + audioSrc + `|hide}}`},
+		{name: "hide flag on ruby", src: `{{ruby:漢字|かんじ|hide}}`, want: `{{ruby:漢字|かんじ|hide}}`},
 		{name: "audio source outside /media", src: `{{audio:https://example.com/a.mp3}}`, want: `{{audio:https://example.com/a.mp3}}`},
 		{name: "audio source hash not lowercase", src: `{{audio:/media/0123456789ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef}}`, want: `{{audio:/media/0123456789ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef}}`},
 		{name: "audio source is not a path", src: `{{audio:a.mp3}}`, want: `{{audio:a.mp3}}`},
@@ -308,6 +323,23 @@ func TestRenderMarkdownShortcodeAllowlistIsClosed(t *testing.T) {
 			required:  []string{"<span>x</span>"},
 		},
 		{
+			name:     "tts hide is a fixed value",
+			src:      `<span data-tts-hide="1">x</span>`,
+			required: []string{`data-tts-hide="1"`},
+		},
+		{
+			name:      "tts hide value is not free text",
+			src:       `<span data-tts-hide="true">x</span>`,
+			forbidden: []string{"data-tts-hide"},
+			required:  []string{"<span>x</span>"},
+		},
+		{
+			name:      "tts hide on another element stays forbidden",
+			src:       `<p data-tts-hide="1">x</p>`,
+			forbidden: []string{"data-tts-hide"},
+			required:  []string{"<p>x</p>"},
+		},
+		{
 			name:     "ruby elements carry no attributes",
 			src:      `<ruby>漢字<rt>かんじ</rt><rp>(</rp></ruby>`,
 			required: []string{"<ruby>漢字<rt>かんじ</rt><rp>(</rp></ruby>"},
@@ -359,6 +391,12 @@ func TestRenderMailMarkdownShortcodesArePlainText(t *testing.T) {
 		{
 			name:      "tts",
 			src:       `{{tts:こんにちは|lang=ja-JP|rate=0.9}}`,
+			required:  []string{"こんにちは"},
+			forbidden: []string{"engram-", "data-tts-", "<span"},
+		},
+		{
+			name:      "tts with the hide flag",
+			src:       `{{tts:こんにちは|lang=ja-JP|hide}}`,
 			required:  []string{"こんにちは"},
 			forbidden: []string{"engram-", "data-tts-", "<span"},
 		},
