@@ -131,8 +131,52 @@ func seedOIDC(t *testing.T, srv *Server, db *gorm.DB, p *stubOIDC, policy string
 	return codec
 }
 
-// startOIDCLogin calls /auth/oidc/start and parses out state and nonce, also asserting the PKCE parameters are present.
-func startOIDCLogin(t *testing.T, srv *Server) (state, nonce string) {
+// oidcStateCookieFrom returns the oidc_state cookie set by a start response and asserts the attributes that make it a
+// short-lived, HttpOnly, same-site browser binding.
+func oidcStateCookieFrom(t *testing.T, rec *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+	for _, ck := range rec.Result().Cookies() {
+		if ck.Name != oidcStateCookie {
+			continue
+		}
+		if !ck.HttpOnly {
+			t.Errorf("%s cookie is not HttpOnly", oidcStateCookie)
+		}
+		if ck.SameSite != http.SameSiteLaxMode {
+			t.Errorf("%s cookie SameSite = %v, want Lax", oidcStateCookie, ck.SameSite)
+		}
+		if ck.Path != "/auth/oidc" {
+			t.Errorf("%s cookie Path = %q, want /auth/oidc", oidcStateCookie, ck.Path)
+		}
+		if ck.MaxAge <= 0 {
+			t.Errorf("%s cookie MaxAge = %d, want > 0", oidcStateCookie, ck.MaxAge)
+		}
+		return ck
+	}
+	t.Fatalf("response has no %s cookie", oidcStateCookie)
+	return nil
+}
+
+// assertOIDCStateCookieCleared asserts the callback deleted the state cookie (a negative MaxAge on the Set-Cookie line).
+func assertOIDCStateCookieCleared(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	for _, ck := range rec.Result().Cookies() {
+		if ck.Name != oidcStateCookie {
+			continue
+		}
+		if ck.MaxAge >= 0 {
+			t.Errorf("%s cookie MaxAge = %d on the callback, want a deletion (< 0)", oidcStateCookie, ck.MaxAge)
+		}
+		if ck.Path != "/auth/oidc" || !ck.HttpOnly || ck.SameSite != http.SameSiteLaxMode {
+			t.Errorf("cleared %s cookie lost its attributes: %+v", oidcStateCookie, ck)
+		}
+		return
+	}
+	t.Fatalf("callback did not clear the %s cookie", oidcStateCookie)
+}
+
+// startOIDCLogin calls /auth/oidc/start and parses out state, nonce and the state cookie, also asserting the PKCE parameters are present.
+func startOIDCLogin(t *testing.T, srv *Server) (state, nonce string, cookie *http.Cookie) {
 	t.Helper()
 	rec := getWithCookies(t, srv, "/auth/oidc/start", nil)
 	if rec.Code != http.StatusFound {
@@ -146,7 +190,7 @@ func startOIDCLogin(t *testing.T, srv *Server) (state, nonce string) {
 	if q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" {
 		t.Fatalf("authorize URL is missing PKCE S256: %s", u.String())
 	}
-	return q.Get("state"), q.Get("nonce")
+	return q.Get("state"), q.Get("nonce"), oidcStateCookieFrom(t, rec)
 }
 
 // TestOIDCLoginAgainstStubProvider is the core acceptance: login succeeds against the stub provider, and a wrong state is refused.
@@ -155,7 +199,7 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 	p := newStubOIDC(t)
 	seedOIDC(t, srv, db, p, auth.PolicyOpen)
 
-	state, nonce := startOIDCLogin(t, srv)
+	state, nonce, stateCookie := startOIDCLogin(t, srv)
 	p.nonce = nonce
 
 	// A wrong state must be refused: the SPA has replaced the SSR login page, so failure 303s to the login page and issues no session.
@@ -174,7 +218,7 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 	}
 
 	// Correct state: login succeeds and a session is issued.
-	ok := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, nil)
+	ok := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, []*http.Cookie{stateCookie})
 	if ok.Code != http.StatusSeeOther {
 		t.Fatalf("callback = %d, want 303 (body %s)", ok.Code, snippet(ok.Body.String()))
 	}
@@ -206,6 +250,60 @@ func TestOIDCLoginAgainstStubProvider(t *testing.T) {
 	}
 	if n, err := audit.CountByAction(context.Background(), store.ActionUserLoginSucceeded); err != nil || n < 1 {
 		t.Errorf("user.login_succeeded audit rows = %d (err %v), want at least 1", n, err)
+	}
+}
+
+// TestOIDCLoginCallbackRequiresStateCookie covers the login-CSRF path: a callback URL is not enough to finish a login,
+// the browser that started the flow must also present the matching state cookie. Rejecting before TakePending keeps a
+// stolen URL from burning the legitimate pending entry.
+func TestOIDCLoginCallbackRequiresStateCookie(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*http.Cookie)
+		send   bool
+	}{
+		{"missing cookie", nil, false},
+		{"wrong cookie", func(ck *http.Cookie) { ck.Value = "an-attacker-state" }, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, db := newAuthServer(t)
+			p := newStubOIDC(t)
+			seedOIDC(t, srv, db, p, auth.PolicyOpen)
+			state, nonce, cookie := startOIDCLogin(t, srv)
+			p.nonce = nonce
+			if tc.mutate != nil {
+				tc.mutate(cookie)
+			}
+			var cookies []*http.Cookie
+			if tc.send {
+				cookies = []*http.Cookie{cookie}
+			}
+
+			rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, cookies)
+			if rec.Code != http.StatusSeeOther {
+				t.Fatalf("callback = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
+			}
+			if loc := rec.Header().Get("Location"); loc != "/login" {
+				t.Fatalf("callback Location = %q, want /login", loc)
+			}
+			for _, ck := range rec.Result().Cookies() {
+				if ck.Name == srv.sessions.CookieName() {
+					t.Fatal("rejected callback issued a session cookie")
+				}
+			}
+			assertOIDCStateCookieCleared(t, rec)
+			if _, ok := srv.oidc.TakePending(state); !ok {
+				t.Fatal("rejected callback consumed the pending state")
+			}
+			var count int64
+			if err := db.Model(&store.Identity{}).Count(&count).Error; err != nil {
+				t.Fatalf("count identities: %v", err)
+			}
+			if count != 0 {
+				t.Fatalf("rejected callback wrote %d identities, want 0", count)
+			}
+		})
 	}
 }
 

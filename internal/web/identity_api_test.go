@@ -107,6 +107,54 @@ func TestIdentityBindStartCreatesBindIntent(t *testing.T) {
 	if pending.Intent != auth.PendingIntentBind || pending.UserID != owner.ID {
 		t.Fatalf("pending = %+v, want intent=bind user=%d", pending, owner.ID)
 	}
+	if ck := oidcStateCookieFrom(t, rec); ck.Value != q.Get("state") {
+		t.Fatalf("state cookie = %q, want the start's state", ck.Value)
+	}
+}
+
+// TestIdentityBindCallbackRequiresStateCookie mirrors the login case for the bind flow: a callback URL alone must not link
+// an identity, and the pending entry must survive a rejected callback.
+func TestIdentityBindCallbackRequiresStateCookie(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*http.Cookie)
+		send   bool
+	}{
+		{"missing cookie", nil, false},
+		{"wrong cookie", func(ck *http.Cookie) { ck.Value = "an-attacker-state" }, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, db := newAuthServer(t)
+			p := newStubOIDC(t)
+			seedOIDC(t, srv, db, p, auth.PolicyClosed)
+			owner := createTestUser(t, srv, "owner", "Sup3rSecret!", store.RoleUser, true)
+			cookies, csrf := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
+			state, nonce, stateCookie := bindURL(t, srv, cookies, csrf)
+			p.nonce = nonce
+			if tc.mutate != nil {
+				tc.mutate(stateCookie)
+			}
+			var callbackCookies []*http.Cookie
+			if tc.send {
+				callbackCookies = bindCallbackCookies(cookies, stateCookie)
+			} else {
+				callbackCookies = cookies
+			}
+
+			rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, callbackCookies)
+			if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=session" {
+				t.Fatalf("callback = (%d, %q), want 303 to identity=session", rec.Code, loc)
+			}
+			assertOIDCStateCookieCleared(t, rec)
+			if _, ok := srv.oidc.TakePending(state); !ok {
+				t.Fatal("rejected bind callback consumed the pending state")
+			}
+			if rows := identityRows(t, db, owner.ID); len(rows) != 0 {
+				t.Fatalf("rejected bind callback wrote %d identities, want 0", len(rows))
+			}
+		})
+	}
 }
 
 func TestIdentityBindStartRejectsUnavailableAndMissingCSRF(t *testing.T) {
@@ -132,8 +180,8 @@ func TestIdentityBindStartRejectsUnavailableAndMissingCSRF(t *testing.T) {
 	}
 }
 
-// bindURL starts a bind and returns state and nonce without consuming the pending entry.
-func bindURL(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string) (state, nonce string) {
+// bindURL starts a bind and returns state, nonce and the browser state cookie without consuming the pending entry.
+func bindURL(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string) (state, nonce string, stateCookie *http.Cookie) {
 	t.Helper()
 	rec := postJSONWithSession(srv, "/api/v1/settings/identities/bind", map[string]string{}, cookies, csrf)
 	if rec.Code != http.StatusOK {
@@ -147,7 +195,13 @@ func bindURL(t *testing.T, srv *Server, cookies []*http.Cookie, csrf string) (st
 	if err != nil {
 		t.Fatalf("parse authorize_url: %v", err)
 	}
-	return u.Query().Get("state"), u.Query().Get("nonce")
+	return u.Query().Get("state"), u.Query().Get("nonce"), oidcStateCookieFrom(t, rec)
+}
+
+// bindCallbackCookies sends the caller's session cookies together with the flow's state cookie, which is the browser
+// binding the callback now requires in addition to the server-side pending entry.
+func bindCallbackCookies(session []*http.Cookie, state *http.Cookie) []*http.Cookie {
+	return append(append([]*http.Cookie{}, session...), state)
 }
 
 func TestIdentityBindCallbackLinksToCaller(t *testing.T) {
@@ -156,14 +210,14 @@ func TestIdentityBindCallbackLinksToCaller(t *testing.T) {
 	seedOIDC(t, srv, db, p, auth.PolicyClosed)
 	owner := createTestUser(t, srv, "owner", "Sup3rSecret!", store.RoleUser, true)
 	cookies, csrf := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
-	state, nonce := bindURL(t, srv, cookies, csrf)
+	state, nonce, stateCookie := bindURL(t, srv, cookies, csrf)
 	p.nonce = nonce
 
 	var before int64
 	if err := db.Model(&store.Session{}).Where("user_id = ?", owner.ID).Count(&before).Error; err != nil {
 		t.Fatalf("count sessions: %v", err)
 	}
-	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, cookies)
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, bindCallbackCookies(cookies, stateCookie))
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("bind callback = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -202,10 +256,10 @@ func TestIdentityBindCallbackRejectsOtherSessionOfSameUser(t *testing.T) {
 	owner := createTestUser(t, srv, "owner", "Sup3rSecret!", store.RoleUser, true)
 	cookiesA, csrfA := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
 	cookiesB, _ := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
-	state, nonce := bindURL(t, srv, cookiesA, csrfA)
+	state, nonce, stateCookie := bindURL(t, srv, cookiesA, csrfA)
 	p.nonce = nonce
 
-	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, cookiesB)
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, bindCallbackCookies(cookiesB, stateCookie))
 	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=session" {
 		t.Fatalf("second-session callback = (%d, %q), want 303 to identity=session", rec.Code, loc)
 	}
@@ -222,10 +276,10 @@ func TestIdentityBindCallbackRejectsOtherSession(t *testing.T) {
 	other := createTestUser(t, srv, "other", "Sup3rSecret!", store.RoleUser, true)
 	ownerCookies, ownerCSRF := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
 	otherCookies, _ := loginJSON(t, srv, db, "other", "Sup3rSecret!")
-	state, nonce := bindURL(t, srv, ownerCookies, ownerCSRF)
+	state, nonce, stateCookie := bindURL(t, srv, ownerCookies, ownerCSRF)
 	p.nonce = nonce
 
-	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, otherCookies)
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, bindCallbackCookies(otherCookies, stateCookie))
 	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=session" {
 		t.Fatalf("mismatched-session callback = (%d, %q), want 303 to identity=session", rec.Code, loc)
 	}
@@ -249,10 +303,10 @@ func TestIdentityBindCallbackSubjectTaken(t *testing.T) {
 		t.Fatalf("seed taken identity: %v", err)
 	}
 	cookies, csrf := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
-	state, nonce := bindURL(t, srv, cookies, csrf)
+	state, nonce, stateCookie := bindURL(t, srv, cookies, csrf)
 	p.nonce = nonce
 
-	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, cookies)
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, bindCallbackCookies(cookies, stateCookie))
 	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=taken" {
 		t.Fatalf("taken-subject callback = (%d, %q), want 303 to identity=taken", rec.Code, loc)
 	}
@@ -299,24 +353,24 @@ func TestIdentityBindCallbackFailures(t *testing.T) {
 	cookies, csrf := loginJSON(t, srv, db, "owner", "Sup3rSecret!")
 
 	// No session: the pending bind belongs to a session, so even the right user id is not enough.
-	state, _ := bindURL(t, srv, cookies, csrf)
-	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, nil)
+	state, _, stateCookie := bindURL(t, srv, cookies, csrf)
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, []*http.Cookie{stateCookie})
 	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=session" {
 		t.Fatalf("no-session bind callback = (%d, %q), want identity=session", rec.Code, loc)
 	}
 
 	// No code: the state is valid and the session matches, but there is nothing to exchange.
-	state, nonce := bindURL(t, srv, cookies, csrf)
+	state, nonce, stateCookie := bindURL(t, srv, cookies, csrf)
 	p.nonce = nonce
-	rec = getWithCookies(t, srv, "/auth/oidc/callback?state="+state, cookies)
+	rec = getWithCookies(t, srv, "/auth/oidc/callback?state="+state, bindCallbackCookies(cookies, stateCookie))
 	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=failed" {
 		t.Fatalf("no-code bind callback = (%d, %q), want identity=failed", rec.Code, loc)
 	}
 
 	// Wrong nonce: the ID token is rejected before any link is written.
-	state, _ = bindURL(t, srv, cookies, csrf)
+	state, _, stateCookie = bindURL(t, srv, cookies, csrf)
 	p.nonce = "wrong-nonce"
-	rec = getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, cookies)
+	rec = getWithCookies(t, srv, "/auth/oidc/callback?code=stub-code&state="+state, bindCallbackCookies(cookies, stateCookie))
 	if loc := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || loc != "/settings/security?identity=failed" {
 		t.Fatalf("wrong-nonce bind callback = (%d, %q), want identity=failed", rec.Code, loc)
 	}
@@ -379,8 +433,8 @@ func TestIdentityBindCallbackProviderError(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			state, _ := bindURL(t, srv, cookies, csrf)
-			rec := getWithCookies(t, srv, "/auth/oidc/callback?error=access_denied&state="+state, tc.cookies)
+			state, _, stateCookie := bindURL(t, srv, cookies, csrf)
+			rec := getWithCookies(t, srv, "/auth/oidc/callback?error=access_denied&state="+state, bindCallbackCookies(tc.cookies, stateCookie))
 			if rec.Code != http.StatusSeeOther {
 				t.Fatalf("cancelled bind callback = %d, want 303", rec.Code)
 			}
@@ -402,9 +456,9 @@ func TestOIDCLoginProviderErrorStillGoesToLogin(t *testing.T) {
 	srv, db := newAuthServer(t)
 	p := newStubOIDC(t)
 	seedOIDC(t, srv, db, p, auth.PolicyClosed)
-	state, _ := startOIDCLogin(t, srv)
+	state, _, stateCookie := startOIDCLogin(t, srv)
 
-	rec := getWithCookies(t, srv, "/auth/oidc/callback?error=access_denied&state="+state, nil)
+	rec := getWithCookies(t, srv, "/auth/oidc/callback?error=access_denied&state="+state, []*http.Cookie{stateCookie})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("cancelled login callback = %d, want 303", rec.Code)
 	}
@@ -413,6 +467,56 @@ func TestOIDCLoginProviderErrorStillGoesToLogin(t *testing.T) {
 	}
 	if _, ok := srv.oidc.TakePending(state); ok {
 		t.Fatal("cancelled login left the pending state in the table")
+	}
+}
+
+// TestAdminOIDCUnlinkLastCredential covers the admin-side guard: an admin unlink must not strip the last sign-in method
+// from a passwordless account, while the same account with a password can still be unlinked.
+func TestAdminOIDCUnlinkLastCredential(t *testing.T) {
+	ctx := context.Background()
+	srv, db, _, adminCookies, adminCSRF := newNotesServer(t)
+	identities := store.NewIdentityStore(db)
+
+	passwordless, err := srv.accounts.CreateOIDCUser(ctx, auth.CreateUserInput{
+		Username: "admin-unlink-oidc", Email: "admin-unlink-oidc@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateOIDCUser: %v", err)
+	}
+	only := &store.Identity{UserID: passwordless.ID, Provider: "https://issuer.example.com", Subject: "sub-admin-unlink"}
+	if err := identities.Create(ctx, only); err != nil {
+		t.Fatalf("seed identity: %v", err)
+	}
+
+	path := "/api/v1/admin/oidc/identities/" + only.PublicID + "/unlink"
+	rec := adminPostJSON(t, srv, path, nil, adminCookies, adminCSRF)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("admin unlink of the last credential = %d, want 409 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var errResp struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, rec, &errResp)
+	if errResp.Error.Code != "last_credential" {
+		t.Fatalf("error code = %q, want last_credential", errResp.Error.Code)
+	}
+	if _, err := identities.ByPublicID(ctx, only.PublicID); err != nil {
+		t.Fatalf("admin unlink removed the last identity: %v", err)
+	}
+
+	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return srv.accounts.SetInitialPasswordTx(ctx, tx, passwordless.ID, "Sup3rSecret!", "")
+	}); err != nil {
+		t.Fatalf("SetInitialPasswordTx: %v", err)
+	}
+	rec = adminPostJSON(t, srv, path, nil, adminCookies, adminCSRF)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("admin unlink with a password = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if _, err := identities.ByPublicID(ctx, only.PublicID); err == nil {
+		t.Fatal("identity still exists after an allowed admin unlink")
 	}
 }
 

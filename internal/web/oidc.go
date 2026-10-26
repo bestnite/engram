@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"net/http"
 	"strings"
@@ -17,12 +18,32 @@ import (
 //
 // Only protocol interaction and routing are implemented here; identity linking is entirely auth.IdentityLinkService's job (oauthlink.go):
 //   GET /auth/oidc/start     generate state / nonce / PKCE and redirect to the provider authorization endpoint
-//   GET /auth/oidc/callback  validate state (one-time), exchange the token, validate nonce and signature, link and open a session
+//   GET /auth/oidc/callback  validate state against the browser cookie (one-time), exchange the token, validate nonce and signature, link and open a session
 //
 // OIDC is off by default: with incomplete configuration these two routes return 404 and the login page shows no entry (no half-open state allowed).
 //
 // Failures always 303 back to the SPA login page (GET /login). Now that the SPA has replaced the SSR login page, no HTML is rendered here;
 // the failure reason goes to an English log. For the client to show copy it would need a stable error hand-off contract (no consumer today).
+
+// oidcStateCookie is the browser-side half of the one-time pending state. The pending entry lives on the server, so without
+// this cookie an attacker could start a login, keep the callback URL and send it to a victim: the victim's browser would
+// complete the flow and open a session for the attacker's account (login CSRF). The callback therefore refuses any state
+// whose cookie is missing or different, and it does so before the pending entry is consumed so a stolen URL cannot burn it.
+const oidcStateCookie = "oidc_state"
+
+// setOIDCStateCookie binds the current pending flow to this browser for ten minutes, matching the pending entry's lifetime.
+// Path /auth/oidc keeps it off every other route; Lax still sends it on the provider's top-level redirect back to the callback.
+func (s *Server) setOIDCStateCookie(c *gin.Context, state string) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(oidcStateCookie, state, 600, "/auth/oidc", "", s.secureCookies(), true)
+}
+
+// clearOIDCStateCookie removes the cookie with the same Path and flags used to write it, so every callback consumes the
+// binding even when it fails; a negative MaxAge is what turns the Set-Cookie into a deletion.
+func (s *Server) clearOIDCStateCookie(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(oidcStateCookie, "", -1, "/auth/oidc", "", s.secureCookies(), true)
+}
 
 // oidcFailToLogin sends one failed OIDC login back to the SPA login page; reason is used only in the log (English).
 // 303 rather than rendering a page: the callback is a browser navigation, and the redirect puts the address bar back on /login,
@@ -114,6 +135,7 @@ func (s *Server) oidcStart(c *gin.Context) {
 		s.oidcFailToLogin(c, "pending_table_full")
 		return
 	}
+	s.setOIDCStateCookie(c, state)
 	authURL := auth.BuildAuthURL(party, state, nonce, pkce.Challenge)
 	c.Redirect(http.StatusFound, authURL)
 }
@@ -150,6 +172,24 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		s.oidcFailToLogin(c, "missing_state")
 		return
 	}
+	// The pending state is server-side but not bound to a browser: whoever holds the callback URL could otherwise finish the
+	// flow. Compare the state cookie with the query state before consuming anything, so a forged or replayed callback neither
+	// opens a session nor burns the victim's pending entry. Constant-time comparison keeps the state value from leaking through
+	// timing. The cookie is one-time: every callback that reaches this point clears it, success or failure.
+	cookieState, cookieErr := c.Cookie(oidcStateCookie)
+	if cookieErr != nil || subtle.ConstantTimeCompare([]byte(cookieState), []byte(state)) != 1 {
+		s.clearOIDCStateCookie(c)
+		s.logger.Info("oidc: callback state does not match the state cookie")
+		if _, ok := auth.CurrentSession(c); ok {
+			// A signed-in browser is answered on the settings page: the missing binding may be a bind whose URL leaked, and a bind
+			// failure must keep its existing destination instead of pretending the user was signed out.
+			c.Redirect(http.StatusSeeOther, "/settings/security?identity=session")
+			return
+		}
+		s.oidcFailToLogin(c, "state_cookie_mismatch")
+		return
+	}
+	s.clearOIDCStateCookie(c)
 	// state is one-time: unknown (forged or replayed) or expired are both refused here (negative case).
 	pending, ok := s.oidc.TakePending(state)
 	if !ok {

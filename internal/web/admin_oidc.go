@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -267,9 +268,18 @@ func (s *Server) adminOIDCUnlink(c *gin.Context) {
 		adminError(c, http.StatusNotFound, "unlink_failed")
 		return
 	}
-	if err := s.identities.Delete(ctx, ident.ID); err != nil {
-		s.logger.Error("spa admin: unlink identity failed", "id", ident.ID, "error", err)
-		adminError(c, http.StatusInternalServerError, "unlink_failed")
+	// DeleteForUser rather than Delete: an admin unlink is still an unlink, and removing the last identity of a passwordless
+	// account would leave that account with no way to sign in. The store holds the guard and the delete in one transaction.
+	if err := s.identities.DeleteForUser(ctx, ident.ID, ident.UserID); err != nil {
+		switch {
+		case errors.Is(err, store.ErrLastCredential):
+			adminError(c, http.StatusConflict, "last_credential")
+		case errors.Is(err, store.ErrIdentityNotFound):
+			adminError(c, http.StatusNotFound, "unlink_failed")
+		default:
+			s.logger.Error("spa admin: unlink identity failed", "id", ident.ID, "error", err)
+			adminError(c, http.StatusInternalServerError, "unlink_failed")
+		}
 		return
 	}
 	s.audit(ctx, store.AuditEntry{
