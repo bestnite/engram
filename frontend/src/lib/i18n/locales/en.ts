@@ -1485,4 +1485,6 @@ export const en: LocaleCatalog = {
   'media.upload.audio_only': 'Only a sound file can be added here.',
   'shortcode.insert.audio.upload': 'Upload an audio file',
   'shortcode.insert.audio.upload_hint': 'MP3, OGG or M4A. Uploads as soon as you choose it.',
+  // ---- Note editor: preview drawer below the desktop breakpoint ----
+  'note_preview.close': 'Close preview',
 };

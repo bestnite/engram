@@ -1029,3 +1029,148 @@ describe('unified note editor — inserting content', () => {
     expect(inDialog<HTMLInputElement>('shortcode-audio-upload').disabled).toBe(false);
   });
 });
+
+/**
+ * The preview below the desktop breakpoint is a drawer over the form rather than a column under it, so a
+ * phone author does not scroll past their own fields to see the result. It is the same panel the desktop
+ * column shows — never a second copy of the sanitized HTML — and it is closed by default.
+ */
+describe('unified note editor — preview drawer below the desktop breakpoint', () => {
+  function panel(): HTMLElement {
+    return target.querySelector('[data-testid="note-preview-panel"]') as HTMLElement;
+  }
+
+  function toggle(): HTMLButtonElement {
+    return target.querySelector('[data-testid="note-preview-toggle"]') as HTMLButtonElement;
+  }
+
+  function openDrawer(): void {
+    toggle().focus();
+    toggle().click();
+    flushSync();
+  }
+
+  it('keeps the preview closed and out of the layout below lg, with a header button to open it', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    // Closed by default: the panel is hidden below lg, and lg restores it as the second column.
+    expect(panel().classList.contains('hidden')).toBe(true);
+    expect(panel().className).toContain('lg:flex');
+    expect(panel().getAttribute('data-open')).toBeNull();
+    expect(panel().getAttribute('aria-hidden')).toBeNull();
+    // The way in exists only where the preview is not already on screen.
+    expect(toggle().className).toContain('lg:hidden');
+    expect(toggle().textContent?.trim()).toBe(formatMessage('zh-CN', 'note_preview.title'));
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+    expect(toggle().getAttribute('aria-controls')).toBe('note-preview-panel');
+    // At lg and wider the panel is the sticky column, as before.
+    expect(panel().parentElement?.className).toContain('lg:sticky');
+  });
+
+  it('opens from the header button and keeps updating the same preview while open', async () => {
+    vi.spyOn(apiClient, 'previewNote')
+      .mockResolvedValueOnce(createResponse([{ front_html: '<p>before</p>', back_html: '' }]))
+      .mockResolvedValueOnce(createResponse([{ front_html: '<p>after</p>', back_html: '' }]));
+
+    mountEditor({ id: '5' });
+    await flush();
+    setField('note-field-front', 'first');
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+    expect(previewFront()).toContain('before');
+
+    const field = target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement;
+    openDrawer();
+    await flush();
+
+    expect(panel().getAttribute('data-open')).toBe('true');
+    expect(panel().classList.contains('hidden')).toBe(false);
+    expect(panel().classList.contains('fixed')).toBe(true);
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+    // One sanitized container only: the drawer is the panel the preview was already committed into.
+    expect(target.querySelectorAll('[data-testid="note-preview-result"]')).toHaveLength(1);
+    expect(panel().querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
+
+    // Typing while the drawer is open lands in the same panel.
+    setField('note-field-front', 'second');
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+    expect(previewFront()).toContain('after');
+    expect(panel().querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
+
+    // Opening and closing never remounted the form: same textarea node, same unsaved text.
+    expect(target.querySelector('[data-testid="note-field-front"]')).toBe(field);
+    expect(field.value).toBe('second');
+  });
+
+  it('closes on Esc and returns focus to the header button, keeping the field caret', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([{ front_html: '<p>x</p>', back_html: '' }]));
+
+    mountEditor({ id: '5' });
+    await flush();
+    setField('note-field-front', 'abcdef');
+    await flush();
+    const field = target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement;
+    field.focus();
+    field.setSelectionRange(2, 2);
+    field.dispatchEvent(new Event('select', { bubbles: true }));
+    flushSync();
+
+    openDrawer();
+    await flush();
+    expect(panel().getAttribute('data-open')).toBe('true');
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flush();
+
+    expect(panel().getAttribute('data-open')).toBeNull();
+    expect(panel().classList.contains('hidden')).toBe(true);
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+    // Focus goes back to the button that opened the drawer.
+    expect(document.activeElement).toBe(toggle());
+    // The unsaved text and the caret survived, so the next insertion still lands where the author left off.
+    expect(field.value).toBe('abcdef');
+    expect(field.selectionStart).toBe(2);
+  });
+
+  it('closes from its own close control', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+    openDrawer();
+    await flush();
+
+    const close = target.querySelector('[data-testid="note-preview-close"]') as HTMLButtonElement;
+    expect(close.getAttribute('aria-label')).toBe(formatMessage('zh-CN', 'note_preview.close'));
+    close.click();
+    await flush();
+
+    expect(panel().getAttribute('data-open')).toBeNull();
+    expect(document.activeElement).toBe(toggle());
+  });
+
+  it('renders the desktop preview unchanged while the drawer stays closed', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(
+      createResponse([{ front_html: '<p>desktop</p>', back_html: '<p>back</p>' }])
+    );
+
+    mountEditor({ id: '5' });
+    await flush();
+    setField('note-field-front', 'Q');
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+
+    // At lg the two-column grid still holds the preview, typeset and enhanced as before.
+    expect(target.querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
+    expect(previewFront()).toContain('desktop');
+    expect(panel().className).toContain('max-h-[calc(100vh-3rem)]');
+    expect(panel().getAttribute('data-open')).toBeNull();
+  });
+});

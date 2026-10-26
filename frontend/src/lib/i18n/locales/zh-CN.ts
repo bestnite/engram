@@ -1483,4 +1483,6 @@ export const zhCN: LocaleCatalog = {
   'media.upload.audio_only': '这里只能添加音频文件。',
   'shortcode.insert.audio.upload': '上传音频文件',
   'shortcode.insert.audio.upload_hint': 'MP3、OGG 或 M4A，选择后立即上传。',
+  // ---- Note editor: preview drawer below the desktop breakpoint ----
+  'note_preview.close': '关闭预览',
 };
