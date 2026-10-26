@@ -207,7 +207,7 @@ different feature and stay.
 
 ### 2.1 Completed since v0.1.10 (2026-10-20)
 
-**The machine surfaces are compatible with v0.1.10.**
+**The machine surfaces are compatible with v0.1.10, with one tightened request check listed below.**
 
 - No REST route was added, removed or renamed, and no MCP tool was removed or renamed. One MCP
   tool was added, `delete_deck`. `get_due_cards` keeps its name and its arguments; only its
@@ -219,6 +219,9 @@ different feature and stay.
   the `\alt` separator.
 - The only payload change is additive: the optional `option_order` field on due cards (REST and
   the `get_due_cards` MCP result) and on the `POST /api/v1/review/render` response.
+- One request is validated more strictly, with no shape change: `POST /api/v1/keys` rejects an
+  `expires_at` that is not strictly after the current time, where it previously created a key
+  that was already unusable. Omitting the field, or sending a future time, behaves as before.
 
 | Goal | What shipped | Breaking change |
 |---|---|---|
@@ -235,6 +238,8 @@ different feature and stay.
 | Toolchain | Go 1.27 and Node 26 / npm 12 in `go.mod`, the Dockerfile, CI and the release workflow; `engines` requires node >= 26 and npm >= 12. | For from-source builds only — images and binaries are unaffected |
 | Deleting a deck over MCP | `delete_deck` removes a deck together with its notes, cards and progress. Only the deck's owner may call it, and the deletion is irreversible. It calls the same service method as `DELETE /api/v1/decks/:id` and returns the same response body. | No — an added tool; a client that does not call it sees no change |
 | Default mail templates | The built-in body of every mail type is designed Markdown rendered through the same pipeline as an admin template: a title, a primary action, a note and a footer, a derived plain-text part, and a shell that survives clients without rounded corners or `<style>`. Saving the pre-filled default unchanged sends exactly that mail, and the copy of all thirteen types was rewritten in both languages. | No — an added HTML part; the template variables and the stored templates are unchanged |
+| API key expiry | The personal key page sets an expiry when creating a key: never, 7 / 30 / 90 days, one year (365 days), or a custom date meaning the end of that local day. The list shows each key's expiry date and puts already-expired keys in their own group with an `expired` badge, ranked below `revoked`; an expired key keeps the revoke action, so it can still be removed by its owner. | No — the field already existed and was already accepted on create |
+| Expiry on create must be in the future | `POST /api/v1/keys` now rejects an `expires_at` that is not strictly after the current time with `400 invalid_request` and creates nothing, instead of returning a key that is dead on arrival. A request that omits the field, or sends a future time, behaves exactly as before. | Tightened — a client that sent a past `expires_at` previously succeeded and now fails, though the key it received was unusable |
 
 Not listed because neither a user nor an integration can observe them: the migration of code
 comments to English, the gitignored `.worktrees/` layout, the removal of dead SSR-era test
@@ -243,8 +248,10 @@ helpers, the review-day seeding fix inside a test, and the internal rename of
 
 ### 2.2 Version number for the next release
 
-- Everything in section 2.1 is non-breaking on the HTTP API, the MCP tools, the database and the
-  configuration, so the next release is **v0.1.11**.
+- Section 2.1 adds, removes and renames no REST route, MCP tool, database schema item or
+  configuration key. One behaviour change is visible to a client: `POST /api/v1/keys` now
+  rejects an `expires_at` that is not in the future with `400 invalid_request`, where it
+  previously returned a key that was already unusable. The next release is **v0.1.11**.
 - The toolchain bump is breaking only for someone building from source with Go 1.26 or Node 22.
   Counting that as breaking makes the same content **v0.2.0**. Every earlier release, including
   the one that changed media identity and deleted `/media/<numeric id>`, shipped as a `0.1.x`
