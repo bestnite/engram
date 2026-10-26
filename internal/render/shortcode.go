@@ -249,20 +249,65 @@ func shortcodeDepth(pc parser.Context) int {
 // Braces are counted instead of taking the first `}}`, because a body may itself contain a
 // shortcode and the first `}}` then belongs to the innermost body. Bodies are single-line, so the
 // scan never crosses a line break.
+//
+// Braces inside a code span or behind a backslash escape are content, not structure: CommonMark
+// renders both as literal text, so counting them would end the shortcode inside source that the
+// author wrote as visible characters.
 func shortcodeEnd(line []byte) (int, bool) {
+	s := string(line)
 	depth := 1
-	for i := 2; i+1 < len(line); i++ {
+	for i := 2; i+1 < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) && util.IsPunct(s[i+1]) {
+			i++
+			continue
+		}
+		if s[i] == '`' {
+			if end, ok := codeSpanEnd(s, i); ok {
+				i = end - 1
+				continue
+			}
+		}
 		switch {
-		case line[i] == '{' && line[i+1] == '{':
+		case s[i] == '{' && s[i+1] == '{':
 			depth++
 			i++
-		case line[i] == '}' && line[i+1] == '}':
+		case s[i] == '}' && s[i+1] == '}':
 			depth--
 			if depth == 0 {
 				return i, true
 			}
 			i++
 		}
+	}
+	return 0, false
+}
+
+// codeSpanEnd returns the offset just past the code span that starts at open.
+//
+// A code span opens with a backtick run and closes with the next run of exactly the same length;
+// a different length belongs to the content. An unclosed run is literal text, so it reports false
+// and the caller keeps scanning, which is what CommonMark does with unmatched backticks.
+func codeSpanEnd(s string, open int) (int, bool) {
+	n := 0
+	for open+n < len(s) && s[open+n] == '`' {
+		n++
+	}
+	if n == 0 {
+		return 0, false
+	}
+	for i := open + n; i < len(s); {
+		if s[i] != '`' {
+			i++
+			continue
+		}
+		m := 0
+		for i+m < len(s) && s[i+m] == '`' {
+			m++
+		}
+		if m == n {
+			return i + m, true
+		}
+		i += m
 	}
 	return 0, false
 }
@@ -304,11 +349,87 @@ func newShortcodeLiteral(content string) *shortcodeNode {
 }
 
 // clozeSpanOpen is the exact opening tag the cloze card type emits around a highlighted deletion.
-// A body accepts raw markup only in this one region; see rewriteShortcodeRawHTML.
+// A body accepts raw markup only inside this region; see rewriteShortcodeRawHTML.
 const clozeSpanOpen = `<span class="cloze">`
 
-// clozeSpanClose is the tag that ends that highlight span.
-const clozeSpanClose = `</span>`
+// rawTagName returns the element name of a raw HTML tag and whether it is a closing tag.
+//
+// It reads only the name: attributes and their quoting are not interpreted, because the cloze
+// tracking needs nothing more and a general HTML parser would be a much larger promise than this
+// static check makes.
+func rawTagName(tag string) (name string, closing, ok bool) {
+	if len(tag) < 2 || tag[0] != '<' {
+		return "", false, false
+	}
+	i := 1
+	if tag[i] == '/' {
+		closing = true
+		i++
+	}
+	start := i
+	for i < len(tag) {
+		c := tag[i]
+		if c == '>' || c == '/' || c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			break
+		}
+		i++
+	}
+	if i == start {
+		return "", false, false
+	}
+	return tag[start:i], closing, true
+}
+
+// clozeSpanDepth applies one raw tag to a cloze-highlight nesting depth.
+//
+// A cloze highlight may itself contain spans: the cloze card type wraps the highlighted content
+// and that content is ordinary Markdown, which may produce its own span or a nested cloze. The
+// exact opening tag the card type emits enters the region, every span open tag inside it raises
+// the depth, and a span close tag lowers it, so the region ends only when the depth returns to
+// zero instead of at the first closing tag. A tag of another name leaves the depth alone.
+func clozeSpanDepth(tag string, depth int) int {
+	name, closing, ok := rawTagName(tag)
+	if !ok || !strings.EqualFold(name, "span") {
+		return depth
+	}
+	if !closing {
+		if depth > 0 || tag == clozeSpanOpen {
+			return depth + 1
+		}
+		return depth
+	}
+	if depth > 0 {
+		return depth - 1
+	}
+	return depth
+}
+
+// clozeSpanEnd returns the offset just past the cloze highlight that starts at open.
+//
+// It walks the raw tags of the region with clozeSpanDepth, so a nested span inside the highlight
+// does not end it early. A region that never closes is not a region this renderer can split or
+// keep raw, so it reports false and the caller treats the source as malformed.
+func clozeSpanEnd(src string, open int) (int, bool) {
+	if !strings.HasPrefix(src[open:], clozeSpanOpen) {
+		return 0, false
+	}
+	depth := 0
+	for i := open; i < len(src); i++ {
+		if src[i] != '<' {
+			continue
+		}
+		gt := strings.IndexByte(src[i:], '>')
+		if gt < 0 {
+			return 0, false
+		}
+		depth = clozeSpanDepth(src[i:i+gt+1], depth)
+		i += gt
+		if depth == 0 {
+			return i + 1, true
+		}
+	}
+	return 0, false
+}
 
 // parseInlineBody parses one shortcode body as inline Markdown with the shared parser.
 //
@@ -422,7 +543,7 @@ func shortcodeNestingAllowed(parent, child string) bool {
 // prepareBody applies the body raw-HTML rule and renders the body fragment with its two text
 // projections.
 func prepareBody(para *ast.Paragraph, source []byte) (fragment, speech, flat string, ok bool) {
-	rewriteShortcodeRawHTML(para, source, false)
+	rewriteShortcodeRawHTML(para, source, 0)
 
 	var buf bytes.Buffer
 	if err := markdown.Renderer().Render(&buf, source, para); err != nil {
@@ -441,35 +562,46 @@ func prepareBody(para *ast.Paragraph, source []byte) (fragment, speech, flat str
 	return fragment, speech, flat, true
 }
 
-// rewriteShortcodeRawHTML applies the body raw-HTML rule in document order and returns whether
-// the traversal ended inside a cloze highlight.
+// rewriteShortcodeRawHTML applies the body raw-HTML rule in document order and returns the cloze
+// span depth at the end of the traversal.
 //
 // A cloze highlight is the one raw markup a body may keep. The cloze card type emits it before
 // Markdown runs, and its content may itself be Markdown or sanitized HTML, so the tags must stay
 // raw for the inner Markdown to render and for the final allowlist pass to trim them the same way
-// it trims a flat cloze. Any other tag is author text, so it is replaced by a string node and
-// renders as escaped source: `{{tts:<script>x</script>}}` shows the tags as text instead of
-// letting them through. The test compares exact tag text with the two tags the card type emits;
-// it is not a general HTML parser.
-func rewriteShortcodeRawHTML(n ast.Node, source []byte, inCloze bool) bool {
+// it trims a flat cloze. A highlight may contain its own spans, so the region is tracked by depth;
+// see clozeSpanDepth. Any tag outside the region is author text, so it is replaced by a raw string
+// node and renders as escaped source: `{{tts:<script>x</script>}}` shows the tags as text instead
+// of letting them through. The check compares tag names and the exact opening tag the card type
+// emits; it is not a general HTML parser.
+func rewriteShortcodeRawHTML(n ast.Node, source []byte, clozeDepth int) int {
 	for c := n.FirstChild(); c != nil; {
 		next := c.NextSibling()
 		if raw, ok := c.(*ast.RawHTML); ok {
 			tag := string(raw.Segments.Value(source))
+			depth := clozeSpanDepth(tag, clozeDepth)
 			switch {
-			case tag == clozeSpanOpen:
-				inCloze = true
-			case tag == clozeSpanClose && inCloze:
-				inCloze = false
-			case !inCloze:
-				n.ReplaceChild(n, c, ast.NewString([]byte(tag)))
+			case depth != clozeDepth:
+				clozeDepth = depth
+			case clozeDepth == 0:
+				n.ReplaceChild(n, c, literalTagNode(tag))
 			}
 		} else {
-			inCloze = rewriteShortcodeRawHTML(c, source, inCloze)
+			clozeDepth = rewriteShortcodeRawHTML(c, source, clozeDepth)
 		}
 		c = next
 	}
-	return inCloze
+	return clozeDepth
+}
+
+// literalTagNode turns raw tag source into text that renders exactly as written.
+//
+// The raw flag matters twice: without it the renderer would resolve character references and
+// remove backslash escapes, so `<div title="&copy;">` would be displayed as `<div title="©">`
+// instead of keeping the source characters the author typed.
+func literalTagNode(tag string) *ast.String {
+	n := ast.NewString([]byte(tag))
+	n.SetRaw(true)
+	return n
 }
 
 // shortcodeTextProjection selects which text a shortcode node contributes to its parent.
@@ -482,20 +614,41 @@ const (
 	shortcodeTextFlat
 )
 
+// inlineTextState carries what a projection must skip across consecutive inline nodes.
+type inlineTextState struct {
+	// hidden is the lower-case name of the raw container whose content is not visible text. The
+	// allowlist removes script and style together with their content, so speaking that text would
+	// read something the reader never sees.
+	hidden string
+}
+
 // inlineVisibleText returns the visible text of a parsed body under the given projection.
 func inlineVisibleText(n ast.Node, source []byte, projection shortcodeTextProjection) string {
 	var b strings.Builder
-	appendInlineVisibleText(&b, n, source, projection)
+	state := &inlineTextState{}
+	appendInlineVisibleText(&b, n, source, projection, state)
 	return b.String()
 }
 
 // appendInlineVisibleText walks an inline AST in document order and writes its visible text.
 //
-// Tags contribute nothing (their inner text does), and a nested shortcode contributes its own
-// projection, so a spoken ruby around a cloze yields the base without the reading. Unknown inline
-// kinds are transparent: walking their children covers GFM strikethrough and any later inline
-// container without this function having to know it.
-func appendInlineVisibleText(b *strings.Builder, n ast.Node, source []byte, projection shortcodeTextProjection) {
+// Text is decoded the way the HTML writer decodes it before escaping: backslash escapes are
+// removed and character references are resolved, because the source segment and the visible text
+// are not the same bytes. Code span content keeps its source literally, as the renderer does.
+// Tags contribute nothing except a space for a line break (their inner text still counts), and a
+// nested shortcode contributes its own projection, so a spoken ruby around a cloze yields the base
+// without the reading. Unknown inline kinds are transparent: walking their children covers GFM
+// strikethrough and any later inline container without this function having to know it.
+func appendInlineVisibleText(b *strings.Builder, n ast.Node, source []byte, projection shortcodeTextProjection, state *inlineTextState) {
+	if state.hidden != "" {
+		// Only a matching raw close tag can end the hidden region; the allowlist removes
+		// everything between the tags, including Markdown that would otherwise render.
+		if raw, ok := n.(*ast.RawHTML); ok {
+			appendRawHTMLVisibleText(b, string(raw.Segments.Value(source)), state)
+		}
+		return
+	}
+
 	switch v := n.(type) {
 	case *shortcodeNode:
 		if projection == shortcodeTextSpeech {
@@ -504,7 +657,11 @@ func appendInlineVisibleText(b *strings.Builder, n ast.Node, source []byte, proj
 			b.WriteString(v.flat)
 		}
 	case *ast.Text:
-		b.Write(v.Segment.Value(source))
+		if v.IsRaw() {
+			b.Write(v.Segment.Value(source))
+		} else {
+			b.Write(decodeInlineText(v.Segment.Value(source)))
+		}
 	case *ast.String:
 		b.Write(v.Value)
 	case *ast.CodeSpan:
@@ -514,14 +671,53 @@ func appendInlineVisibleText(b *strings.Builder, n ast.Node, source []byte, proj
 			}
 		}
 	case *ast.AutoLink:
-		b.Write(v.Label(source))
+		b.Write(decodeInlineText(v.Label(source)))
 	case *ast.RawHTML:
-		// A tag is markup, not text.
+		appendRawHTMLVisibleText(b, string(v.Segments.Value(source)), state)
 	default:
 		for c := v.FirstChild(); c != nil; c = c.NextSibling() {
-			appendInlineVisibleText(b, c, source, projection)
+			appendInlineVisibleText(b, c, source, projection, state)
 		}
 	}
+}
+
+// appendRawHTMLVisibleText adds what one raw tag contributes to visible text.
+//
+// A line break is a visible word boundary, so it contributes one space: the renderer emits a
+// <br> element, which carries no text node of its own. A script or style open tag starts a region
+// whose content the allowlist removes, so it is marked hidden until the matching close tag; both
+// names are compared case-insensitively because HTML tag names are.
+func appendRawHTMLVisibleText(b *strings.Builder, tag string, state *inlineTextState) {
+	name, closing, ok := rawTagName(tag)
+	if !ok {
+		return
+	}
+	lower := strings.ToLower(name)
+	if state.hidden != "" {
+		if closing && lower == state.hidden {
+			state.hidden = ""
+		}
+		return
+	}
+	if closing {
+		return
+	}
+	switch lower {
+	case "script", "style":
+		state.hidden = lower
+	case "br":
+		b.WriteByte(' ')
+	}
+}
+
+// decodeInlineText applies the transformations the HTML writer applies to text before escaping:
+// backslash escapes are removed and character references are resolved. Numeric references go
+// before named ones because the writer decides between the two by the character after `&`, and an
+// entity name such as `&amp;` must not turn the rest of the source into a second reference.
+func decodeInlineText(v []byte) []byte {
+	v = util.UnescapePunctuations(v)
+	v = util.ResolveNumericReferences(v)
+	return util.ResolveEntityNames(v)
 }
 
 // expandSpan renders a span shortcode from shortcodeTable.
@@ -670,30 +866,40 @@ func expandRuby(rest string, mode shortcodeMode, depth int) *shortcodeNode {
 }
 
 // splitRubyBody splits a ruby body into its base and reading at the first `|` outside a nested
-// shortcode and outside a cloze highlight.
+// shortcode, a code span, a backslash escape and a cloze highlight.
 //
 // Skipping a complete `<span class="cloze">…</span>` region is what keeps a `|` inside the
-// highlighted content from splitting the base. A cloze region opened but never closed is not a
-// body this function can split, so the ruby stays literal. A `|` inside a nested shortcode
-// belongs to that shortcode's own parameter list, so brace depth decides which separator is
-// ruby's.
+// highlighted content from splitting the base; the region is followed by depth so a span nested in
+// the highlight does not end it early. A cloze region opened but never closed is not a body this
+// function can split, so the ruby stays literal. A `|` inside a nested shortcode belongs to that
+// shortcode's own parameter list, so brace depth decides which separator is ruby's, and a `|`
+// inside a code span or behind a backslash is literal text that Markdown renders as `|`.
 func splitRubyBody(rest string) (base, reading string, ok bool) {
 	depth := 0
 	for i := 0; i < len(rest); i++ {
+		if rest[i] == '\\' && i+1 < len(rest) && util.IsPunct(rest[i+1]) {
+			i++
+			continue
+		}
+		if rest[i] == '`' {
+			if end, found := codeSpanEnd(rest, i); found {
+				i = end - 1
+				continue
+			}
+		}
 		switch {
+		case depth == 0 && strings.HasPrefix(rest[i:], clozeSpanOpen):
+			end, found := clozeSpanEnd(rest, i)
+			if !found {
+				return "", "", false
+			}
+			i = end - 1
 		case strings.HasPrefix(rest[i:], "{{"):
 			depth++
 			i++
 		case depth > 0 && strings.HasPrefix(rest[i:], "}}"):
 			depth--
 			i++
-		case depth == 0 && strings.HasPrefix(rest[i:], clozeSpanOpen):
-			innerStart := i + len(clozeSpanOpen)
-			closeAt := strings.Index(rest[innerStart:], clozeSpanClose)
-			if closeAt < 0 {
-				return "", "", false
-			}
-			i = innerStart + closeAt + len(clozeSpanClose) - 1
 		case depth == 0 && rest[i] == '|':
 			return rest[:i], rest[i+1:], true
 		}
@@ -709,10 +915,21 @@ func splitRubyBody(rest string) (base, reading string, ok bool) {
 // quoted snippet) belongs to the body. The consequence is that a body cannot itself contain the
 // sequence `|word=`, or a `|` followed by this shortcode's flag word, because those are exactly
 // the separator shapes. A `|` inside a nested `{{…}}` belongs to that shortcode, so brace depth
-// decides which one is the separator.
+// decides which one is the separator; a `|` inside a code span or behind a backslash is literal
+// text and can never be a separator.
 func splitShortcodeBody(def shortcodeDef, rest string) (body, params string) {
 	depth := 0
 	for i := 0; i < len(rest); i++ {
+		if rest[i] == '\\' && i+1 < len(rest) && util.IsPunct(rest[i+1]) {
+			i++
+			continue
+		}
+		if rest[i] == '`' {
+			if end, ok := codeSpanEnd(rest, i); ok {
+				i = end - 1
+				continue
+			}
+		}
 		switch {
 		case strings.HasPrefix(rest[i:], "{{"):
 			depth++

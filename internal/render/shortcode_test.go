@@ -701,6 +701,333 @@ func TestRenderMailMarkdownShortcodesArePlainText(t *testing.T) {
 	}
 }
 
+// TestRenderMarkdownBodyProjectionDecodesVisibleText pins the projection rule: the spoken and mail
+// text must be the text the browser displays, not the source bytes. Goldmark's writer removes
+// backslash escapes and resolves character references, so the projection has to do the same.
+func TestRenderMarkdownBodyProjectionDecodesVisibleText(t *testing.T) {
+	cases := []struct {
+		name    string
+		src     string
+		visible string
+	}{
+		{
+			name:    "named entity and numeric reference",
+			src:     `{{tts:Tom &amp; Jerry &#x4F60;}}`,
+			visible: "Tom & Jerry 你",
+		},
+		{
+			name:    "backslash escaped punctuation",
+			src:     `{{tts:a\*b}}`,
+			visible: "a*b",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := RenderMarkdown(tc.src)
+			if err != nil {
+				t.Fatalf("RenderMarkdown() error = %v", err)
+			}
+			attrs, text := elementWithClass(t, out, "span", "engram-tts")
+			if attrs == nil {
+				t.Fatalf("output has no span.engram-tts:\n%s", out)
+			}
+			if text != tc.visible {
+				t.Errorf("visible text = %q, want %q", text, tc.visible)
+			}
+			if got := attrs["data-tts-text"]; got != tc.visible {
+				t.Errorf("data-tts-text = %q, want %q", got, tc.visible)
+			}
+
+			mail, err := RenderMailMarkdown(tc.src)
+			if err != nil {
+				t.Fatalf("RenderMailMarkdown() error = %v", err)
+			}
+			if got := fragmentText(t, mail); got != tc.visible {
+				t.Errorf("mail text = %q, want %q", got, tc.visible)
+			}
+			assertSafeFragment(t, out)
+		})
+	}
+}
+
+// TestRenderMarkdownClozeRegionTracksNestedSpans pins the region rule: a cloze highlight may
+// contain its own spans, so only the close tag that returns the span depth to zero ends the
+// highlight. The nested tags stay markup and the speech text drops them all.
+func TestRenderMarkdownClozeRegionTracksNestedSpans(t *testing.T) {
+	src := `{{tts:<span class="cloze"><span>x</span>y</span>}}`
+	out, err := RenderMarkdown(src)
+	if err != nil {
+		t.Fatalf("RenderMarkdown() error = %v", err)
+	}
+	const want = `<span class="cloze"><span>x</span>y</span>`
+	if !strings.Contains(out, want) {
+		t.Errorf("output missing %q:\n%s", want, out)
+	}
+	for _, bad := range []string{"&lt;span", "&lt;/span"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("output escaped a tag that belongs to the highlight (%q):\n%s", bad, out)
+		}
+	}
+
+	attrs, text := elementWithClass(t, out, "span", "engram-tts")
+	if attrs == nil {
+		t.Fatalf("output has no span.engram-tts:\n%s", out)
+	}
+	if text != "xy" {
+		t.Errorf("visible text = %q, want %q", text, "xy")
+	}
+	if got := attrs["data-tts-text"]; got != "xy" {
+		t.Errorf("data-tts-text = %q, want %q", got, "xy")
+	}
+
+	mail, err := RenderMailMarkdown(src)
+	if err != nil {
+		t.Fatalf("RenderMailMarkdown() error = %v", err)
+	}
+	if got := fragmentText(t, mail); got != "xy" {
+		t.Errorf("mail text = %q, want %q", got, "xy")
+	}
+	assertSafeFragment(t, out)
+}
+
+// TestRenderMarkdownBodySpeechKeepsVisibleBoundaries pins the two projection adjustments that keep
+// speech equal to what the reader sees: a kept line break is a word boundary, and the content of a
+// script or style element is removed by the allowlist, so it must not be spoken either.
+func TestRenderMarkdownBodySpeechKeepsVisibleBoundaries(t *testing.T) {
+	cases := []struct {
+		name      string
+		src       string
+		spoken    string
+		visible   string
+		required  []string
+		forbidden []string
+	}{
+		{
+			name:     "line break inside a cloze",
+			src:      `{{tts:<span class="cloze">hello<br>world</span>}}`,
+			spoken:   "hello world",
+			visible:  "helloworld",
+			required: []string{"<br>"},
+		},
+		{
+			name:     "self closing line break inside a cloze",
+			src:      `{{tts:<span class="cloze">hello<br/>world</span>}}`,
+			spoken:   "hello world",
+			visible:  "helloworld",
+			required: []string{"<br"},
+		},
+		{
+			name:     "spaced self closing line break inside a cloze",
+			src:      `{{tts:<span class="cloze">hello<br />world</span>}}`,
+			spoken:   "hello world",
+			visible:  "helloworld",
+			required: []string{"<br"},
+		},
+		{
+			name:      "script content is not spoken",
+			src:       `{{tts:<span class="cloze">a<script>hidden</script>b</span>}}`,
+			spoken:    "ab",
+			visible:   "ab",
+			forbidden: []string{"<script", "hidden"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := RenderMarkdown(tc.src)
+			if err != nil {
+				t.Fatalf("RenderMarkdown() error = %v", err)
+			}
+			for _, want := range tc.required {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+			for _, bad := range tc.forbidden {
+				if strings.Contains(out, bad) {
+					t.Errorf("output contains forbidden %q:\n%s", bad, out)
+				}
+			}
+
+			attrs, text := elementWithClass(t, out, "span", "engram-tts")
+			if attrs == nil {
+				t.Fatalf("output has no span.engram-tts:\n%s", out)
+			}
+			if text != tc.visible {
+				t.Errorf("visible text = %q, want %q", text, tc.visible)
+			}
+			if got := attrs["data-tts-text"]; got != tc.spoken {
+				t.Errorf("data-tts-text = %q, want %q", got, tc.spoken)
+			}
+
+			mail, err := RenderMailMarkdown(tc.src)
+			if err != nil {
+				t.Fatalf("RenderMailMarkdown() error = %v", err)
+			}
+			if got := fragmentText(t, mail); got != tc.spoken {
+				t.Errorf("mail text = %q, want %q", got, tc.spoken)
+			}
+			for _, bad := range tc.forbidden {
+				if strings.Contains(mail, bad) {
+					t.Errorf("mail output contains forbidden %q:\n%s", bad, mail)
+				}
+			}
+			assertSafeFragment(t, out)
+		})
+	}
+}
+
+// TestRenderMarkdownLiteralTagKeepsSource pins the literal-tag rule: a tag shown as text keeps the
+// source characters the author wrote, so a character reference inside the tag is displayed as
+// written instead of being resolved on the way out. The tag is raw text, not markup.
+func TestRenderMarkdownLiteralTagKeepsSource(t *testing.T) {
+	src := `{{tts:<div title="&copy;">x</div>}}`
+	want := `<div title="&copy;">x</div>`
+
+	out, err := RenderMarkdown(src)
+	if err != nil {
+		t.Fatalf("RenderMarkdown() error = %v", err)
+	}
+	if !strings.Contains(out, "&amp;copy;") {
+		t.Errorf("output lost the escaped source reference:\n%s", out)
+	}
+	if strings.Contains(out, "©") {
+		t.Errorf("output resolved the reference inside a literal tag:\n%s", out)
+	}
+
+	attrs, text := elementWithClass(t, out, "span", "engram-tts")
+	if attrs == nil {
+		t.Fatalf("output has no span.engram-tts:\n%s", out)
+	}
+	if text != want {
+		t.Errorf("visible text = %q, want %q", text, want)
+	}
+	if got := attrs["data-tts-text"]; got != want {
+		t.Errorf("data-tts-text = %q, want %q", got, want)
+	}
+
+	mail, err := RenderMailMarkdown(src)
+	if err != nil {
+		t.Fatalf("RenderMailMarkdown() error = %v", err)
+	}
+	if got := fragmentText(t, mail); got != want {
+		t.Errorf("mail text = %q, want %q", got, want)
+	}
+	if !strings.Contains(mail, "&amp;copy;") {
+		t.Errorf("mail output lost the escaped source reference:\n%s", mail)
+	}
+	assertSafeFragment(t, out)
+}
+
+// TestRenderMarkdownCodeSpansProtectStructure pins the lexical rule: braces, pipes and backticks
+// inside a code span are content, not structure. The shortcode still ends at its real closing
+// braces, a parameter-looking pipe stays in the body, and a ruby reading is still found after the
+// code span. A backslash-escaped punctuation byte is literal in the same way.
+func TestRenderMarkdownCodeSpansProtectStructure(t *testing.T) {
+	cases := []struct {
+		name      string
+		src       string
+		required  []string
+		forbidden []string
+		mailText  string
+	}{
+		{
+			name:     "closing braces in a tts body",
+			src:      "{{tts:a `}}` b}}",
+			required: []string{"<code>}}</code>", `data-tts-text="a }} b"`},
+			mailText: "a }} b",
+		},
+		{
+			name:     "opening braces in a tts body",
+			src:      "{{tts:a `{{` b}}",
+			required: []string{"<code>{{</code>", `data-tts-text="a {{ b"`},
+			mailText: "a {{ b",
+		},
+		{
+			name:     "parameter-looking pipe in a tts body",
+			src:      "{{tts:a `x|lang=zh` b}}",
+			required: []string{"<code>x|lang=zh</code>", `data-tts-text="a x|lang=zh b"`},
+			forbidden: []string{
+				"data-tts-lang",
+			},
+			mailText: "a x|lang=zh b",
+		},
+		{
+			name:     "pipe in a ruby base",
+			src:      "{{ruby:a `x|y` b|r}}",
+			required: []string{`<ruby>a <code>x|y</code> b<rt>r</rt></ruby>`},
+		},
+		{
+			name:     "escaped closing brace in a tts body",
+			src:      `{{tts:x\}}}`,
+			required: []string{`data-tts-text="x}"`},
+			mailText: "x}",
+		},
+		{
+			name:     "escaped pipe in a ruby base",
+			src:      `{{ruby:a\|b|r}}`,
+			required: []string{`<ruby>a|b<rt>r</rt></ruby>`},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := RenderMarkdown(tc.src)
+			if err != nil {
+				t.Fatalf("RenderMarkdown() error = %v", err)
+			}
+			for _, want := range tc.required {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+			for _, bad := range tc.forbidden {
+				if strings.Contains(out, bad) {
+					t.Errorf("output contains forbidden %q:\n%s", bad, out)
+				}
+			}
+			if tc.mailText != "" {
+				mail, err := RenderMailMarkdown(tc.src)
+				if err != nil {
+					t.Fatalf("RenderMailMarkdown() error = %v", err)
+				}
+				if got := fragmentText(t, mail); got != tc.mailText {
+					t.Errorf("mail text = %q, want %q", got, tc.mailText)
+				}
+			}
+			assertSafeFragment(t, out)
+		})
+	}
+}
+
+// fragmentText returns the visible text of a rendered HTML fragment. The block renderer ends a
+// paragraph with a newline, so one trailing newline is dropped; nothing else is trimmed, because a
+// space inside the text is meaningful.
+func fragmentText(t *testing.T, out string) string {
+	t.Helper()
+
+	nodes, err := html.ParseFragment(strings.NewReader(out), &html.Node{Type: html.ElementNode, DataAtom: atom.Div, Data: "div"})
+	if err != nil {
+		t.Fatalf("html.ParseFragment(%q) error = %v", out, err)
+	}
+
+	var text strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			text.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	for _, n := range nodes {
+		walk(n)
+	}
+	return strings.TrimSuffix(text.String(), "\n")
+}
+
 // elementWithClass returns the attributes of the first tag element whose class list contains class,
 // and that element's text content.
 func elementWithClass(t *testing.T, out, tag, class string) (map[string]string, string) {
