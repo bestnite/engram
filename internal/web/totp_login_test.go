@@ -154,7 +154,8 @@ func TestTOTPLoginSecondStepIssuesSession(t *testing.T) {
 	var okRes struct {
 		Authenticated bool `json:"authenticated"`
 		User          struct {
-			Username string `json:"username"`
+			Username    string `json:"username"`
+			HasPassword bool   `json:"has_password"`
 		} `json:"user"`
 		CSRFToken string `json:"csrf_token"`
 	}
@@ -163,6 +164,9 @@ func TestTOTPLoginSecondStepIssuesSession(t *testing.T) {
 	}
 	if !okRes.Authenticated || okRes.User.Username != "admin" || okRes.CSRFToken == "" {
 		t.Fatalf("second-step success response = %+v, want an authenticated admin with a CSRF token", okRes)
+	}
+	if !okRes.User.HasPassword {
+		t.Error("second-step success response for a password account has has_password=false")
 	}
 	sessCookie := findCookie(ok, srv.sessions.CookieName())
 	if sessCookie == nil {

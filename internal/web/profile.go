@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
@@ -63,7 +64,9 @@ func (s *Server) passwordPatch(c *gin.Context) {
 	// An account without a local password is setting its first one: there is no old password to ask for or to verify.
 	initial := fresh.PasswordHash == nil
 	if !initial && req.OldPassword == "" {
-		passwordError(c, http.StatusBadRequest, "invalid_request", "The password request is invalid.")
+		// The client loaded the page while passwordless and therefore sent no old password. A hash now exists, so another request already
+		// set it; 409 lets the client refresh has_password, while asking for the old password would be unanswerable on that stale page.
+		passwordError(c, http.StatusConflict, "password_already_set", "A password has already been set for this account.")
 		return
 	}
 	sess, _ := auth.CurrentSession(c)
@@ -71,10 +74,13 @@ func (s *Server) passwordPatch(c *gin.Context) {
 	if sess != nil {
 		keep = sess.ID
 	}
+	ctx := c.Request.Context()
 	if initial {
-		err = s.accounts.SetInitialPassword(c.Request.Context(), u.ID, req.NewPassword, keep)
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return s.accounts.SetInitialPasswordTx(ctx, tx, u.ID, req.NewPassword, keep)
+		})
 	} else {
-		err = s.accounts.ChangePasswordKeepingSession(c.Request.Context(), u.ID, keep, req.OldPassword, req.NewPassword)
+		err = s.accounts.ChangePasswordKeepingSession(ctx, u.ID, keep, req.OldPassword, req.NewPassword)
 	}
 	if err != nil {
 		code, status, message := "password_rejected", http.StatusBadRequest, "The new password does not meet the password policy."

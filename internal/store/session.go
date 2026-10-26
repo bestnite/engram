@@ -63,7 +63,14 @@ func (s *SessionStore) RevokeAllForUserTx(ctx context.Context, tx *gorm.DB, user
 // RevokeAllForUserExcept revokes all of a user's active sessions except keepID.
 // The user's own password change on the settings page uses it: other devices are signed out at once while the current session is kept, so the user is not thrown out right after changing the password.
 func (s *SessionStore) RevokeAllForUserExcept(ctx context.Context, userID uint64, keepID string, at time.Time) error {
-	if err := s.db.WithContext(ctx).Model(&Session{}).
+	return s.RevokeAllForUserExceptTx(ctx, s.db, userID, keepID, at)
+}
+
+// RevokeAllForUserExceptTx is RevokeAllForUserExcept inside the caller's transaction.
+// The first-password flow needs the hash write and the revocation to share one transaction, so a revocation failure cannot leave a password
+// written while other devices stay signed in.
+func (s *SessionStore) RevokeAllForUserExceptTx(ctx context.Context, tx *gorm.DB, userID uint64, keepID string, at time.Time) error {
+	if err := tx.WithContext(ctx).Model(&Session{}).
 		Where("user_id = ? AND revoked_at IS NULL AND id <> ?", userID, keepID).
 		Update("revoked_at", at).Error; err != nil {
 		return fmt.Errorf("revoke user sessions except current: %w", err)

@@ -36,6 +36,46 @@ func TestUserStoreSetInitialPasswordHash(t *testing.T) {
 	}
 }
 
+func TestUserStoreUpdateDoesNotResurrectPasswordHash(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			users := NewUserStore(db)
+			u := &User{Username: "oidc", Email: "oidc@example.com", DisplayName: "OIDC",
+				Role: RoleUser, Status: StatusActive, Locale: "zh-CN", Timezone: "UTC", CreatedAt: time.Now().UTC()}
+			if err := users.Create(ctx, u); err != nil {
+				t.Fatalf("Create() error = %v", err)
+			}
+			// Simulate a profile request that read the user while the hash was still NULL.
+			stale, err := users.ByID(ctx, u.ID)
+			if err != nil {
+				t.Fatalf("ByID() error = %v", err)
+			}
+			hash := "$argon2id$v=19$m=1024,t=1,p=1$c2FsdA$aGFzaA"
+			if changed, err := users.SetInitialPasswordHash(ctx, u.ID, hash); err != nil || !changed {
+				t.Fatalf("SetInitialPasswordHash() = (%v, %v), want (true, nil)", changed, err)
+			}
+			stale.DisplayName = "Renamed"
+			if err := users.Update(ctx, stale); err != nil {
+				t.Fatalf("Update() error = %v", err)
+			}
+			got, err := users.ByID(ctx, u.ID)
+			if err != nil {
+				t.Fatalf("ByID() after update error = %v", err)
+			}
+			if got.DisplayName != "Renamed" {
+				t.Errorf("DisplayName = %q, want Renamed", got.DisplayName)
+			}
+			if got.PasswordHash == nil || *got.PasswordHash != hash {
+				t.Fatalf("Update() resurrected the stale NULL hash: %v", got.PasswordHash)
+			}
+		})
+	}
+}
+
 func TestUserStoreCRUD(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

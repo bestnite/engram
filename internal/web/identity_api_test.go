@@ -426,8 +426,10 @@ func TestIdentityUnlinkLastCredential(t *testing.T) {
 	}
 
 	// The same account with a password may unlink its last identity.
-	if err := srv.accounts.SetInitialPassword(ctx, passwordless.ID, "Sup3rSecret!", ""); err != nil {
-		t.Fatalf("SetInitialPassword: %v", err)
+	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return srv.accounts.SetInitialPasswordTx(ctx, tx, passwordless.ID, "Sup3rSecret!", "")
+	}); err != nil {
+		t.Fatalf("SetInitialPasswordTx: %v", err)
 	}
 	cookies, csrf = loginJSON(t, srv, db, "oidc-user", "Sup3rSecret!")
 	rec = jsonRequest(t, srv, http.MethodDelete, "/api/v1/settings/identities/"+only.PublicID, "", cookies, csrf)

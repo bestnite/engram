@@ -79,10 +79,25 @@ func TestInitialPasswordForPasswordlessAccount(t *testing.T) {
 		t.Fatal("no password change audit row")
 	}
 
-	// A second attempt at the initial-password path is not possible: the account now needs its old password.
+	// A second submission from a tab that loaded the page while passwordless sends no old password. The password now exists, so this is the
+	// stale-page conflict, not a malformed request, and the stored hash must not change.
+	firstHash := *stored.PasswordHash
 	rec = patchProfile(t, srv, "/api/v1/settings/password", passwordRequest{NewPassword: "An0therStrongPass!"}, cookies, csrf, "")
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("password change without the old password = %d, want 400", rec.Code)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("password change without the old password = %d, want 409 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var conflict struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, rec, &conflict)
+	if conflict.Error.Code != "password_already_set" {
+		t.Fatalf("stale password code = %q, want password_already_set", conflict.Error.Code)
+	}
+	stored, err = store.NewUserStore(db).ByID(ctx, u.ID)
+	if err != nil || stored.PasswordHash == nil || *stored.PasswordHash != firstHash {
+		t.Fatalf("stale request changed the password hash: %v, err=%v", stored.PasswordHash, err)
 	}
 }
 

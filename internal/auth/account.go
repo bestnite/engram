@@ -229,19 +229,13 @@ func (s *AccountService) changePassword(ctx context.Context, userID uint64, oldP
 	return s.sessions.RevokeAllForUser(ctx, userID, s.now())
 }
 
-// SetInitialPassword gives an account that has no local password (a pure OIDC account) its first one.
+// SetInitialPasswordTx gives an account that has no local password (a pure OIDC account) its first one, inside the caller's transaction.
 //
 // There is no old password to verify: the caller is already authenticated through the external identity. A hash that exists by the time
-// this runs means another request won the race, and overwriting it without the old password would be a credential reset, so that case fails
-// with ErrPasswordAlreadySet. Like ChangePasswordKeepingSession it revokes every other session, keeping keepSessionID when it is non-empty.
-func (s *AccountService) SetInitialPassword(ctx context.Context, userID uint64, newPassword, keepSessionID string) error {
-	u, err := s.users.ByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("load user: %w", err)
-	}
-	if u.PasswordHash != nil {
-		return ErrPasswordAlreadySet
-	}
+// the conditional write runs means another request won the race; overwriting it without the old password would be a credential reset, so
+// that case fails with ErrPasswordAlreadySet. The hash write and the revocation of every session except keepSessionID share one transaction,
+// so a revocation failure cannot leave a password written while other devices stay signed in.
+func (s *AccountService) SetInitialPasswordTx(ctx context.Context, tx *gorm.DB, userID uint64, newPassword, keepSessionID string) error {
 	if err := ValidatePasswordPolicy(newPassword); err != nil {
 		return err
 	}
@@ -249,18 +243,14 @@ func (s *AccountService) SetInitialPassword(ctx context.Context, userID uint64, 
 	if err != nil {
 		return err
 	}
-	changed, err := s.users.SetInitialPasswordHash(ctx, userID, hash)
+	changed, err := s.users.SetInitialPasswordHashTx(ctx, tx, userID, hash)
 	if err != nil {
 		return err
 	}
 	if !changed {
-		// The conditional update matched no row: another request set the hash after the read above.
 		return ErrPasswordAlreadySet
 	}
-	if keepSessionID != "" {
-		return s.sessions.RevokeAllForUserExcept(ctx, userID, keepSessionID, s.now())
-	}
-	return s.sessions.RevokeAllForUser(ctx, userID, s.now())
+	return s.sessions.RevokeAllForUserExceptTx(ctx, tx, userID, keepSessionID, s.now())
 }
 
 // DisableUser marks the account disabled and revokes all of its sessions; even if a session row were read back directly, the middleware rejects it because the status is no longer active.
