@@ -78,7 +78,10 @@
     {openLabel || $t('media.open')}
   </Button>
   {#if open}
-    <section data-testid="{idPrefix}-picker" class="rounded-xl border border-input p-4">
+    <!-- A container query, not a viewport breakpoint: this picker is also used inside the shortcode
+         panel, where the available width is well under the viewport's and four fixed columns would
+         squeeze the tile caption into the border. -->
+    <section data-testid="{idPrefix}-picker" class="@container rounded-xl border border-input p-4">
       <h2 class="text-lg font-semibold">{$t('media.heading')}</h2>
       {#if loading}<Skeleton testId="{idPrefix}-loading" label={$t('media.loading')} lines={2} />{/if}
       {#if failed}<p role="alert">{$t('media.failed')}</p><button type="button" onclick={() => load(!cursor)}>{$t('media.retry')}</button>{/if}
@@ -87,7 +90,7 @@
         <p data-testid="{idPrefix}-empty" class="text-sm text-muted-foreground">{emptyLabel || $t('media.empty')}</p>
       {/if}
       {#if visible.length > 0}
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="grid grid-cols-2 gap-3 @sm:grid-cols-4">
           {#each visible as item (item.sha256)}
             <button
               data-testid="{idPrefix}-item-{item.sha256}"
@@ -99,7 +102,9 @@
                 <!-- A sound file has no picture: the tile shows a sound mark and the mime type instead of a broken image. -->
                 <span class="flex h-24 w-full flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
                   <Music class="size-6" aria-hidden="true" />
-                  <span class="text-[11px]">{item.mime}</span>
+                  <!-- The mime type is a caption, not a label that may run into the tile border:
+                       a narrow tile truncates it instead of letting it overlap. -->
+                  <span class="w-full truncate px-1 text-center text-[11px]">{item.mime}</span>
                 </span>
               {:else}
                 <img src={item.url} alt={item.sha256} loading="lazy" class="h-24 w-full object-contain" />
