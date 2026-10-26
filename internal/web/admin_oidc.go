@@ -79,13 +79,15 @@ func (s *Server) adminOIDC(c *gin.Context) {
 		}
 	}
 
+	// Show the effective scopes, not the raw row: an unset value falls back to the built-in default at load time, and
+	// returning the empty row would make the admin type the default again on every fresh instance.
 	resp := adminOIDCResponse{
 		Enabled:            cfg.Enabled,
 		Issuer:             saved[auth.SettingKeyOIDCIssuer],
 		ClientID:           saved[auth.SettingKeyOIDCClientID],
 		SecretConfigured:   secretConfigured,
 		RedirectURI:        s.oidcRedirectURI(c),
-		Scopes:             saved[auth.SettingKeyOIDCScopes],
+		Scopes:             strings.Join(cfg.Scopes, " "),
 		ClaimSubject:       saved[auth.SettingKeyOIDCClaimSubject],
 		ClaimEmail:         saved[auth.SettingKeyOIDCClaimEmail],
 		ClaimName:          saved[auth.SettingKeyOIDCClaimName],

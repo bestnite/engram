@@ -241,6 +241,10 @@ func TestAdminOIDCReadSaveAndTest(t *testing.T) {
 	if read.Enabled || read.RedirectURI == "" {
 		t.Errorf("oidc read = enabled %v redirect %q, want disabled with a redirect uri", read.Enabled, read.RedirectURI)
 	}
+	// An unconfigured instance still returns the effective default, so the admin form is pre-filled and does not require typing it.
+	if read.Scopes != "openid email profile" {
+		t.Errorf("oidc read scopes = %q, want the effective default %q", read.Scopes, "openid email profile")
+	}
 
 	// Enabled but issuer invalid: 400.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/oidc", adminOIDCRequest{Enabled: true, Issuer: "not a url"}, cookies, csrf); rec.Code != http.StatusBadRequest {
@@ -263,6 +267,17 @@ func TestAdminOIDCReadSaveAndTest(t *testing.T) {
 	}
 	if settings["oidc.issuer"] != "https://idp.example.com" || settings["oidc.enabled"] != "true" {
 		t.Fatalf("oidc settings not persisted: %+v", settings)
+	}
+	// A saved scope list is returned as the effective list, so the form shows exactly what the login flow will request.
+	rec = getJSON(t, srv, "/api/v1/admin/oidc", cookies, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET oidc after save = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &read); err != nil {
+		t.Fatalf("decode oidc after save: %v", err)
+	}
+	if read.Scopes != "openid email" {
+		t.Errorf("oidc read scopes after save = %q, want %q", read.Scopes, "openid email")
 	}
 
 	// Test connection: no usable issuer (the saved one is empty) → no_issuer.
