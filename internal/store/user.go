@@ -56,8 +56,10 @@ func (s *UserStore) ByEmail(ctx context.Context, email string) (*User, error) {
 }
 
 // Update saves all of the user's fields; Save generates the right upsert on both databases.
+// PasswordHash is omitted: that column may only be written by the dedicated password methods, because a whole-row save from a request that
+// read the user before a first-password set would otherwise write the stale NULL back and remove the account's only credential.
 func (s *UserStore) Update(ctx context.Context, u *User) error {
-	if err := s.db.WithContext(ctx).Save(u).Error; err != nil {
+	if err := s.db.WithContext(ctx).Omit("PasswordHash").Save(u).Error; err != nil {
 		return fmt.Errorf("update user: %w", err)
 	}
 	return nil
@@ -66,6 +68,25 @@ func (s *UserStore) Update(ctx context.Context, u *User) error {
 // SetPasswordHash changes only the password hash column, so a whole-row overwrite cannot lose a concurrent write.
 func (s *UserStore) SetPasswordHash(ctx context.Context, id uint64, hash string) error {
 	return s.SetPasswordHashTx(ctx, s.db, id, hash)
+}
+
+// SetInitialPasswordHash sets the password hash only while the column is still NULL, and reports whether a row changed.
+//
+// The "still NULL" condition lives in the UPDATE rather than in a read-then-write: a concurrent first-password request must not overwrite
+// a hash written after the caller's read, because that would reset a credential without asking for it.
+func (s *UserStore) SetInitialPasswordHash(ctx context.Context, id uint64, hash string) (bool, error) {
+	return s.SetInitialPasswordHashTx(ctx, s.db, id, hash)
+}
+
+// SetInitialPasswordHashTx is SetInitialPasswordHash inside the caller's transaction, so the hash write and the session revocation share one boundary.
+func (s *UserStore) SetInitialPasswordHashTx(ctx context.Context, tx *gorm.DB, id uint64, hash string) (bool, error) {
+	res := tx.WithContext(ctx).Model(&User{}).
+		Where("id = ? AND password_hash IS NULL", id).
+		Update("password_hash", hash)
+	if res.Error != nil {
+		return false, fmt.Errorf("set initial password hash: %w", res.Error)
+	}
+	return res.RowsAffected > 0, nil
 }
 
 // SetPasswordHashTx changes the password hash column inside the transaction given by the caller.

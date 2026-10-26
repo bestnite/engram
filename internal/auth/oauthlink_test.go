@@ -130,6 +130,7 @@ func TestDecideIdentityLink(t *testing.T) {
 
 // linkEnv wires up real SQLite, real stores and the real service to verify the whole identity-linking flow (without mocking the database).
 type linkEnv struct {
+	db         *gorm.DB
 	svc        *IdentityLinkService
 	users      *store.UserStore
 	identities *store.IdentityStore
@@ -161,7 +162,7 @@ func newLinkEnv(t *testing.T) *linkEnv {
 	if err != nil {
 		t.Fatalf("NewIdentityLinkService() error = %v", err)
 	}
-	return &linkEnv{svc: svc, users: users, identities: identities, audit: auditStore, accounts: accounts}
+	return &linkEnv{db: db, svc: svc, users: users, identities: identities, audit: auditStore, accounts: accounts}
 }
 
 func (e *linkEnv) seedLocalUser(t *testing.T, username string, reasonEmail string) *store.User {

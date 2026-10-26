@@ -17,6 +17,7 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUserDisabled       = errors.New("user is disabled")
 	ErrPasswordUnchanged  = errors.New("new password must differ from the current one")
+	ErrPasswordAlreadySet = errors.New("password is already set")
 )
 
 // CreateUserInput is the input for creating a local account; empty fields are filled with defaults by the service.
@@ -226,6 +227,30 @@ func (s *AccountService) changePassword(ctx context.Context, userID uint64, oldP
 		return s.sessions.RevokeAllForUserExcept(ctx, userID, keepSessionID, s.now())
 	}
 	return s.sessions.RevokeAllForUser(ctx, userID, s.now())
+}
+
+// SetInitialPasswordTx gives an account that has no local password (a pure OIDC account) its first one, inside the caller's transaction.
+//
+// There is no old password to verify: the caller is already authenticated through the external identity. A hash that exists by the time
+// the conditional write runs means another request won the race; overwriting it without the old password would be a credential reset, so
+// that case fails with ErrPasswordAlreadySet. The hash write and the revocation of every session except keepSessionID share one transaction,
+// so a revocation failure cannot leave a password written while other devices stay signed in.
+func (s *AccountService) SetInitialPasswordTx(ctx context.Context, tx *gorm.DB, userID uint64, newPassword, keepSessionID string) error {
+	if err := ValidatePasswordPolicy(newPassword); err != nil {
+		return err
+	}
+	hash, err := s.hasher.Hash(newPassword)
+	if err != nil {
+		return err
+	}
+	changed, err := s.users.SetInitialPasswordHashTx(ctx, tx, userID, hash)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return ErrPasswordAlreadySet
+	}
+	return s.sessions.RevokeAllForUserExceptTx(ctx, tx, userID, keepSessionID, s.now())
 }
 
 // DisableUser marks the account disabled and revokes all of its sessions; even if a session row were read back directly, the middleware rejects it because the status is no longer active.

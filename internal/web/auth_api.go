@@ -33,15 +33,8 @@ func (s *Server) apiSession(c *gin.Context) {
 	if okUser && okSess && u.Status == store.StatusActive {
 		c.JSON(http.StatusOK, gin.H{
 			"authenticated": true,
-			"user": gin.H{
-				"id":           u.PublicID,
-				"username":     u.Username,
-				"email":        u.Email,
-				"display_name": u.DisplayName,
-				"role":         u.Role,
-				"locale":       u.Locale,
-			},
-			"csrf_token": sess.CSRFToken,
+			"user":          sessionUserPayload(u),
+			"csrf_token":    sess.CSRFToken,
 		})
 		return
 	}
@@ -167,16 +160,23 @@ func (s *Server) apiLogin(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"authenticated": true,
-		"user": gin.H{
-			"id":           u.PublicID,
-			"username":     u.Username,
-			"email":        u.Email,
-			"display_name": u.DisplayName,
-			"role":         u.Role,
-			"locale":       u.Locale,
-		},
-		"csrf_token": sess.CSRFToken,
+		"user":          sessionUserPayload(u),
+		"csrf_token":    sess.CSRFToken,
 	})
+}
+
+// sessionUserPayload is the user object shared by the session probe and the login response, so the two shapes cannot drift.
+// has_password tells the client whether the account needs an old password to change it, or may set a first one.
+func sessionUserPayload(u *store.User) gin.H {
+	return gin.H{
+		"id":           u.PublicID,
+		"username":     u.Username,
+		"email":        u.Email,
+		"display_name": u.DisplayName,
+		"role":         u.Role,
+		"locale":       u.Locale,
+		"has_password": u.PasswordHash != nil,
+	}
 }
 
 // loginShell serves GET /login: returns the app shell (the canonical path),

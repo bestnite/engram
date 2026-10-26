@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
@@ -50,7 +51,7 @@ func (s *Server) passwordPatch(c *gin.Context) {
 		return
 	}
 	var req passwordRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.OldPassword == "" || req.NewPassword == "" {
+	if err := c.ShouldBindJSON(&req); err != nil || req.NewPassword == "" {
 		passwordError(c, http.StatusBadRequest, "invalid_request", "The password request is invalid.")
 		return
 	}
@@ -60,8 +61,12 @@ func (s *Server) passwordPatch(c *gin.Context) {
 		passwordError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		return
 	}
-	if fresh.PasswordHash == nil {
-		passwordError(c, http.StatusConflict, "password_unavailable", "Password change is unavailable for this account.")
+	// An account without a local password is setting its first one: there is no old password to ask for or to verify.
+	initial := fresh.PasswordHash == nil
+	if !initial && req.OldPassword == "" {
+		// The client loaded the page while passwordless and therefore sent no old password. A hash now exists, so another request already
+		// set it; 409 lets the client refresh has_password, while asking for the old password would be unanswerable on that stale page.
+		passwordError(c, http.StatusConflict, "password_already_set", "A password has already been set for this account.")
 		return
 	}
 	sess, _ := auth.CurrentSession(c)
@@ -69,7 +74,14 @@ func (s *Server) passwordPatch(c *gin.Context) {
 	if sess != nil {
 		keep = sess.ID
 	}
-	err = s.accounts.ChangePasswordKeepingSession(c.Request.Context(), u.ID, keep, req.OldPassword, req.NewPassword)
+	ctx := c.Request.Context()
+	if initial {
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return s.accounts.SetInitialPasswordTx(ctx, tx, u.ID, req.NewPassword, keep)
+		})
+	} else {
+		err = s.accounts.ChangePasswordKeepingSession(ctx, u.ID, keep, req.OldPassword, req.NewPassword)
+	}
 	if err != nil {
 		code, status, message := "password_rejected", http.StatusBadRequest, "The new password does not meet the password policy."
 		switch {
@@ -77,11 +89,22 @@ func (s *Server) passwordPatch(c *gin.Context) {
 			code, status, message = "invalid_current_password", http.StatusUnauthorized, "The current password is incorrect."
 		case errors.Is(err, auth.ErrPasswordUnchanged):
 			code, status, message = "password_unchanged", http.StatusBadRequest, "The new password must differ from the current password."
+		case errors.Is(err, auth.ErrPasswordAlreadySet):
+			// Another request set a password between the read above and SetInitialPassword: answer with the same conflict a
+			// follow-up attempt would see, never overwrite a hash that exists.
+			code, status, message = "password_already_set", http.StatusConflict, "A password has already been set for this account."
 		}
 		passwordError(c, status, code, message)
 		return
 	}
-	s.audit(c.Request.Context(), store.AuditEntry{UserID: store.Ptr(u.ID), Action: store.ActionUserPasswordChange, TargetType: "user", TargetID: store.Ptr(u.ID)})
+	detail := map[string]any(nil)
+	if initial {
+		detail = map[string]any{"initial": true}
+	}
+	s.audit(c.Request.Context(), store.AuditEntry{
+		UserID: store.Ptr(u.ID), Action: store.ActionUserPasswordChange, TargetType: "user", TargetID: store.Ptr(u.ID),
+		Detail: detail,
+	})
 	s.notifyCredentialChanged(c.Request.Context(), fresh, "password")
 	c.Status(http.StatusNoContent)
 }
