@@ -1388,4 +1388,6 @@ export const en: LocaleCatalog = {
   'settings.identity.toast.failed': 'Linking failed. Nothing was changed.',
   'settings.identity.toast.session': 'Your session ended before linking finished. Sign in again.',
   'settings.identity.toast.unlinked': 'Identity unlinked.',
+  // ---- Admin: OIDC identity unlink refusals ----
+  'admin.oidc.notice.last_credential': 'This identity is the user\'s only way to sign in. Ask them to set a password first.',
 };

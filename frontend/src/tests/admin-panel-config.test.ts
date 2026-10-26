@@ -138,6 +138,7 @@ describe('Admin config SPA routes and catalog coverage', () => {
       'admin.smtp.outbox.last_error',
       'admin.oidc.redirect_uri.hint',
       'admin.oidc.notice.invalid_issuer',
+      'admin.oidc.notice.last_credential',
     ];
     for (const key of keys) {
       expect(zhCN[key], `zh-CN missing ${key}`).toBeTruthy();

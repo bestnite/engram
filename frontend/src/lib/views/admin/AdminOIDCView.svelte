@@ -79,6 +79,8 @@
       invalid_issuer: 'admin.oidc.notice.invalid_issuer',
       save_failed: 'admin.oidc.notice.failed',
       unlink_failed: 'admin.oidc.notice.failed',
+      // The identity is the user's only way to sign in, so retrying the same request cannot succeed: the admin must change something else first.
+      last_credential: 'admin.oidc.notice.last_credential',
     };
     return map[code] || 'admin.oidc.notice.failed';
   }

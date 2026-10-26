@@ -1387,4 +1387,6 @@ export const zhCN: LocaleCatalog = {
   'settings.identity.toast.failed': '绑定失败，账号未做任何更改。',
   'settings.identity.toast.session': '绑定完成前登录状态已失效，请重新登录。',
   'settings.identity.toast.unlinked': '身份已解绑。',
+  // ---- Admin: OIDC identity unlink refusals ----
+  'admin.oidc.notice.last_credential': '该身份是此用户唯一的登录方式；请先让用户设置密码。',
 };
