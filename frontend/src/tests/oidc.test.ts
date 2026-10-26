@@ -48,6 +48,22 @@ describe('SPA OIDC login entry', () => {
     expect(html).not.toContain('/auth/oidc/start');
   });
 
+  it('uses the login label when the host page passes no labelKey', () => {
+    const { html } = render(OIDCLoginEntry, {
+      props: { initial: { enabled: true, start_url: '/auth/oidc/start' } },
+    });
+    expect(html).toContain(en['account.oidc.button']);
+    expect(html).not.toContain(en['auth.register.oidc']);
+  });
+
+  it('uses labelKey when the host page supplies one', () => {
+    const { html } = render(OIDCLoginEntry, {
+      props: { initial: { enabled: true, start_url: '/auth/oidc/start' }, labelKey: 'auth.register.oidc' },
+    });
+    expect(html).toContain(en['auth.register.oidc']);
+    expect(html).not.toContain(en['account.oidc.button']);
+  });
+
   it('has the OIDC label in both catalogues', () => {
     expect(zhCN['account.oidc.button']).toBeTruthy();
     expect(en['account.oidc.button']).toBe(

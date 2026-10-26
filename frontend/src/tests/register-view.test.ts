@@ -20,6 +20,8 @@ describe('RegisterView first paint states', () => {
     expect(html).toContain('自助注册已关闭，请联系管理员开通账号。');
     expect(html).not.toContain('data-testid="register-submit"');
     expect(html).not.toContain('data-testid="register-password-confirm"');
+    // The OIDC entry belongs to the form branch only: a blocked site must not advertise it.
+    expect(html).not.toContain('data-testid="oidc-entry"');
   });
 
   it('asks for an invite link when the policy is invite and this visit carries no token', () => {
@@ -28,6 +30,7 @@ describe('RegisterView first paint states', () => {
     expect(html).toContain('data-testid="register-blocked"');
     expect(html).toContain('注册需要邀请链接，请联系管理员获取。');
     expect(html).not.toContain('data-testid="register-submit"');
+    expect(html).not.toContain('data-testid="oidc-entry"');
   });
 
   it('renders the form with the password confirmation field when registration is open', () => {
@@ -53,6 +56,7 @@ describe('RegisterView first paint states', () => {
     expect(html).toContain('data-testid="register-probing"');
     expect(html).not.toContain('data-testid="register-submit"');
     expect(html).not.toContain('data-testid="register-blocked"');
+    expect(html).not.toContain('data-testid="oidc-entry"');
   });
 });
 
