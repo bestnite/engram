@@ -181,14 +181,6 @@ func (l *LoginLimiter) bucket(key string, now time.Time) *failureBucket {
 	return b
 }
 
-// activeCount returns the currently effective failure count of a key (the caller holds the lock).
-func (l *LoginLimiter) activeCount(key string) int {
-	if b := l.bucket(key, l.now()); b != nil {
-		return b.count
-	}
-	return 0
-}
-
 // delayFor converts a failure count into a wait duration: 0 failures wait nothing, after that it grows by powers of two up to the cap.
 func (l *LoginLimiter) delayFor(failures int) time.Duration {
 	if failures <= 0 {

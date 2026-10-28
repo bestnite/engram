@@ -131,11 +131,6 @@ var errorMessages = map[string]string{
 // defaultErrorMessage returns the English fallback text for a code; unregistered codes return the empty string.
 func defaultErrorMessage(code string) string { return errorMessages[code] }
 
-// errorMessage returns the English message for a code.
-func errorMessage(c *gin.Context, code string) string {
-	return ErrorMessage(c.Request.Context(), code)
-}
-
 // ErrorMessage returns the stable English text for a code.
 // Unregistered codes fall back to the code itself.
 func ErrorMessage(_ context.Context, code string) string {

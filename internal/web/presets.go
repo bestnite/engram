@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/jobs"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -77,12 +76,4 @@ func validStepSpec(spec string) bool {
 		}
 	}
 	return true
-}
-
-// sessionCSRF takes the current session-bound CSRF token; the SPA page shell and the JSON write paths share the same session token.
-func sessionCSRF(c *gin.Context) string {
-	if sess, ok := auth.CurrentSession(c); ok {
-		return sess.CSRFToken
-	}
-	return ""
 }

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,31 +62,6 @@ func doGet(t *testing.T, srv *web.Server, target string) *httptest.ResponseRecor
 	t.Helper()
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
-	return rec
-}
-
-// doPostForm issues a POST as x-www-form-urlencoded.
-//
-// The pre-login forms (/login, /register, /setup) need the double-submit cookie: this fills in the cookie and the mirror
-// token automatically, so this test keeps verifying the wiring itself. The rejection path (missing mirror cookie) is covered
-// separately by internal/web's csrf_presession_test.go with raw requests.
-func doPostForm(t *testing.T, srv *web.Server, target string, values url.Values) *httptest.ResponseRecorder {
-	t.Helper()
-	preSession := false
-	switch strings.SplitN(target, "?", 2)[0] {
-	case "/login", "/register", "/setup":
-		preSession = true
-	}
-	if preSession && values.Get(auth.CSRFFieldName) == "" {
-		values.Set(auth.CSRFFieldName, testDoubleSubmitToken)
-	}
-	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(values.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if preSession {
-		req.AddCookie(&http.Cookie{Name: auth.CSRFDoubleSubmitCookieName, Value: testDoubleSubmitToken})
-	}
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
 	return rec
 }
 

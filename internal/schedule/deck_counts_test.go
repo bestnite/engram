@@ -205,16 +205,6 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	}
 }
 
-// containsID reports whether the set contains the given id.
-func containsID(ids []uint64, want uint64) bool {
-	for _, id := range ids {
-		if id == want {
-			return true
-		}
-	}
-	return false
-}
-
 // TestDeckCountsUnlimitedIsNotCappedByBatch asserts the review count of an unlimited deck is the real number of cards:
 // the single-batch fetch limit (BatchSize) only decides how many are returned at once, not how many can be studied today.
 func TestDeckCountsUnlimitedIsNotCappedByBatch(t *testing.T) {

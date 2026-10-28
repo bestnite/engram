@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -31,11 +30,8 @@ import (
 // The tests use a recording Sender to take the enqueued mail, so they do not depend on a real SMTP server; delivery itself is
 // the outbox worker's job, and here we only verify "the trigger point really wrote a mail of the right type into the queue".
 
-// recordingSender is a test double for mail.Sender: it records every mail delivered and always succeeds.
-type recordingSender struct {
-	mu   sync.Mutex
-	msgs []mail.Message
-}
+// recordingSender is a test double for mail.Sender: every delivery and handshake succeeds without recording anything.
+type recordingSender struct{}
 
 func (r *recordingSender) Send(_ context.Context, _ mail.SMTPConfig, _ mail.Message) error {
 	return nil

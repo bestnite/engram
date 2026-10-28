@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"gorm.io/gorm"
@@ -24,20 +23,4 @@ func seedReviewDeck(t *testing.T, db *gorm.DB, ownerID uint64, name string) *sto
 		t.Fatalf("create deck: %v", err)
 	}
 	return &deck
-}
-
-// attrValue takes the value="..." that immediately follows name="<name>" in an HTML fragment.
-// For the tests that still assert on SSR-rendered fragments (deck settings page and the like).
-func attrValue(body, name string) string {
-	marker := `name="` + name + `" value="`
-	idx := strings.Index(body, marker)
-	if idx < 0 {
-		return ""
-	}
-	rest := body[idx+len(marker):]
-	end := strings.Index(rest, `"`)
-	if end < 0 {
-		return ""
-	}
-	return rest[:end]
 }

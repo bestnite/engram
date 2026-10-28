@@ -2,8 +2,6 @@ package web
 
 import (
 	"context"
-	"net/http"
-	"net/url"
 	"testing"
 
 	"gorm.io/gorm"
@@ -29,27 +27,4 @@ func createRoleUser(t *testing.T, db *gorm.DB, username, role string) uint64 {
 		t.Fatalf("CreateLocalUser(%q) error = %v", username, err)
 	}
 	return u.ID
-}
-
-// adminPost submits a form with CSRF as an admin.
-func adminPost(t *testing.T, srv *Server, path string, values url.Values, cookies []*http.Cookie, csrf string) *http.Response {
-	t.Helper()
-	values.Set("csrf_token", csrf)
-	rec := postForm(t, srv, path, values, cookies)
-	return rec.Result()
-}
-
-// assertSessionsRevoked asserts that all of a user's sessions are revoked (revoked_at non-null).
-func assertSessionsRevoked(t *testing.T, db *gorm.DB, userID uint64) {
-	t.Helper()
-	var total, revoked int64
-	if err := db.Model(&store.Session{}).Where("user_id = ?", userID).Count(&total).Error; err != nil {
-		t.Fatalf("count sessions: %v", err)
-	}
-	if err := db.Model(&store.Session{}).Where("user_id = ? AND revoked_at IS NOT NULL", userID).Count(&revoked).Error; err != nil {
-		t.Fatalf("count revoked sessions: %v", err)
-	}
-	if total == 0 || revoked != total {
-		t.Fatalf("sessions for user %d: %d/%d revoked, want all revoked", userID, revoked, total)
-	}
 }

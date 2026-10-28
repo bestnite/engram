@@ -6,7 +6,6 @@ import (
 	"context"
 	"io"
 	"mime"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,36 +18,6 @@ import (
 
 // The part of the deck package browser path still in the web layer: the export download. Import itself has moved to REST
 // `POST /api/v1/decks/import` (the SPA's client.ts uses it), so the web layer keeps only the export and the /import shell.
-
-// uploadPackage builds an .edeck upload request as multipart; reused by tests that still hit the REST import endpoint.
-func uploadPackage(t *testing.T, srv *Server, target string, cookies []*http.Cookie, csrf, filename string, body []byte, fields map[string]string) *httptest.ResponseRecorder {
-	t.Helper()
-	var buf bytes.Buffer
-	w := multipart.NewWriter(&buf)
-	if csrf != "" {
-		_ = w.WriteField("csrf_token", csrf)
-	}
-	for k, v := range fields {
-		_ = w.WriteField(k, v)
-	}
-	part, err := w.CreateFormFile("file", filename)
-	if err != nil {
-		t.Fatalf("create form file: %v", err)
-	}
-	if _, err := part.Write(body); err != nil {
-		t.Fatalf("write part: %v", err)
-	}
-	_ = w.Close()
-
-	req := httptest.NewRequest(http.MethodPost, target, &buf)
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	return rec
-}
 
 // TestDeckPackageExportServesAttachment asserts the export endpoint's response shape and auth: a signed-in user's download gets
 // an .edeck attachment (same MIME as the REST export), and anonymous access is redirected to the login page.
@@ -142,30 +111,6 @@ func TestImportPageServesShell(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), "text/html") {
 		t.Fatalf("anonymous GET /import = %d (%q), want SPA HTML shell", rec.Code, rec.Header().Get("Content-Type"))
 	}
-}
-
-// exportPackageBytes fetches a deck package's bytes through the browser export endpoint, as a valid payload for the import cases.
-// Using a real exported package (rather than hand-made bytes) ensures a negative case fails because of permissions, not a broken package.
-func exportPackageBytes(t *testing.T, srv *Server, deckPublicID string, cookies []*http.Cookie) []byte {
-	t.Helper()
-	rec := getWithCookies(t, srv, "/decks/"+deckPublicID+"/package", cookies)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("export deck %s = %d, want 200 (body %s)", deckPublicID, rec.Code, snippet(rec.Body.String()))
-	}
-	body := rec.Body.Bytes()
-	if len(body) == 0 {
-		t.Fatalf("export deck %s produced an empty package", deckPublicID)
-	}
-	return body
-}
-
-// countDeckNotes counts the notes under a deck, for round-trip checks.
-func countDeckNotes(db *gorm.DB, deckID uint64) (int64, error) {
-	var n int64
-	if err := db.Model(&store.Note{}).Where("deck_id = ?", deckID).Count(&n).Error; err != nil {
-		return 0, err
-	}
-	return n, nil
 }
 
 // seedMediaDeck creates a deck, puts in a note referencing media, and writes the media bytes into the server's media root; returns the deck and the media bytes.

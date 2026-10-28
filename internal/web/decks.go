@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -118,19 +117,4 @@ func summaryDeckIDs(summaries []store.DeckSummary) []uint64 {
 		ids = append(ids, summaries[i].Deck.ID)
 	}
 	return ids
-}
-
-// resolvePresetID resolves a preset's public id: it must belong to the current user; when absent or invalid it falls back to the first preset.
-// store.EnsureDefaultPreset guarantees at least one preset exists, so there is no "no preset to fall back to" branch.
-func (s *Server) resolvePresetID(ctx context.Context, userID uint64, raw string) (uint64, error) {
-	presets, err := store.EnsureDefaultPreset(ctx, s.db, userID)
-	if err != nil {
-		return 0, err
-	}
-	if raw = strings.TrimSpace(raw); raw != "" {
-		if p, err := s.presets.ByPublicID(ctx, raw); err == nil && p.OwnerUserID == userID {
-			return p.ID, nil
-		}
-	}
-	return presets[0].ID, nil
 }

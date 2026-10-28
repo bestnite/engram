@@ -1,31 +1,14 @@
 package web
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"gopkg.in/yaml.v3"
-	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/mail"
-	"git.nite07.com/nite/engram/internal/store"
 )
-
-// setOwnerLocale writes the owner's UI language to code directly, so the preferences page renders with assertable copy.
-func setOwnerLocale(t *testing.T, db *gorm.DB, userID uint64, code string) {
-	t.Helper()
-	users := store.NewUserStore(db)
-	u, err := users.ByID(context.Background(), userID)
-	if err != nil {
-		t.Fatalf("load owner: %v", err)
-	}
-	u.Locale = code
-	if err := users.Update(context.Background(), u); err != nil {
-		t.Fatalf("update owner locale: %v", err)
-	}
-}
 
 // TestMailPrefsCatalogKeysExistInBothCatalogs asserts every language-pack key referenced by the catalog and the page exists in both the Chinese and English sets:
 // catalog labels are built dynamically (def.LabelKey), so the static key scanner cannot see them and this is the fallback check.

@@ -8,13 +8,6 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// newAdminServer reuses newNotesServer: the owner it creates is an admin, and it provides both the admin session and CSRF.
-func newAdminServer(t *testing.T) (srv *Server, adminCookies []*http.Cookie, adminCSRF string) {
-	t.Helper()
-	srv, _, _, cookies, csrf := newNotesServer(t)
-	return srv, cookies, csrf
-}
-
 // TestAdminRoutesDenyNonAdmin is the core acceptance test: create an ordinary user and access
 // every registered /admin/* page route one by one; all must be 403 (the guard runs before the shell).
 func TestAdminRoutesDenyNonAdmin(t *testing.T) {

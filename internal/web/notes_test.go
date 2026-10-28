@@ -183,30 +183,3 @@ func userPublicID(t *testing.T, db *gorm.DB, id uint64) string {
 	}
 	return u.PublicID
 }
-
-// pad3 is a test helper that pads a sequence number to three digits (used for generating front/back copy).
-func pad3(i int) string {
-	s := "000" + itoa(i)
-	return s[len(s)-3:]
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	var b []byte
-	for i > 0 {
-		b = append([]byte{byte('0' + i%10)}, b...)
-		i /= 10
-	}
-	return string(b)
-}
-
-func contains(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-	return false
-}

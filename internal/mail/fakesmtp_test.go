@@ -10,22 +10,14 @@ import (
 
 // fakeSMTP is a minimal in-process SMTP server, used in tests to verify delivery and retries
 // without depending on the internet or a real SMTP service. It reads commands line by line and
-// answers with fixed status codes.
-//
-// Its behavior is controlled by failFirst: transactions before the N-th DATA get a 4xx (a retryable
-// transient error), which is used to verify the worker's backoff retries; errors records the error
-// text returned to the client each time, so a test can assert that the "last error" really is the
-// server text.
+// answers with fixed status codes; rcptReject switches RCPT TO to a permanent rejection.
 type fakeSMTP struct {
 	ln   net.Listener
 	addr string
 	mu   sync.Mutex
 	msgs []string // bodies of the successfully received messages
-	// failNext is how many more failures are due (>0 means the next transaction fails).
-	failNext int
 	// When rcptReject is true, RCPT TO is rejected outright (the permanent failure path).
 	rcptReject bool
-	closed     bool
 }
 
 // newFakeSMTP starts a minimal SMTP service on a loopback port.
@@ -55,13 +47,6 @@ func (f *fakeSMTP) port() int {
 		n = n*10 + int(c-'0')
 	}
 	return n
-}
-
-// setFailNext makes the next n transactions fail, returning a retryable server error text.
-func (f *fakeSMTP) setFailNext(n int) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.failNext = n
 }
 
 // setRcptReject makes RCPT TO be rejected (the permanent failure path that is not retried).
@@ -122,10 +107,6 @@ func (f *fakeSMTP) handle(conn net.Conn) {
 		case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
 			say("250 fake greets you")
 		case strings.HasPrefix(cmd, "MAIL FROM"):
-			if f.takeFail() {
-				say("451 4.3.0 temporary local problem")
-				continue
-			}
 			say("250 ok")
 		case strings.HasPrefix(cmd, "RCPT TO"):
 			f.mu.Lock()
@@ -149,17 +130,6 @@ func (f *fakeSMTP) handle(conn net.Conn) {
 			say("502 5.5.2 command not implemented")
 		}
 	}
-}
-
-// takeFail consumes one failure credit when a failure is due and returns true.
-func (f *fakeSMTP) takeFail() bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.failNext > 0 {
-		f.failNext--
-		return true
-	}
-	return false
 }
 
 // finishTransaction records one successfully received mail.

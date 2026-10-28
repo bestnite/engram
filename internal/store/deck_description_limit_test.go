@@ -11,17 +11,6 @@ import (
 // rejected, invalid UTF-8 rejected; an empty description is allowed). Before the fix the description was not validated at all, so the web UI could create a deck 'its own importer would reject'.
 // Here both store-layer write paths, creation and rename, are exercised on real SQLite (and on gated PG).
 
-// assertDescriptionRejected asserts that the store layer rejected writing that description.
-func assertDescriptionRejected(t *testing.T, err error) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf("description write was accepted, want a rejection")
-	}
-	if errors.Is(err, ErrDeckNameInvalid) {
-		t.Fatalf("description rejection must not reuse ErrDeckNameInvalid: %v", err)
-	}
-}
-
 func TestDeckDescriptionLimitCreateAndRename(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
