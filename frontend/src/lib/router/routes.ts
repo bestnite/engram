@@ -35,7 +35,6 @@ import EmailSettingsView from '../views/EmailSettingsView.svelte';
 import VerifyEmailView from '../views/VerifyEmailView.svelte';
 import ConfirmEmailChangeView from '../views/ConfirmEmailChangeView.svelte';
 import UnsubscribeView from '../views/UnsubscribeView.svelte';
-import ShortcodesHelpView from '../views/ShortcodesHelpView.svelte';
 
 /**
  * Frontend skeleton route definition list
@@ -281,12 +280,5 @@ export const routes: RouteDefinition[] = [
     path: '/unsubscribe',
     name: 'unsubscribe',
     component: UnsubscribeView as unknown as RouteDefinition['component'],
-  },
-  {
-    // Shortcode reference page. It reads no API and needs no parameters: the content is static documentation
-    // of the server's shortcode grammar, so the view renders in the same way on every visit.
-    path: '/help/shortcodes',
-    name: 'help-shortcodes',
-    component: ShortcodesHelpView as unknown as RouteDefinition['component'],
   },
 ];

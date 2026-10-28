@@ -270,16 +270,13 @@ describe('ShortcodeInsert — audio', () => {
   });
 });
 
-describe('ShortcodeInsert — target and help', () => {
-  it('names the target field and links to the syntax guide', () => {
+describe('ShortcodeInsert — target', () => {
+  it('names the target field', () => {
     setup({ targetLabel: '背面' });
 
     expect(target.textContent).toContain(
       formatMessage('zh-CN', 'shortcode.insert.target', { field: '背面' })
     );
-    const link = el<HTMLAnchorElement>('shortcode-insert-help');
-    expect(link.getAttribute('href')).toBe('/help/shortcodes');
-    expect(link.textContent?.trim()).toBe(formatMessage('zh-CN', 'shortcode.insert.help'));
   });
 
   it('stays unavailable when the chosen field cannot hold a shortcode', () => {
@@ -347,10 +344,9 @@ describe('ShortcodeInsert — audio upload', () => {
 });
 
 describe('ShortcodeInsert — heading', () => {
-  it('prints no heading when a dialog already titles the panel, and keeps the syntax link', () => {
+  it('prints no heading when a dialog already titles the panel', () => {
     setup({ showHeading: false });
 
     expect(target.querySelector('h2')).toBeNull();
-    expect(el<HTMLAnchorElement>('shortcode-insert-help').getAttribute('href')).toBe('/help/shortcodes');
   });
 });

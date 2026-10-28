@@ -364,7 +364,6 @@ func New(addr string, deps Deps) (*Server, error) {
 	// One-click unsubscribe (RFC 8058): a login-free one-click unsubscribe endpoint (for optional types only).
 	s.registerUnsubscribeRoutes(router)
 	s.registerStatsRoutes(router)
-	s.registerHelpRoutes(router)
 	s.registerAdminRoutes(router)
 	// Unknown path fallback: every request that matches no route lands on the designed 404 page (not_found.go).
 	s.registerNotFoundRoute(router)

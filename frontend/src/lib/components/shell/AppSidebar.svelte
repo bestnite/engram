@@ -9,7 +9,6 @@
     SlidersHorizontal,
     Shield,
     Settings,
-    BookOpen,
     PanelLeftClose,
     PanelLeftOpen,
   } from '@lucide/svelte';
@@ -79,12 +78,10 @@
   ]);
 
   // The admin entry is only for admins (consistent with the server's admin authorization rule), so normal users do not walk into a 403.
-  // The shortcode reference is documentation rather than a setting, so it sits last, above the account menu, and is open to every signed-in user.
   const footerItems = $derived<NavItem[]>([
     // /admin has no overview page, so point directly at the first item of the admin navigation.
     ...(isAdmin ? [{ href: '/admin/users', label: $t('nav.admin'), icon: Shield, active: path.startsWith('/admin') }] : []),
     { href: '/settings', label: $t('nav.settings'), icon: Settings, active: path.startsWith('/settings') },
-    { href: '/help/shortcodes', label: $t('nav.help'), icon: BookOpen, active: path === '/help' || path.startsWith('/help/') },
   ]);
 
   const itemClass = (active: boolean) =>

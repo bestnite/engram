@@ -167,18 +167,9 @@
   aria-labelledby={showHeading ? `${uid}-heading` : undefined}
   class="space-y-4 {showHeading ? 'rounded-xl border border-input p-4' : ''}"
 >
-  <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-    {#if showHeading}
-      <h2 id="{uid}-heading" class="text-lg font-semibold">{$t('shortcode.insert.heading')}</h2>
-    {/if}
-    <a
-      href="/help/shortcodes"
-      data-testid="shortcode-insert-help"
-      class="ml-auto rounded-sm text-sm text-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-    >
-      {$t('shortcode.insert.help')}
-    </a>
-  </div>
+  {#if showHeading}
+    <h2 id="{uid}-heading" class="text-lg font-semibold">{$t('shortcode.insert.heading')}</h2>
+  {/if}
 
   <p class="text-xs text-muted-foreground">{$t('shortcode.insert.target', { field: targetLabel })}</p>
 

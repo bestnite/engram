@@ -49,7 +49,7 @@ func assertRedirectsToLogin(t *testing.T, rec *httptest.ResponseRecorder, what s
 
 // TestSessionPageRoutesServeShell covers the page paths that only require a signed-in session.
 func TestSessionPageRoutesServeShell(t *testing.T) {
-	for _, path := range []string{"/decks", "/review", "/settings", "/settings/security", "/settings/email", "/settings/keys", "/help/shortcodes"} {
+	for _, path := range []string{"/decks", "/review", "/settings", "/settings/security", "/settings/email", "/settings/keys"} {
 		t.Run(path, func(t *testing.T) {
 			srv, _, _, cookies, _ := newNotesServer(t)
 			assertShell(t, getWithCookies(t, srv, path, cookies))
