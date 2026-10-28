@@ -9,6 +9,39 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 
 ## 1. Task backlog
 
+### M15 — Deck pause
+
+- [ ] **M15-1 Pause a deck for oneself** — a user pauses a whole deck they can see, so it leaves
+  their default study scope without losing any progress.
+  *Data:* a new table `deck_pauses` keyed `(deck_id, user_id)` with `paused_at`; a row means the
+  user paused the deck, resuming deletes the row. The owner and every member (reader included)
+  pause for themselves only; another member's study is never affected. The table is additive
+  (AutoMigrate). Deleting the deck deletes its rows (`internal/store/deck.go`), and revoking a
+  grant or leaving a share deletes that member's row (`internal/store/grant.go`).
+  `decks.archived_at` is not used.
+  *Excluded from (only when no deck is named):* the default review queue (`scopeDeckIDs` in
+  `internal/schedule/queue.go`, which also serves MCP `get_due_cards`); `due` in the stats summary
+  (`API.Stats`, the home "due" number and the start-review button); the due forecast with no deck
+  filter (`StatsStore.DueForecast` and its recomputation in `internal/store/retro.go`, which the
+  weekly digest reuses); the reminder candidates (`store.ReminderCandidates`); the home deck list;
+  the sidebar deck list.
+  *Unchanged:* naming a paused deck explicitly (`/review?deck=…`, batch review, a stats deck filter)
+  studies or shows it as usual; review history, retention, the deck count and the card counts
+  keep every visible deck.
+  *Transports:* `PUT /api/v1/decks/:id/paused` with `{"paused": bool}` (scope `review`, at least
+  reader, idempotent) and the MCP tool `set_deck_paused` (scope `review`) call one service method,
+  which writes the audit actions `deck.pause` / `deck.resume`. `GET /api/v1/decks`, `list_decks` and
+  every other deck response gain `paused`. The deck list page shows paused decks with a badge and a
+  switch; the deck detail page has the same switch, with a hint that cards keep falling due while the
+  deck is paused.
+  *Acceptance:* tests show, on SQLite and on PostgreSQL via `TEST_PG_DSN`, that a paused deck
+  leaves the default queue, the summary `due`, the unfiltered forecast and the reminder count while
+  an explicit deck scope still returns its cards; that one member pausing a shared deck leaves the
+  owner's queue unchanged; that pausing twice and resuming twice both succeed; that an invisible
+  deck answers `404` and a key without the `review` scope answers `403`, over REST and MCP alike;
+  and that deleting the deck or revoking the grant removes the row. Frontend tests cover the
+  switch, the badge, and the hidden home and sidebar rows.
+
 ### M10 — Future work (not part of the current release)
 
 These tasks are recorded so the design keeps room for them. They are not part of the current
