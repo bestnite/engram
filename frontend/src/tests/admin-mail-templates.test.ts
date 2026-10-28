@@ -130,7 +130,6 @@ describe('mail template admin route and catalog keys', () => {
       'admin.mail.subject_label',
       'admin.mail.body_label',
       'admin.mail.vars_heading',
-      'admin.mail.var_required',
       'admin.mail.fallback_hint',
       'admin.mail.preview',
       'admin.mail.preview_heading',

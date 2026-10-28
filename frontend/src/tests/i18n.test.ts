@@ -59,8 +59,8 @@ describe('i18n language resolution and formatting', () => {
     expect(formatMessage('en', 'nav.today')).toBe('Today');
 
     // Param substitution
-    const custom = formatMessage('zh-CN', 'shell.welcome');
-    expect(custom).toBe('欢迎使用 Engram');
+    const custom = formatMessage('zh-CN', 'decks.select_deck', { name: 'Kanji' });
+    expect(custom).toBe('选择卡组 Kanji');
 
     // An unknown key falls through unchanged
     expect(formatMessage('zh-CN', 'nonexistent.key')).toBe('nonexistent.key');

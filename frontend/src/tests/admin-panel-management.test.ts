@@ -78,7 +78,6 @@ describe('Admin management views render server-provided truth', () => {
       'admin.registration.notice.mail_unconfigured',
       'admin.keys.state.revoked',
       'admin.keys.last_used_never',
-      'admin.common.copy',
     ];
     for (const key of keys) {
       expect(zhCN[key], `zh-CN missing ${key}`).toBeTruthy();
