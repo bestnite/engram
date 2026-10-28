@@ -13,7 +13,7 @@ import (
 // DeckPause records that one user paused one deck for themselves.
 //
 // Pausing is a study choice of the user, not a property of the deck: the owner and every member of a shared deck pause
-// for themselves only, so the row is keyed (deck, user) and decks.archived_at is never involved. A row means "paused";
+// for themselves only, so the row is keyed (deck, user) and no decks column is involved. A row means "paused";
 // resuming deletes the row, so no row is the normal state.
 //
 // A paused deck leaves the user's default scope (activeDeckIDsQuery): the queue with no deck named, the due count of the

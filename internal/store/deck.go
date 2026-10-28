@@ -160,7 +160,7 @@ func (s *DeckStore) Create(ctx context.Context, d *Deck) error {
 	return nil
 }
 
-// ByID fetches a deck by primary key; archiving does not affect reads, callers decide how to display it by ArchivedAt.
+// ByID fetches a deck by primary key.
 func (s *DeckStore) ByID(ctx context.Context, id uint64) (*Deck, error) {
 	var d Deck
 	if err := s.db.WithContext(ctx).First(&d, "id = ?", id).Error; err != nil {
@@ -175,7 +175,7 @@ func (s *DeckStore) ByID(ctx context.Context, id uint64) (*Deck, error) {
 // Validation applies to the 'merged final text' (existing value + fields supplied this time), with rules shared by creation and deck package import.
 // **preset_id is not written**: the scheduling preset is a study setting changed only via SetStudySettings; if the rename path
 // wrote it back, it would overwrite a preset change made in the meantime with the value read earlier in this call (the owner's setting lives in decks.preset_id).
-// Ownership, creation time and archive state are likewise not writable fields, so a whole-row overwrite cannot also wipe them.
+// Ownership and creation time are likewise not writable fields, so a whole-row overwrite cannot also wipe them.
 func (s *DeckStore) Update(ctx context.Context, actorUserID, deckID uint64, name, description *string) error {
 	if name == nil && description == nil {
 		return ErrDeckUpdateEmpty

@@ -81,6 +81,34 @@ var BuiltinMigrations = []Migration{
 		Name: "0009_unique_default_preset_names",
 		Up:   uniqueDefaultPresetNames,
 	},
+	{
+		// Deck archiving never had a route, tool or page that set it, so decks.archived_at was a column nothing wrote. It is dropped
+		// rather than kept as a second, unused notion of "hidden deck" next to the per-user pause. Dropping a column is outside
+		// AutoMigrate's additive scope and needs an explicit migration.
+		Name: "0010_drop_deck_archived_at",
+		Up:   dropDeckArchivedAt,
+	},
+}
+
+// dropDeckArchivedAt drops the decks.archived_at column.
+//
+// The column carries no index or constraint, so both databases drop it in place, as dropDeckVisibility does. A database already in the
+// new shape (AutoMigrate builds decks without that column) is skipped.
+func dropDeckArchivedAt(tx *gorm.DB) error {
+	m := tx.Migrator()
+	if !m.HasTable("decks") || !m.HasColumn("decks", "archived_at") {
+		return nil
+	}
+	var stmt string
+	switch tx.Dialector.Name() {
+	case "sqlite":
+		stmt = "ALTER TABLE decks DROP COLUMN archived_at"
+	case "postgres":
+		stmt = "ALTER TABLE decks DROP COLUMN IF EXISTS archived_at"
+	default:
+		return fmt.Errorf("drop deck archived_at migration: unsupported dialect %q", tx.Dialector.Name())
+	}
+	return tx.Exec(stmt).Error
 }
 
 // uniqueDefaultPresetNames renames duplicate presets named DefaultPresetName, keeping one per owner.

@@ -8,7 +8,6 @@ export interface Deck {
   new_per_day: number;
   reviews_per_day: number;
   preset_id: string;
-  archived_at?: string | null;
   created_at: string;
   /**
    * The caller's explicit relation to this deck (Go: DeckResponse.Role).

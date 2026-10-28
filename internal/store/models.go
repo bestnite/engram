@@ -120,16 +120,15 @@ func (Preset) TableName() string { return "presets" }
 // Both cap columns are integers with database defaults, so a zero value is omitted by GORM and filled in by the database default;
 // to set a cap to 0 explicitly, go through DeckStore.SetCaps (a map update writes 0).
 type Deck struct {
-	ID            uint64     `gorm:"primaryKey" json:"-"`
-	PublicID      string     `gorm:"column:public_id;uniqueIndex" json:"id"`
-	OwnerUserID   uint64     `gorm:"not null;index" json:"owner_user_id"`
-	Name          string     `gorm:"not null" json:"name"`
-	Description   string     `gorm:"not null" json:"description"`
-	NewPerDay     int        `gorm:"not null;default:20" json:"new_per_day"`
-	ReviewsPerDay int        `gorm:"not null;default:200" json:"reviews_per_day"`
-	PresetID      uint64     `gorm:"not null;index" json:"preset_id"`
-	ArchivedAt    *time.Time `json:"archived_at,omitempty"`
-	CreatedAt     time.Time  `gorm:"not null" json:"created_at"`
+	ID            uint64    `gorm:"primaryKey" json:"-"`
+	PublicID      string    `gorm:"column:public_id;uniqueIndex" json:"id"`
+	OwnerUserID   uint64    `gorm:"not null;index" json:"owner_user_id"`
+	Name          string    `gorm:"not null" json:"name"`
+	Description   string    `gorm:"not null" json:"description"`
+	NewPerDay     int       `gorm:"not null;default:20" json:"new_per_day"`
+	ReviewsPerDay int       `gorm:"not null;default:200" json:"reviews_per_day"`
+	PresetID      uint64    `gorm:"not null;index" json:"preset_id"`
+	CreatedAt     time.Time `gorm:"not null" json:"created_at"`
 }
 
 func (Deck) TableName() string { return "decks" }

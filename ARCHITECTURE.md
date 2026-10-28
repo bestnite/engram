@@ -123,7 +123,7 @@ change.
 - **Decks and sharing.** A deck has an owner. Grants give other users a role on the deck. Each
   member chooses their own preset and study settings for a shared deck.
 - **Deck pause.** A user pauses a deck for themselves in `deck_pauses`, keyed `(deck_id, user_id)`;
-  the owner and every member decide alone, and `decks.archived_at` is not involved. Visibility and
+  the owner and every member decide alone, and no `decks` column is involved. Visibility and
   the default study scope are two predicates in `internal/store`: `visibleDeckIDsQuery` (owned or
   granted) decides what a user can see, and `activeDeckIDsQuery` (visible minus paused) decides what
   is studied when no deck is named — the whole-library queue, the summary `due`, the unfiltered due

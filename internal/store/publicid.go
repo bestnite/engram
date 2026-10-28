@@ -68,7 +68,7 @@ func firstByPublicID[T any](ctx context.Context, db *gorm.DB, publicID string) (
 	return &out, nil
 }
 
-// ByPublicID fetches a deck by external id. Archiving does not affect reading; the caller decides how to present it based on ArchivedAt.
+// ByPublicID fetches a deck by external id.
 func (s *DeckStore) ByPublicID(ctx context.Context, publicID string) (*Deck, error) {
 	return firstByPublicID[Deck](ctx, s.db, publicID)
 }

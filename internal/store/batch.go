@@ -74,7 +74,6 @@ func (s *CardStore) ByIDs(ctx context.Context, ids []uint64) (map[uint64]*Card, 
 }
 
 // ByIDs batch-fetches decks by primary key, returning an id→deck map; missing ids do not appear in the result.
-// Archiving does not affect reads (same rule as ByID); callers decide how to display by ArchivedAt.
 func (s *DeckStore) ByIDs(ctx context.Context, ids []uint64) (map[uint64]*Deck, error) {
 	out := make(map[uint64]*Deck, len(ids))
 	for _, chunk := range chunkIDs(ids) {

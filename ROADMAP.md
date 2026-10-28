@@ -57,8 +57,9 @@ release; a task moves into a release milestone when it is scheduled.
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
 
-**Everything shipped since v0.2.0 is additive: nothing was removed or renamed, and no configuration
-key or file format changed.** The v0.2.0 release notes cover everything before it.
+**Everything shipped since v0.2.0 is additive except one removal: the unused `archived_at` deck field
+and its column. Nothing was renamed, and no configuration key or file format changed.** The v0.2.0
+release notes cover everything before it.
 
 - One REST route was added, `PUT /api/v1/decks/:id/paused` (scope `review`), and one MCP tool,
   `set_deck_paused` (scope `review`).
@@ -66,6 +67,10 @@ key or file format changed.** The v0.2.0 release notes cover everything before i
 - Payload changes are additive: every deck response (`GET /api/v1/decks`, `list_decks` and the other
   deck-returning endpoints) gains `paused`, and each entry of the session-only
   `GET /api/v1/decks/queue-counts` response gains `studied_count` and `remaining_count`.
+- Every deck response (`GET /api/v1/decks`, `list_decks` and the other deck-returning endpoints)
+  drops `archived_at`, and the versioned migration `0010_drop_deck_archived_at` drops the
+  `decks.archived_at` column. No route, tool or page ever set it, so the field was always absent
+  from responses (`omitempty`) unless a row had been edited by hand.
 - With no deck named, `GET /api/v1/review/due` and `get_due_cards` leave out the decks the caller
   paused, and so do `due` in the stats summary, the unfiltered due forecast, the weekly digest and the
   reminder mail. Until a user pauses a deck, every result is the same as before.
@@ -74,3 +79,4 @@ key or file format changed.** The v0.2.0 release notes cover everything before i
 |---|---|---|
 | Deck progress | The deck list, the home deck list and the deck detail header show how many of the deck's cards the user has studied and how many new cards are left, as `Studied N · Left M`. On the home deck list each deck gets a second line of numbers: today's new and review counts as badges, which turn grey at zero, and a progress bar beside the studied and remaining text, which turns to the success colour once no new card is left. The counts are per user, so a shared deck never shows another member's progress, and they ignore the daily limits. A suspended new card is not counted as left; a suspended studied card still counts as studied. | No — two fields added to a session-only response |
 | Deck pause | A user pauses a deck for themselves from the deck list (a toggle beside delete or leave) or the deck detail header; the owner and every member, readers included, decide alone. A paused deck keeps a `Paused` badge on the deck list and disappears from the home deck list and the sidebar. It stays out of the default review queue, the home due count, the unfiltered forecast, the weekly digest and the reminder mail, while naming it (`/review?deck=…`, batch review, a stats deck filter) still studies or shows it. Progress is kept and cards keep falling due. Pausing and resuming write the audit actions `deck.pause` and `deck.resume`. | No — additive route, tool, table and field; nothing changes until a user pauses a deck |
+| Deck archive removal | The deck archive state is removed: it had no route, tool or page that set it, the sidebar's archived filter could never match, and pausing a deck already covers hiding one. The `archived_at` field leaves every deck response and the column leaves the database through a versioned migration. | Yes — HTTP API and MCP payload (`archived_at` removed) and database schema (column dropped by migration 0010) |

@@ -47,7 +47,7 @@ export const sidebarDecks = writable<SidebarDecksState>({ decks: [], totalDue: n
 
 /**
  * Compute the decks to show in the sidebar from the deck list and the queue counts: more due cards first, ties sorted by name,
- * and only the first SIDEBAR_DECK_LIMIT are taken. Archived decks and the decks the user paused never enter the sidebar, so the total
+ * and only the first SIDEBAR_DECK_LIMIT are taken. The decks the user paused never enter the sidebar, so the total
  * due count matches the default review queue.
  */
 export function buildSidebarDecks(decks: Deck[], counts: DeckQueueCountsResponse | null): SidebarDecksState {
@@ -56,7 +56,7 @@ export function buildSidebarDecks(decks: Deck[], counts: DeckQueueCountsResponse
     dueById.set(c.deck_id, c.new_count + c.review_count);
   }
   const visible = decks
-    .filter((d) => !d.archived_at && !d.paused)
+    .filter((d) => !d.paused)
     .map((d) => ({ id: d.id, name: d.name, due: counts ? (dueById.get(d.id) ?? 0) : null }));
   visible.sort((a, b) => (b.due ?? 0) - (a.due ?? 0) || a.name.localeCompare(b.name));
   const totalDue = counts ? visible.reduce((sum, d) => sum + (d.due ?? 0), 0) : null;

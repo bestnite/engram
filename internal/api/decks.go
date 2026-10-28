@@ -13,14 +13,13 @@ import (
 
 // DeckResponse is the external shape of a deck; REST and MCP share the same shape.
 type DeckResponse struct {
-	ID            string     `json:"id"`
-	Name          string     `json:"name"`
-	Description   string     `json:"description"`
-	NewPerDay     int        `json:"new_per_day"`
-	ReviewsPerDay int        `json:"reviews_per_day"`
-	PresetID      string     `json:"preset_id"`
-	ArchivedAt    *time.Time `json:"archived_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Description   string    `json:"description"`
+	NewPerDay     int       `json:"new_per_day"`
+	ReviewsPerDay int       `json:"reviews_per_day"`
+	PresetID      string    `json:"preset_id"`
+	CreatedAt     time.Time `json:"created_at"`
 	// Role is the caller's explicit relation to this deck: owner (their own) or a granted role of editor/reader.
 	// Every deck in the list is necessarily one of the two - there is no third source of "visible only by visibility".
 	// Clients use it to decide whether to show "delete" or "leave share".
@@ -41,7 +40,6 @@ func (a *API) ToDeckResponse(ctx context.Context, userID uint64, d store.Deck, r
 		ID:          d.PublicID,
 		Name:        d.Name,
 		Description: d.Description,
-		ArchivedAt:  d.ArchivedAt,
 		CreatedAt:   d.CreatedAt,
 		Role:        role,
 	}

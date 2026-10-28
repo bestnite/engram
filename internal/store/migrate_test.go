@@ -265,6 +265,69 @@ func TestBuiltinDropDeckVisibilityMigration(t *testing.T) {
 	}
 }
 
+// archivedDeck is the decks table as it stood before 0010: it still carries the archived_at column.
+type archivedDeck struct {
+	ID            uint64  `gorm:"primaryKey"`
+	PublicID      *string `gorm:"uniqueIndex"`
+	OwnerUserID   uint64  `gorm:"not null;index"`
+	Name          string  `gorm:"not null"`
+	Description   string  `gorm:"not null"`
+	NewPerDay     int     `gorm:"not null;default:20"`
+	ReviewsPerDay int     `gorm:"not null;default:200"`
+	PresetID      uint64  `gorm:"not null;index"`
+	ArchivedAt    *time.Time
+	CreatedAt     time.Time `gorm:"not null"`
+}
+
+func (archivedDeck) TableName() string { return "decks" }
+
+// TestBuiltinDropDeckArchivedAtMigration builds decks with the archived_at column, one row archived and one not, runs Sync and
+// asserts the column is gone, both rows survive unchanged, and a second Sync applies nothing.
+func TestBuiltinDropDeckArchivedAtMigration(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := db.AutoMigrate(&archivedDeck{}); err != nil {
+				t.Fatalf("create decks table with archived_at: %v", err)
+			}
+			ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+			for _, row := range []archivedDeck{
+				{OwnerUserID: 1, Name: "kept", PresetID: 1, CreatedAt: ts},
+				{OwnerUserID: 1, Name: "archived", PresetID: 1, ArchivedAt: &ts, CreatedAt: ts},
+			} {
+				if err := db.Create(&row).Error; err != nil {
+					t.Fatalf("seed deck %q: %v", row.Name, err)
+				}
+			}
+			if !db.Migrator().HasColumn("decks", "archived_at") {
+				t.Fatal("fixture is not the old schema: decks has no archived_at column")
+			}
+
+			if _, err := Sync(ctx, db, BuiltinMigrations); err != nil {
+				t.Fatalf("Sync(BuiltinMigrations) error = %v", err)
+			}
+			if db.Migrator().HasColumn("decks", "archived_at") {
+				t.Error("decks still has an archived_at column after the migration")
+			}
+			var names []string
+			if err := db.Model(&Deck{}).Order("name ASC").Pluck("name", &names).Error; err != nil {
+				t.Fatalf("read decks after migration: %v", err)
+			}
+			if len(names) != 2 || names[0] != "archived" || names[1] != "kept" {
+				t.Fatalf("decks after migration = %v, want both seeded rows", names)
+			}
+
+			applied, err := Sync(ctx, db, BuiltinMigrations)
+			if err != nil {
+				t.Fatalf("second Sync(BuiltinMigrations) error = %v", err)
+			}
+			if applied != 0 {
+				t.Errorf("second Sync() applied = %d, want 0", applied)
+			}
+		})
+	}
+}
+
 // TestBuiltinBackfillMediaNotesMigration simulates data from before the mapping table existed: note fields reference media,
 // but media_notes has no rows (including one soft-deleted note). After the migration both notes' references are in the mapping,
 // existing mapping rows are neither duplicated nor errored on, and another run does not execute again.
@@ -655,8 +718,8 @@ func TestBuiltinUniqueDefaultPresetNamesMigration(t *testing.T) {
 				t.Fatalf("create deck: %v", err)
 			}
 
-			if applied, err := Apply(ctx, db, BuiltinMigrations); err != nil || applied != 1 {
-				t.Fatalf("Apply(BuiltinMigrations) = %d, %v; want 1, nil", applied, err)
+			if applied, err := Apply(ctx, db, BuiltinMigrations[:9]); err != nil || applied != 1 {
+				t.Fatalf("Apply(BuiltinMigrations[:9]) = %d, %v; want 1, nil", applied, err)
 			}
 
 			load := func(id uint64) Preset {
@@ -703,8 +766,8 @@ func TestBuiltinUniqueDefaultPresetNamesMigration(t *testing.T) {
 				t.Errorf("deck preset_id = %d, want the unchanged %d", after.PresetID, oldest)
 			}
 
-			if applied, err := Apply(ctx, db, BuiltinMigrations); err != nil || applied != 0 {
-				t.Fatalf("second Apply(BuiltinMigrations) = %d, %v; want 0, nil", applied, err)
+			if applied, err := Apply(ctx, db, BuiltinMigrations[:9]); err != nil || applied != 0 {
+				t.Fatalf("second Apply(BuiltinMigrations[:9]) = %d, %v; want 0, nil", applied, err)
 			}
 			before := []string{load(second).Name, load(third).Name}
 			if err := uniqueDefaultPresetNames(db); err != nil {

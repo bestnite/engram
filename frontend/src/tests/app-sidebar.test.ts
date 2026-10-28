@@ -42,12 +42,10 @@ describe('buildSidebarDecks', () => {
     expect(state.totalDue).toBe(13);
   });
 
-  it('drops archived decks and caps the list', () => {
+  it('caps the list', () => {
     const many = Array.from({ length: SIDEBAR_DECK_LIMIT + 3 }, (_, i) => deck(String(i), `Deck ${i}`));
-    many.push(deck('archived', 'Archived', { archived_at: '2026-02-01T00:00:00Z' }));
     const state = buildSidebarDecks(many, { decks: [] });
     expect(state.decks).toHaveLength(SIDEBAR_DECK_LIMIT);
-    expect(state.decks.some((d) => d.id === 'archived')).toBe(false);
   });
 
   it('drops paused decks and leaves their due cards out of the total', () => {
