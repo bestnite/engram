@@ -57,6 +57,13 @@ release; a task moves into a release milestone when it is scheduled.
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
 
-Nothing has shipped since v0.2.0. Its release notes cover everything before it: the removal of
-seven REST routes and the two share-link tables, the card shortcodes and the Markdown dialect,
-and the Go 1.27 / Node 26 toolchain bump.
+**Everything shipped since v0.2.0 is additive: no route, MCP tool, table, configuration key or
+file format was added, removed or renamed.** The v0.2.0 release notes cover everything before it.
+
+- The only payload change is additive: each entry of the session-only
+  `GET /api/v1/decks/queue-counts` response gains `studied_count` and `remaining_count`. The public
+  deck shape of REST (`GET /api/v1/decks`) and MCP (`list_decks`) is unchanged.
+
+| Goal | What shipped | Breaking change |
+|---|---|---|
+| Deck progress | The deck list, the home deck list and the deck detail header show how many of the deck's cards the user has studied and how many new cards are left, as `Studied N · Left M`. The counts are per user, so a shared deck never shows another member's progress, and they ignore the daily limits. A suspended new card is not counted as left; a suspended studied card still counts as studied. | No — two fields added to a session-only response |
