@@ -5,10 +5,7 @@
  * with the contract in internal/cardtype/describe.go). This file keeps only transport-agnostic pure functions: the control vocabulary,
  * empty form initialization, and conversion between the form model and the submit payload. Views no longer write ten forms per card kind.
  */
-import type { CardTypeField, CardTypeFieldControl } from './api/types';
-
-/** Control vocabulary: item-by-item identical to the value set of the server's FieldSpec.control. */
-export type FieldControl = CardTypeFieldControl;
+import type { CardTypeField } from './api/types';
 
 /** Field spec, i.e. the shape the server sends (key, control, required, default). */
 export type FieldSpec = CardTypeField;

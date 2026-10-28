@@ -11,7 +11,7 @@ import { en } from './locales/en';
 /**
  * Language pack map
  */
-export const catalogs: Record<SupportedLocale, LocaleCatalog> = {
+const catalogs: Record<SupportedLocale, LocaleCatalog> = {
   'zh-CN': zhCN,
   en,
 };
@@ -28,7 +28,7 @@ export function isSupportedLocale(code: string | null | undefined): code is Supp
  * Match any language code to the nearest supported language
  * e.g. 'zh', 'zh-CN', 'zh-TW' -> 'zh-CN'; 'en-US', 'en' -> 'en'
  */
-export function matchSupportedLocale(lang: string | null | undefined): SupportedLocale | null {
+function matchSupportedLocale(lang: string | null | undefined): SupportedLocale | null {
   if (!lang) return null;
   const normalized = lang.trim().toLowerCase();
   if (normalized.startsWith('zh')) return 'zh-CN';
@@ -75,7 +75,7 @@ export function resolveLocale(options: ResolveLocaleOptions = {}): SupportedLoca
 /**
  * Detect the initial language for the current environment
  */
-export function detectInitialLocale(): SupportedLocale {
+function detectInitialLocale(): SupportedLocale {
   let urlParam: string | null = null;
   let navLang: string | null = null;
 

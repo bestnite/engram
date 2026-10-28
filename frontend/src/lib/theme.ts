@@ -26,8 +26,8 @@ export const DARK_CANVAS = '#09090b';
 export const LIGHT_CANVAS = '#f8fafc';
 
 /** Value of `<meta name="theme-color">` in dark and light mode (affects the mobile browser address bar color). */
-export const DARK_THEME_COLOR = '#09090b';
-export const LIGHT_THEME_COLOR = '#ffffff';
+const DARK_THEME_COLOR = '#09090b';
+const LIGHT_THEME_COLOR = '#ffffff';
 
 export type ThemeChoice = 'light' | 'dark';
 

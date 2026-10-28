@@ -260,6 +260,5 @@ export function initRouter(): () => void {
   };
 }
 
-export { get };
 export * from './types';
 export * from './routes';

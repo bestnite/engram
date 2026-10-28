@@ -2,7 +2,7 @@ import { writable } from 'svelte/store';
 import type { ApiClient, DataChangeKind, Deck, DeckQueueCountsResponse } from '../../api';
 
 /** Storage key for the sidebar's collapsed state. It is only a local display preference and does not go into account settings. */
-export const SIDEBAR_COLLAPSED_KEY = 'engram-sidebar-collapsed';
+const SIDEBAR_COLLAPSED_KEY = 'engram-sidebar-collapsed';
 
 /** Maximum number of decks listed directly in the sidebar; more decks are reached through "all decks". */
 export const SIDEBAR_DECK_LIMIT = 6;
@@ -106,7 +106,7 @@ export function refreshSidebarDecks(client: ApiClient, force = false): Promise<v
  * Mark the sidebar data stale without refetching immediately: the next page change bypasses the throttle and refetches.
  * Used for high-frequency changes such as answering reviews - refetching on every card answer would add two requests each time.
  */
-export function markSidebarStale(): void {
+function markSidebarStale(): void {
   lastLoadedAt = 0;
 }
 

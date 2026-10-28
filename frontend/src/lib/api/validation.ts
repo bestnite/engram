@@ -119,7 +119,7 @@ export const MAX_LEARN_AHEAD_MINUTES = 1440;
  * Validate the early-study window (minutes): an empty string means use the default (stored as NULL); a provided value must be
  * an integer in 0-1440 (0 means off).
  */
-export function validateLearnAheadMinutes(raw: string | null | undefined): {
+function validateLearnAheadMinutes(raw: string | null | undefined): {
   valid: boolean;
   value: number | null;
   errorKey?: string;
