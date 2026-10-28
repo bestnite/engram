@@ -32,8 +32,8 @@ describe('buildSidebarDecks', () => {
       [deck('a', 'Beta'), deck('b', 'Alpha'), deck('c', 'Gamma')],
       {
         decks: [
-          { deck_id: 'a', new_count: 1, review_count: 2 },
-          { deck_id: 'c', new_count: 10, review_count: 0 },
+          { deck_id: 'a', new_count: 1, review_count: 2, studied_count: 0, remaining_count: 0 },
+          { deck_id: 'c', new_count: 10, review_count: 0, studied_count: 0, remaining_count: 0 },
         ],
       }
     );

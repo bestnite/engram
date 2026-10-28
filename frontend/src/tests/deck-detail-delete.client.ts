@@ -46,6 +46,7 @@ describe('DeckDetailView deck deletion', () => {
     window.history.replaceState({}, '', '/decks/d1');
     routeStore.set(matchRoute('/decks/d1'));
     vi.spyOn(apiClient, 'getCardTypes').mockResolvedValue({ card_types: [] } as never);
+    vi.spyOn(apiClient, 'getDeckQueueCounts').mockResolvedValue({ decks: [] });
     target = document.createElement('div');
     document.body.appendChild(target);
     instance = mount(DeckDetailView, {

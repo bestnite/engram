@@ -47,13 +47,19 @@ type deckQueueCountsResponse struct {
 	Decks []deckQueueCount `json:"decks"`
 }
 
+// deckQueueCount carries two independent pairs of numbers for one deck.
+// NewCount / ReviewCount are what can be studied today, after the daily allowances.
+// StudiedCount / RemainingCount are the overall progress through the deck, which no daily allowance limits.
 type deckQueueCount struct {
-	DeckID      string `json:"deck_id"`
-	NewCount    int    `json:"new_count"`
-	ReviewCount int    `json:"review_count"`
+	DeckID         string `json:"deck_id"`
+	NewCount       int    `json:"new_count"`
+	ReviewCount    int    `json:"review_count"`
+	StudiedCount   int    `json:"studied_count"`
+	RemainingCount int    `json:"remaining_count"`
 }
 
-// deckQueueCountsAPI returns the queue counts of the decks visible to the current session, directly reusing the shared queue builder.
+// deckQueueCountsAPI returns the queue counts and the study progress of the decks visible to the current session,
+// directly reusing the shared queue builder.
 func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -77,11 +83,19 @@ func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	progress, err := schedule.NewQueueBuilder(s.db, s.decks, nil).DeckProgress(ctx, user.ID, summaryDeckIDs(summaries))
+	if err != nil {
+		s.logger.Error("count deck progress failed", "user_id", user.ID, "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
 	response := deckQueueCountsResponse{Decks: make([]deckQueueCount, 0, len(summaries))}
 	for _, summary := range summaries {
 		count := counts[summary.Deck.ID]
+		p := progress[summary.Deck.ID]
 		response.Decks = append(response.Decks, deckQueueCount{
 			DeckID: summary.Deck.PublicID, NewCount: count.New, ReviewCount: count.Review,
+			StudiedCount: p.Studied, RemainingCount: p.Remaining,
 		})
 	}
 	c.JSON(http.StatusOK, response)
@@ -91,14 +105,19 @@ func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 // it shares the filter conditions and quota formula with /review's card-fetching path, so the two numbers summed equal the count actually studyable after clicking in.
 // The count does not compute retrievability and needs no scheduler; "used today" is tallied by the user's own timezone and day boundary.
 func (s *Server) deckQueueCounts(ctx context.Context, user *store.User, summaries []store.DeckSummary) (map[uint64]schedule.DeckQueueCounts, error) {
+	return schedule.NewQueueBuilder(s.db, s.decks, nil).DeckCounts(ctx, user.ID, summaryDeckIDs(summaries), schedule.QueueOptions{
+		Timezone:      user.Timezone,
+		DayCutoffHour: user.DayCutoffHour,
+	})
+}
+
+// summaryDeckIDs collects the internal deck ids of the list rows.
+func summaryDeckIDs(summaries []store.DeckSummary) []uint64 {
 	ids := make([]uint64, 0, len(summaries))
 	for i := range summaries {
 		ids = append(ids, summaries[i].Deck.ID)
 	}
-	return schedule.NewQueueBuilder(s.db, s.decks, nil).DeckCounts(ctx, user.ID, ids, schedule.QueueOptions{
-		Timezone:      user.Timezone,
-		DayCutoffHour: user.DayCutoffHour,
-	})
+	return ids
 }
 
 // resolvePresetID resolves a preset's public id: it must belong to the current user; when absent or invalid it falls back to the first preset.

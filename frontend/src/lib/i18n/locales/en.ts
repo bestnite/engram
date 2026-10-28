@@ -1501,4 +1501,8 @@ export const en: LocaleCatalog = {
     'Only tts around ruby, tts around a cloze, and tts around ruby around a cloze nest, which is at most two shortcodes deep. A cloze can contain any shortcode because the cloze is resolved first; every other nesting is shown as source text.',
   'help.shortcode.rule.speech':
     'Speech reads the visible text only: a ruby reading is not spoken, and a cloze is spoken as its placeholder or hint on the front and its answer on the back.',
+  // ---- Deck progress: studied and remaining cards across the whole deck ----
+  'decks.progress': 'Studied {studied} · Left {remaining}',
+  'decks.progress_hint': 'Studied: cards you have studied. Left: new cards you have not studied yet, excluding suspended cards.',
+  'list.col.progress': 'Progress',
 };

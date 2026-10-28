@@ -3,7 +3,7 @@
   import { navigate, routeStore } from '../router';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { Deck, DeckTag, Note, BulkNotesResponse } from '../api';
+  import type { Deck, DeckQueueCount, DeckTag, Note, BulkNotesResponse } from '../api';
   import DeckSharingView from './DeckSharingView.svelte';
   import DeckSettingsView from './DeckSettingsView.svelte';
   import Select from '../components/ui/Select.svelte';
@@ -44,6 +44,8 @@
   let notes = $state<Note[]>(initialNotes);
   // svelte-ignore state_referenced_locally
   let total = $state(initialTotal);
+  // The caller's progress through this deck; null until loaded or when the request fails, in which case the header omits it.
+  let progress = $state<DeckQueueCount | null>(null);
   let page = $state(1);
   let activeTab = $state<'cards' | 'sharing' | 'settings'>('cards');
   // Opened tabs stay mounted and only toggle visibility: switching back and forth does not refetch, so the loading placeholder does not flash every time.
@@ -223,6 +225,20 @@
     }
   }
 
+  /**
+   * Load this deck's study progress. The counts endpoint answers for every visible deck at once, so this picks out the current one.
+   * The numbers are supplementary: a failure leaves the header without them instead of failing the page.
+   */
+  async function loadProgress(): Promise<void> {
+    if (!deckId) return;
+    try {
+      const res = await apiClient.getDeckQueueCounts();
+      progress = res.decks.find((item) => item.deck_id === deckId) ?? null;
+    } catch {
+      progress = null;
+    }
+  }
+
   /** Text input: refetch after the debounce, so not every keystroke hits the API. */
   function scheduleFilterReload(): void {
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -304,6 +320,7 @@
       confirmingBulkDelete = false;
       if (action === 'delete') selectedIds = [];
       await loadData(1);
+      if (action === 'delete') void loadProgress();
     } catch (err) {
       bulkError = err instanceof ApiClientError && err.isForbidden ? 'error.forbidden' : 'notes.bulk_failed';
     } finally {
@@ -330,6 +347,7 @@
     try {
       const res = await apiClient.setNoteSuspended(note.id, !note.suspended);
       notes = notes.map((item) => (item.id === note.id ? { ...item, suspended: res.suspended } : item));
+      void loadProgress();
     } catch {
       toast.error($t('notes.suspend_failed'));
     } finally {
@@ -346,6 +364,7 @@
       selectedIds = selectedIds.filter((id) => id !== note.id);
       total = Math.max(0, total - 1);
       noteToDelete = null;
+      void loadProgress();
       toast.success($t('notes.delete_success'));
     } catch (err) {
       deleteError = err instanceof ApiClientError
@@ -417,6 +436,7 @@
 
   onMount(() => {
     if (initialLoading) loadData(1);
+    void loadProgress();
     // Metadata is loaded only once (idempotent within the module); on failure the filter dropdown degrades to just "all card types" without interrupting the page.
     void loadCardTypes(apiClient).catch(() => {});
   });
@@ -459,6 +479,11 @@
             onSave={(description) => saveDeckInfo({ description })}
           />
         </div>
+      {/if}
+      {#if progress}
+        <p data-testid="deck-progress" class="mt-2 text-[13px] tabular-nums text-muted-foreground" title={$t('decks.progress_hint')}>
+          {$t('decks.progress', { studied: progress.studied_count, remaining: progress.remaining_count })}
+        </p>
       {/if}
     {/snippet}
     {#snippet actions()}

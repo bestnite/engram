@@ -1499,4 +1499,8 @@ export const zhCN: LocaleCatalog = {
     '只有 tts 包裹 ruby、tts 包裹 cloze、tts 包裹 ruby 再包裹 cloze 可以嵌套，最多两层短代码。cloze 会先被解析，因此它的内容可以包含任意短代码；其他嵌套都按原文显示。',
   'help.shortcode.rule.speech':
     '朗读只读可见文字：ruby 的读音不会被读出；cloze 在正面读占位或提示，在背面读答案。',
+  // ---- Deck progress: studied and remaining cards across the whole deck ----
+  'decks.progress': '已学 {studied} · 剩余 {remaining}',
+  'decks.progress_hint': '已学：你学过的卡片；剩余：你还没学过的新卡，不含已暂停的卡片。',
+  'list.col.progress': '进度',
 };

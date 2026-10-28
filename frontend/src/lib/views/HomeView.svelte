@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { ApiClient, StatsSummary, Deck } from '../api';
+  import type { ApiClient, StatsSummary, Deck, DeckQueueCount } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
@@ -36,7 +36,7 @@
   // svelte-ignore state_referenced_locally
   let decks = $state<Deck[]>(initialDecks);
   // How many new cards/reviews each deck can still do today; empty when unavailable, in which case the list only shows names.
-  let queueCounts = $state<Record<string, { new_count: number; review_count: number }>>({});
+  let queueCounts = $state<Record<string, DeckQueueCount>>({});
 
   function formatNumber(val: number): string {
     return new Intl.NumberFormat($localeStore).format(val);
@@ -177,6 +177,13 @@
                   {/if}
                 </div>
                 {#if counts}
+                  <span
+                    data-testid={`home-deck-progress-${deck.id}`}
+                    class="hidden shrink-0 text-[13px] tabular-nums text-muted-foreground md:inline"
+                    title={$t('decks.progress_hint')}
+                  >
+                    {$t('decks.progress', { studied: counts.studied_count, remaining: counts.remaining_count })}
+                  </span>
                   <span class="shrink-0 text-[13px] tabular-nums text-muted-foreground">
                     {$t('decks.queue_counts', { new: counts.new_count, review: counts.review_count })}
                   </span>

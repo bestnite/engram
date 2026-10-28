@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -15,6 +16,20 @@ func TestDeckQueueCountsUsesVisibleDecksAndSessionOnly(t *testing.T) {
 	secondDeck := seedDeck(t, db, ownerID, "second-deck")
 	for _, d := range []*store.Deck{ownerDeck, secondDeck} {
 		seedBasic(t, db, d.ID, "question", "answer")
+	}
+	// One card of secondDeck is already studied and not due until later: it adds to studied, not to today's queue.
+	studied := seedBasic(t, db, secondDeck.ID, "studied", "answer")
+	var studiedCard store.Card
+	if err := db.Where("note_id = ?", studied.ID).First(&studiedCard).Error; err != nil {
+		t.Fatal(err)
+	}
+	due := time.Now().UTC().Add(72 * time.Hour)
+	if err := db.Create(&store.CardState{CardID: studiedCard.ID, UserID: ownerID, State: "review", DueAt: &due}).Error; err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]deckQueueCount{
+		ownerDeck.PublicID:  {DeckID: ownerDeck.PublicID, NewCount: 1, ReviewCount: 0, StudiedCount: 0, RemainingCount: 1},
+		secondDeck.PublicID: {DeckID: secondDeck.PublicID, NewCount: 1, ReviewCount: 0, StudiedCount: 1, RemainingCount: 1},
 	}
 
 	request := func(withSession bool) *httptest.ResponseRecorder {
@@ -36,15 +51,13 @@ func TestDeckQueueCountsUsesVisibleDecksAndSessionOnly(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	seen := map[string]bool{}
-	for _, item := range body.Decks {
-		seen[item.DeckID] = true
-		if item.NewCount != 1 || item.ReviewCount != 0 {
-			t.Errorf("count for deck %s = %+v, want new=1 review=0", item.DeckID, item)
-		}
+	if len(body.Decks) != len(want) {
+		t.Fatalf("counts = %+v, want exactly the %d visible decks", body.Decks, len(want))
 	}
-	if !seen[ownerDeck.PublicID] || !seen[secondDeck.PublicID] {
-		t.Fatalf("visible decks missing from counts: %+v", body)
+	for _, item := range body.Decks {
+		if item != want[item.DeckID] {
+			t.Errorf("count for deck %s = %+v, want %+v", item.DeckID, item, want[item.DeckID])
+		}
 	}
 
 	if got := request(false).Code; got != http.StatusUnauthorized {

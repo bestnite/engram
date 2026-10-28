@@ -65,9 +65,22 @@ export interface SharePolicyResponse {
   allow_list: ShareAllowRow[];
 }
 
+/**
+ * One deck's counts in GET /api/v1/decks/queue-counts.
+ * new_count / review_count are what can be studied today, after the daily limits.
+ * studied_count / remaining_count are the caller's progress through the whole deck; remaining excludes suspended new cards.
+ */
+export interface DeckQueueCount {
+  deck_id: string;
+  new_count: number;
+  review_count: number;
+  studied_count: number;
+  remaining_count: number;
+}
+
 /** GET /api/v1/decks/queue-counts response; counts are produced by the shared queue builder. */
 export interface DeckQueueCountsResponse {
-  decks: Array<{ deck_id: string; new_count: number; review_count: number }>;
+  decks: DeckQueueCount[];
 }
 
 /**

@@ -42,6 +42,7 @@ describe('DeckDetailView tag review', () => {
     setLocale('zh-CN');
     routeStore.set(matchRoute('/decks/d1'));
     vi.spyOn(apiClient, 'getCardTypes').mockResolvedValue({ card_types: [] } as never);
+    vi.spyOn(apiClient, 'getDeckQueueCounts').mockResolvedValue({ decks: [] });
     const getDeckTags = vi.spyOn(apiClient, 'getDeckTags').mockResolvedValue({ tags });
     target = document.createElement('div');
     document.body.appendChild(target);

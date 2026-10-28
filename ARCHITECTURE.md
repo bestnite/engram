@@ -140,6 +140,11 @@ change.
   per deck, per user, per review day in `deck_daily_extras`, and `deckBudget` adds it to the new
   card limit. It expires with the review day. REST (`/api/v1/decks/:id/extra-new`) and MCP
   (`add_extra_new_cards`) share one service method.
+- **Deck progress.** `DeckProgress` in `internal/schedule/deck_progress.go` counts, per deck and
+  per user, the cards studied and the new cards left, independent of the daily budgets. A new card
+  follows the queue's rule: no state row, or state new. A suspended new card is not counted as
+  left; a suspended studied card still counts as studied. The SPA reads both numbers from the
+  session-only `/api/v1/decks/queue-counts`, next to the daily budget counts.
 - **Interval preview.** The review screen shows the next interval for each rating. The preview
   uses a scheduler with fuzz disabled, because go-fsrs seeds its fuzz with the current
   millisecond and a fuzzed preview could never match the submitted result. With fuzz enabled on

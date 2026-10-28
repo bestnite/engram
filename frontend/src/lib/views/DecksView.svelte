@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { BulkDecksResponse, Deck, DeckShareInvite } from '../api';
+  import type { BulkDecksResponse, Deck, DeckQueueCount, DeckShareInvite } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
   import { toast } from '../components/ui/toast';
@@ -22,7 +22,7 @@
   let loading = $state(true);
   let error = $state<ApiClientError | Error | null>(null);
   let decks = $state<Deck[]>([]);
-  let queueCounts = $state<Record<string, { new_count: number; review_count: number }>>({});
+  let queueCounts = $state<Record<string, DeckQueueCount>>({});
 
   // New deck dialog state
   let showCreateModal = $state(false);
@@ -165,7 +165,7 @@
         preset_id: createPresetId,
       });
       decks = [deck, ...decks];
-      queueCounts = { ...queueCounts, [deck.id]: { new_count: 0, review_count: 0 } };
+      queueCounts = { ...queueCounts, [deck.id]: { deck_id: deck.id, new_count: 0, review_count: 0, studied_count: 0, remaining_count: 0 } };
       name = '';
       description = '';
       createPresetId = createPresetDefault;
@@ -455,6 +455,7 @@
         />
         <span class="flex-1">{$t('list.col.name')}</span>
         <span class="hidden w-36 sm:block">{$t('list.col.today')}</span>
+        <span class="hidden w-40 lg:block" title={$t('decks.progress_hint')}>{$t('list.col.progress')}</span>
         <span class="hidden w-24 md:block" title={$t('home.deck_limits')}>{$t('list.col.limits')}</span>
         <span class="w-8" aria-hidden="true"></span>
       </div>
@@ -479,6 +480,9 @@
           </div>
           <span data-testid={`deck-queue-count-${deck.id}`} class="hidden w-36 text-[13px] tabular-nums text-foreground/80 sm:block">
             {$t('decks.queue_counts', { new: queueCounts[deck.id]?.new_count ?? 0, review: queueCounts[deck.id]?.review_count ?? 0 })}
+          </span>
+          <span data-testid={`deck-progress-${deck.id}`} class="hidden w-40 text-[13px] tabular-nums text-muted-foreground lg:block" title={$t('decks.progress_hint')}>
+            {$t('decks.progress', { studied: queueCounts[deck.id]?.studied_count ?? 0, remaining: queueCounts[deck.id]?.remaining_count ?? 0 })}
           </span>
           <span class="hidden w-24 text-[13px] tabular-nums text-muted-foreground md:block" title={$t('home.deck_limits')}>
             {deck.new_per_day} / {deck.reviews_per_day}
