@@ -4,6 +4,7 @@ import {
   type DecksResponse,
   type DeckTagsResponse,
   type DeckQueueCountsResponse,
+  type DeckPauseStatus,
   type DeckSettings,
   type UpdateDeckSettingsRequest,
   type CreateDeckRequest,
@@ -412,6 +413,21 @@ export class ApiClient {
     return this.notifying('decks', this.request<Deck>(`/api/v1/decks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(input),
+    }));
+  }
+
+  /**
+   * Pause or resume a deck for the caller only (PUT /api/v1/decks/:id/paused, at least reader).
+   * The default queue and the due counts change with it, so the sidebar is told the decks changed.
+   */
+  async setDeckPaused(deckId: string, paused: boolean): Promise<DeckPauseStatus> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const id = encodeURIComponent(String(deckId));
+    return this.notifying('decks', this.request<DeckPauseStatus>(`/api/v1/decks/${id}/paused`, {
+      method: 'PUT',
+      body: JSON.stringify({ paused }),
     }));
   }
 

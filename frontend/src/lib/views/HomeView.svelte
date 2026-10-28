@@ -37,6 +37,8 @@
   let decks = $state<Deck[]>(initialDecks);
   // How many new cards/reviews each deck can still do today; empty when unavailable, in which case the list only shows names.
   let queueCounts = $state<Record<string, DeckQueueCount>>({});
+  // The home list shows what the default review queue draws on, so the decks the user paused stay on the deck list page only.
+  let activeDecks = $derived(decks.filter((deck) => !deck.paused));
 
   function formatNumber(val: number): string {
     return new Intl.NumberFormat($localeStore).format(val);
@@ -161,13 +163,13 @@
           </a>
         </div>
 
-        {#if decks.length === 0}
+        {#if activeDecks.length === 0}
           <div data-testid="home-empty-decks" class="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-            {$t('home.no_decks')}
+            {$t(decks.length === 0 ? 'home.no_decks' : 'home.all_paused')}
           </div>
         {:else}
           <div data-testid="home-decks-list" class={listClasses.root}>
-            {#each decks as deck (deck.id)}
+            {#each activeDecks as deck (deck.id)}
               {@const counts = queueCounts[deck.id]}
               <div class={listClasses.row}>
                 <div class="flex min-w-0 flex-1 flex-col">

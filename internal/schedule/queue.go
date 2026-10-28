@@ -562,7 +562,9 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 }
 
 // scopeDeckIDs normalises the three deck modes into one deduplicated id set:
-// DeckIDs wins when non-empty (deduped), otherwise a non-zero DeckID returns a single element, and when both are empty the decks visible to the user are returned.
+// DeckIDs wins when non-empty (deduped), otherwise a non-zero DeckID returns a single element, and when both are empty the user's
+// default study scope is returned: the visible decks minus the ones the user paused. A paused deck named in DeckID or DeckIDs is
+// studied as usual, because naming it is an explicit choice.
 func (b *QueueBuilder) scopeDeckIDs(ctx context.Context, userID uint64, opts QueueOptions) ([]uint64, error) {
 	if len(opts.DeckIDs) > 0 {
 		return dedupeIDs(opts.DeckIDs), nil
@@ -570,9 +572,9 @@ func (b *QueueBuilder) scopeDeckIDs(ctx context.Context, userID uint64, opts Que
 	if opts.DeckID != 0 {
 		return []uint64{opts.DeckID}, nil
 	}
-	ids, err := b.decks.VisibleIDs(ctx, userID)
+	ids, err := b.decks.ActiveIDs(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("schedule: resolve visible decks: %w", err)
+		return nil, fmt.Errorf("schedule: resolve active decks: %w", err)
 	}
 	return ids, nil
 }

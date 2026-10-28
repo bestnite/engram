@@ -361,6 +361,9 @@ func deleteDeckTx(tx *gorm.DB, deckID uint64) error {
 	if err := tx.Exec("DELETE FROM deck_daily_extras WHERE deck_id = ?", deckID).Error; err != nil {
 		return fmt.Errorf("delete deck_daily_extras: %w", err)
 	}
+	if err := tx.Exec("DELETE FROM deck_pauses WHERE deck_id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete deck_pauses: %w", err)
+	}
 	// pending invites must be cleaned too: with the deck gone, opening that invite only 404s.
 	if err := tx.Exec("DELETE FROM deck_share_invites WHERE deck_id = ?", deckID).Error; err != nil {
 		return fmt.Errorf("delete deck_share_invites: %w", err)

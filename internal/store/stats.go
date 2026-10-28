@@ -77,7 +77,9 @@ type DueForecast struct {
 	NewNotDue int64
 }
 
-// DueForecast buckets by card_states.due_at. With deckID 0 it covers every deck visible to the user.
+// DueForecast buckets by card_states.due_at. With deckID 0 it covers the user's default study scope: the visible decks
+// minus the ones the user paused (activeDeckIDsQuery), so it agrees with the default queue and the weekly digest built on it.
+// A non-zero deckID names a deck explicitly, which counts it even when it is paused.
 //
 // The deck scope is always limited to the decks "visible" to the user (their own ∪ granted through deck_grants ∪ others' public,
 // the same set as the deck list page and the queue's whole-database definition). Without this filter, cards in someone else's private deck have no
@@ -95,8 +97,12 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 	visible := `card_states AS cs
 		JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL`
+	scope := activeDeckIDsQuery(s.db, userID)
+	if deckID != 0 {
+		scope = visibleDeckIDsQuery(s.db, userID)
+	}
 	where := "cs.user_id = ? AND n.deck_id IN (?)"
-	args := []any{userID, visibleDeckIDsQuery(s.db, userID)}
+	args := []any{userID, scope}
 	if deckID != 0 {
 		where += " AND n.deck_id = ?"
 		args = append(args, deckID)
@@ -130,7 +136,7 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		  AND n.deck_id IN (?)
 		  AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`)
-	newArgs := []any{userID, visibleDeckIDsQuery(s.db, userID), now.UTC()}
+	newArgs := []any{userID, scope, now.UTC()}
 	if deckID != 0 {
 		newSQL += " AND n.deck_id = ?"
 		newArgs = append(newArgs, deckID)

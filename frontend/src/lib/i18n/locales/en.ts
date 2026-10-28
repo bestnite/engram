@@ -1509,4 +1509,15 @@ export const en: LocaleCatalog = {
   'home.deck.new': 'New {count}',
   'home.deck.review': 'Review {count}',
   'home.deck.progress_label': 'Study progress',
+  // ---- Deck pause: a deck the user paused for themselves ----
+  'decks.paused_badge': 'Paused',
+  'decks.pause.action': 'Pause deck',
+  'decks.resume.action': 'Resume deck',
+  'decks.pause.done': 'Paused "{name}". It no longer appears in the default review queue.',
+  'decks.resume.done': 'Resumed "{name}".',
+  'decks.pause.failed': "That didn't work. Try again.",
+  'deck.pause.short': 'Pause',
+  'deck.resume.short': 'Resume',
+  'deck.paused_hint': 'This deck stays out of the default review queue, the home page and reminder emails. Its cards keep falling due, so resuming may bring a backlog.',
+  'home.all_paused': 'All your decks are paused.',
 };

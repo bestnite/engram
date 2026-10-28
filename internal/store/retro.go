@@ -133,14 +133,15 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 	}
 
 	// Due and new: the day boundary matches the queue (the review day starts at 04:00, local).
-	// Both are scoped to "visible decks", the same predicate as StatsStore.DueForecast (visibleDeckIDsQuery);
-	// without it, cards in someone else's private deck with no state row would be counted as "new cards not yet due".
+	// Both are scoped to the default study scope, the same predicate as StatsStore.DueForecast with no deck (activeDeckIDsQuery):
+	// without the visibility part, cards in someone else's private deck with no state row would be counted as "new cards not yet due",
+	// and without the pause part, a paused deck would still feed the forecast.
 	e1 := reviewDayStart(now, loc, cutoffHour).Add(24 * time.Hour)
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(*) FROM card_states cs
 		JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
 		WHERE cs.user_id = ? AND n.deck_id IN (?) AND cs.due_at IS NOT NULL AND cs.due_at <= ?`,
-		userID, visibleDeckIDsQuery(db, userID), e1).
+		userID, activeDeckIDsQuery(db, userID), e1).
 		Row().Scan(&p.DueToday); err != nil {
 		return p, fmt.Errorf("retro check: due today: %w", err)
 	}
@@ -150,7 +151,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		  AND n.deck_id IN (?)
 		  AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`,
-		userID, visibleDeckIDsQuery(db, userID), now.UTC()).
+		userID, activeDeckIDsQuery(db, userID), now.UTC()).
 		Row().Scan(&p.DueNewNotDue); err != nil {
 		return p, fmt.Errorf("retro check: new not due: %w", err)
 	}

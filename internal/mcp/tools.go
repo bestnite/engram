@@ -184,6 +184,12 @@ type addExtraNewCardsIn struct {
 	Count  int    `json:"count,omitempty" jsonschema:"number of extra new cards to allow today (1..1000); omit to use the caller's daily new card limit for the deck"`
 }
 
+// setDeckPausedIn is the input of set_deck_paused.
+type setDeckPausedIn struct {
+	DeckID string `json:"deck_id" jsonschema:"public id of the deck to pause or resume"`
+	Paused bool   `json:"paused" jsonschema:"true pauses the deck for the caller, false resumes it"`
+}
+
 // ---- handlers ----
 
 func (s *Server) listDecks(ctx context.Context, id Identity, _ listDecksIn) (any, error) {
@@ -497,6 +503,15 @@ func (s *Server) addExtraNewCards(ctx context.Context, id Identity, in addExtraN
 		return nil, err
 	}
 	return s.api.AddExtraNew(ctx, id.User, id.apiKeyID(), d.ID, in.Count)
+}
+
+// setDeckPaused pauses or resumes a deck for the caller: the same service method as REST `PUT /decks/:id/paused`.
+func (s *Server) setDeckPaused(ctx context.Context, id Identity, in setDeckPausedIn) (any, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return nil, err
+	}
+	return s.api.SetDeckPaused(ctx, id.User, id.apiKeyID(), d.ID, in.Paused)
 }
 
 // toImportRequest turns the MCP input arguments into the service layer's ImportRequest; shared by both tools.

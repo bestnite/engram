@@ -249,7 +249,7 @@ func TestWriteAndReviewKeysSeeOwnTools(t *testing.T) {
 	}
 
 	r := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeReview}))
-	wantR := []string{"add_extra_new_cards", "get_due_cards", "submit_review"}
+	wantR := []string{"add_extra_new_cards", "get_due_cards", "set_deck_paused", "submit_review"}
 	if got := toolNames(t, r); !reflect.DeepEqual(got, wantR) {
 		t.Fatalf("review tools/list = %v, want %v", got, wantR)
 	}
@@ -260,7 +260,7 @@ func TestAdminScopeSeesAllTools(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "admin")
 	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeAdmin}))
-	if got := len(toolNames(t, cs)); got != 20 {
-		t.Fatalf("admin sees %d tools, want 20", got)
+	if got := len(toolNames(t, cs)); got != 21 {
+		t.Fatalf("admin sees %d tools, want 21", got)
 	}
 }

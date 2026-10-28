@@ -82,6 +82,7 @@ func TestToolSchemasDeclareStringIDs(t *testing.T) {
 		"submit_review":       "card_id",
 		"list_deck_tags":      "deck_id",
 		"add_extra_new_cards": "deck_id",
+		"set_deck_paused":     "deck_id",
 	}
 	for tool, field := range stringFields {
 		node := propType(t, findTool(t, cs, tool), field)

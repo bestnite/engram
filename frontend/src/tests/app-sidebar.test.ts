@@ -50,6 +50,17 @@ describe('buildSidebarDecks', () => {
     expect(state.decks.some((d) => d.id === 'archived')).toBe(false);
   });
 
+  it('drops paused decks and leaves their due cards out of the total', () => {
+    const state = buildSidebarDecks([deck('a', 'Alpha'), deck('p', 'Paused', { paused: true })], {
+      decks: [
+        { deck_id: 'a', new_count: 1, review_count: 1, studied_count: 0, remaining_count: 0 },
+        { deck_id: 'p', new_count: 5, review_count: 5, studied_count: 0, remaining_count: 0 },
+      ],
+    });
+    expect(state.decks.map((d) => d.id)).toEqual(['a']);
+    expect(state.totalDue).toBe(2);
+  });
+
   it('shows names without numbers when queue counts are unavailable', () => {
     const state = buildSidebarDecks([deck('a', 'Alpha')], null);
     expect(state.decks[0]?.due).toBeNull();

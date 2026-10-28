@@ -178,6 +178,8 @@ func (a *API) Register(r gin.IRouter) {
 	// "One more batch": read today's new-card allowance, add to the caller's allowance for today; touches only personal progress and sits under review like reviewing.
 	v1.GET("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.getExtraNew)
 	v1.POST("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.postExtraNew)
+	// Pause or resume a deck for the caller only; a study choice like extra-new, so it needs the review scope.
+	v1.PUT("/decks/:id/paused", a.authn.RequireScope(store.ScopeReview), a.putDeckPaused)
 	v1.POST("/decks/:id/notes", a.authn.RequireScope(store.ScopeWrite), a.importNotes)
 	v1.PATCH("/notes/:id", a.authn.RequireScope(store.ScopeWrite), a.updateNote)
 	v1.GET("/notes/:id", a.authn.RequireScope(store.ScopeRead), a.getNote)

@@ -985,6 +985,7 @@ type StatsSummary struct {
 //
 // The convention is deliberately asymmetric (2026-10-06 decision): decks/due/notes/cards count only currently visible
 // decks (the same store predicate as list_decks, the web list page and the review queue), and are 0 when the deck set is empty;
+// due further leaves out the decks the user paused, matching the default review queue;
 // reviews_today / reviews_total / retention keep the full history per user_id - reviews are the person's own record,
 // and revoking a grant does not reach back. So even with no visible deck at all, reviews must still be aggregated; returning early would
 // silently zero the historical numbers. retention shares RetentionByStability with the stats page: likewise not limited to visible decks,
@@ -998,12 +999,18 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
 	}
 	resp := StatsSummary{Decks: len(deckIDs)}
+	// due follows the default review queue, so it leaves out the decks the user paused; the deck, note and card counts keep them.
+	activeIDs, err := a.decks.ActiveIDs(ctx, u.ID)
+	if err != nil {
+		a.logger.Error("load active decks for stats failed", "user_id", u.ID, "error", err)
+		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
+	}
 
 	var due int64
 	if err := a.db.WithContext(ctx).Model(&store.CardState{}).
 		Joins("JOIN cards ON cards.id = card_states.card_id AND cards.deleted_at IS NULL").
 		Joins("JOIN notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
-		Where("notes.deck_id IN ?", deckIDs).
+		Where("notes.deck_id IN ?", activeIDs).
 		Where("card_states.user_id = ? AND card_states.due_at IS NOT NULL AND card_states.due_at <= ?", u.ID, now).
 		Count(&due).Error; err != nil {
 		a.logger.Error("count due cards failed", "user_id", u.ID, "error", err)

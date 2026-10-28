@@ -51,8 +51,8 @@ type ReminderCandidate struct {
 // ReminderCandidates returns the active users who have due cards and may receive mail.
 //
 // The due definition matches the schedule queue and DueQueueSize: only card_states that are scheduled with due_at <= now,
-// excluding soft-deleted cards/notes and suspended cards. One user may have several rows, so GROUP BY
-// merges them and yields the due count along the way.
+// excluding soft-deleted cards/notes, suspended cards and the decks the user paused (a paused deck must not prompt a reminder).
+// One user may have several rows, so GROUP BY merges them and yields the due count along the way.
 func ReminderCandidates(ctx context.Context, db *gorm.DB, now time.Time) ([]ReminderCandidate, error) {
 	var out []ReminderCandidate
 	err := db.WithContext(ctx).Table("users AS u").
@@ -61,7 +61,8 @@ func ReminderCandidates(ctx context.Context, db *gorm.DB, now time.Time) ([]Remi
 		Joins("JOIN card_states AS cs ON cs.user_id = u.id AND cs.due_at IS NOT NULL AND cs.due_at <= ?", now.UTC()).
 		Joins("JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL").
 		Joins("JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL").
-		Where("u.status = ? AND u.email <> ''", StatusActive).
+		Joins("LEFT JOIN deck_pauses AS dp ON dp.deck_id = n.deck_id AND dp.user_id = u.id").
+		Where("u.status = ? AND u.email <> '' AND dp.deck_id IS NULL", StatusActive).
 		Group("u.id, u.email, u.locale, u.timezone, u.day_cutoff_hour, u.reminder_hour").
 		Order("u.id asc").
 		Scan(&out).Error

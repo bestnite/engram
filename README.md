@@ -75,6 +75,7 @@ Engram provides 19 dedicated MCP tools:
 - `create_notes` / `update_note` / `delete_note` / `bulk_notes`: Create, update and delete notes across all supported card types, with dry-run validation, bulk insertion and bulk tag or delete actions.
 - `get_due_cards` / `submit_review`: Fetch cards due for review and record reviews. Self-assessed cards take a rating (`Again`, `Hard`, `Good`, `Easy`), and a short-answer card may also carry the answer the learner wrote, stored with the review; answer-type cards (cloze, list, typed, numeric, choice, true/false) take the answer instead, and the server grades it.
 - `add_extra_new_cards`: After the daily new card limit is reached, allow extra new cards in one deck for the current review day only. The deck settings do not change, and the next day returns to the daily limit.
+- `set_deck_paused`: Pause or resume a deck for yourself only. A paused deck leaves the default review queue, the due count and the reminder emails, but keeps its progress and can still be reviewed by name.
 - `get_stats`: Retrieve learning summaries, queue counts, and retention rates.
 - `export_deck` / `import_deck`: Export and import portable deck packages (`.edeck`).
 - `create_import_upload`: Get a single-use upload URL for a deck package. The agent sends the file to it with an HTTP client such as `curl`, so a large package never passes through the model and the API key never leaves the MCP client.

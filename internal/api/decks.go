@@ -25,6 +25,8 @@ type DeckResponse struct {
 	// Every deck in the list is necessarily one of the two - there is no third source of "visible only by visibility".
 	// Clients use it to decide whether to show "delete" or "leave share".
 	Role string `json:"role"`
+	// Paused reports whether the caller paused this deck for themselves; a paused deck stays out of the default review queue.
+	Paused bool `json:"paused"`
 }
 
 // deckResponse keeps the old name for existing in-package callers.
@@ -43,6 +45,11 @@ func (a *API) ToDeckResponse(ctx context.Context, userID uint64, d store.Deck, r
 		CreatedAt:   d.CreatedAt,
 		Role:        role,
 	}
+	paused, err := a.decks.IsPaused(ctx, userID, d.ID)
+	if err != nil {
+		a.logger.Error("load deck pause for deck response failed", "deck_id", d.ID, "user_id", userID, "error", err)
+	}
+	out.Paused = paused
 	settings, err := a.decks.StudySettings(ctx, userID, &d)
 	if err != nil {
 		a.logger.Error("load study settings for deck response failed", "deck_id", d.ID, "user_id", userID, "error", err)

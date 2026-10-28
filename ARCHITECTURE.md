@@ -122,6 +122,12 @@ change.
   `review.undo` audit row.
 - **Decks and sharing.** A deck has an owner. Grants give other users a role on the deck. Each
   member chooses their own preset and study settings for a shared deck.
+- **Deck pause.** A user pauses a deck for themselves in `deck_pauses`, keyed `(deck_id, user_id)`;
+  the owner and every member decide alone, and `decks.archived_at` is not involved. Visibility and
+  the default study scope are two predicates in `internal/store`: `visibleDeckIDsQuery` (owned or
+  granted) decides what a user can see, and `activeDeckIDsQuery` (visible minus paused) decides what
+  is studied when no deck is named — the whole-library queue, the summary `due`, the unfiltered due
+  forecast, and the weekly digest built on it. The reminder query applies the same exclusion.
 - **Presets.** A preset holds the FSRS weights, desired retention, learning and relearning
   steps, and fuzz switch that the scheduler for a deck uses.
 - **Audit.** Security-relevant and settings-changing actions append rows to the audit log; the
@@ -131,7 +137,8 @@ change.
 
 - `internal/schedule` builds a go-fsrs scheduler per deck from the member's effective preset.
 - **Queue.** The queue builder selects due reviews and new cards for one or more decks and a tag
-  filter, for the user's current review day.
+  filter, for the user's current review day. With no deck named it covers the user's active decks
+  (`DeckStore.ActiveIDs`), so a paused deck only enters the queue when it is named.
 - **Daily budgets.** `deckBudget` in `internal/schedule/queue.go` is the only implementation of
   the per-deck daily new and review limits. The review queue, the deck list counts, and the deck
   settings page all call it, so the three numbers always agree.

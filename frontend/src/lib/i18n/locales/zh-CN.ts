@@ -1507,4 +1507,15 @@ export const zhCN: LocaleCatalog = {
   'home.deck.new': '新 {count}',
   'home.deck.review': '复习 {count}',
   'home.deck.progress_label': '学习进度',
+  // ---- Deck pause: a deck the user paused for themselves ----
+  'decks.paused_badge': '已暂停',
+  'decks.pause.action': '暂停卡组',
+  'decks.resume.action': '恢复卡组',
+  'decks.pause.done': '已暂停「{name}」，它不会再出现在默认复习队列中。',
+  'decks.resume.done': '已恢复「{name}」。',
+  'decks.pause.failed': '操作没成功，请重试。',
+  'deck.pause.short': '暂停',
+  'deck.resume.short': '恢复',
+  'deck.paused_hint': '这个卡组不进入默认复习队列，也不计入首页和提醒邮件。卡片仍会照常到期，恢复后可能会有一批待复习。',
+  'home.all_paused': '所有卡组都已暂停。',
 };

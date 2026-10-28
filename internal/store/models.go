@@ -394,6 +394,8 @@ func AllModels() []any {
 		&DeckMemberSetting{},
 		// New-card quota appended per review day by 'one more round': model defined in deck_daily_extra.go.
 		&DeckDailyExtra{},
+		// Decks a user paused for themselves: model defined in deck_pause.go.
+		&DeckPause{},
 	}
 }
 

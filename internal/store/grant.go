@@ -99,7 +99,7 @@ func (s *GrantStore) Grant(ctx context.Context, deckID, userID uint64, role stri
 }
 
 // Revoke deletes the grant row; the very next request is refused ('revocation takes effect immediately').
-// The member's study settings on that deck and the extra new-card quota for the day are deleted together with the grant.
+// The member's study settings on that deck, the extra new-card quota for the day and the member's pause are deleted together with the grant.
 func (s *GrantStore) Revoke(ctx context.Context, deckID, userID uint64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("deck_id = ? AND user_id = ?", deckID, userID).
@@ -113,6 +113,10 @@ func (s *GrantStore) Revoke(ctx context.Context, deckID, userID uint64) error {
 		if err := tx.Where("deck_id = ? AND user_id = ?", deckID, userID).
 			Delete(&DeckDailyExtra{}).Error; err != nil {
 			return fmt.Errorf("delete daily extras: %w", err)
+		}
+		if err := tx.Where("deck_id = ? AND user_id = ?", deckID, userID).
+			Delete(&DeckPause{}).Error; err != nil {
+			return fmt.Errorf("delete deck pause: %w", err)
 		}
 		return nil
 	})

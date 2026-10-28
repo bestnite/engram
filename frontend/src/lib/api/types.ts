@@ -16,6 +16,17 @@ export interface Deck {
    * The list card uses this to decide whether to show "delete" (owner) or "leave shared deck" (editor/reader).
    */
   role: 'owner' | 'editor' | 'reader';
+  /**
+   * Whether the caller paused this deck for themselves (Go: DeckResponse.Paused). A paused deck stays out of the default review
+   * queue, the home deck list and the sidebar, but can still be opened and reviewed by name. Absent means active.
+   */
+  paused?: boolean;
+}
+
+/** PUT /api/v1/decks/:id/paused response (Go: DeckPauseStatus). */
+export interface DeckPauseStatus {
+  deck_id: string;
+  paused: boolean;
 }
 
 /**

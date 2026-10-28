@@ -15,7 +15,7 @@
   import SelectionBar from '../components/ui/SelectionBar.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { listClasses, selectionBarButton } from '../components/ui/variants';
-  import { CirclePlay, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
+  import { CirclePause, CirclePlay, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
   import { deckActionKind, presetSelectOptions } from '../labels';
 
   // View reactive state definitions (Svelte 5 runes)
@@ -94,6 +94,29 @@
       invites = res.invites;
     } catch {
       invites = [];
+    }
+  }
+
+  // The deck whose pause toggle is in flight; its button is disabled until the request settles.
+  let pausingDeckId = $state<string | null>(null);
+
+  /**
+   * Pause or resume a deck for the caller only. The row stays in this list either way; the default queue, the home list and the sidebar
+   * follow the new state. The row is updated from the response, so no refetch is needed.
+   */
+  async function togglePaused(deck: Deck, event: MouseEvent): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+    const paused = !deck.paused;
+    pausingDeckId = deck.id;
+    try {
+      const res = await apiClient.setDeckPaused(deck.id, paused);
+      decks = decks.map((item) => (item.id === deck.id ? { ...item, paused: res.paused } : item));
+      toast.success($t(res.paused ? 'decks.pause.done' : 'decks.resume.done', { name: deck.name }));
+    } catch {
+      toast.error($t('decks.pause.failed'));
+    } finally {
+      pausingDeckId = null;
     }
   }
 
@@ -457,9 +480,10 @@
         <span class="hidden w-36 sm:block">{$t('list.col.today')}</span>
         <span class="hidden w-40 lg:block" title={$t('decks.progress_hint')}>{$t('list.col.progress')}</span>
         <span class="hidden w-24 md:block" title={$t('home.deck_limits')}>{$t('list.col.limits')}</span>
-        <span class="w-8" aria-hidden="true"></span>
+        <span class="w-16" aria-hidden="true"></span>
       </div>
       {#each decks as deck (deck.id)}
+        <!-- A paused deck keeps its row; its numbers fade because the default queue no longer draws on them. -->
         <div data-testid={`deck-card-${deck.id}`} class={listClasses.row}>
           <Checkbox
             class={listClasses.rowAction}
@@ -473,21 +497,38 @@
               {#if deckActionKind(deck.role) === 'leave'}
                 <Badge testId={`deck-shared-badge-${deck.id}`}>{$t('decks.shared_badge')}</Badge>
               {/if}
+              {#if deck.paused}
+                <Badge variant="warning" testId={`deck-paused-badge-${deck.id}`}>{$t('decks.paused_badge')}</Badge>
+              {/if}
             </div>
             {#if deck.description}
               <span class="truncate text-[13px] text-muted-foreground">{deck.description}</span>
             {/if}
           </div>
-          <span data-testid={`deck-queue-count-${deck.id}`} class="hidden w-36 text-[13px] tabular-nums text-foreground/80 sm:block">
+          <span data-testid={`deck-queue-count-${deck.id}`} class="hidden w-36 text-[13px] tabular-nums text-foreground/80 sm:block {deck.paused ? 'opacity-50' : ''}">
             {$t('decks.queue_counts', { new: queueCounts[deck.id]?.new_count ?? 0, review: queueCounts[deck.id]?.review_count ?? 0 })}
           </span>
-          <span data-testid={`deck-progress-${deck.id}`} class="hidden w-40 text-[13px] tabular-nums text-muted-foreground lg:block" title={$t('decks.progress_hint')}>
+          <span data-testid={`deck-progress-${deck.id}`} class="hidden w-40 text-[13px] tabular-nums text-muted-foreground lg:block {deck.paused ? 'opacity-50' : ''}" title={$t('decks.progress_hint')}>
             {$t('decks.progress', { studied: queueCounts[deck.id]?.studied_count ?? 0, remaining: queueCounts[deck.id]?.remaining_count ?? 0 })}
           </span>
-          <span class="hidden w-24 text-[13px] tabular-nums text-muted-foreground md:block" title={$t('home.deck_limits')}>
+          <span class="hidden w-24 text-[13px] tabular-nums text-muted-foreground md:block {deck.paused ? 'opacity-50' : ''}" title={$t('home.deck_limits')}>
             {deck.new_per_day} / {deck.reviews_per_day}
           </span>
-          <div class="{listClasses.rowAction} flex w-8 justify-end">
+          <div class="{listClasses.rowAction} flex w-16 justify-end">
+            <button
+              type="button"
+              data-testid={`deck-pause-btn-${deck.id}`}
+              title={$t(deck.paused ? 'decks.resume.action' : 'decks.pause.action')}
+              aria-label={$t(deck.paused ? 'decks.resume.action' : 'decks.pause.action')}
+              aria-pressed={deck.paused ?? false}
+              disabled={pausingDeckId === deck.id}
+              class="inline-flex size-8 items-center justify-center rounded-md transition hover:bg-muted hover:text-foreground hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-40 cursor-pointer {deck.paused
+                ? 'text-warning opacity-100'
+                : 'text-muted-foreground opacity-60'}"
+              onclick={(e) => togglePaused(deck, e)}
+            >
+              {#if deck.paused}<CirclePlay class="size-4" aria-hidden="true" />{:else}<CirclePause class="size-4" aria-hidden="true" />{/if}
+            </button>
             {#if deckActionKind(deck.role) === 'delete'}
               <button
                 type="button"

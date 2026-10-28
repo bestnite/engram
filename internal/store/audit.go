@@ -77,6 +77,9 @@ const (
 	ActionDeckCaps = "deck.caps_change"
 	// 'one more round': append new-card quota for this deck today, for the caller only, recorded at the same tier as daily quota changes.
 	ActionDeckExtraNew = "deck.extra_new"
+	// Pausing and resuming a deck for the caller only: it changes which decks the default queue and the reminder mail cover.
+	ActionDeckPause  = "deck.pause"
+	ActionDeckResume = "deck.resume"
 	// preset parameter optimization: trigger the optimization job and one-click rollback to the default weights.
 	ActionPresetOptimize       = "preset.optimize"
 	ActionPresetOptimizeRevert = "preset.optimize.revert"

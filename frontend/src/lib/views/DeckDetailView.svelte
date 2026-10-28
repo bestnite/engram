@@ -20,7 +20,7 @@
   import InlineEdit from '../components/InlineEdit.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
-  import { Copy, Download, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Tags, Trash2 } from '@lucide/svelte';
+  import { CirclePause, CirclePlay, Copy, Download, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Tags, Trash2 } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { backField, cardTypes, frontField, kindOrder, loadCardTypes } from '../card-types';
 
@@ -236,6 +236,27 @@
       progress = res.decks.find((item) => item.deck_id === deckId) ?? null;
     } catch {
       progress = null;
+    }
+  }
+
+  let pausing = $state(false);
+
+  /**
+   * Pause or resume this deck for the caller only. Any member may do it, so the button is not limited to the owner.
+   * The progress numbers do not change, so only the deck itself is updated from the response.
+   */
+  async function togglePaused(): Promise<void> {
+    if (!deck || pausing) return;
+    const current = deck;
+    pausing = true;
+    try {
+      const res = await apiClient.setDeckPaused(current.id, !current.paused);
+      deck = { ...current, paused: res.paused };
+      toast.success($t(res.paused ? 'decks.pause.done' : 'decks.resume.done', { name: current.name }));
+    } catch {
+      toast.error($t('decks.pause.failed'));
+    } finally {
+      pausing = false;
     }
   }
 
@@ -480,6 +501,12 @@
           />
         </div>
       {/if}
+      {#if deck?.paused}
+        <p data-testid="deck-paused-hint" class="mt-2 flex max-w-3xl items-start gap-2 text-[13px] text-muted-foreground">
+          <Badge variant="warning" class="shrink-0">{$t('decks.paused_badge')}</Badge>
+          <span>{$t('deck.paused_hint')}</span>
+        </p>
+      {/if}
       {#if progress}
         <p data-testid="deck-progress" class="mt-2 text-[13px] tabular-nums text-muted-foreground" title={$t('decks.progress_hint')}>
           {$t('decks.progress', { studied: progress.studied_count, remaining: progress.remaining_count })}
@@ -501,6 +528,19 @@
         <Tags class="size-4" aria-hidden="true" />
         <span>{$t('deck.tag_review.open')}</span>
       </Button>
+      {#if deck}
+        <Button
+          variant="outline"
+          size="lg"
+          onclick={() => void togglePaused()}
+          loading={pausing}
+          title={$t(deck.paused ? 'decks.resume.action' : 'decks.pause.action')}
+          testId="deck-pause-toggle"
+        >
+          {#if deck.paused}<CirclePlay class="size-4" aria-hidden="true" />{:else}<CirclePause class="size-4" aria-hidden="true" />{/if}
+          <span>{$t(deck.paused ? 'deck.resume.short' : 'deck.pause.short')}</span>
+        </Button>
+      {/if}
       <Button variant="primary" size="lg" href="/review?deck={encodeURIComponent(deckId)}" testId="deck-start-review">
         <Play class="size-4" aria-hidden="true" />
         <span>{$t('home.start_review')}</span>
