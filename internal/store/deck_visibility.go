@@ -49,34 +49,3 @@ func (s *DeckStore) VisibleIDs(ctx context.Context, userID uint64) ([]uint64, er
 	}
 	return ids, nil
 }
-
-// SummariesVisible is the aggregate version for the list page: each visible deck with its card count.
-// Visibility comes from the same source as ListVisible, and the counting logic is centralized in countCardsByDeck, so the two rules cannot drift.
-//
-// 'how many cards can I review today' is not computed here: it must first pass the queue's daily quota (schedule.DeckCounts),
-// fetched by the caller through the same card-fetching path, so the list number equals the number you can actually review after clicking in.
-func (s *DeckStore) SummariesVisible(ctx context.Context, userID uint64) ([]DeckSummary, error) {
-	decks, err := s.ListVisible(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]DeckSummary, 0, len(decks))
-	if len(decks) == 0 {
-		return out, nil
-	}
-	ids := make([]uint64, 0, len(decks))
-	for i := range decks {
-		ids = append(ids, decks[i].ID)
-	}
-	cardCounts, err := s.countCardsByDeck(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-	for i := range decks {
-		out = append(out, DeckSummary{
-			Deck:      decks[i],
-			CardCount: cardCounts[decks[i].ID],
-		})
-	}
-	return out, nil
-}

@@ -25,44 +25,12 @@
   translation: "True / false"
 - id: cardtype.short_answer
   translation: "Short answer"
-- id: notes.preview.title
-  translation: "Live preview"
-- id: notes.preview.front
-  translation: "Front"
-- id: notes.preview.back
-  translation: "Back"
-- id: notes.preview.invalid
-  translation: "Cannot preview: "
 # M5-4 deck clone.
 - id: clone.name_suffix
   translation: " (copy)"
-- id: admin.setting.site_name
-  translation: "Site name"
-- id: admin.setting.site_name.hint
-  translation: "Shown as the brand in the page header; falls back to the application name."
-- id: admin.setting.site_default_locale
-  translation: "Default language"
-- id: admin.setting.site_default_locale.hint
-  translation: "Used only when neither the lang parameter, the user setting, nor Accept-Language decides the language. Accepted values are zh-CN and en."
-- id: admin.setting.media_max_bytes
-  translation: "Upload size limit (bytes)"
-- id: admin.setting.media_max_bytes.hint
-  translation: "Maximum size of a single uploaded file, in bytes; the built-in default is 10 MiB."
-- id: admin.setting.media_allowed_mimes
-  translation: "Allowed MIME types"
-- id: admin.setting.media_allowed_mimes.hint
-  translation: "Comma-separated list; uploads are also validated against magic bytes."
-- id: admin.setting.optimize_min_reviews
-  translation: "Optimizer threshold (reviews)"
-- id: admin.setting.optimize_min_reviews.hint
-  translation: "Minimum reviews required before parameter optimization can run; the floor is 300 and the default is 500. Stored values below the floor take effect as 300."
 # ── Per-user media quota (M2-13) ─────────────────────────────
 - id: media.quota.exceeded
   translation: "Media quota exceeded: you have used {{.used}} of your {{.limit}} limit. Remove some media you no longer use and try again."
-- id: media.quota.setting.label
-  translation: "Per-user media quota (bytes)"
-- id: media.quota.setting.hint
-  translation: "Total media bytes one user may reference. 0 means unlimited (the default)."
 - id: admin.mail.test.subject
   translation: "Test mail: {{site}} template preview"
 - id: admin.mail.test.body

@@ -51,14 +51,12 @@ type SubmitInput struct {
 	DayCutoffHour *int
 }
 
-// SubmitResult returns the result after submission: the new state row, the written review id, and the scheduling outcome.
+// SubmitResult returns the result after submission: the new state row and the written review id.
 type SubmitResult struct {
 	// State is the new card_states row after it is stored.
 	State store.CardState
 	// ReviewID is the reviews.id written by this call.
 	ReviewID uint64
-	// Outcome is the scheduling outcome computed by the scheduler (due/interval/stability etc.).
-	Outcome Outcome
 }
 
 // Submit submits one grade within the given tx: it reads and locks the current state, validates expected_version,
@@ -148,7 +146,7 @@ func Submit(ctx context.Context, tx *gorm.DB, in SubmitInput) (SubmitResult, err
 		return SubmitResult{}, fmt.Errorf("schedule: submit review: insert review for card %d: %w", in.CardID, err)
 	}
 
-	return SubmitResult{State: newState, ReviewID: review.ID, Outcome: outcome}, nil
+	return SubmitResult{State: newState, ReviewID: review.ID}, nil
 }
 
 // loadStateForUpdate reads the state row by (card_id, user_id); under PostgreSQL it takes a FOR UPDATE row lock.

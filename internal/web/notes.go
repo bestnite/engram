@@ -10,7 +10,6 @@ import (
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/cardtype"
-	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/render"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -175,67 +174,45 @@ func (s *Server) noteNewRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// PreviewCard is the rendered front and back of one card.
-type PreviewCard struct {
-	TemplateLabel string
-	FrontHTML     string
-	BackHTML      string
-}
-
-// NotePreviewData is the payload for the card edit page preview.
-type NotePreviewData struct {
-	Title      string
-	FrontLabel string
-	BackLabel  string
-	Error      string
-	Cards      []PreviewCard
+// previewCard is the rendered front and back of one card.
+type previewCard struct {
+	FrontHTML string
+	BackHTML  string
 }
 
 // buildPreview renders the front and back of every card with internal/render, for the SPA preview JSON.
-func (s *Server) buildPreview(loc *i18n.Localizer, kind string, fields map[string]any) NotePreviewData {
-	data := NotePreviewData{
-		Title:      loc.T("notes.preview.title"),
-		FrontLabel: loc.T("notes.preview.front"),
-		BackLabel:  loc.T("notes.preview.back"),
-	}
+// It reports false when the kind is unknown or the fields do not produce renderable cards; the endpoint answers
+// those with one stable invalid_request code, so the cause is not carried along.
+func buildPreview(kind string, fields map[string]any) ([]previewCard, bool) {
 	t, ok := cardtype.Lookup(kind)
 	if !ok {
-		data.Error = loc.T("notes.preview.invalid") + kind
-		return data
+		return nil, false
 	}
 	cards, err := cardtype.Cards(cardtype.Note{Kind: kind, Fields: fields})
 	if err != nil {
-		data.Error = loc.T("notes.preview.invalid") + err.Error()
-		return data
+		return nil, false
 	}
+	out := make([]previewCard, 0, len(cards))
 	for _, card := range cards {
 		front, err := t.Render(card, cardtype.SideFront)
 		if err != nil {
-			data.Error = loc.T("notes.preview.invalid") + err.Error()
-			return data
+			return nil, false
 		}
 		back, err := t.Render(card, cardtype.SideBack)
 		if err != nil {
-			data.Error = loc.T("notes.preview.invalid") + err.Error()
-			return data
+			return nil, false
 		}
 		frontHTML, err := renderSide(front)
 		if err != nil {
-			data.Error = loc.T("notes.preview.invalid") + err.Error()
-			return data
+			return nil, false
 		}
 		backHTML, err := renderSide(back)
 		if err != nil {
-			data.Error = loc.T("notes.preview.invalid") + err.Error()
-			return data
+			return nil, false
 		}
-		data.Cards = append(data.Cards, PreviewCard{
-			TemplateLabel: card.Template,
-			FrontHTML:     frontHTML,
-			BackHTML:      backHTML,
-		})
+		out = append(out, previewCard{FrontHTML: frontHTML, BackHTML: backHTML})
 	}
-	return data
+	return out, true
 }
 
 // renderSide renders one side's Markdown text into sanitized HTML, with a choice card's options appended after the body.

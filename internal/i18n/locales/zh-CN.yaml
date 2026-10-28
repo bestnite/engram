@@ -25,44 +25,12 @@
   translation: "判断"
 - id: cardtype.short_answer
   translation: "简答"
-- id: notes.preview.title
-  translation: "实时预览"
-- id: notes.preview.front
-  translation: "正面"
-- id: notes.preview.back
-  translation: "背面"
-- id: notes.preview.invalid
-  translation: "无法预览："
 # M5-4 deck cloning.
 - id: clone.name_suffix
   translation: "（副本）"
-- id: admin.setting.site_name
-  translation: "站点名称"
-- id: admin.setting.site_name.hint
-  translation: "作为页头品牌名显示；未设置时回退到应用名称。"
-- id: admin.setting.site_default_locale
-  translation: "默认语言"
-- id: admin.setting.site_default_locale.hint
-  translation: "仅当 lang 参数、用户设置与 Accept-Language 都无法决定语言时生效。可选值：zh-CN、en。"
-- id: admin.setting.media_max_bytes
-  translation: "上传大小上限（字节）"
-- id: admin.setting.media_max_bytes.hint
-  translation: "单个上传文件的最大字节数；内置默认 10 MiB。"
-- id: admin.setting.media_allowed_mimes
-  translation: "允许的 MIME 类型"
-- id: admin.setting.media_allowed_mimes.hint
-  translation: "逗号分隔；上传时还会用 magic bytes 交叉校验。"
-- id: admin.setting.optimize_min_reviews
-  translation: "优化门槛（复习条数）"
-- id: admin.setting.optimize_min_reviews.hint
-  translation: "运行参数优化前要求的最少复习条数；下限 300，默认 500。存量低于下限时会按 300 生效。"
 # ── Per-user media quota (M2-13) ────────────────────────────────────
 - id: media.quota.exceeded
   translation: "媒体配额已超限：已用 {{.used}}，限额 {{.limit}}。请删除部分不再使用的媒体后重试。"
-- id: media.quota.setting.label
-  translation: "每用户媒体配额（字节）"
-- id: media.quota.setting.hint
-  translation: "单个用户可引用的媒体总字节数。0 表示不限（默认）。"
 - id: admin.mail.test.subject
   translation: "测试邮件：{site} 邮件模板预览"
 - id: admin.mail.test.body

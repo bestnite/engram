@@ -20,12 +20,10 @@ import (
 // with the settings table read per request. After the SSR settings page was removed, the page's reads and writes live on the JSON
 // endpoint /api/v1/admin/settings (admin_settings_api.go); the setting specs, effective values and reading helpers that endpoint reuses are kept here.
 
-// settingSpec describes one editable setting: the settings key, the optional env var override, the default value source and the copy key.
+// settingSpec describes one editable setting: the settings key, the optional env var override and the default value source.
 type settingSpec struct {
-	key      string
-	envVar   string
-	labelKey string
-	hintKey  string
+	key    string
+	envVar string
 	// def computes the default value under loc (the site name falls back to the language pack, the locale falls back to the built-in default, and so on).
 	def func(loc *i18n.Localizer) string
 }
@@ -34,11 +32,11 @@ type settingSpec struct {
 func generalSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
-			key: settingKeySiteName, labelKey: "admin.setting.site_name", hintKey: "admin.setting.site_name.hint",
+			key: settingKeySiteName,
 			def: func(loc *i18n.Localizer) string { return loc.T("app.name") },
 		},
 		{
-			key: settingKeySiteDefaultLocale, labelKey: "admin.setting.site_default_locale", hintKey: "admin.setting.site_default_locale.hint",
+			key: settingKeySiteDefaultLocale,
 			def: func(*i18n.Localizer) string { return i18n.DefaultLocaleCode },
 		},
 	}
@@ -49,19 +47,16 @@ func mediaSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
 			key: media.SettingKeyMediaMaxBytes, envVar: media.EnvMediaMaxBytes,
-			labelKey: "admin.setting.media_max_bytes", hintKey: "admin.setting.media_max_bytes.hint",
 			def: func(*i18n.Localizer) string { return strconv.FormatInt(media.DefaultMaxBytes(), 10) },
 		},
 		{
 			key: settingKeyMediaAllowedMimes, envVar: envMediaAllowedMimes,
-			labelKey: "admin.setting.media_allowed_mimes", hintKey: "admin.setting.media_allowed_mimes.hint",
 			def: func(*i18n.Localizer) string { return strings.Join(media.DefaultAllowedMimes(), ", ") },
 		},
 		{
 			// Per-user total media quota: 0 = unlimited (default). 0 follows the project's existing convention (the daily cap also uses 0 for unlimited),
 			// it is not an arbitrarily chosen number; it shows 0 when unconfigured, and the admin enables it by entering a positive number.
 			key: settingKeyMediaUserQuotaBytes, envVar: envMediaUserQuotaBytes,
-			labelKey: "media.quota.setting.label", hintKey: "media.quota.setting.hint",
 			def: func(*i18n.Localizer) string { return "0" },
 		},
 	}
@@ -73,8 +68,7 @@ func mediaSettingSpecs() []settingSpec {
 func optimizeSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
-			key:      store.SettingKeyOptimizeMinReviews,
-			labelKey: "admin.setting.optimize_min_reviews", hintKey: "admin.setting.optimize_min_reviews.hint",
+			key: store.SettingKeyOptimizeMinReviews,
 			def: func(*i18n.Localizer) string { return strconv.Itoa(store.DefaultOptimizeMinReviews) },
 		},
 	}

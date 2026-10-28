@@ -18,10 +18,6 @@ type notePreviewRequest struct {
 
 // notePreview returns only card-face HTML sanitized by internal/render.
 func (s *Server) notePreview(c *gin.Context) {
-	loc, ok := s.localizer(c)
-	if !ok {
-		return
-	}
 	user, ok := auth.CurrentUser(c)
 	if !ok || user.Status != store.StatusActive {
 		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
@@ -41,13 +37,13 @@ func (s *Server) notePreview(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	preview := s.buildPreview(loc, req.Kind, req.Fields)
-	if preview.Error != "" || len(preview.Cards) == 0 {
+	cards, ok := buildPreview(req.Kind, req.Fields)
+	if !ok || len(cards) == 0 {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	result := make([]gin.H, 0, len(preview.Cards))
-	for _, card := range preview.Cards {
+	result := make([]gin.H, 0, len(cards))
+	for _, card := range cards {
 		result = append(result, gin.H{"front_html": card.FrontHTML, "back_html": card.BackHTML})
 	}
 	c.JSON(http.StatusOK, gin.H{"cards": result})

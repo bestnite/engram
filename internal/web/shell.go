@@ -31,7 +31,6 @@ type shellAsset struct {
 
 // SPA manages the embedded production build output of the Svelte SPA.
 type Shell struct {
-	fs        fs.FS
 	rawIndex  []byte
 	indexHTML []byte
 	// mathjaxURL is the content-hashed URL of the self-hosted MathJax; empty means not injected (resource missing or SetMathJaxURL never called).
@@ -64,7 +63,6 @@ func NewShell(subFS fs.FS) (*Shell, error) {
 	}
 
 	shell := &Shell{
-		fs:        subFS,
 		rawIndex:  indexData,
 		indexHTML: indexData,
 		assets:    make(map[string]*shellAsset),

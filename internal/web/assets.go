@@ -28,10 +28,9 @@ const staticPathPrefix = "/static/v/"
 
 // asset is the metadata of one embedded asset.
 type asset struct {
-	logical string
-	hash    string
-	url     string
-	data    []byte
+	hash string
+	url  string
+	data []byte
 }
 
 // Assets is the asset manifest: logical path → hashed URL, and it also serves content by URL.
@@ -69,10 +68,9 @@ func newAsset(logical string, data []byte) *asset {
 	sum := sha256.Sum256(data)
 	h := hex.EncodeToString(sum[:4])
 	return &asset{
-		logical: logical,
-		hash:    h,
-		url:     staticPathPrefix + h + "/" + logical,
-		data:    data,
+		hash: h,
+		url:  staticPathPrefix + h + "/" + logical,
+		data: data,
 	}
 }
 

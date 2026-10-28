@@ -70,30 +70,30 @@ func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	summaries, err := s.decks.SummariesVisible(ctx, user.ID)
+	decks, err := s.decks.ListVisible(ctx, user.ID)
 	if err != nil {
 		s.logger.Error("list decks for queue counts failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	counts, err := s.deckQueueCounts(ctx, user, summaries)
+	counts, err := s.deckQueueCounts(ctx, user, decks)
 	if err != nil {
 		s.logger.Error("count deck queue failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	progress, err := schedule.NewQueueBuilder(s.db, s.decks, nil).DeckProgress(ctx, user.ID, summaryDeckIDs(summaries))
+	progress, err := schedule.NewQueueBuilder(s.db, s.decks, nil).DeckProgress(ctx, user.ID, deckIDs(decks))
 	if err != nil {
 		s.logger.Error("count deck progress failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	response := deckQueueCountsResponse{Decks: make([]deckQueueCount, 0, len(summaries))}
-	for _, summary := range summaries {
-		count := counts[summary.Deck.ID]
-		p := progress[summary.Deck.ID]
+	response := deckQueueCountsResponse{Decks: make([]deckQueueCount, 0, len(decks))}
+	for _, deck := range decks {
+		count := counts[deck.ID]
+		p := progress[deck.ID]
 		response.Decks = append(response.Decks, deckQueueCount{
-			DeckID: summary.Deck.PublicID, NewCount: count.New, ReviewCount: count.Review,
+			DeckID: deck.PublicID, NewCount: count.New, ReviewCount: count.Review,
 			StudiedCount: p.Studied, RemainingCount: p.Remaining,
 		})
 	}
@@ -103,18 +103,18 @@ func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 // deckQueueCounts gets the "studyable today" makeup of each deck on the list page (the two numbers new / review) via schedule.DeckCounts:
 // it shares the filter conditions and quota formula with /review's card-fetching path, so the two numbers summed equal the count actually studyable after clicking in.
 // The count does not compute retrievability and needs no scheduler; "used today" is tallied by the user's own timezone and day boundary.
-func (s *Server) deckQueueCounts(ctx context.Context, user *store.User, summaries []store.DeckSummary) (map[uint64]schedule.DeckQueueCounts, error) {
-	return schedule.NewQueueBuilder(s.db, s.decks, nil).DeckCounts(ctx, user.ID, summaryDeckIDs(summaries), schedule.QueueOptions{
+func (s *Server) deckQueueCounts(ctx context.Context, user *store.User, decks []store.Deck) (map[uint64]schedule.DeckQueueCounts, error) {
+	return schedule.NewQueueBuilder(s.db, s.decks, nil).DeckCounts(ctx, user.ID, deckIDs(decks), schedule.QueueOptions{
 		Timezone:      user.Timezone,
 		DayCutoffHour: user.DayCutoffHour,
 	})
 }
 
-// summaryDeckIDs collects the internal deck ids of the list rows.
-func summaryDeckIDs(summaries []store.DeckSummary) []uint64 {
-	ids := make([]uint64, 0, len(summaries))
-	for i := range summaries {
-		ids = append(ids, summaries[i].Deck.ID)
+// deckIDs collects the internal ids of the listed decks.
+func deckIDs(decks []store.Deck) []uint64 {
+	ids := make([]uint64, 0, len(decks))
+	for i := range decks {
+		ids = append(ids, decks[i].ID)
 	}
 	return ids
 }
