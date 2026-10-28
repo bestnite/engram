@@ -9,7 +9,7 @@
 
 Engram 是一个开源、自托管的渐进式间隔重复闪卡（Flashcard）服务。采用 Svelte 5 SPA 前端与 Go 后端构建，将现代自适应间隔排程算法 **FSRS v6** 与原生 **Model Context Protocol (MCP)** 服务结合，提供开箱即用的 AI 辅助制卡与自动化学习流。
 
-线上 Demo：<https://engram.nite07.com/>（注册已关闭，可使用测试账号 `test` / `testdemo` 登录体验）
+线上 Demo：<https://engram.nite07.com/>（注册开放，也可使用测试账号 `test` / `testdemo` 登录体验）
 
 ---
 
@@ -66,10 +66,11 @@ Engram 内置 Streamable HTTP MCP 服务（挂载于 `/mcp`），通过用户 AP
 
 ### 工具列表
 
-Engram 暴露 19 个业务 MCP 工具：
+Engram 暴露 21 个业务 MCP 工具：
 
 - `list_decks` / `create_deck` / `update_deck`：查看可访问卡组、创建新卡组并指定调度预设，或修改卡组名称与描述。
 - `delete_deck`：连同笔记、卡片和学习进度一起删除卡组。仅所有者可以执行，且删除后不可恢复。
+- `bulk_decks`：一次删除多个卡组，逐行校验所有者；`dry_run` 只计数不写入。对应 REST `POST /decks/bulk`。
 - `list_card_types`：列出支持的题型，附每个题型的字段表和一条能通过校验的示例 note，agent 不必猜字段名与写法。
 - `search_notes` / `get_note` / `list_deck_tags`：按标签与关键词检索卡片、读取单条 note、列出卡组内用到的标签。
 - `create_notes` / `update_note` / `delete_note` / `bulk_notes`：批量建卡、就地更新、删除，以及批量打标签或删除；支持 Dry-Run 校验。
