@@ -182,6 +182,8 @@ func (s *Server) adminMailTemplates(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "load_failed")
 		return
 	}
+	// Rows is an empty array, not null, on a site with no saved template.
+	resp.Rows = make([]mailTemplateRow, 0, len(rows))
 	for _, row := range rows {
 		resp.Rows = append(resp.Rows, mailTemplateRow{
 			Type: row.Type, Locale: row.Locale, Subject: row.Subject, BodyMD: row.BodyMD,

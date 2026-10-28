@@ -77,7 +77,8 @@ type DeckShareInviteView struct {
 
 // ListForDeck lists a deck's pending invites (owner's view: whom I invited who has not answered yet), newest first.
 func (s *DeckShareInviteStore) ListForDeck(ctx context.Context, deckID uint64) ([]DeckShareInviteView, error) {
-	var rows []DeckShareInviteView
+	// Start from an empty slice, not nil: Scan leaves a nil slice untouched when no row matches, and a nil slice encodes as JSON null.
+	rows := []DeckShareInviteView{}
 	err := s.db.WithContext(ctx).
 		Table("deck_share_invites AS i").
 		Select("COALESCE(d.public_id, '') AS deck_id, '' AS deck_name, COALESCE(u.public_id, '') AS user_id, COALESCE(u.username, '') AS username, i.role, COALESCE(v.public_id, '') AS invited_by, COALESCE(v.display_name, v.username, '') AS inviter_name, i.created_at, i.expires_at").
@@ -98,7 +99,8 @@ func (s *DeckShareInviteStore) ListForDeck(ctx context.Context, deckID uint64) (
 // Only unexpired ones count: expired rows may not have been cleaned up by the retention worker yet, so the read path must judge for itself — otherwise the UI shows
 // ghost entries where 'clicked accept and nothing happened'.
 func (s *DeckShareInviteStore) ListForUser(ctx context.Context, userID uint64) ([]DeckShareInviteView, error) {
-	var rows []DeckShareInviteView
+	// Empty rather than nil for the same reason as ListForDeck: the SPA reads the list's length directly.
+	rows := []DeckShareInviteView{}
 	err := s.db.WithContext(ctx).
 		Table("deck_share_invites AS i").
 		Select("d.public_id AS deck_id, d.name AS deck_name, COALESCE(w.public_id, '') AS user_id, '' AS username, i.role, COALESCE(u.public_id, '') AS invited_by, COALESCE(u.display_name, u.username, '') AS inviter_name, i.created_at, i.expires_at").

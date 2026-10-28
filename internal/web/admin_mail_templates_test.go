@@ -37,6 +37,10 @@ func TestAdminMailTemplatesShipTheBuiltinDefaults(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
+	// No template is saved yet: rows must be an empty array, not null.
+	if body := rec.Body.String(); !strings.Contains(body, `"rows":[]`) {
+		t.Errorf("GET body has no empty rows array: %s", snippet(body))
+	}
 	list := decodeMailTemplates(t, rec.Body.Bytes())
 	if len(list.Defaults) == 0 {
 		t.Fatal("defaults is empty, want one entry per type and locale")

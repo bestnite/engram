@@ -219,3 +219,16 @@ func TestSharePolicySaveEndpoint(t *testing.T) {
 		t.Errorf("allow list after revoke = %v (err %v), want empty", allow, err)
 	}
 }
+
+// TestShareInviteListEmptyIsArray guards the empty case: a user with no pending invite gets "invites":[] rather than null,
+// because the SPA deck list reads invites.length and a null crashed the page.
+func TestShareInviteListEmptyIsArray(t *testing.T) {
+	srv, _, _, cookies, _ := newNotesServer(t)
+	rec := getJSON(t, srv, "/api/v1/sharing/invites", cookies, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET invites = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if body := rec.Body.String(); !strings.Contains(body, `"invites":[]`) {
+		t.Errorf("GET invites body = %s, want an empty invites array", snippet(body))
+	}
+}
