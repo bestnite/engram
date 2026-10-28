@@ -18,7 +18,7 @@ import (
 // This file is the acceptance test for (class D admin notification mail).
 //
 // Covers: the two trigger points that really exist in this repository each deliver the correct type of mail to the **admin's sign-in mailbox**;
-// "a mail failure does not affect the triggering operation"; class D can be turned off; the page renders mail.not_configured when SMTP is unconfigured.
+// "a mail failure does not affect the triggering operation"; class D can be turned off; the page renders a "mail is not configured" notice when SMTP is unconfigured.
 
 // attachAdminMail writes effective SMTP settings and attaches an outbox to the test service; the worker is not started,
 // so enqueued mail stays in the outbox table and the test can query it directly by type (the same approach as the class A tests).

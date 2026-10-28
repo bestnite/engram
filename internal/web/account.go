@@ -95,7 +95,7 @@ type apiForgotPasswordRequest struct {
 //
 // The anonymous rate limit (IP + target mailbox, 5 times each / 15 minutes) runs before the DB lookup and
 // enqueueing to the outbox; the same response shape is returned whether or not the mailbox exists, avoiding account enumeration. mail_ready in the response only reflects the site-level
-// "is mail configured", unrelated to whether the account exists; the frontend uses it to render mail.not_configured when unconfigured instead of
+// "is mail configured", unrelated to whether the account exists; the frontend uses it to render a "mail is not configured" notice when unconfigured instead of
 // falsely reporting "sent". No token is returned here and the mailbox is not echoed back.
 func (s *Server) forgotPasswordSubmit(c *gin.Context) {
 	var req apiForgotPasswordRequest

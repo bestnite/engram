@@ -103,12 +103,12 @@ func TestNewFromFSRejectsUnknownExtraKey(t *testing.T) {
 func TestLocalizeTranslatesAndFallsBackToID(t *testing.T) {
 	tr := newTestTranslator(t)
 	en := tr.Localizer(tr.Pick("", "en", ""))
-	if got, want := en.T("home.heading"), "Today's review"; got != want {
-		t.Errorf("en home.heading = %q, want %q", got, want)
+	if got, want := en.T("cardtype.basic"), "Basic"; got != want {
+		t.Errorf("en cardtype.basic = %q, want %q", got, want)
 	}
 	zh := tr.Localizer(tr.Pick("", "zh-CN", ""))
-	if got, want := zh.T("home.heading"), "今日复习"; got != want {
-		t.Errorf("zh-CN home.heading = %q, want %q", got, want)
+	if got, want := zh.T("cardtype.basic"), "问答"; got != want {
+		t.Errorf("zh-CN cardtype.basic = %q, want %q", got, want)
 	}
 	// A missing key falls back to the key itself, so the problem is visible on the page rather than
 	// disappearing into thin air.

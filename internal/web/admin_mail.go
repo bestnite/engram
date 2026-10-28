@@ -19,7 +19,7 @@ import (
 // The three hard constraints match class A/B mail and are implemented one by one:
 //   - Never send mail synchronously on the request path: always enqueue via mail.AdminNotifier.Send → Outbox.Enqueue;
 //   - A send failure must not fail the triggering operation: no trigger function returns an error, failures are only logged in English;
-//   - Must not be silent when SMTP is unconfigured: the trigger point logs a Warn, and the SMTP config page renders the mail.not_configured notice.
+//   - Must not be silent when SMTP is unconfigured: the trigger point logs a Warn, and the SMTP config page renders a "mail is not configured" notice.
 //
 // Recipient address: class D goes to the sign-in mailbox of admin accounts (store.UserStore.ListAdmins).
 // Preference: class D is on by default and can be turned off, decided by the **receiving admin's own** preference (mail.ResolveEnabled).
@@ -45,7 +45,7 @@ func (s *Server) adminRecipients(ctx context.Context) []store.User {
 // build takes the receiving admin's localizer and returns the mail subject and body in that admin's language.
 func (s *Server) notifyAdmins(ctx context.Context, t mail.Type, build func(loc *i18n.Localizer) mail.Message) int {
 	if s.mail == nil || !s.mail.Configured() {
-		// SMTP unconfigured: must not be silent — log a Warn and let the triggering operation proceed as usual. The relevant pages render mail.not_configured.
+		// SMTP unconfigured: must not be silent — log a Warn and let the triggering operation proceed as usual. The relevant pages render a "mail is not configured" notice.
 		s.logger.Warn("admin mail: smtp is not configured; notification not sent", "type", string(t))
 		return 0
 	}

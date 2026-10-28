@@ -3,38 +3,6 @@
 
 - id: app.name
   translation: "Engram"
-- id: nav.today
-  translation: "Today"
-- id: home.heading
-  translation: "Today's review"
-- id: auth.error.username_required
-  translation: "Please enter a username."
-- id: auth.error.email_required
-  translation: "Please enter an email address."
-- id: auth.error.email_invalid
-  translation: "That email address is not valid."
-- id: auth.error.password_required
-  translation: "Please enter a password."
-- id: auth.error.password_too_short
-  translation: "Password must be at least 8 characters."
-- id: auth.error.password_too_long
-  translation: "Password must be at most 128 characters."
-- id: auth.error.password_too_common
-  translation: "That password is too common; choose a stronger one."
-- id: auth.error.invalid_credentials
-  translation: "Incorrect username or password."
-- id: auth.error.user_disabled
-  translation: "This account has been disabled."
-- id: auth.error.registration_closed
-  translation: "Self-service registration is closed; ask an administrator for an account."
-- id: auth.error.email_domain_not_allowed
-  translation: "That email domain is not allowed to register; ask an administrator."
-- id: auth.error.invite_required
-  translation: "Registration requires an invite link; ask an administrator for one."
-- id: auth.error.invite_invalid
-  translation: "The invite link is invalid, expired, or already used; ask an administrator for a new one."
-- id: auth.error.create_failed
-  translation: "Could not create the account; try again or use a different username or email."
 # M2-7 card list and editor pages.
 - id: cardtype.basic
   translation: "Basic"
@@ -57,51 +25,6 @@
   translation: "True / false"
 - id: cardtype.short_answer
   translation: "Short answer"
-- id: note.field.front
-  translation: "Front"
-- id: note.field.back
-  translation: "Back"
-- id: note.field.text
-  translation: "Text"
-- id: note.field.prompt
-  translation: "Prompt"
-- id: note.field.items
-  translation: "Items (JSON array)"
-- id: note.field.ordered
-  translation: "Ordered (true/false)"
-- id: note.field.extra
-  translation: "Extra"
-- id: note.field.source_url
-  translation: "Source URL"
-# M2-10 graded and short-answer field labels (frozen field table in).
-- id: note.field.question
-  translation: "Question"
-- id: note.field.answer
-  translation: "Answer"
-- id: note.field.accept
-  translation: "Other accepted answers (JSON array)"
-- id: note.field.options
-  translation: "Options (JSON array)"
-- id: note.field.answers
-  translation: "Correct option indices (JSON array)"
-- id: note.field.statement
-  translation: "Statement"
-- id: note.field.value
-  translation: "Value"
-- id: note.field.unit
-  translation: "Unit"
-- id: note.field.tolerance_absolute
-  translation: "Absolute tolerance"
-- id: note.field.tolerance_relative
-  translation: "Relative tolerance (0–1)"
-- id: note.field.ignore_case
-  translation: "Ignore case (true/false)"
-- id: note.field.ignore_whitespace
-  translation: "Ignore whitespace (true/false)"
-- id: note.field.regex
-  translation: "Regular expression (true/false)"
-- id: note.field.reference
-  translation: "Reference answer"
 - id: notes.preview.title
   translation: "Live preview"
 - id: notes.preview.front
@@ -110,18 +33,6 @@
   translation: "Back"
 - id: notes.preview.invalid
   translation: "Cannot preview: "
-- id: review.interval.under_minute
-  translation: "<1 min"
-- id: review.interval.minutes
-  translation: "{{.count}} min"
-- id: review.interval.hours
-  translation: "{{.count}} h"
-- id: review.interval.days
-  translation: "{{.count}} d"
-- id: review.interval.months
-  translation: "{{.count}} mo"
-- id: review.interval.years
-  translation: "{{.count}} y"
 # M5-4 deck clone.
 - id: clone.name_suffix
   translation: " (copy)"
@@ -145,46 +56,6 @@
   translation: "Optimizer threshold (reviews)"
 - id: admin.setting.optimize_min_reviews.hint
   translation: "Minimum reviews required before parameter optimization can run; the floor is 300 and the default is 500. Stored values below the floor take effect as 300."
-- id: admin.users.role.admin
-  translation: "admin"
-- id: admin.users.role.user
-  translation: "user"
-- id: admin.users.status.active
-  translation: "active"
-- id: admin.users.status.disabled
-  translation: "disabled"
-- id: admin.registration.notice.saved
-  translation: "Registration settings saved."
-- id: admin.registration.notice.invalid_policy
-  translation: "Invalid registration policy."
-- id: admin.registration.notice.save_failed
-  translation: "Could not save the registration settings."
-- id: admin.registration.notice.invite_created
-  translation: "Invite created."
-- id: admin.registration.notice.invite_revoked
-  translation: "Invite revoked."
-- id: admin.registration.notice.invite_invalid
-  translation: "Invite not found."
-- id: admin.registration.notice.invite_create_failed
-  translation: "Could not create the invite."
-- id: auth.error.oidc_state
-  translation: "The login state check failed. Please start again."
-- id: auth.error.oidc_failed
-  translation: "OIDC login failed. Please try again."
-- id: auth.error.oidc_unavailable
-  translation: "The OIDC provider is unreachable. Please try again later."
-- id: auth.error.oidc_link_denied
-  translation: "No account is linked to this identity. Please ask an administrator to link it."
-- id: stats.duration.milliseconds
-  translation: "{{.value}} ms"
-- id: stats.duration.seconds
-  translation: "{{.value}} s"
-- id: stats.duration.minutes
-  translation: "{{.value}} min"
-- id: stats.duration.hours
-  translation: "{{.hours}} h"
-- id: stats.duration.hours_minutes
-  translation: "{{.hours}} h {{.minutes}} min"
 # ── Per-user media quota (M2-13) ─────────────────────────────
 - id: media.quota.exceeded
   translation: "Media quota exceeded: you have used {{.used}} of your {{.limit}} limit. Remove some media you no longer use and try again."
@@ -234,35 +105,7 @@ It renders with sample variables; real recipients see their own data."
   translation: "Unsubscribe from these emails"
 - id: mail.footer.automated
   translation: "This message was sent automatically. Please do not reply."
-- id: mail.not_configured
-  translation: "Mail is not enabled on this site; contact an administrator."
 # ── Email type catalog and preferences (M1-18) ────────────────
-- id: settings.mail_prefs.heading
-  translation: "Email notification preferences"
-- id: settings.mail_prefs.hint
-  translation: "Choose which optional email types you receive; security and transactional mail cannot be turned off."
-- id: settings.mail_prefs.link
-  translation: "Manage email notification preferences"
-- id: mail.prefs.title
-  translation: "Email notification preferences"
-- id: mail.prefs.heading
-  translation: "Email notification preferences"
-- id: mail.prefs.intro
-  translation: "These switches decide which emails this site may send you. Security and transactional mail cannot be turned off; every other type can be changed at any time."
-- id: mail.prefs.submit
-  translation: "Save preferences"
-- id: mail.prefs.saved
-  translation: "Preferences saved."
-- id: mail.prefs.locked
-  translation: "Always on: security and transactional mail protects your account."
-- id: mail.prefs.class.security.heading
-  translation: "Security and transactional"
-- id: mail.prefs.class.collab.heading
-  translation: "Collaboration and permissions"
-- id: mail.prefs.class.study.heading
-  translation: "Study"
-- id: mail.prefs.class.admin.heading
-  translation: "Administrator notices"
 - id: mail.prefs.type.password_reset
   translation: "Password reset"
 - id: mail.prefs.type.email_verification
@@ -302,14 +145,6 @@ It renders with sample variables; real recipients see their own data."
   translation: "This invitation expires on {{.expires}}."
 - id: mail.invite.note
   translation: "If you weren't expecting this invitation, you can ignore this email."
-- id: mail.invite.form_note
-  translation: "Sends the invite link to that address; leave unchecked to copy the link yourself."
-- id: mail.invite.notice.queued
-  translation: "Invite created and the email has been queued for delivery."
-- id: mail.invite.notice.failed
-  translation: "Invite created, but the email could not be queued."
-- id: mail.invite.notice.opted_out
-  translation: "Invite created; the recipient has this email type turned off, so nothing was sent."
 # ── Review reminder (M1-21, class C) ─────────────────────────
 - id: mail.reminder.subject
   translation: "Time to review - {{.site}}"
@@ -427,27 +262,6 @@ It renders with sample variables; real recipients see their own data."
   translation: "**Due now:** {{.count}}"
 - id: mail.digest.link_label
   translation: "See your statistics"
-# Per-user reminder & digest send hour (mail.prefs.reminder_time.*): the review reminder and the
-# weekly digest share one local hour; empty selection means the site default. Appended by this task.
-- id: mail.prefs.reminder_time.heading
-  translation: "Reminder and weekly report time"
-- id: mail.prefs.reminder_time.label
-  translation: "Send at (your local time)"
-- id: mail.prefs.reminder_time.hint
-  translation: "Uses your timezone ({{.tz}}). The review reminder and the weekly report are sent after this hour."
-- id: mail.prefs.reminder_time.default
-  translation: "Site default ({{.hour}}:00)"
-
 # Display name of the default preset in server-rendered text (the stored name is an identity literal).
 - id: presets.default_name
   translation: "Default"
-
-# Error copy for the direct-link import endpoint lives here; the key set must match the Chinese catalog.
-- id: error.deck_import_url_invalid
-  translation: "The URL is not a valid public HTTPS link."
-- id: error.deck_import_url_blocked
-  translation: "The URL points to a network address that is not allowed."
-- id: error.deck_import_url_fetch_failed
-  translation: "The package could not be downloaded from the URL."
-- id: error.deck_import_url_not_package
-  translation: "The URL did not return a deck package."

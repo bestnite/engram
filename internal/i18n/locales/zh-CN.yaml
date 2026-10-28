@@ -3,38 +3,6 @@
 
 - id: app.name
   translation: "Engram"
-- id: nav.today
-  translation: "今日"
-- id: home.heading
-  translation: "今日复习"
-- id: auth.error.username_required
-  translation: "请输入用户名。"
-- id: auth.error.email_required
-  translation: "请输入邮箱。"
-- id: auth.error.email_invalid
-  translation: "邮箱格式不正确。"
-- id: auth.error.password_required
-  translation: "请输入密码。"
-- id: auth.error.password_too_short
-  translation: "密码至少需要 8 个字符。"
-- id: auth.error.password_too_long
-  translation: "密码不能超过 128 个字符。"
-- id: auth.error.password_too_common
-  translation: "密码过于常见，请更换更复杂的密码。"
-- id: auth.error.invalid_credentials
-  translation: "用户名或密码错误。"
-- id: auth.error.user_disabled
-  translation: "该账号已被禁用。"
-- id: auth.error.registration_closed
-  translation: "自助注册已关闭，请联系管理员开通账号。"
-- id: auth.error.email_domain_not_allowed
-  translation: "该邮箱域名不在允许注册的范围内，请联系管理员。"
-- id: auth.error.invite_required
-  translation: "注册需要邀请链接，请联系管理员获取。"
-- id: auth.error.invite_invalid
-  translation: "邀请链接无效、已过期或已被使用，请联系管理员重新获取。"
-- id: auth.error.create_failed
-  translation: "创建账号失败，请稍后重试或更换用户名/邮箱。"
 # M2-7 card list and editor pages.
 - id: cardtype.basic
   translation: "问答"
@@ -57,51 +25,6 @@
   translation: "判断"
 - id: cardtype.short_answer
   translation: "简答"
-- id: note.field.front
-  translation: "正面"
-- id: note.field.back
-  translation: "背面"
-- id: note.field.text
-  translation: "文本"
-- id: note.field.prompt
-  translation: "题干"
-- id: note.field.items
-  translation: "条目（JSON 数组）"
-- id: note.field.ordered
-  translation: "有序（true/false）"
-- id: note.field.extra
-  translation: "附注"
-- id: note.field.source_url
-  translation: "来源链接"
-# M2-10 graded and short-answer field labels (frozen field table).
-- id: note.field.question
-  translation: "问题"
-- id: note.field.answer
-  translation: "答案"
-- id: note.field.accept
-  translation: "其它可接受答案（JSON 数组）"
-- id: note.field.options
-  translation: "选项（JSON 数组）"
-- id: note.field.answers
-  translation: "正确选项索引（JSON 数组）"
-- id: note.field.statement
-  translation: "陈述"
-- id: note.field.value
-  translation: "数值"
-- id: note.field.unit
-  translation: "单位"
-- id: note.field.tolerance_absolute
-  translation: "绝对容差"
-- id: note.field.tolerance_relative
-  translation: "相对容差（0–1）"
-- id: note.field.ignore_case
-  translation: "忽略大小写（true/false）"
-- id: note.field.ignore_whitespace
-  translation: "忽略空白（true/false）"
-- id: note.field.regex
-  translation: "正则匹配（true/false）"
-- id: note.field.reference
-  translation: "参考答案"
 - id: notes.preview.title
   translation: "实时预览"
 - id: notes.preview.front
@@ -110,18 +33,6 @@
   translation: "背面"
 - id: notes.preview.invalid
   translation: "无法预览："
-- id: review.interval.under_minute
-  translation: "<1 分钟"
-- id: review.interval.minutes
-  translation: "{{.count}} 分钟"
-- id: review.interval.hours
-  translation: "{{.count}} 小时"
-- id: review.interval.days
-  translation: "{{.count}} 天"
-- id: review.interval.months
-  translation: "{{.count}} 个月"
-- id: review.interval.years
-  translation: "{{.count}} 年"
 # M5-4 deck cloning.
 - id: clone.name_suffix
   translation: "（副本）"
@@ -145,46 +56,6 @@
   translation: "优化门槛（复习条数）"
 - id: admin.setting.optimize_min_reviews.hint
   translation: "运行参数优化前要求的最少复习条数；下限 300，默认 500。存量低于下限时会按 300 生效。"
-- id: admin.users.role.admin
-  translation: "admin（管理员）"
-- id: admin.users.role.user
-  translation: "user（普通用户）"
-- id: admin.users.status.active
-  translation: "正常"
-- id: admin.users.status.disabled
-  translation: "已禁用"
-- id: admin.registration.notice.saved
-  translation: "注册设置已保存。"
-- id: admin.registration.notice.invalid_policy
-  translation: "注册策略取值非法。"
-- id: admin.registration.notice.save_failed
-  translation: "保存注册设置失败。"
-- id: admin.registration.notice.invite_created
-  translation: "邀请码已创建。"
-- id: admin.registration.notice.invite_revoked
-  translation: "邀请码已撤销。"
-- id: admin.registration.notice.invite_invalid
-  translation: "邀请码不存在。"
-- id: admin.registration.notice.invite_create_failed
-  translation: "创建邀请码失败。"
-- id: auth.error.oidc_state
-  translation: "登录状态校验失败，请重新发起登录。"
-- id: auth.error.oidc_failed
-  translation: "OIDC 登录失败，请重试。"
-- id: auth.error.oidc_unavailable
-  translation: "无法连接 OIDC 提供商，请稍后再试。"
-- id: auth.error.oidc_link_denied
-  translation: "该身份未绑定任何账号，请联系管理员绑定账号。"
-- id: stats.duration.milliseconds
-  translation: "{{.value}} 毫秒"
-- id: stats.duration.seconds
-  translation: "{{.value}} 秒"
-- id: stats.duration.minutes
-  translation: "{{.value}} 分钟"
-- id: stats.duration.hours
-  translation: "{{.hours}} 小时"
-- id: stats.duration.hours_minutes
-  translation: "{{.hours}} 小时 {{.minutes}} 分"
 # ── Per-user media quota (M2-13) ────────────────────────────────────
 - id: media.quota.exceeded
   translation: "媒体配额已超限：已用 {{.used}}，限额 {{.limit}}。请删除部分不再使用的媒体后重试。"
@@ -234,35 +105,7 @@
   translation: "一键退订这类邮件"
 - id: mail.footer.automated
   translation: "这封邮件由系统自动发送，请勿直接回复。"
-- id: mail.not_configured
-  translation: "本站未开启邮件功能，请联系管理员。"
 # ── Mail type catalog and preferences (M1-18) ────────────────────────────────
-- id: settings.mail_prefs.heading
-  translation: "邮件通知偏好"
-- id: settings.mail_prefs.hint
-  translation: "选择要接收的可选邮件类型；安全与事务类邮件不可关闭。"
-- id: settings.mail_prefs.link
-  translation: "管理邮件通知偏好"
-- id: mail.prefs.title
-  translation: "邮件通知偏好"
-- id: mail.prefs.heading
-  translation: "邮件通知偏好"
-- id: mail.prefs.intro
-  translation: "以下开关决定本站可以给你发哪些邮件。安全与事务类邮件不可关闭；其余类型随时可以修改。"
-- id: mail.prefs.submit
-  translation: "保存偏好"
-- id: mail.prefs.saved
-  translation: "偏好已保存。"
-- id: mail.prefs.locked
-  translation: "安全与事务类邮件关乎账号安全，不可关闭。"
-- id: mail.prefs.class.security.heading
-  translation: "安全与事务"
-- id: mail.prefs.class.collab.heading
-  translation: "协作与授权"
-- id: mail.prefs.class.study.heading
-  translation: "学习"
-- id: mail.prefs.class.admin.heading
-  translation: "管理员通知"
 - id: mail.prefs.type.password_reset
   translation: "密码重置"
 - id: mail.prefs.type.email_verification
@@ -302,14 +145,6 @@
   translation: "该邀请将于 {{.expires}} 过期。"
 - id: mail.invite.note
   translation: "如果你没有预料到这封邀请，可以忽略它。"
-- id: mail.invite.form_note
-  translation: "把邀请链接发送到该邮箱；不勾选则自行拷贝链接。"
-- id: mail.invite.notice.queued
-  translation: "邀请已创建，邮件已加入发送队列。"
-- id: mail.invite.notice.failed
-  translation: "邀请已创建，但邮件未能加入发送队列。"
-- id: mail.invite.notice.opted_out
-  translation: "邀请已创建；收件人已关闭该类邮件，因此没有发送。"
 # ── Review due reminders (M1-21, class C) ────────────────────────────────
 - id: mail.reminder.subject
   translation: "该复习了 - {{.site}}"
@@ -427,28 +262,6 @@
   translation: "**待复习**：{{.count}}"
 - id: mail.digest.link_label
   translation: "查看统计"
-# Per-user send hour for reminders and digests (mail.prefs.reminder_time.*): review reminders and the weekly digest share the same local hour;
-# empty means the site default. Appended by this task.
-- id: mail.prefs.reminder_time.heading
-  translation: "复习提醒与周报发送时间"
-- id: mail.prefs.reminder_time.label
-  translation: "发送时间（按你的本地时区）"
-- id: mail.prefs.reminder_time.hint
-  translation: "按你的时区（{{.tz}}）。复习提醒与每周摘要会在这个时间之后发送。"
-- id: mail.prefs.reminder_time.default
-  translation: "站点默认（{{.hour}}:00）"
-
 # Display name of the "default preset" in server-visible text (the stored name Default is an identity, not copy for humans).
 - id: presets.default_name
   translation: "默认"
-
-# Stable error copy for the direct-link deck import endpoint (POST /api/v1/decks/import-url).
-# The key set must match the English catalog.
-- id: error.deck_import_url_invalid
-  translation: "链接不是有效的公开 HTTPS 直链。"
-- id: error.deck_import_url_blocked
-  translation: "链接指向不允许访问的网络地址。"
-- id: error.deck_import_url_fetch_failed
-  translation: "无法从该链接下载卡组包。"
-- id: error.deck_import_url_not_package
-  translation: "该链接返回的内容不是卡组包。"

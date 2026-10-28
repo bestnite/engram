@@ -42,7 +42,7 @@ func NewAdminNotifier(outbox *Outbox, prefs *store.EmailPrefStore, logger *slog.
 }
 
 // Configured reports whether SMTP is configured; the trigger points use it to decide whether to render
-// the mail.not_configured explanation.
+// the "mail is not configured" explanation.
 func (n *AdminNotifier) Configured() bool {
 	return n != nil && n.outbox != nil && n.outbox.Configured()
 }

@@ -17,18 +17,10 @@ var documentedKinds = []string{
 	"typed", "numeric", "choice_single", "choice_multi", "true_false", "short_answer",
 }
 
-// gradedFieldKeys is the field names of graded and short-answer card types (the frozen field name table).
-// The edit/new page must render a label for every one of these fields instead of the raw key.
-var gradedFieldKeys = []string{
-	"question", "answer", "accept", "options", "answers", "statement",
-	"value", "unit", "tolerance_absolute", "tolerance_relative",
-	"ignore_case", "ignore_whitespace", "regex", "reference",
-}
-
 // TestCardTypeLabelsCoverRegistry is the acceptance test: enumerate Registry.Kinds(), and fail if any
 // card type lacks a display name (cardtype.<kind>) in either language pack.
-// It also checks that the ten card types frozen in the docs and every graded field name have labels,
-// so the catalog cannot be quietly trimmed.
+// It also checks that the ten card types frozen in the docs have labels, so the catalog cannot be
+// quietly trimmed.
 func TestCardTypeLabelsCoverRegistry(t *testing.T) {
 	zh := catalogKeys(t, "locales/zh-CN.yaml")
 	en := catalogKeys(t, "locales/en.yaml")
@@ -48,7 +40,7 @@ func TestCardTypeLabelsCoverRegistry(t *testing.T) {
 		}
 	}
 
-	// 2) The ten card types frozen in the docs and the field names must have labels too
+	// 2) The ten card types frozen in the docs must have labels too
 	// (including short_answer, which is not registered yet).
 	for _, kind := range documentedKinds {
 		key := "cardtype." + kind
@@ -58,23 +50,15 @@ func TestCardTypeLabelsCoverRegistry(t *testing.T) {
 			}
 		}
 	}
-	for _, field := range gradedFieldKeys {
-		key := "note.field." + field
-		for code, catalog := range catalogs {
-			if strings.TrimSpace(catalog[key]) == "" {
-				t.Errorf("locale %s is missing the field label %q", code, key)
-			}
-		}
-	}
 }
 
-// TestCatalogLabelsAreTranslatedNotKeyIDs asserts that card type/field labels are real translations
+// TestCatalogLabelsAreTranslatedNotKeyIDs asserts that card type labels are real translations
 // rather than the key names themselves, guarding against the illusion of "having a label" created by
 // copying the key into the catalog as its translation.
 func TestCatalogLabelsAreTranslatedNotKeyIDs(t *testing.T) {
 	for _, name := range []string{"locales/zh-CN.yaml", "locales/en.yaml"} {
 		catalog := catalogKeys(t, name)
-		prefixes := []string{"cardtype.", "note.field.", "notes.create."}
+		prefixes := []string{"cardtype.", "notes.create."}
 		for id, translation := range catalog {
 			for _, prefix := range prefixes {
 				if strings.HasPrefix(id, prefix) && translation == id {

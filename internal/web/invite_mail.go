@@ -19,7 +19,7 @@ import (
 // Design constraints, applied one by one:
 //   - Never send mail synchronously on the request path: always enqueue via Outbox.Enqueue and let the background worker deliver.
 //   - A failed send must not fail the triggering operation: creating the invite still succeeds, and an Enqueue error only logs in English and echoes a notice.
-//   - With SMTP unconfigured the flow is disabled and gives the reason: the invite page's "send to email" entry renders mail.not_configured,
+//   - With SMTP unconfigured the flow is disabled and gives the reason: the invite page's "send to email" entry renders a "mail is not configured" notice,
 //     and submission uses the same explanatory copy — never silently do nothing.
 //   - Type B is optional: if the recipient is a user of this site, respect their explicit preference for the invite type; otherwise fall back to the default (on).
 //   - The one-click unsubscribe header is a later task; this task sets no Message.Headers (kept empty).
@@ -38,7 +38,7 @@ const (
 //
 // The return value is the notice code for the page to echo; an empty string means the caller keeps invite_created:
 //   - noticeInviteMailQueued: enqueued, waiting for the worker to deliver;
-//   - noticeInviteMailUnconfigured: mail requested but SMTP unconfigured (with the mail.not_configured explanation);
+//   - noticeInviteMailUnconfigured: mail requested but SMTP unconfigured (with the "mail is not configured" explanation);
 //   - noticeInviteMailFailed: enqueue failed (the invite is still created successfully);
 //   - noticeInviteMailOptedOut: the recipient has turned this class of mail off (the invite is still created successfully).
 //

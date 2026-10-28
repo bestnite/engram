@@ -22,12 +22,12 @@ import (
 // Three behavioral constraints are met in one place here:
 //   - never send mail synchronously on the request path: always enqueue via SecurityNotifier.Send → Outbox.Enqueue;
 //   - a failed send never fails the triggering action: no notify function returns an error, failures only log in English;
-//   - when SMTP is not configured the flow is disabled and states why: the page renders mail.not_configured (see the page handlers).
+//   - when SMTP is not configured the flow is disabled and states why: the page renders a "mail is not configured" notice (see the page handlers).
 //
 // Class A mail is not affected by user preferences and carries no unsubscribe header (SecurityNotifier never writes Headers).
 
 // securityMailReady reports whether class A mail is currently deliverable (SMTP configured and outbox wired up).
-// Pages that depend on mail disable themselves and render mail.not_configured from it, instead of silently doing nothing.
+// Pages that depend on mail disable themselves and render a "mail is not configured" notice from it, instead of silently doing nothing.
 func (s *Server) securityMailReady() bool {
 	return s.securityMail != nil && s.securityMail.Configured()
 }
