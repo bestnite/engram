@@ -139,13 +139,6 @@ func VarSpecs(t Type) ([]VarSpec, bool) {
 	return specs, ok
 }
 
-// SupportsTemplate means the type has custom template support (the sender passes values by the
-// variable table).
-func SupportsTemplate(t Type) bool {
-	_, ok := mailVars[t]
-	return ok
-}
-
 // RequiredVars returns the required variable names, for save validation and test assertions.
 func RequiredVars(t Type) []string {
 	specs, ok := mailVars[t]

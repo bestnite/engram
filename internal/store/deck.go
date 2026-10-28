@@ -169,21 +169,11 @@ func (s *DeckStore) ByID(ctx context.Context, id uint64) (*Deck, error) {
 	return &d, nil
 }
 
-// ListByOwner lists the decks owned by a user (archived included), newest first.
-func (s *DeckStore) ListByOwner(ctx context.Context, ownerUserID uint64) ([]Deck, error) {
-	var decks []Deck
-	if err := s.db.WithContext(ctx).Where("owner_user_id = ?", ownerUserID).
-		Order("created_at DESC, id DESC").Find(&decks).Error; err != nil {
-		return nil, fmt.Errorf("list decks by owner: %w", err)
-	}
-	return decks, nil
-}
-
 // Update changes a deck's name and description; only the owner may. nil name / description means 'do not change this field',
 // so a request with only a name does not wipe the description (PATCH semantics).
 //
 // Validation applies to the 'merged final text' (existing value + fields supplied this time), with rules shared by creation and deck package import.
-// **preset_id is not written**: the scheduling preset is a study setting changed only via SetPreset / SetStudySettings; if the rename path
+// **preset_id is not written**: the scheduling preset is a study setting changed only via SetStudySettings; if the rename path
 // wrote it back, it would overwrite a preset change made in the meantime with the value read earlier in this call (the owner's setting lives in decks.preset_id).
 // Ownership, creation time and archive state are likewise not writable fields, so a whole-row overwrite cannot also wipe them.
 func (s *DeckStore) Update(ctx context.Context, actorUserID, deckID uint64, name, description *string) error {
@@ -220,19 +210,6 @@ func (s *DeckStore) Update(ctx context.Context, actorUserID, deckID uint64, name
 	return nil
 }
 
-// Archive stamps the archive time; archiving again returns nil directly (idempotent).
-func (s *DeckStore) Archive(ctx context.Context, actorUserID, deckID uint64, at time.Time) error {
-	if at.IsZero() {
-		at = time.Now().UTC()
-	}
-	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"archived_at": at})
-}
-
-// Restore clears the archive time; idempotent and returns nil when not archived.
-func (s *DeckStore) Restore(ctx context.Context, actorUserID, deckID uint64) error {
-	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"archived_at": nil})
-}
-
 // Caps reads the deck's daily caps; returns the underlying error when the deck does not exist.
 func (s *DeckStore) Caps(ctx context.Context, deckID uint64) (DeckCaps, error) {
 	var d Deck
@@ -256,22 +233,7 @@ func (s *DeckStore) SetCaps(ctx context.Context, actorUserID, deckID uint64, cap
 	})
 }
 
-// SetPreset changes a deck's scheduling preset; only the owner may,
-// and the target preset must belong to the same user — otherwise someone could hang another's preset on their own deck
-// and expose that preset's parameters through 'the deck is readable'.
-func (s *DeckStore) SetPreset(ctx context.Context, actorUserID, deckID, presetID uint64) error {
-	var count int64
-	if err := s.db.WithContext(ctx).Model(&Preset{}).
-		Where("id = ? AND owner_user_id = ?", presetID, actorUserID).Count(&count).Error; err != nil {
-		return fmt.Errorf("check preset ownership: %w", err)
-	}
-	if count == 0 {
-		return ErrDeckPresetInvalid
-	}
-	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"preset_id": presetID})
-}
-
-// mutateOwned is the single-column / multi-column update channel with the owner check; every mutating method lands through it.
+// mutateOwned is the column update channel with the owner check that SetCaps writes through.
 func (s *DeckStore) mutateOwned(ctx context.Context, actorUserID, deckID uint64, updates map[string]any) error {
 	existing, err := s.ByID(ctx, deckID)
 	if err != nil {

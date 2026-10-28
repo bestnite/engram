@@ -56,9 +56,6 @@ type TOTPRecoveryCode struct {
 
 func (TOTPRecoveryCode) TableName() string { return "totp_recovery_codes" }
 
-// TOTPModels returns all TOTP-related models for AutoMigrate to union in (see store.AutoMigrate).
-func TOTPModels() []any { return []any{&UserTOTP{}, &TOTPRecoveryCode{}} }
-
 // TOTPStore wraps GORM access to user_totp and totp_recovery_codes.
 type TOTPStore struct {
 	db *gorm.DB

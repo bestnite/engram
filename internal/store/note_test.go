@@ -340,8 +340,8 @@ func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 				t.Errorf("second Delete() error = %v, want ErrRecordNotFound", err)
 			}
 
-			if err := notes.Restore(ctx, n.ID); err != nil {
-				t.Fatalf("Restore() error = %v", err)
+			if err := notes.RestoreInTx(ctx, db, n.ID); err != nil {
+				t.Fatalf("RestoreInTx() error = %v", err)
 			}
 			if _, err := notes.ByID(ctx, n.ID); err != nil {
 				t.Errorf("ByID() after Restore() error = %v", err)
@@ -360,8 +360,8 @@ func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 			}
 
 			// Restoring a non-existent note -> not found.
-			if err := notes.Restore(ctx, 999999); !IsNotFound(err) {
-				t.Errorf("Restore(missing) error = %v, want ErrRecordNotFound", err)
+			if err := notes.RestoreInTx(ctx, db, 999999); !IsNotFound(err) {
+				t.Errorf("RestoreInTx(missing) error = %v, want ErrRecordNotFound", err)
 			}
 		})
 	}

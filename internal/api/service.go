@@ -71,7 +71,7 @@ type DeckWithRole struct {
 // A deck someone else has not granted me never shows up here: decks accept no ownership of the form "entered someone else's list without consent".
 // The convention matches the web list page (DeckStore.SummariesVisible) and the review queue's whole-library scope (DeckStore.VisibleIDs)
 // exactly, and the predicate exists only once, as store.visibleDeckIDsQuery. REST and the built-in MCP
-// both call here; switching either one to ListByOwner would hide shared decks from external callers.
+// both call here; switching either one to an owner-only query would hide shared decks from external callers.
 func (a *API) ListDecks(ctx context.Context, userID uint64) ([]DeckWithRole, error) {
 	decks, err := a.decks.ListVisible(ctx, userID)
 	if err != nil {

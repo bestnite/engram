@@ -305,12 +305,6 @@ func (s *NoteStore) Delete(ctx context.Context, id uint64) error {
 	return nil
 }
 
-// Restore clears notes.deleted_at; the cards rows and ids never changed, so they are visible again afterwards.
-// Returns gorm.ErrRecordNotFound when the note does not exist.
-func (s *NoteStore) Restore(ctx context.Context, id uint64) error {
-	return s.RestoreInTx(ctx, s.db, id)
-}
-
 // RestoreInTx restores a soft-deleted note in the transaction given by the caller (bulk import commits per batch:
 // when a soft-deleted external_ref is hit, restore it first, otherwise the following Update has no effect).
 func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) error {

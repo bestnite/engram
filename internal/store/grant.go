@@ -132,16 +132,6 @@ func (s *GrantStore) ListByDeck(ctx context.Context, deckID uint64) ([]DeckGrant
 	return rows, nil
 }
 
-// DeckIDsForUser returns every deck id explicitly granted to a user; merged with owned decks when the list is filtered by permission.
-func (s *GrantStore) DeckIDsForUser(ctx context.Context, userID uint64) ([]uint64, error) {
-	var ids []uint64
-	if err := s.db.WithContext(ctx).Model(&DeckGrant{}).
-		Where("user_id = ?", userID).Pluck("deck_id", &ids).Error; err != nil {
-		return nil, fmt.Errorf("list granted deck ids: %w", err)
-	}
-	return ids, nil
-}
-
 // RolesForUser returns the deck_id -> role map of all of a user's explicit grants.
 //
 // The list endpoint uses it to tell 'decks shared with me' from 'my own decks': own decks are decided by decks.owner_user_id,

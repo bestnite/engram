@@ -52,7 +52,6 @@ type exportPageRow struct {
 // and it is idle for the entire time the response body is written.
 //
 // Memory is still bounded: at most one page (API.exportPageSize rows) is in memory at any moment, independent of the number of exported rows.
-// Use CollectExportRows when a whole slice is needed (MCP tools must return the complete JSON in one go).
 func (a *API) ExportCards(ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool, emit func(ExportRow) error) error {
 	if len(deckIDs) == 0 {
 		return nil
@@ -138,17 +137,4 @@ func (a *API) exportCardPage(ctx context.Context, userID uint64, deckIDs []uint6
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to export cards")
 	}
 	return page, nil
-}
-
-// CollectExportRows collects the streaming export into a slice; only for callers that must return complete JSON (MCP export_deck).
-// HTTP export goes through ExportCards' streaming path, not through here.
-func (a *API) CollectExportRows(ctx context.Context, userID uint64, deckIDs []uint64, includeProgress bool) ([]ExportRow, error) {
-	rows := make([]ExportRow, 0, 64)
-	if err := a.ExportCards(ctx, userID, deckIDs, includeProgress, func(r ExportRow) error {
-		rows = append(rows, r)
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return rows, nil
 }

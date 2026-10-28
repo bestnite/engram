@@ -120,9 +120,9 @@ func TestExportTenThousandNotesStreamsWithoutBuffering(t *testing.T) {
 	var buffered []ExportRow
 	bufferedPeak := measurePeak(t, func() {
 		var err error
-		buffered, err = env.api.CollectExportRows(ctx, user.ID, []uint64{deck.ID}, false)
+		buffered, err = collectExportRows(ctx, env.api, user.ID, []uint64{deck.ID})
 		if err != nil {
-			t.Fatalf("CollectExportRows() error = %v", err)
+			t.Fatalf("collectExportRows() error = %v", err)
 		}
 	})
 	if len(buffered) != total {
@@ -459,4 +459,16 @@ func TestExportOutputIsIndependentOfPageSize(t *testing.T) {
 			t.Fatalf("card %d = %s, want %s (export must follow cards.id ASC)", i, out.Cards[i].CardID, want)
 		}
 	}
+}
+
+// collectExportRows gathers the streaming export into one slice; it is the buffered baseline the streaming peak is compared against.
+func collectExportRows(ctx context.Context, a *API, userID uint64, deckIDs []uint64) ([]ExportRow, error) {
+	rows := make([]ExportRow, 0, 64)
+	if err := a.ExportCards(ctx, userID, deckIDs, false, func(r ExportRow) error {
+		rows = append(rows, r)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }

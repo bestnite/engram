@@ -15,13 +15,10 @@ import (
 )
 
 // newTOTPFixture builds an environment of real SQLite + the TOTP store + the service; the database is not mocked (AGENTS.md §2.5).
-// testEnv migrates by AllModels() by default and the TOTP table is defined in a new file, so it is added explicitly once here.
+// testEnv migrates AllModels(), which already includes the TOTP tables.
 func newTOTPFixture(t *testing.T) (*TOTPService, *store.TOTPStore, *testEnv) {
 	t.Helper()
 	e := newTestEnv(t)
-	if err := e.db.AutoMigrate(store.TOTPModels()...); err != nil {
-		t.Fatalf("auto migrate totp tables: %v", err)
-	}
 	codec, err := store.NewSecretCodec(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x2b}, 32)))
 	if err != nil {
 		t.Fatalf("NewSecretCodec() error = %v", err)

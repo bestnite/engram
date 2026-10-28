@@ -385,7 +385,7 @@ func TestPlaceholdersKeepsOrderAndDedupes(t *testing.T) {
 // in the table would grow a template on the page that never sends.
 func TestVarsTableCoversEveryTypeWithSenders(t *testing.T) {
 	for _, def := range Catalog() {
-		if !SupportsTemplate(def.Type) {
+		if _, ok := mailVars[def.Type]; !ok {
 			t.Errorf("type %q is in the catalogue but has no template variables", def.Type)
 		}
 	}

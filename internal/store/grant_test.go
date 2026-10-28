@@ -55,11 +55,6 @@ func TestGrantStoreLifecycle(t *testing.T) {
 				t.Fatalf("ListByDeck = (%d rows,%v), want (1,nil)", len(rows), err)
 			}
 
-			ids, err := gs.DeckIDsForUser(ctx, member)
-			if err != nil || len(ids) != 1 || ids[0] != d.ID {
-				t.Fatalf("DeckIDsForUser = (%v,%v), want [%d]", ids, err, d.ID)
-			}
-
 			// revoking deletes the whole row; the next query is immediately empty (revocation takes effect immediately).
 			if err := gs.Revoke(ctx, d.ID, member); err != nil {
 				t.Fatalf("revoke: %v", err)

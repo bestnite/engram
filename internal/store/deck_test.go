@@ -72,19 +72,7 @@ func TestDeckStoreCRUD(t *testing.T) {
 				t.Errorf("ByID() = %+v, want name Deck A owner %d", got, ownerA)
 			}
 
-			// list: only that owner's decks are listed.
-			if err := decks.Create(ctx, &Deck{OwnerUserID: ownerB, Name: "Deck B", PresetID: presetB}); err != nil {
-				t.Fatalf("Create() for owner B error = %v", err)
-			}
-			owned, err := decks.ListByOwner(ctx, ownerA)
-			if err != nil {
-				t.Fatalf("ListByOwner() error = %v", err)
-			}
-			if len(owned) != 1 || owned[0].ID != d.ID {
-				t.Errorf("ListByOwner(ownerA) = %+v, want only deck %d", owned, d.ID)
-			}
-
-			// update: the owner changes only name and description; the preset is not a writable field (switching presets goes through SetPreset / SetStudySettings).
+			// update: the owner changes only name and description; the preset is not a writable field (switching presets goes through SetStudySettings).
 			got.Name = "Deck A renamed"
 			got.Description = "desc"
 			got.PresetID = presetB
@@ -100,32 +88,6 @@ func TestDeckStoreCRUD(t *testing.T) {
 			}
 			if reloaded.PresetID != d.PresetID {
 				t.Errorf("after Update() preset = %d, want %d (a metadata update must not change the preset)", reloaded.PresetID, d.PresetID)
-			}
-
-			// archive / restore: idempotent, and the state round-trips.
-			at := time.Now().UTC().Truncate(time.Second)
-			if err := decks.Archive(ctx, ownerA, d.ID, at); err != nil {
-				t.Fatalf("Archive() error = %v", err)
-			}
-			if err := decks.Archive(ctx, ownerA, d.ID, at); err != nil {
-				t.Fatalf("Archive() second call error = %v, want idempotent nil", err)
-			}
-			reloaded, err = decks.ByID(ctx, d.ID)
-			if err != nil {
-				t.Fatalf("ByID() after archive error = %v", err)
-			}
-			if reloaded.ArchivedAt == nil || !reloaded.ArchivedAt.Equal(at) {
-				t.Errorf("ArchivedAt = %v, want %v", reloaded.ArchivedAt, at)
-			}
-			if err := decks.Restore(ctx, ownerA, d.ID); err != nil {
-				t.Fatalf("Restore() error = %v", err)
-			}
-			reloaded, err = decks.ByID(ctx, d.ID)
-			if err != nil {
-				t.Fatalf("ByID() after restore error = %v", err)
-			}
-			if reloaded.ArchivedAt != nil {
-				t.Errorf("ArchivedAt after Restore = %v, want nil", reloaded.ArchivedAt)
 			}
 
 			// delete: a non-owner deletion is rejected.
@@ -176,21 +138,13 @@ func TestDeckNonOwnerCannotModifyBeforeGrants(t *testing.T) {
 			if err := decks.Update(ctx, stranger, attempt.ID, &attempt.Name, &attempt.Description); !errors.Is(err, ErrNotOwner) {
 				t.Errorf("non-owner Update() error = %v, want ErrNotOwner", err)
 			}
-			// a non-owner archiving is rejected.
-			if err := decks.Archive(ctx, stranger, d.ID, time.Now().UTC()); !errors.Is(err, ErrNotOwner) {
-				t.Errorf("non-owner Archive() error = %v, want ErrNotOwner", err)
-			}
-			// a non-owner restoring (unarchiving) is rejected too.
-			if err := decks.Restore(ctx, stranger, d.ID); !errors.Is(err, ErrNotOwner) {
-				t.Errorf("non-owner Restore() error = %v, want ErrNotOwner", err)
-			}
 
 			// the row in the database must be left untouched.
 			after, err := decks.ByID(ctx, d.ID)
 			if err != nil {
 				t.Fatalf("ByID() error = %v", err)
 			}
-			if after.Name != "Shared" || after.ArchivedAt != nil {
+			if after.Name != "Shared" {
 				t.Errorf("deck was modified by a non-owner: %+v", after)
 			}
 		})
@@ -213,54 +167,6 @@ func TestDeckCreateValidation(t *testing.T) {
 			}
 			if err := decks.Create(ctx, &Deck{OwnerUserID: owner, Name: "NoPreset"}); !errors.Is(err, ErrDeckPresetRequired) {
 				t.Errorf("Create(no preset) error = %v, want ErrDeckPresetRequired", err)
-			}
-		})
-	}
-}
-
-// TestDeckSetPresetRequiresOwnership is the acceptance case for 'deck scheduling switch': the owner may switch among presets under
-// their own name, but switching to someone else's preset must be rejected — a readable deck means its scheduling parameters are readable.
-func TestDeckSetPresetRequiresOwnership(t *testing.T) {
-	for driver, db := range testDatabases(t) {
-		t.Run(driver, func(t *testing.T) {
-			if err := db.AutoMigrate(AllModels()...); err != nil {
-				t.Fatalf("AutoMigrate() error = %v", err)
-			}
-			ctx := context.Background()
-			users := seedUsers(t, db, "preset_owner", "preset_intruder")
-			owner, intruder := users[0], users[1]
-			first := seedPresetRow(t, db, owner)
-			second := seedPresetRow(t, db, owner)
-			foreign := seedPresetRow(t, db, intruder)
-			decks := NewDeckStore(db)
-			d := &Deck{OwnerUserID: owner, Name: "Switchable", PresetID: first}
-			if err := decks.Create(ctx, d); err != nil {
-				t.Fatalf("Create() error = %v", err)
-			}
-
-			// another preset under their own name: the switch succeeds and is persisted.
-			if err := decks.SetPreset(ctx, owner, d.ID, second); err != nil {
-				t.Fatalf("SetPreset(own preset) error = %v", err)
-			}
-			if got, err := decks.ByID(ctx, d.ID); err != nil {
-				t.Fatalf("ByID() error = %v", err)
-			} else if got.PresetID != second {
-				t.Errorf("preset_id = %d, want %d", got.PresetID, second)
-			}
-
-			// someone else's preset: rejected.
-			if err := decks.SetPreset(ctx, owner, d.ID, foreign); !errors.Is(err, ErrDeckPresetInvalid) {
-				t.Errorf("SetPreset(foreign preset) error = %v, want ErrDeckPresetInvalid", err)
-			}
-			// non-owner: rejected.
-			if err := decks.SetPreset(ctx, intruder, d.ID, foreign); !errors.Is(err, ErrNotOwner) {
-				t.Errorf("SetPreset(non-owner) error = %v, want ErrNotOwner", err)
-			}
-			// neither rejection may leave a trace.
-			if got, err := decks.ByID(ctx, d.ID); err != nil {
-				t.Fatalf("ByID() after rejected writes error = %v", err)
-			} else if got.PresetID != second {
-				t.Errorf("preset_id after rejected writes = %d, want %d (unchanged)", got.PresetID, second)
 			}
 		})
 	}
