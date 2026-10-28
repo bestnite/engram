@@ -132,7 +132,6 @@ export const zhCN: LocaleCatalog = {
   'home.decks_title': '我的卡组',
   'home.no_decks': '暂无卡组',
   'home.view_all_decks': '查看全部卡组',
-  'home.deck_review': '复习',
   'home.deck_limits': '每日上限 (新卡/复习)',
   'stats.title': '统计',
   'stats.loading': '正在加载统计数据...',
@@ -1446,10 +1445,6 @@ export const zhCN: LocaleCatalog = {
   'decks.progress': '已学 {studied} · 剩余 {remaining}',
   'decks.progress_hint': '已学：你学过的卡片；剩余：你还没学过的新卡，不含已暂停的卡片。',
   'list.col.progress': '进度',
-  // ---- Home deck list: the stats line under each deck ----
-  'home.deck.new': '新 {count}',
-  'home.deck.review': '复习 {count}',
-  'home.deck.progress_label': '学习进度',
   // ---- Deck pause: a deck the user paused for themselves ----
   'decks.paused_badge': '已暂停',
   'decks.pause.action': '暂停卡组',
@@ -1461,4 +1456,10 @@ export const zhCN: LocaleCatalog = {
   'deck.resume.short': '恢复',
   'deck.paused_hint': '这个卡组不进入默认复习队列，也不计入首页和提醒邮件。卡片仍会照常到期，恢复后可能会有一批待复习。',
   'home.all_paused': '所有卡组都已暂停。',
+  // ---- Deck progress bar and the home deck table ----
+  'deck_progress.value': '{studied}/{total}',
+  'deck_progress.label': '学习进度',
+  'home.col.new': '新卡',
+  'home.col.review': '复习',
+  'decks.review.action': '复习卡组',
 };

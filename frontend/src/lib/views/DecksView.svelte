@@ -14,6 +14,7 @@
   import PageHeader from '../components/ui/PageHeader.svelte';
   import SelectionBar from '../components/ui/SelectionBar.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
+  import DeckProgressBar from '../components/DeckProgressBar.svelte';
   import { listClasses, selectionBarButton } from '../components/ui/variants';
   import { CirclePause, CirclePlay, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
   import { deckActionKind, presetSelectOptions } from '../labels';
@@ -480,7 +481,7 @@
         <span class="hidden w-36 sm:block">{$t('list.col.today')}</span>
         <span class="hidden w-40 lg:block" title={$t('decks.progress_hint')}>{$t('list.col.progress')}</span>
         <span class="hidden w-24 md:block" title={$t('home.deck_limits')}>{$t('list.col.limits')}</span>
-        <span class="w-16" aria-hidden="true"></span>
+        <span class="w-24" aria-hidden="true"></span>
       </div>
       {#each decks as deck (deck.id)}
         <!-- A paused deck keeps its row; its numbers fade because the default queue no longer draws on them. -->
@@ -508,13 +509,29 @@
           <span data-testid={`deck-queue-count-${deck.id}`} class="hidden w-36 text-[13px] tabular-nums text-foreground/80 sm:block {deck.paused ? 'opacity-50' : ''}">
             {$t('decks.queue_counts', { new: queueCounts[deck.id]?.new_count ?? 0, review: queueCounts[deck.id]?.review_count ?? 0 })}
           </span>
-          <span data-testid={`deck-progress-${deck.id}`} class="hidden w-40 text-[13px] tabular-nums text-muted-foreground lg:block {deck.paused ? 'opacity-50' : ''}" title={$t('decks.progress_hint')}>
-            {$t('decks.progress', { studied: queueCounts[deck.id]?.studied_count ?? 0, remaining: queueCounts[deck.id]?.remaining_count ?? 0 })}
-          </span>
+          <!-- The same bar as the home list; it sits above the row link so its hover tooltip with the exact numbers can open. -->
+          <div class="{listClasses.rowAction} hidden w-40 items-center lg:flex {deck.paused ? 'opacity-50' : ''}">
+            <DeckProgressBar
+              studied={queueCounts[deck.id]?.studied_count ?? 0}
+              remaining={queueCounts[deck.id]?.remaining_count ?? 0}
+              testId={`deck-progress-${deck.id}`}
+              class="w-28"
+            />
+          </div>
           <span class="hidden w-24 text-[13px] tabular-nums text-muted-foreground md:block {deck.paused ? 'opacity-50' : ''}" title={$t('home.deck_limits')}>
             {deck.new_per_day} / {deck.reviews_per_day}
           </span>
-          <div class="{listClasses.rowAction} flex w-16 justify-end">
+          <div class="{listClasses.rowAction} flex w-24 justify-end">
+            <!-- The play icon means "review" across the app (sidebar, selection bar); naming a deck reviews it even while paused. -->
+            <a
+              href="/review?deck={encodeURIComponent(deck.id)}"
+              data-testid={`deck-review-btn-${deck.id}`}
+              title={$t('decks.review.action')}
+              aria-label={$t('decks.review.action')}
+              class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-60 transition hover:bg-muted hover:text-foreground hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100"
+            >
+              <CirclePlay class="size-4" aria-hidden="true" />
+            </a>
             <button
               type="button"
               data-testid={`deck-pause-btn-${deck.id}`}
@@ -527,7 +544,8 @@
                 : 'text-muted-foreground opacity-60'}"
               onclick={(e) => togglePaused(deck, e)}
             >
-              {#if deck.paused}<CirclePlay class="size-4" aria-hidden="true" />{:else}<CirclePause class="size-4" aria-hidden="true" />{/if}
+              <!-- A toggle: the icon stays the same and the pressed state shows in colour, so the play icon is left to "review". -->
+              <CirclePause class="size-4" aria-hidden="true" />
             </button>
             {#if deckActionKind(deck.role) === 'delete'}
               <button

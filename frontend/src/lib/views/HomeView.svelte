@@ -9,7 +9,9 @@
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import HelpTip from '../components/ui/HelpTip.svelte';
+  import DeckProgressBar from '../components/DeckProgressBar.svelte';
   import { listClasses } from '../components/ui/variants';
+  import { cn } from '../components/ui/utils';
 
   interface Props {
     client?: ApiClient;
@@ -42,6 +44,11 @@
 
   function formatNumber(val: number): string {
     return new Intl.NumberFormat($localeStore).format(val);
+  }
+
+  // A count above zero is today's work and reads in the foreground colour; a zero fades to grey.
+  function countClass(count: number): string {
+    return count > 0 ? 'font-medium text-foreground' : 'text-muted-foreground';
   }
 
   function formatPercent(rate: number): string {
@@ -168,69 +175,61 @@
             {$t(decks.length === 0 ? 'home.no_decks' : 'home.all_paused')}
           </div>
         {:else}
-          <div data-testid="home-decks-list" class={listClasses.root}>
+          <!-- A table: every row is a subgrid of the list, so each column takes the width of its widest cell and the counts and
+               the bars line up across rows whatever the numbers are. From sm up the name is the first of four columns; below sm it
+               spans the row and the three count columns sit under it, labelled inline because the header is hidden there.
+               The whole row is the review entry for that deck; the deck detail stays one click away in the sidebar. -->
+          <div
+            data-testid="home-decks-list"
+            class={cn(listClasses.root, 'grid grid-cols-[auto_auto_minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]')}
+          >
+            <div class={cn(listClasses.header, 'hidden sm:col-span-full sm:grid sm:grid-cols-subgrid sm:gap-x-8')}>
+              <span>{$t('list.col.name')}</span>
+              <span class="text-right">{$t('home.col.new')}</span>
+              <span class="text-right">{$t('home.col.review')}</span>
+              <span title={$t('decks.progress_hint')}>{$t('list.col.progress')}</span>
+            </div>
             {#each activeDecks as deck (deck.id)}
               {@const counts = queueCounts[deck.id]}
-              <div class={listClasses.row}>
-                <div class="flex min-w-0 flex-1 flex-col">
-                  <a href="/decks/{encodeURIComponent(deck.id)}" class={listClasses.rowLink}>{deck.name}</a>
+              <a
+                href="/review?deck={encodeURIComponent(deck.id)}"
+                data-testid={`home-deck-row-${deck.id}`}
+                class={cn(
+                  listClasses.row,
+                  'col-span-full grid grid-cols-subgrid gap-x-5 gap-y-1.5 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:gap-x-8'
+                )}
+              >
+                <div class="col-span-full flex min-w-0 flex-col sm:col-span-1">
+                  <span class="truncate font-medium text-foreground">{deck.name}</span>
                   {#if deck.description}
                     <span class="truncate text-[13px] text-muted-foreground">{deck.description}</span>
                   {/if}
-                  {#if counts}
-                    <!-- The numbers get their own line so the title line keeps only the name and the action.
-                         Today's badges turn neutral at zero, so only decks with work left draw the eye;
-                         the bar turns to the success colour once no new card is left. -->
-                    {@const total = counts.studied_count + counts.remaining_count}
-                    <div data-testid={`home-deck-stats-${deck.id}`} class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                      <div class="flex items-center gap-1.5" title={$t('list.col.today')}>
-                        <Badge
-                          variant={counts.new_count > 0 ? 'info' : 'neutral'}
-                          class="tabular-nums"
-                          testId={`home-deck-new-${deck.id}`}
-                        >
-                          {$t('home.deck.new', { count: counts.new_count })}
-                        </Badge>
-                        <Badge
-                          variant={counts.review_count > 0 ? 'success' : 'neutral'}
-                          class="tabular-nums"
-                          testId={`home-deck-review-${deck.id}`}
-                        >
-                          {$t('home.deck.review', { count: counts.review_count })}
-                        </Badge>
-                      </div>
-                      <div class="flex min-w-0 items-center gap-2" title={$t('decks.progress_hint')}>
-                        <div
-                          role="progressbar"
-                          aria-label={$t('home.deck.progress_label')}
-                          aria-valuemin={0}
-                          aria-valuemax={total}
-                          aria-valuenow={counts.studied_count}
-                          class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-border"
-                        >
-                          <div
-                            class="h-full rounded-full transition-[width] duration-300 {total > 0 && counts.remaining_count === 0
-                              ? 'bg-success'
-                              : 'bg-brand'}"
-                            style:width="{total > 0 ? (counts.studied_count / total) * 100 : 0}%"
-                          ></div>
-                        </div>
-                        <span data-testid={`home-deck-progress-${deck.id}`} class="truncate text-xs tabular-nums text-muted-foreground">
-                          {$t('decks.progress', { studied: counts.studied_count, remaining: counts.remaining_count })}
-                        </span>
-                      </div>
-                    </div>
-                  {/if}
                 </div>
-                <Button
-                  href="/review?deck={encodeURIComponent(deck.id)}"
-                  variant="outline"
-                  size="sm"
-                  class={listClasses.rowAction}
-                >
-                  {$t('home.deck_review')}
-                </Button>
-              </div>
+                {#if counts}
+                  <!-- Counts above zero are in the foreground colour and zeros are grey, so only decks with work left draw the eye. -->
+                  <div data-testid={`home-deck-stats-${deck.id}`} class="contents">
+                    <span data-testid={`home-deck-new-${deck.id}`} class="text-[13px] tabular-nums sm:text-right {countClass(counts.new_count)}">
+                      <span class="font-normal text-muted-foreground sm:hidden">{$t('home.col.new')}</span>
+                      {formatNumber(counts.new_count)}
+                    </span>
+                    <span data-testid={`home-deck-review-${deck.id}`} class="text-[13px] tabular-nums sm:text-right {countClass(counts.review_count)}">
+                      <span class="font-normal text-muted-foreground sm:hidden">{$t('home.col.review')}</span>
+                      {formatNumber(counts.review_count)}
+                    </span>
+                    <span class="flex items-center gap-2">
+                      <DeckProgressBar
+                        studied={counts.studied_count}
+                        remaining={counts.remaining_count}
+                        testId={`home-deck-progress-${deck.id}`}
+                        class="w-20 sm:w-24"
+                      />
+                      <span class="text-xs tabular-nums text-muted-foreground sm:hidden">
+                        {$t('deck_progress.value', { studied: counts.studied_count, total: counts.studied_count + counts.remaining_count })}
+                      </span>
+                    </span>
+                  </div>
+                {/if}
+              </a>
             {/each}
           </div>
         {/if}

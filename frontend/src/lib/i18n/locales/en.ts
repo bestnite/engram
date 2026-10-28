@@ -132,7 +132,6 @@ export const en: LocaleCatalog = {
   'home.decks_title': 'My Decks',
   'home.no_decks': 'No decks yet',
   'home.view_all_decks': 'View All Decks',
-  'home.deck_review': 'Review',
   'home.deck_limits': 'Daily Limit (New / Review)',
   'stats.title': 'Statistics',
   'stats.loading': 'Loading statistics...',
@@ -1448,10 +1447,6 @@ export const en: LocaleCatalog = {
   'decks.progress': 'Studied {studied} · Left {remaining}',
   'decks.progress_hint': 'Studied: cards you have studied. Left: new cards you have not studied yet, excluding suspended cards.',
   'list.col.progress': 'Progress',
-  // ---- Home deck list: the stats line under each deck ----
-  'home.deck.new': 'New {count}',
-  'home.deck.review': 'Review {count}',
-  'home.deck.progress_label': 'Study progress',
   // ---- Deck pause: a deck the user paused for themselves ----
   'decks.paused_badge': 'Paused',
   'decks.pause.action': 'Pause deck',
@@ -1463,4 +1458,10 @@ export const en: LocaleCatalog = {
   'deck.resume.short': 'Resume',
   'deck.paused_hint': 'This deck stays out of the default review queue, the home page and reminder emails. Its cards keep falling due, so resuming may bring a backlog.',
   'home.all_paused': 'All your decks are paused.',
+  // ---- Deck progress bar and the home deck table ----
+  'deck_progress.value': '{studied}/{total}',
+  'deck_progress.label': 'Study progress',
+  'home.col.new': 'New',
+  'home.col.review': 'Review',
+  'decks.review.action': 'Review deck',
 };
