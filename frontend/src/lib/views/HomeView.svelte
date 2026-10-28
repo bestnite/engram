@@ -175,19 +175,51 @@
                   {#if deck.description}
                     <span class="truncate text-[13px] text-muted-foreground">{deck.description}</span>
                   {/if}
+                  {#if counts}
+                    <!-- The numbers get their own line so the title line keeps only the name and the action.
+                         Today's badges turn neutral at zero, so only decks with work left draw the eye;
+                         the bar turns to the success colour once no new card is left. -->
+                    {@const total = counts.studied_count + counts.remaining_count}
+                    <div data-testid={`home-deck-stats-${deck.id}`} class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                      <div class="flex items-center gap-1.5" title={$t('list.col.today')}>
+                        <Badge
+                          variant={counts.new_count > 0 ? 'info' : 'neutral'}
+                          class="tabular-nums"
+                          testId={`home-deck-new-${deck.id}`}
+                        >
+                          {$t('home.deck.new', { count: counts.new_count })}
+                        </Badge>
+                        <Badge
+                          variant={counts.review_count > 0 ? 'success' : 'neutral'}
+                          class="tabular-nums"
+                          testId={`home-deck-review-${deck.id}`}
+                        >
+                          {$t('home.deck.review', { count: counts.review_count })}
+                        </Badge>
+                      </div>
+                      <div class="flex min-w-0 items-center gap-2" title={$t('decks.progress_hint')}>
+                        <div
+                          role="progressbar"
+                          aria-label={$t('home.deck.progress_label')}
+                          aria-valuemin={0}
+                          aria-valuemax={total}
+                          aria-valuenow={counts.studied_count}
+                          class="h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-border"
+                        >
+                          <div
+                            class="h-full rounded-full transition-[width] duration-300 {total > 0 && counts.remaining_count === 0
+                              ? 'bg-success'
+                              : 'bg-brand'}"
+                            style:width="{total > 0 ? (counts.studied_count / total) * 100 : 0}%"
+                          ></div>
+                        </div>
+                        <span data-testid={`home-deck-progress-${deck.id}`} class="truncate text-xs tabular-nums text-muted-foreground">
+                          {$t('decks.progress', { studied: counts.studied_count, remaining: counts.remaining_count })}
+                        </span>
+                      </div>
+                    </div>
+                  {/if}
                 </div>
-                {#if counts}
-                  <span
-                    data-testid={`home-deck-progress-${deck.id}`}
-                    class="hidden shrink-0 text-[13px] tabular-nums text-muted-foreground md:inline"
-                    title={$t('decks.progress_hint')}
-                  >
-                    {$t('decks.progress', { studied: counts.studied_count, remaining: counts.remaining_count })}
-                  </span>
-                  <span class="shrink-0 text-[13px] tabular-nums text-muted-foreground">
-                    {$t('decks.queue_counts', { new: counts.new_count, review: counts.review_count })}
-                  </span>
-                {/if}
                 <Button
                   href="/review?deck={encodeURIComponent(deck.id)}"
                   variant="outline"

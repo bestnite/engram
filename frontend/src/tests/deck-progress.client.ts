@@ -119,6 +119,39 @@ describe('deck progress display', () => {
     vi.spyOn(apiClient, 'getDeckQueueCounts').mockResolvedValue(counts);
     await mountHome();
     expect(text('home-deck-progress-d1')).toBe('已学 120 · 剩余 380');
+    expect(text('home-deck-new-d1')).toBe('新 5');
+    expect(text('home-deck-review-d1')).toBe('复习 3');
+    const bar = target.querySelector('[data-testid="home-deck-stats-d1"] [role="progressbar"]') as HTMLElement | null;
+    expect(bar).not.toBeNull();
+    expect(bar!.getAttribute('aria-valuenow')).toBe('120');
+    expect(bar!.getAttribute('aria-valuemax')).toBe('500');
+    expect((bar!.firstElementChild as HTMLElement).style.width).toBe('24%');
+  });
+
+  it('greys out zero badges and leaves an empty deck at zero progress on the home deck list', async () => {
+    vi.spyOn(apiClient, 'getDeckQueueCounts').mockResolvedValue(counts);
+    mountTarget();
+    vi.spyOn(apiClient, 'getStatsSummary').mockResolvedValue({} as StatsSummary);
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [deck('d1', 'Alpha'), deck('d2', 'Beta')] });
+    instance = mount(HomeView, { target });
+    await flush();
+    const newBadge = target.querySelector('[data-testid="home-deck-new-d2"]') as HTMLElement;
+    const activeBadge = target.querySelector('[data-testid="home-deck-new-d1"]') as HTMLElement;
+    expect(newBadge.className).toContain('bg-muted');
+    expect(activeBadge.className).toContain('bg-brand-soft');
+    const bar = target.querySelector('[data-testid="home-deck-stats-d2"] [role="progressbar"]') as HTMLElement;
+    expect((bar.firstElementChild as HTMLElement).style.width).toBe('0%');
+    expect((bar.firstElementChild as HTMLElement).className).toContain('bg-brand');
+  });
+
+  it('marks a finished deck with the success colour on the home deck list', async () => {
+    vi.spyOn(apiClient, 'getDeckQueueCounts').mockResolvedValue({
+      decks: [{ deck_id: 'd1', new_count: 0, review_count: 0, studied_count: 72, remaining_count: 0 }],
+    });
+    await mountHome();
+    const fill = target.querySelector('[data-testid="home-deck-stats-d1"] [role="progressbar"] > div') as HTMLElement;
+    expect(fill.style.width).toBe('100%');
+    expect(fill.className).toContain('bg-success');
   });
 
   it('omits deck progress in the home deck list when the counts request fails', async () => {
@@ -126,5 +159,6 @@ describe('deck progress display', () => {
     await mountHome();
     expect(target.querySelector('[data-testid="home-decks-list"]')).not.toBeNull();
     expect(text('home-deck-progress-d1')).toBeNull();
+    expect(target.querySelector('[data-testid="home-deck-stats-d1"]')).toBeNull();
   });
 });

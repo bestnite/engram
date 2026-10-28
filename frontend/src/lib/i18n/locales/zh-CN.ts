@@ -1503,4 +1503,8 @@ export const zhCN: LocaleCatalog = {
   'decks.progress': '已学 {studied} · 剩余 {remaining}',
   'decks.progress_hint': '已学：你学过的卡片；剩余：你还没学过的新卡，不含已暂停的卡片。',
   'list.col.progress': '进度',
+  // ---- Home deck list: the stats line under each deck ----
+  'home.deck.new': '新 {count}',
+  'home.deck.review': '复习 {count}',
+  'home.deck.progress_label': '学习进度',
 };

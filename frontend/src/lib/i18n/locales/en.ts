@@ -1505,4 +1505,8 @@ export const en: LocaleCatalog = {
   'decks.progress': 'Studied {studied} · Left {remaining}',
   'decks.progress_hint': 'Studied: cards you have studied. Left: new cards you have not studied yet, excluding suspended cards.',
   'list.col.progress': 'Progress',
+  // ---- Home deck list: the stats line under each deck ----
+  'home.deck.new': 'New {count}',
+  'home.deck.review': 'Review {count}',
+  'home.deck.progress_label': 'Study progress',
 };
