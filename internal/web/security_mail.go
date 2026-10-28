@@ -115,7 +115,7 @@ func (s *Server) emailChangeMessage(ctx context.Context, loc *i18n.Localizer, to
 }
 
 // newDeviceLoginMessage assembles the new device / new IP login alert.
-func (s *Server) newDeviceLoginMessage(ctx context.Context, loc *i18n.Localizer, to, site, ip, userAgent string, at time.Time) mail.Message {
+func (s *Server) newDeviceLoginMessage(ctx context.Context, loc *i18n.Localizer, to, site, ip string, at time.Time) mail.Message {
 	atText := at.UTC().Format("2006-01-02 15:04 UTC")
 	vars := mail.Vars{"site": site, "ip": ip, "time": atText}
 	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeNewDeviceLogin, mail.VariantDefault, loc.Tf, vars)
@@ -158,8 +158,7 @@ func (s *Server) notifyNewDeviceLogin(c *gin.Context, u *store.User) {
 		return
 	}
 	loc := s.userLocalizer(u)
-	msg := s.newDeviceLoginMessage(ctx, loc, u.Email, securitySiteName(loc), strings.TrimSpace(c.ClientIP()),
-		strings.TrimSpace(c.GetHeader("User-Agent")), now)
+	msg := s.newDeviceLoginMessage(ctx, loc, u.Email, securitySiteName(loc), strings.TrimSpace(c.ClientIP()), now)
 	s.sendSecurity(ctx, u.ID, msg.To, mail.TypeNewDeviceLogin, msg.Subject, msg.TextBody, msg.HTMLBody)
 }
 

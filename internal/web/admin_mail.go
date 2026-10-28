@@ -39,19 +39,17 @@ func (s *Server) adminRecipients(ctx context.Context) []store.User {
 }
 
 // notifyAdmins sends one class D notification to each admin: localized into each one's language, decided by each one's preference, enqueued one by one.
-// It returns no error — no mail problem may fail the triggering operation; the return value is only the number of messages successfully enqueued (for tests and
-// callers to observe, not for callers to handle).
+// It returns nothing — no mail problem may fail the triggering operation.
 //
 // build takes the receiving admin's localizer and returns the mail subject and body in that admin's language.
-func (s *Server) notifyAdmins(ctx context.Context, t mail.Type, build func(loc *i18n.Localizer) mail.Message) int {
+func (s *Server) notifyAdmins(ctx context.Context, t mail.Type, build func(loc *i18n.Localizer) mail.Message) {
 	if s.mail == nil || !s.mail.Configured() {
 		// SMTP unconfigured: must not be silent — log a Warn and let the triggering operation proceed as usual. The relevant pages render a "mail is not configured" notice.
 		s.logger.Warn("admin mail: smtp is not configured; notification not sent", "type", string(t))
-		return 0
+		return
 	}
 	admins := s.adminRecipients(ctx)
 	notifier := mail.NewAdminNotifier(s.mail, store.NewEmailPrefStore(s.db), s.logger)
-	sent := 0
 	for i := range admins {
 		admin := &admins[i]
 		to := strings.TrimSpace(admin.Email)
@@ -62,11 +60,8 @@ func (s *Server) notifyAdmins(ctx context.Context, t mail.Type, build func(loc *
 		// Class D is optional, so every notification carries the RFC 8058 one-click unsubscribe headers; the
 		// token names this one type, and the link is assembled from BASE_URL because this path has no request.
 		headers := mail.UnsubscribeHeaders(t, s.optionalUnsubscribeLinkCtx(ctx, admin.ID, t))
-		if notifier.Send(ctx, admin.ID, to, t, msg.Subject, msg.TextBody, msg.HTMLBody, headers) {
-			sent++
-		}
+		notifier.Send(ctx, admin.ID, to, t, msg.Subject, msg.TextBody, msg.HTMLBody, headers)
 	}
-	return sent
 }
 
 // NotifyJobFailed notifies admins after a job failure is persisted (class D, job_failed).

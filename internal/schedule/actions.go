@@ -181,7 +181,7 @@ func rebuildReviewLog(last store.Review, prev *store.Review) (fsrs.ReviewLog, *t
 		scheduled = int(math.Round(*prev.IntervalDays))
 		due = addDays(prev.ReviewedAt.UTC(), *prev.IntervalDays)
 	}
-	log.ScheduledDays = uint64(maxInt(scheduled, 0))
+	log.ScheduledDays = uint64(max(scheduled, 0))
 	lastReview := prev.ReviewedAt.UTC()
 	return log, &due, &lastReview, scheduled
 }

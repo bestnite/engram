@@ -270,9 +270,9 @@ func cardFromState(st *store.CardState) (fsrs.Card, error) {
 		Due:            derefTime(st.DueAt),
 		Stability:      derefFloat(st.Stability),
 		Difficulty:     derefFloat(st.Difficulty),
-		ScheduledDays:  uint64(maxInt(st.ScheduledDays, 0)),
-		Reps:           uint64(maxInt(st.Reps, 0)),
-		Lapses:         uint64(maxInt(st.Lapses, 0)),
+		ScheduledDays:  uint64(max(st.ScheduledDays, 0)),
+		Reps:           uint64(max(st.Reps, 0)),
+		Lapses:         uint64(max(st.Lapses, 0)),
 		State:          state.fsrsState(),
 		LastReview:     derefTime(st.LastReviewAt),
 		RemainingSteps: st.StepIndex,
@@ -360,11 +360,4 @@ func derefFloat(f *float64) float64 {
 		return 0
 	}
 	return *f
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

@@ -356,10 +356,7 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	username, _ := s.lookupUsername(ctx, actorUserID)
 
 	report := &PackageImportReport{Target: targetKind, DryRun: opts.DryRun, Errors: []PackageImportError{}}
-	mediaMissing, err := missingMediaRefs(pkg)
-	if err != nil {
-		return nil, err
-	}
+	mediaMissing := missingMediaRefs(pkg)
 	if len(mediaMissing) > 0 && !opts.SkipMissingMedia && !opts.DryRun {
 		return nil, &PackageError{Code: CodePackageBadFormat, Message: "package references media that is not included", Entries: mediaMissing}
 	}
@@ -495,7 +492,7 @@ func parsePackage(entries map[string][]byte) (*packageModel, error) {
 }
 
 // missingMediaRefs finds media referenced in note fields but without bytes in the package.
-func missingMediaRefs(pkg *packageModel) ([]string, error) {
+func missingMediaRefs(pkg *packageModel) []string {
 	refs := map[string]bool{}
 	for i := range pkg.Notes {
 		collectMediaRefs(pkg.Notes[i].Fields, refs)
@@ -506,7 +503,7 @@ func missingMediaRefs(pkg *packageModel) ([]string, error) {
 			missing = append(missing, "media/"+sha)
 		}
 	}
-	return missing, nil
+	return missing
 }
 
 // headBytes returns the head of the file, at most mediatype.HeadBytes; it gives as much as there is up to the length detection needs.

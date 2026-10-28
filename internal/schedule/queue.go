@@ -223,10 +223,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 	if opts.NewOrder == NewOrderRandom {
 		rng = opts.Rand
 		if rng == nil {
-			loc, err := opts.location()
-			if err != nil {
-				return nil, err
-			}
+			loc := opts.location()
 			rng = rand.New(rand.NewSource(queueShuffleSeed(userID, ReviewDay(now, loc, store.ResolveCutoff(opts.DayCutoffHour)))))
 		}
 		order = randomNewCardOrder(rng)
@@ -527,10 +524,7 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 		return nil, err
 	}
 	now := opts.now()
-	loc, err := opts.location()
-	if err != nil {
-		return nil, err
-	}
+	loc := opts.location()
 	day := ReviewDay(now, loc, store.ResolveCutoff(opts.DayCutoffHour))
 	usage, err := b.countUsage(ctx, userID, day, ids)
 	if err != nil {
@@ -618,15 +612,15 @@ func dedupeIDs(ids []uint64) []uint64 {
 }
 
 // location resolves the user's timezone; when unspecified it is loaded from Timezone, falling back to UTC on failure (so review is never blocked).
-func (o QueueOptions) location() (*time.Location, error) {
+func (o QueueOptions) location() *time.Location {
 	if o.Location != nil {
-		return o.Location, nil
+		return o.Location
 	}
 	loc, err := time.LoadLocation(o.Timezone)
 	if err != nil {
-		return time.UTC, nil
+		return time.UTC
 	}
-	return loc, nil
+	return loc
 }
 
 // now returns the observation instant (UTC).
