@@ -75,10 +75,10 @@ func TestRetroCheckCatchesCorruptedAggregate(t *testing.T) {
 
 			// Break the aggregate value of a different item too; the check must catch that as well.
 			corrupted = page
-			corrupted.DueNewNotDue += 99
+			corrupted.DueNew += 99
 			drift = DiffPageNumbers(corrupted, raw)
-			if len(drift) != 1 || !strings.Contains(drift[0], "due_forecast.new_not_due") {
-				t.Fatalf("corrupted DueNewNotDue -> drift %v, want due_forecast.new_not_due", drift)
+			if len(drift) != 1 || !strings.Contains(drift[0], "due_forecast.new") {
+				t.Fatalf("corrupted DueNew -> drift %v, want due_forecast.new", drift)
 			}
 			t.Logf("second corrupted aggregate detected: %s", drift[0])
 		})

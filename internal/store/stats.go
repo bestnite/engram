@@ -66,48 +66,37 @@ func (s *StatsStore) ReviewVolume(ctx context.Context, userID uint64, today stri
 }
 
 // DueForecast is the bucket counts of the due forecast: today (overdue included) / tomorrow / within 7 days / within 30 days /
-// further out, plus "new cards not yet due" (no state row yet, or state new with a due date in the future).
+// further out, over the cards that have left the new state, plus New, the user's unstudied new cards.
 //
+// The buckets and New are disjoint: a buried new card carries a due_at but is still new, so it is counted in New only.
 // The day boundary is the review-day start from reviewday.Start: the cutoff moment of the date that local (now - day_cutoff_hour) falls in.
-// The "today" bucket holds every card with due_at <= the end of today, so overdue cards are never missed.
+// The "today" bucket holds every scheduled card with due_at <= the end of today, so overdue cards are never missed.
 type DueForecast struct {
-	Today     int64
-	Tomorrow  int64
-	Within7   int64
-	Within30  int64
-	Later     int64
-	NewNotDue int64
+	Today    int64
+	Tomorrow int64
+	Within7  int64
+	Within30 int64
+	Later    int64
+	New      int64
 }
 
-// DueForecast buckets by card_states.due_at. With deckID 0 it covers the user's default study scope: the visible decks
-// minus the ones the user paused (activeDeckIDsQuery), so it agrees with the default queue and the weekly digest built on it.
-// A non-zero deckID names a deck explicitly, which counts it even when it is paused.
-//
-// The deck scope is always limited to the decks "visible" to the user (their own ∪ granted through deck_grants ∪ others' public,
-// the same set as the deck list page and the queue's whole-database definition). Without this filter, cards in someone else's private deck have no
-// card_states row for the current user (cs.card_id IS NULL) and are all counted as "new cards not yet due" -- a real defect in this repo.
+// DueForecast buckets the user's scheduled cards by due_at and counts their new cards, both through the shared predicates in
+// card_scope.go. With deckID 0 it covers the user's default study scope: the visible decks minus the ones the user paused
+// (activeDeckIDsQuery), so it agrees with the default queue. A non-zero deckID names a deck explicitly, which counts it even
+// when it is paused, as long as the user can see it.
 func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now time.Time, loc *time.Location, cutoffHour int) (DueForecast, error) {
 	if userID == 0 {
 		return DueForecast{}, fmt.Errorf("due forecast: user id is required")
 	}
-	dayStart := reviewday.Start(now, loc, cutoffHour)
-	e1 := dayStart.Add(24 * time.Hour) // end of today
-	e2 := e1.Add(24 * time.Hour)       // end of tomorrow
-	e7 := e1.Add(7 * 24 * time.Hour)   // end of the 7-day window
-	e30 := e1.Add(30 * 24 * time.Hour) // end of the 30-day window
+	e1 := reviewday.Start(now, loc, cutoffHour).Add(24 * time.Hour) // end of today
+	e2 := e1.Add(24 * time.Hour)                                    // end of tomorrow
+	e7 := e1.Add(7 * 24 * time.Hour)                                // end of the 7-day window
+	e30 := e1.Add(30 * 24 * time.Hour)                              // end of the 30-day window
 
-	visible := `card_states AS cs
-		JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL
-		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL`
+	db := s.db.WithContext(ctx)
 	scope := activeDeckIDsQuery(s.db, userID)
 	if deckID != 0 {
-		scope = visibleDeckIDsQuery(s.db, userID)
-	}
-	where := "cs.user_id = ? AND n.deck_id IN (?)"
-	args := []any{userID, scope}
-	if deckID != 0 {
-		where += " AND n.deck_id = ?"
-		args = append(args, deckID)
+		scope = visibleDeckIDsQuery(s.db, userID).Where("id = ?", deckID)
 	}
 
 	var row struct {
@@ -117,46 +106,30 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 		Within30 int64 `gorm:"column:b_within30"`
 		Later    int64 `gorm:"column:b_later"`
 	}
-	bucketSQL := fmt.Sprintf(`SELECT
-		COALESCE(SUM(CASE WHEN cs.due_at IS NOT NULL AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_today,
-		COALESCE(SUM(CASE WHEN cs.due_at > ? AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_tomorrow,
-		COALESCE(SUM(CASE WHEN cs.due_at > ? AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_within7,
-		COALESCE(SUM(CASE WHEN cs.due_at > ? AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_within30,
-		COALESCE(SUM(CASE WHEN cs.due_at > ? THEN 1 ELSE 0 END), 0) AS b_later
-		FROM %s WHERE %s`, visible, where)
-	args = append([]any{e1, e1, e2, e2, e7, e7, e30, e30}, args...)
-	if err := s.db.WithContext(ctx).Raw(bucketSQL, args...).Scan(&row).Error; err != nil {
+	err := WhereScheduled(UserCardStates(db, userID, scope)).
+		Select(`COALESCE(SUM(CASE WHEN cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_today,
+			COALESCE(SUM(CASE WHEN cs.due_at > ? AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_tomorrow,
+			COALESCE(SUM(CASE WHEN cs.due_at > ? AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_within7,
+			COALESCE(SUM(CASE WHEN cs.due_at > ? AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_within30,
+			COALESCE(SUM(CASE WHEN cs.due_at > ? THEN 1 ELSE 0 END), 0) AS b_later`,
+			e1, e1, e2, e2, e7, e7, e30, e30).
+		Scan(&row).Error
+	if err != nil {
 		return DueForecast{}, fmt.Errorf("due forecast: bucket: %w", err)
 	}
 
-	// New cards not yet due: start from cards with a LEFT JOIN, so new cards without a card_states row are included.
-	// The visible-deck scope is required: without it, cards in someone else's private deck (no states row for the current user) would be
-	// all counted as "new cards not yet due".
-	newSQL := fmt.Sprintf(`SELECT COALESCE(COUNT(c.id), 0) AS n FROM cards AS c
-		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
-		LEFT JOIN card_states AS cs ON cs.card_id = c.id AND cs.user_id = ?
-		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
-		  AND n.deck_id IN (?)
-		  AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`)
-	newArgs := []any{userID, scope, now.UTC()}
-	if deckID != 0 {
-		newSQL += " AND n.deck_id = ?"
-		newArgs = append(newArgs, deckID)
-	}
-	var newRow struct {
-		N int64 `gorm:"column:n"`
-	}
-	if err := s.db.WithContext(ctx).Raw(newSQL, newArgs...).Scan(&newRow).Error; err != nil {
-		return DueForecast{}, fmt.Errorf("due forecast: new not due: %w", err)
+	var fresh int64
+	if err := UserNewCards(db, userID, scope).Count(&fresh).Error; err != nil {
+		return DueForecast{}, fmt.Errorf("due forecast: new cards: %w", err)
 	}
 
 	return DueForecast{
-		Today:     row.Today,
-		Tomorrow:  row.Tomorrow,
-		Within7:   row.Within7,
-		Within30:  row.Within30,
-		Later:     row.Later,
-		NewNotDue: newRow.N,
+		Today:    row.Today,
+		Tomorrow: row.Tomorrow,
+		Within7:  row.Within7,
+		Within30: row.Within30,
+		Later:    row.Later,
+		New:      fresh,
 	}, nil
 }
 
@@ -314,7 +287,9 @@ type DeckStat struct {
 	// PublicID is the deck's external id; clients only know that one, the numeric primary key never appears in a response.
 	PublicID string
 	Name     string
-	DueCount int64
+	// Review and New are what the review queue offers in this deck today (DeckQueueCounts), not a count of their own.
+	Review int64
+	New    int64
 	// Reviews is the deck's total review count (new cards' first reviews and learning steps included).
 	Reviews int64
 	// RetentionTotal / Passed are the denominator and numerator of the true retention rate (definition in retentionReviewSQL),
@@ -326,12 +301,19 @@ type DeckStat struct {
 	ElapsedMS int64
 }
 
-// DeckBreakdown returns the due volume, retention rate and cumulative time invested for each of the user's decks that has related data.
+// DeckQueueCounts is what the review queue offers in one deck today: New is the new cards that can still be introduced
+// within new_per_day, Review is the due learning cards plus the due review cards within reviews_per_day. Their sum is the
+// number of cards available after opening the deck. schedule.QueueBuilder.DeckCounts is the only producer.
+type DeckQueueCounts struct{ New, Review int }
+
+// DeckBreakdown returns, for each visible deck that has something to study today or any review history, the queue counts
+// taken from queue (keyed by deck id, as produced by schedule.QueueBuilder.DeckCounts), the review volume, the retention
+// rate and the cumulative time invested.
 //
-// The deck scope is those "decks visible to the user" that have related data (the visibility predicate is the same one as the deck list page and the queue:
-// their own ∪ granted through deck_grants ∪ others' public), so shared decks appear while decks unrelated to the user
-// (others' private included) do not. now drives the due check.
-func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.Time) ([]DeckStat, error) {
+// The deck scope is the decks visible to the user (the same predicate as the deck list page and the queue), so shared decks
+// appear while decks unrelated to the user, others' private ones included, do not. The due numbers are not counted here:
+// they come from the queue so the stats page shows the same numbers as the deck list and /review.
+func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, queue map[uint64]DeckQueueCounts) ([]DeckStat, error) {
 	if userID == 0 {
 		return nil, fmt.Errorf("deck breakdown: user id is required")
 	}
@@ -346,26 +328,13 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 		return row
 	}
 
-	// Due volume: new cards (no state row, or state=new) and cards whose due_at has passed; suspended cards are excluded.
-	// The visible-deck scope is required: cards in someone else's private deck have no card_states row for the current user
-	// (cs.card_id IS NULL), and without the filter they would all be counted as "due" and grouped by deck_id,
-	// making other people's decks appear in the deck dimension (a real defect in this repo).
-	var dueRows []struct {
-		DeckID uint64 `gorm:"column:deck_id"`
-		N      int64  `gorm:"column:n"`
-	}
-	dueSQL := `SELECT n.deck_id AS deck_id, COUNT(c.id) AS n FROM cards AS c
-		JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL
-		LEFT JOIN card_states AS cs ON cs.card_id = c.id AND cs.user_id = ?
-		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
-		  AND n.deck_id IN (?)
-		  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)
-		GROUP BY n.deck_id`
-	if err := s.db.WithContext(ctx).Raw(dueSQL, userID, deckScope, now.UTC()).Scan(&dueRows).Error; err != nil {
-		return nil, fmt.Errorf("deck breakdown: due: %w", err)
-	}
-	for _, r := range dueRows {
-		get(r.DeckID).DueCount = r.N
+	for id, c := range queue {
+		if c.New == 0 && c.Review == 0 {
+			continue
+		}
+		row := get(id)
+		row.Review = int64(c.Review)
+		row.New = int64(c.New)
 	}
 
 	// Review volume, retention rate, cumulative time: aggregate reviews grouped by deck. Likewise limited to visible decks:
@@ -408,18 +377,16 @@ func (s *StatsStore) DeckBreakdown(ctx context.Context, userID uint64, now time.
 	for id := range stats {
 		ids = append(ids, id)
 	}
+	// Only visible decks get a row, even when the queue map names another one.
 	var decks []Deck
-	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&decks).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id IN ? AND id IN (?)", ids, deckScope).Find(&decks).Error; err != nil {
 		return nil, fmt.Errorf("deck breakdown: deck names: %w", err)
 	}
+	out := make([]DeckStat, 0, len(decks))
 	for _, d := range decks {
-		if row, ok := stats[d.ID]; ok {
-			row.Name = d.Name
-			row.PublicID = d.PublicID
-		}
-	}
-	out := make([]DeckStat, 0, len(stats))
-	for _, row := range stats {
+		row := stats[d.ID]
+		row.Name = d.Name
+		row.PublicID = d.PublicID
 		out = append(out, *row)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].DeckID < out[j].DeckID })

@@ -39,6 +39,7 @@ import (
 	"git.nite07.com/nite/engram/internal/mail"
 	"git.nite07.com/nite/engram/internal/reminder"
 	"git.nite07.com/nite/engram/internal/reviewday"
+	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/worker"
 	"strconv"
@@ -253,7 +254,8 @@ type DigestStats struct {
 	StreakCurrent int
 	// NewCards is the number of newly introduced cards within the window (the sum of LearningCurve's New).
 	NewCards int64
-	// DueNow is the number of currently due (including overdue) cards (= DueForecast.Today).
+	// DueNow is the number of cards the user's review queue serves right now (= schedule.QueueBuilder.DueNow), the same
+	// number as the home page and the reminder mail.
 	DueNow int64
 }
 
@@ -280,7 +282,9 @@ func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time
 	if err != nil {
 		return DigestStats{}, err
 	}
-	due, err := stats.DueForecast(ctx, userID, 0, now, loc, cutoffHour)
+	due, err := schedule.NewQueueBuilder(db, store.NewDeckStore(db), nil).DueNow(ctx, userID, schedule.QueueOptions{
+		Now: now, Location: loc, DayCutoffHour: &cutoffHour,
+	})
 	if err != nil {
 		return DigestStats{}, err
 	}
@@ -296,7 +300,7 @@ func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time
 		PassRate:      retention.Rate,
 		StreakCurrent: streak.Current,
 		NewCards:      newCards,
-		DueNow:        due.Today,
+		DueNow:        due,
 	}, nil
 }
 

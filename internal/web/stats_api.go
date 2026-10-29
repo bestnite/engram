@@ -76,7 +76,17 @@ func (s *Server) collectStatsMeasures(ctx context.Context, user *store.User) (st
 	if err != nil {
 		return statsMeasures{}, err
 	}
-	decks, err := stats.DeckBreakdown(ctx, user.ID, now)
+	// The per-deck numbers are the queue's own counts for every visible deck, paused ones included, the same numbers
+	// as the deck list; the stats store adds history to them but never counts due cards itself.
+	visible, err := s.decks.ListVisible(ctx, user.ID)
+	if err != nil {
+		return statsMeasures{}, err
+	}
+	queue, err := s.deckQueueCounts(ctx, user, visible, now)
+	if err != nil {
+		return statsMeasures{}, err
+	}
+	decks, err := stats.DeckBreakdown(ctx, user.ID, queue)
 	if err != nil {
 		return statsMeasures{}, err
 	}
@@ -133,14 +143,14 @@ type statsVolume struct {
 	Last30Days int64 `json:"last_30_days"`
 }
 
-// statsDue holds mutually exclusive buckets of the due forecast; NewNotDue means new cards not yet scheduled.
+// statsDue holds mutually exclusive buckets of the due forecast over studied cards; New is the unstudied new cards.
 type statsDue struct {
-	Today     int64 `json:"today"`
-	Tomorrow  int64 `json:"tomorrow"`
-	Within7   int64 `json:"within_7_days"`
-	Within30  int64 `json:"within_30_days"`
-	Later     int64 `json:"later"`
-	NewNotDue int64 `json:"new_not_due"`
+	Today    int64 `json:"today"`
+	Tomorrow int64 `json:"tomorrow"`
+	Within7  int64 `json:"within_7_days"`
+	Within30 int64 `json:"within_30_days"`
+	Later    int64 `json:"later"`
+	New      int64 `json:"new"`
 }
 
 // statsRetentionBucket is the retention of one stability bucket; Rate is Passed/Total (0 when Total is 0).
@@ -183,9 +193,11 @@ type statsCurvePoint struct {
 // statsDeck is the stats row of one deck. Reviews is the total number of reviews; Retention is the true retention rate,
 // whose denominator RetentionTotal counts only scheduled (due) reviews, and when it is 0 the client shows "no data" rather than 0%.
 type statsDeck struct {
-	DeckID         string  `json:"deck_id"`
-	Name           string  `json:"name"`
-	DueCount       int64   `json:"due_count"`
+	DeckID string `json:"deck_id"`
+	Name   string `json:"name"`
+	// Review and New are the deck's queue counts for today, the same numbers the deck list shows.
+	Review         int64   `json:"review"`
+	New            int64   `json:"new"`
 	Reviews        int64   `json:"reviews"`
 	Retention      float64 `json:"retention"`
 	RetentionTotal int64   `json:"retention_total"`
@@ -241,7 +253,7 @@ func (s *Server) buildStatsDetail(ctx context.Context, user *store.User) (statsD
 		GeneratedAt: m.Now.UTC().Format(time.RFC3339),
 		// Empty-state criterion: no review volume at all, nothing due today, no deck data.
 		Empty: m.Volume.Today == 0 && m.Volume.Last30Days == 0 &&
-			m.Due.Today == 0 && m.Due.NewNotDue == 0 && len(m.Decks) == 0,
+			m.Due.Today == 0 && m.Due.New == 0 && len(m.Decks) == 0,
 		CurveFrom: m.CurveFrom,
 		CurveTo:   m.CurveTo,
 		Volume: statsVolume{
@@ -250,12 +262,12 @@ func (s *Server) buildStatsDetail(ctx context.Context, user *store.User) (statsD
 			Last30Days: m.Volume.Last30Days,
 		},
 		Due: statsDue{
-			Today:     m.Due.Today,
-			Tomorrow:  m.Due.Tomorrow,
-			Within7:   m.Due.Within7,
-			Within30:  m.Due.Within30,
-			Later:     m.Due.Later,
-			NewNotDue: m.Due.NewNotDue,
+			Today:    m.Due.Today,
+			Tomorrow: m.Due.Tomorrow,
+			Within7:  m.Due.Within7,
+			Within30: m.Due.Within30,
+			Later:    m.Due.Later,
+			New:      m.Due.New,
 		},
 		Retention: statsRetention{
 			Total:   m.Retention.Total,
@@ -285,7 +297,7 @@ func (s *Server) buildStatsDetail(ctx context.Context, user *store.User) (statsD
 	}
 	for _, d := range m.Decks {
 		detail.Decks = append(detail.Decks, statsDeck{
-			DeckID: d.PublicID, Name: d.Name, DueCount: d.DueCount,
+			DeckID: d.PublicID, Name: d.Name, Review: d.Review, New: d.New,
 			Reviews: d.Reviews, Retention: d.Retention, RetentionTotal: d.RetentionTotal, ElapsedMS: d.ElapsedMS,
 		})
 	}

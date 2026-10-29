@@ -35,6 +35,7 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/mail"
 	"git.nite07.com/nite/engram/internal/reviewday"
+	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/worker"
 	"strconv"
@@ -128,6 +129,8 @@ type Reminder struct {
 	templates mail.LookupFunc
 	// siteLocale provides the site default locale (second level of the fallback chain); may be nil.
 	siteLocale func() string
+	// queue counts the cards the user's review queue serves right now; the reminder announces exactly that number.
+	queue *schedule.QueueBuilder
 }
 
 // New constructs a Reminder; it does not start the worker, Start must be called afterwards.
@@ -164,6 +167,7 @@ func New(deps Deps) (*Reminder, error) {
 		tokens:     deps.Tokens,
 		templates:  deps.Templates,
 		siteLocale: deps.SiteDefaultLocale,
+		queue:      schedule.NewQueueBuilder(deps.DB, store.NewDeckStore(deps.DB), nil),
 	}
 	// Start/stop and the tick loop are handed to the shared skeleton; RunOnce is injected as the business phase, and the failure log wording is kept verbatim.
 	lifecycle, err := worker.New(worker.Config{
@@ -214,6 +218,8 @@ func (r *Reminder) RunOnce(ctx context.Context) error {
 //     back-to-back double send when "the chosen hour precedes the day cutoff" (the daily ledger counts by review day and cannot stop it).
 //  3. Daily cap: if the user's local review day already had a send, do not send again.
 //  4. Preference gate: class C defaults to off, and the user turning it off takes effect immediately (preferences are read fresh every round, not cached).
+//  5. Something to review: the number of cards the user's queue serves now (schedule.QueueBuilder.DueNow) must be above zero;
+//     an empty queue skips the round without touching the ledger.
 //
 // The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume that day's quota.
 //
@@ -250,26 +256,36 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 		return nil
 	}
 
-	if err := r.outbox.Enqueue(ctx, r.message(ctx, c)); err != nil {
+	// The candidate list is only a prefilter; the number announced is what /review serves. A queue emptied by daily caps,
+	// paused decks or revoked grants sends nothing and leaves the ledger untouched, so a later round can still send.
+	due, err := r.queue.DueNow(ctx, c.ID, schedule.QueueOptions{Now: now, Timezone: c.Timezone, DayCutoffHour: c.DayCutoffHour})
+	if err != nil {
+		return err
+	}
+	if due == 0 {
+		return nil
+	}
+
+	if err := r.outbox.Enqueue(ctx, r.message(ctx, c, due)); err != nil {
 		return err
 	}
 	if err := store.RecordReminderSent(ctx, r.db, c.ID, day, now); err != nil {
 		return err
 	}
-	r.logger.Info("review reminder enqueued", "user_id", c.ID, "review_day", day, "due_count", c.DueCount)
+	r.logger.Info("review reminder enqueued", "user_id", c.ID, "review_day", day, "due_count", due)
 	return nil
 }
 
 // message assembles the reminder mail in the user's language. A reminder is class-C optional mail, so it carries the RFC 8058 one-click unsubscribe header:
 // the token names the single type review_reminder, and the recipient (necessarily a user of this site) can turn it off without logging in.
 // A failed token issuance is only logged and the mail is still sent: a missing unsubscribe entry must not stop the reminder from going out.
-func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate) mail.Message {
+func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate, due int64) mail.Message {
 	lc := r.translator.Localizer(r.translator.Pick("", c.Locale, ""))
 	site := lc.T("app.name")
 	reviewURL := r.reviewURL()
 	unsubURL := r.unsubscribeLink(ctx, c.ID)
 
-	vars := mail.Vars{"site": site, "count": strconv.FormatInt(c.DueCount, 10), "url": reviewURL}
+	vars := mail.Vars{"site": site, "count": strconv.FormatInt(due, 10), "url": reviewURL}
 	if unsubURL != "" {
 		vars["unsubscribe_url"] = unsubURL
 	}

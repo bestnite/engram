@@ -34,8 +34,7 @@ type ReminderLog struct {
 // TableName pins the table name so the pluralization rule cannot drift across GORM versions.
 func (ReminderLog) TableName() string { return "reminder_log" }
 
-// ReminderCandidate holds the user fields the reminder worker needs plus their current due-card count.
-// Only active users with due cards appear in the result -- an account with nothing due should not be nudged.
+// ReminderCandidate holds the user fields the reminder worker needs.
 type ReminderCandidate struct {
 	ID            uint64 `gorm:"column:id" json:"id"`
 	Email         string `gorm:"column:email" json:"email"`
@@ -44,28 +43,19 @@ type ReminderCandidate struct {
 	DayCutoffHour *int   `gorm:"column:day_cutoff_hour" json:"day_cutoff_hour"`
 	// ReminderHour is the local send hour the user chose; NULL means unset (use the global default).
 	ReminderHour *int `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`
-	// DueCount is the number of the user's card_states rows currently due (one card counts once per user).
-	DueCount int64 `gorm:"column:due_count" json:"due_count"`
 }
 
-// ReminderCandidates returns the active users who have due cards and may receive mail.
-//
-// The due definition matches the schedule queue and DueQueueSize: only card_states that are scheduled with due_at <= now,
-// excluding soft-deleted cards/notes, suspended cards and the decks the user paused (a paused deck must not prompt a reminder).
-// A state='new' row is left out even when its due_at has passed: burying a new card writes such a row, and the queue treats it as a
-// new card under new_per_day rather than a due one, so counting it would announce cards the review page does not show as due.
-// One user may have several rows, so GROUP BY merges them and yields the due count along the way.
+// ReminderCandidates returns the active users with an email address who have at least one due card (WhereDue on a live,
+// unsuspended card). It is a cheap prefilter over all users: daily caps, paused decks and deck visibility are per-user
+// rules, so the worker asks schedule.QueueBuilder.DueNow for the exact number before sending and skips a user whose
+// queue turns out to be empty.
 func ReminderCandidates(ctx context.Context, db *gorm.DB, now time.Time) ([]ReminderCandidate, error) {
+	due := WhereDue(LiveCardStates(db), now.UTC()).Select("1").Where("cs.user_id = u.id")
 	var out []ReminderCandidate
 	err := db.WithContext(ctx).Table("users AS u").
 		Select("u.id AS id, u.email AS email, u.locale AS locale, u.timezone AS timezone, "+
-			"u.day_cutoff_hour AS day_cutoff_hour, u.reminder_hour AS reminder_hour, COUNT(cs.card_id) AS due_count").
-		Joins("JOIN card_states AS cs ON cs.user_id = u.id AND cs.state <> ? AND cs.due_at IS NOT NULL AND cs.due_at <= ?", "new", now.UTC()).
-		Joins("JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL").
-		Joins("JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL").
-		Joins("LEFT JOIN deck_pauses AS dp ON dp.deck_id = n.deck_id AND dp.user_id = u.id").
-		Where("u.status = ? AND u.email <> '' AND dp.deck_id IS NULL", StatusActive).
-		Group("u.id, u.email, u.locale, u.timezone, u.day_cutoff_hour, u.reminder_hour").
+			"u.day_cutoff_hour AS day_cutoff_hour, u.reminder_hour AS reminder_hour").
+		Where("u.status = ? AND u.email <> '' AND EXISTS (?)", StatusActive, due).
 		Order("u.id asc").
 		Scan(&out).Error
 	if err != nil {

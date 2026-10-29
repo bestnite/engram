@@ -33,8 +33,8 @@ func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 	if got := detail.Volume; got.Today != 2 || got.Last7Days != 3 || got.Last30Days != 3 {
 		t.Errorf("volume = %+v, want {2 3 3}", got)
 	}
-	if got := detail.Due; got.Today != 1 || got.NewNotDue != 0 {
-		t.Errorf("due = %+v, want today=1 new_not_due=0", got)
+	if got := detail.Due; got.Today != 1 || got.New != 0 {
+		t.Errorf("due = %+v, want today=1 new=0", got)
 	}
 
 	if got := detail.Retention; got.Total != 2 || got.Passed != 2 || math.Abs(got.Rate-1) > 1e-9 {
@@ -84,8 +84,8 @@ func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 		t.Fatalf("decks = %d, want 1", len(detail.Decks))
 	}
 	deck := detail.Decks[0]
-	if deck.Name != "Stats deck" || deck.DueCount != 1 || deck.Reviews != 3 || deck.ElapsedMS != 3000 {
-		t.Errorf("deck = %+v, want Stats deck due=1 reviews=3 elapsed=3000", deck)
+	if deck.Name != "Stats deck" || deck.Review != 1 || deck.New != 0 || deck.Reviews != 3 || deck.ElapsedMS != 3000 {
+		t.Errorf("deck = %+v, want Stats deck review=1 new=0 reviews=3 elapsed=3000", deck)
 	}
 	// Retention is the true retention rate: of three reviews only two were scheduled reviews (neither Again), and the new card's Again is not counted,
 	// so it is 2/2 rather than the 2/3 of "non-Again / all reviews".

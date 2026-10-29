@@ -227,7 +227,7 @@ describe('StatsView component response states and truthful rendering', () => {
     generated_at: '2026-10-06T12:00:00Z',
     empty: false,
     volume: { today: 2, last_7_days: 3, last_30_days: 3 },
-    due: { today: 1, tomorrow: 0, within_7_days: 0, within_30_days: 0, later: 0, new_not_due: 0 },
+    due: { today: 1, tomorrow: 0, within_7_days: 0, within_30_days: 0, later: 0, new: 0 },
     retention: {
       total: 2,
       passed: 2,
@@ -244,7 +244,7 @@ describe('StatsView component response states and truthful rendering', () => {
     curve_to: '2026-10-06',
     // Reviews for the deck and tag dimensions all total 3, and retention counts only the 2 due reviews among them (both non-Again).
     decks: [
-      { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 1, retention_total: 2, elapsed_ms: 3000 },
+      { deck_id: '1', name: 'Stats deck', review: 1, new: 0, reviews: 3, retention: 1, retention_total: 2, elapsed_ms: 3000 },
     ],
     tags: [{ tag: 'algebra', reviews: 3, retention: 1, retention_total: 2 }],
     grades: [
@@ -326,7 +326,7 @@ describe('StatsView component response states and truthful rendering', () => {
   it('shows no-data retention for deck and tag rows without due reviews', () => {
     const learningOnly: StatsDetail = {
       ...detailFixture,
-      decks: [{ deck_id: '1', name: 'Fresh deck', due_count: 5, reviews: 4, retention: 0, retention_total: 0, elapsed_ms: 0 }],
+      decks: [{ deck_id: '1', name: 'Fresh deck', review: 5, new: 0, reviews: 4, retention: 0, retention_total: 0, elapsed_ms: 0 }],
       tags: [{ tag: 'fresh', reviews: 4, retention: 0, retention_total: 0 }],
     };
     const { html } = render(StatsView, {
@@ -352,7 +352,8 @@ describe('StatsView component response states and truthful rendering', () => {
       'stats-retention-buckets-help',
       'stats-time-help',
       'stats-grade-help',
-      'stats-deck-due-help',
+      'stats-deck-review-help',
+      'stats-deck-new-help',
       'stats-deck-reviews-help',
       'stats-deck-retention-help',
       'stats-deck-elapsed-help',
@@ -362,7 +363,7 @@ describe('StatsView component response states and truthful rendering', () => {
       expect(html).toContain(`data-testid="${id}"`);
     }
     expect(html).toContain('aria-label="记忆强度是什么意思？"');
-    expect(html).toContain('aria-label="到期是什么意思？"');
+    expect(html).toContain('aria-label="今日复习是什么意思？"');
   });
 
   it('localizes detail labels into English when the locale is en', () => {

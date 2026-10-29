@@ -405,7 +405,8 @@ export interface StatsDue {
   within_7_days: number;
   within_30_days: number;
   later: number;
-  new_not_due: number;
+  /** Unstudied new cards (not suspended); never part of the dated buckets. */
+  new: number;
 }
 
 export interface StatsRetentionBucket {
@@ -443,7 +444,10 @@ export interface StatsCurvePoint {
 export interface StatsDeck {
   deck_id: string;
   name: string;
-  due_count: number;
+  /** Due learning and review cards the queue serves today, the same number as the deck list. */
+  review: number;
+  /** New cards the queue still introduces today. */
+  new: number;
   /** Total review count (including learning steps). */
   reviews: number;
   /** True retention; a denominator retention_total of 0 does not mean 0% but no data. */

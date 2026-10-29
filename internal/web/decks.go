@@ -1,6 +1,8 @@
 package web
 
 import (
+	"time"
+
 	"context"
 	"net/http"
 
@@ -76,7 +78,7 @@ func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	counts, err := s.deckQueueCounts(ctx, user, decks)
+	counts, err := s.deckQueueCounts(ctx, user, decks, time.Now())
 	if err != nil {
 		s.logger.Error("count deck queue failed", "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -103,8 +105,9 @@ func (s *Server) deckQueueCountsAPI(c *gin.Context) {
 // deckQueueCounts gets the "studyable today" makeup of each deck on the list page (the two numbers new / review) via schedule.DeckCounts:
 // it shares the filter conditions and quota formula with /review's card-fetching path, so the two numbers summed equal the count actually studyable after clicking in.
 // The count does not compute retrievability and needs no scheduler; "used today" is tallied by the user's own timezone and day boundary.
-func (s *Server) deckQueueCounts(ctx context.Context, user *store.User, decks []store.Deck) (map[uint64]schedule.DeckQueueCounts, error) {
+func (s *Server) deckQueueCounts(ctx context.Context, user *store.User, decks []store.Deck, now time.Time) (map[uint64]store.DeckQueueCounts, error) {
 	return schedule.NewQueueBuilder(s.db, s.decks, nil).DeckCounts(ctx, user.ID, deckIDs(decks), schedule.QueueOptions{
+		Now:           now,
 		Timezone:      user.Timezone,
 		DayCutoffHour: user.DayCutoffHour,
 	})

@@ -65,30 +65,39 @@ const (
 // silence would hide a migration bug or a caller's typo.
 func ParseState(s string) (State, error) {
 	switch s {
-	case "new":
+	case store.CardStateNew:
 		return StateNew, nil
-	case "learning":
+	case store.CardStateLearning:
 		return StateLearning, nil
-	case "review":
+	case store.CardStateReview:
 		return StateReview, nil
-	case "relearning":
+	case store.CardStateRelearning:
 		return StateRelearning, nil
 	default:
 		return 0, fmt.Errorf("schedule: unknown card state %q", s)
 	}
 }
 
+// StateFromInt validates an integer state from the review log (reviews.state_before). Unknown values report an English
+// error for the same reason ParseState does.
+func StateFromInt(v int) (State, error) {
+	if s := State(v); s >= StateNew && s <= StateRelearning {
+		return s, nil
+	}
+	return 0, fmt.Errorf("schedule: unknown card state %d", v)
+}
+
 // String returns the string state used in the database; this is the single translation point between this package and store.
 func (s State) String() string {
 	switch s {
 	case StateNew:
-		return "new"
+		return store.CardStateNew
 	case StateLearning:
-		return "learning"
+		return store.CardStateLearning
 	case StateReview:
-		return "review"
+		return store.CardStateReview
 	case StateRelearning:
-		return "relearning"
+		return store.CardStateRelearning
 	default:
 		return "unknown"
 	}

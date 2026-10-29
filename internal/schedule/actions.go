@@ -88,7 +88,7 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		prev = &logs[1]
 	}
 
-	stateBefore, err := ParseState(parseStateInt(last.StateBefore))
+	stateBefore, err := StateFromInt(last.StateBefore)
 	if err != nil {
 		return store.CardState{}, err
 	}
@@ -190,22 +190,6 @@ func rebuildReviewLog(last store.Review, prev *store.Review) (fsrs.ReviewLog, *t
 // addDays adds d days to t; rounded to milliseconds because interval_days is REAL and sub-millisecond precision is meaningless.
 func addDays(t time.Time, d float64) time.Time {
 	return t.Add(time.Duration(math.Round(d*24*60*60*1000)) * time.Millisecond)
-}
-
-// parseStateInt turns the integer state from the log into a string so ParseState reuses the same validation.
-func parseStateInt(v int) string {
-	switch State(v) {
-	case StateNew:
-		return "new"
-	case StateLearning:
-		return "learning"
-	case StateReview:
-		return "review"
-	case StateRelearning:
-		return "relearning"
-	default:
-		return fmt.Sprintf("invalid-%d", v)
-	}
 }
 
 // writeUndoAudit writes one audit_log row in the same transaction, recording which grade was undone.

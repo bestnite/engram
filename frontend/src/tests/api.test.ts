@@ -930,7 +930,7 @@ describe('Centralized typed same-origin REST API client', () => {
         generated_at: '2026-10-06T12:00:00Z',
         empty: false,
         volume: { today: 2, last_7_days: 3, last_30_days: 3 },
-        due: { today: 1, tomorrow: 0, within_7_days: 0, within_30_days: 0, later: 0, new_not_due: 0 },
+        due: { today: 1, tomorrow: 0, within_7_days: 0, within_30_days: 0, later: 0, new: 0 },
         retention: {
           total: 2,
           passed: 2,
@@ -943,7 +943,7 @@ describe('Centralized typed same-origin REST API client', () => {
         curve_from: '2026-09-07',
         curve_to: '2026-10-06',
         decks: [
-          { deck_id: '1', name: 'Stats deck', due_count: 1, reviews: 3, retention: 1, retention_total: 2, elapsed_ms: 3000 },
+          { deck_id: '1', name: 'Stats deck', review: 1, new: 0, reviews: 3, retention: 1, retention_total: 2, elapsed_ms: 3000 },
         ],
         tags: [{ tag: 'algebra', reviews: 3, retention: 1, retention_total: 2 }],
         grades: [

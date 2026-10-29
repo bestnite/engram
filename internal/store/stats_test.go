@@ -155,23 +155,65 @@ func TestStatsDueForecastMatchesHandSQL(t *testing.T) {
 				db.Raw(sql, args...).Scan(&n)
 				return n
 			}
-			join := "FROM card_states cs JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL WHERE cs.user_id = ?"
+			join := "FROM card_states cs JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL WHERE cs.state <> 'new' AND cs.user_id = ?"
 			wantToday := hand("SELECT COUNT(*) "+join+" AND cs.due_at <= ?", 1, edges[0])
 			wantTomorrow := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ? AND cs.due_at <= ?", 1, edges[0], edges[1])
 			want7 := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ? AND cs.due_at <= ?", 1, edges[1], edges[2])
 			want30 := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ? AND cs.due_at <= ?", 1, edges[2], edges[3])
 			wantLater := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ?", 1, edges[3])
-			wantNew := hand(`SELECT COUNT(*) FROM cards c JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ? WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`, 1, statsNow)
+			wantNew := hand(`SELECT COUNT(*) FROM cards c JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ? WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL AND (cs.card_id IS NULL OR cs.state = 'new')`, 1)
 
 			if got.Today != wantToday || got.Tomorrow != wantTomorrow || got.Within7 != want7 ||
-				got.Within30 != want30 || got.Later != wantLater || got.NewNotDue != wantNew {
+				got.Within30 != want30 || got.Later != wantLater || got.New != wantNew {
 				t.Errorf("DueForecast() = %+v, hand SQL = today %d tomorrow %d 7d %d 30d %d later %d new %d",
 					got, wantToday, wantTomorrow, want7, want30, wantLater, wantNew)
 			}
-			if got.Today != 1 || got.Tomorrow != 1 || got.Within7 != 1 || got.Within30 != 1 || got.Later != 1 || got.NewNotDue != 1 {
+			if got.Today != 1 || got.Tomorrow != 1 || got.Within7 != 1 || got.Within30 != 1 || got.Later != 1 || got.New != 1 {
 				t.Errorf("DueForecast() = %+v, want one card per bucket", got)
 			}
 		})
+	}
+}
+
+// TestStatsDueForecastCountsBuriedNewCardOnce is the regression for the double count: burying a new card gives it a
+// due_at at the next day start, which used to land it in both the today bucket (due_at <= end of today) and the new-card
+// count. A new card is never due, so it belongs to New alone; a scheduled card in the same window stays in Today.
+func TestStatsDueForecastCountsBuriedNewCardOnce(t *testing.T) {
+	cases := []struct {
+		name      string
+		state     string
+		dueAt     time.Time
+		wantToday int64
+		wantNew   int64
+	}{
+		{name: "new card buried until the next day start", state: "new", dueAt: time.Date(2026, 10, 3, 4, 0, 0, 0, time.UTC), wantToday: 0, wantNew: 1},
+		{name: "buried new card whose day has passed", state: "new", dueAt: statsNow.Add(-48 * time.Hour), wantToday: 0, wantNew: 1},
+		{name: "learning card due later today", state: "learning", dueAt: time.Date(2026, 10, 3, 3, 0, 0, 0, time.UTC), wantToday: 1, wantNew: 0},
+	}
+	for _, tc := range cases {
+		for driver, db := range testDatabases(t) {
+			t.Run(driver+"/"+tc.name, func(t *testing.T) {
+				seedStatsFixture(t, db)
+				ctx := context.Background()
+				before, err := NewStatsStore(db).DueForecast(ctx, 1, 0, statsNow, time.UTC, 4)
+				if err != nil {
+					t.Fatalf("DueForecast() before error = %v", err)
+				}
+				deck := seedForeignDeck(t, db, 1, "Own deck", 1)
+				var card Card
+				if err := db.Where("note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deck).First(&card).Error; err != nil {
+					t.Fatalf("load card: %v", err)
+				}
+				setState(t, db, card.ID, tc.state, tc.dueAt, 5)
+				after, err := NewStatsStore(db).DueForecast(ctx, 1, 0, statsNow, time.UTC, 4)
+				if err != nil {
+					t.Fatalf("DueForecast() after error = %v", err)
+				}
+				if dt, dn := after.Today-before.Today, after.New-before.New; dt != tc.wantToday || dn != tc.wantNew {
+					t.Errorf("adding the card moved today by %d and new by %d, want %d and %d", dt, dn, tc.wantToday, tc.wantNew)
+				}
+			})
+		}
 	}
 }
 
@@ -283,7 +325,8 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			fx := seedStatsFixture(t, db)
-			got, err := NewStatsStore(db).DeckBreakdown(context.Background(), 1, statsNow)
+			queue := map[uint64]DeckQueueCounts{fx.deckID: {New: 3, Review: 2}}
+			got, err := NewStatsStore(db).DeckBreakdown(context.Background(), 1, queue)
 			if err != nil {
 				t.Fatalf("DeckBreakdown() error = %v", err)
 			}
@@ -291,7 +334,7 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 				t.Fatalf("DeckBreakdown() = %+v, want one row for deck %d", got, fx.deckID)
 			}
 			// The retention denominator/numerator use the true retention definition: only due reviews with state_before=Review count, while the review volume still counts everything.
-			var wantReviews, wantRetTotal, wantPassed, wantDue, wantElapsed int64
+			var wantReviews, wantRetTotal, wantPassed, wantElapsed int64
 			db.Raw(`SELECT COUNT(*),
 				COALESCE(SUM(CASE WHEN r.state_before = 2 AND r.stability IS NOT NULL THEN 1 ELSE 0 END), 0),
 				COALESCE(SUM(CASE WHEN r.state_before = 2 AND r.stability IS NOT NULL AND r.rating <> 1 THEN 1 ELSE 0 END), 0),
@@ -302,19 +345,16 @@ func TestStatsDeckBreakdownMatchesHandSQL(t *testing.T) {
 				WHERE r.user_id = ?
 				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))`,
 				1, 1, 1).Row().Scan(&wantReviews, &wantRetTotal, &wantPassed, &wantElapsed)
-			db.Raw(`SELECT COUNT(*) FROM cards c
-				JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
-				LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
-				WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
-				  AND n.deck_id IN (SELECT id FROM decks WHERE owner_user_id = ? OR id IN (SELECT deck_id FROM deck_grants WHERE user_id = ?))
-				  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`,
-				1, 1, 1, statsNow).Scan(&wantDue)
 			row := got[0]
-			if row.Reviews != wantReviews || row.RetentionTotal != wantRetTotal || row.Passed != wantPassed || row.ElapsedMS != wantElapsed || row.DueCount != wantDue {
-				t.Errorf("DeckBreakdown() = %+v, hand SQL = reviews %d retention total %d passed %d elapsed %d due %d", row, wantReviews, wantRetTotal, wantPassed, wantElapsed, wantDue)
+			if row.Reviews != wantReviews || row.RetentionTotal != wantRetTotal || row.Passed != wantPassed || row.ElapsedMS != wantElapsed {
+				t.Errorf("DeckBreakdown() = %+v, hand SQL = reviews %d retention total %d passed %d elapsed %d", row, wantReviews, wantRetTotal, wantPassed, wantElapsed)
 			}
-			if wantReviews != 5 || wantRetTotal != 4 || wantPassed != 3 || wantDue != 2 {
-				t.Errorf("fixture drifted: hand reviews/retention total/passed/due = %d/%d/%d/%d, want 5/4/3/2", wantReviews, wantRetTotal, wantPassed, wantDue)
+			// The queue counts are passed through untouched: the stats page shows what /review serves, not a count of its own.
+			if row.Review != 2 || row.New != 3 {
+				t.Errorf("DeckBreakdown() queue counts = review %d new %d, want the passed 2 and 3", row.Review, row.New)
+			}
+			if wantReviews != 5 || wantRetTotal != 4 || wantPassed != 3 {
+				t.Errorf("fixture drifted: hand reviews/retention total/passed = %d/%d/%d, want 5/4/3", wantReviews, wantRetTotal, wantPassed)
 			}
 			if row.Retention != 0.75 {
 				t.Errorf("DeckBreakdown() retention = %v, want 0.75 (3 of 4 due reviews)", row.Retention)
@@ -551,8 +591,12 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 				t.Fatalf("delete grant: %v", err)
 			}
 
-			// Deck dimension: only their own deck, and the due volume is right.
-			got, err := NewStatsStore(db).DeckBreakdown(ctx, 1, statsNow)
+			// Deck dimension: only their own deck. The queue map deliberately names the invisible decks as well:
+			// a caller mistake there must still not leak another user's deck into the table.
+			queue := map[uint64]DeckQueueCounts{
+				fx.deckID: {Review: 2}, foreignOne: {Review: 1}, foreignTwo: {New: 1}, revoked: {Review: 2},
+			}
+			got, err := NewStatsStore(db).DeckBreakdown(ctx, 1, queue)
 			if err != nil {
 				t.Fatalf("DeckBreakdown() error = %v", err)
 			}
@@ -566,8 +610,8 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 					t.Errorf("DeckBreakdown() leaked deck %d (%q): not visible to the user", row.DeckID, row.Name)
 					continue
 				}
-				if row.DueCount != want {
-					t.Errorf("DeckBreakdown() deck %d due = %d, want %d", row.DeckID, row.DueCount, want)
+				if row.Review != want {
+					t.Errorf("DeckBreakdown() deck %d review = %d, want %d", row.DeckID, row.Review, want)
 				}
 			}
 			// Named explicitly: not a single card of someone else's deck may appear (the direct symptom of the defect).
@@ -576,13 +620,13 @@ func TestStatsScopesToVisibleDecks(t *testing.T) {
 					t.Errorf("DeckBreakdown() leaked another user's deck %d (%q)", row.DeckID, row.Name)
 				}
 			}
-			// Due forecast: new cards not yet due only count visible decks (the fixture's own 1).
+			// Due forecast: new cards only count visible decks (the fixture's own 1).
 			due, err := NewStatsStore(db).DueForecast(ctx, 1, 0, statsNow, time.UTC, 4)
 			if err != nil {
 				t.Fatalf("DueForecast() error = %v", err)
 			}
-			if due.NewNotDue != 1 {
-				t.Errorf("DueForecast().NewNotDue = %d, want 1 (own cards only)", due.NewNotDue)
+			if due.New != 1 {
+				t.Errorf("DueForecast().New = %d, want 1 (own cards only)", due.New)
 			}
 			// User 1 has two due state rows in the revoked-grant deck: without the filter this would become 3.
 			if due.Today != 1 {
@@ -811,7 +855,7 @@ func TestStatsTrueRetentionIgnoresLearningSteps(t *testing.T) {
 						t.Errorf("RetentionByStability() = %d/%d/%v, want %d/%d/%v", ret.Total, ret.Passed, ret.Rate, tc.wantTotal, tc.wantPass, tc.wantRate)
 					}
 
-					decks, err := st.DeckBreakdown(ctx, 1, statsNow)
+					decks, err := st.DeckBreakdown(ctx, 1, nil)
 					if err != nil {
 						t.Fatalf("DeckBreakdown() error = %v", err)
 					}

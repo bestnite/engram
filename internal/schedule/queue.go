@@ -149,11 +149,6 @@ type QueueItem struct {
 	Kind           QueueKind
 }
 
-// DeckQueueCounts is the queue composition for a single deck: New is the number of new cards that can still be introduced today,
-// Review is the number of due cards available today (due learning/relearning cards + review cards limited by reviews_per_day).
-// The two added together equal the number of cards actually available after entering that deck, which is exactly what those two numbers mean on the list page.
-type DeckQueueCounts struct{ New, Review int }
-
 // QueueBuilder constructs the review queue from card_states / reviews.
 type QueueBuilder struct {
 	db        *gorm.DB
@@ -287,7 +282,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 func (b *QueueBuilder) learningAhead(ctx context.Context, userID uint64, from, until time.Time, deckIDs []uint64, tags []string) ([]QueueItem, error) {
 	var rows []stateRow
 	err := b.baseStateQuery(ctx, userID, deckIDs, tags).
-		Where("cs.state IN ?", []string{StateLearning.String(), StateRelearning.String()}).
+		Where("cs.state IN ?", []string{store.CardStateLearning, store.CardStateRelearning}).
 		Where("cs.due_at > ? AND cs.due_at <= ?", from, until).
 		Order("cs.due_at ASC, cs.card_id ASC").
 		Scan(&rows).Error
@@ -319,14 +314,14 @@ func queueShuffleSeed(userID uint64, day string) int64 {
 // cards + due review cards limited by reviews_per_day. The total number of cards available after entering that deck is the sum of these two
 // (Build returns cards in batches of at most BatchSize and fetches the next batch when drained, so this is **not** truncated by the batch size).
 //
-// It shares the same set of filter conditions with Build (stateFrom / learningDueWhere / reviewDueWhere / newCardsFrom)
+// It shares the same set of filter conditions with Build (stateFrom / store.WhereLearningDue / store.WhereReviewDue / newCardsFrom)
 // and the same allowance formula (deckBudget), only replacing row fetching with a COUNT grouped by deck: the list page does not need the cards themselves,
 // and an unlimited deck will not pull every row into memory either.
 //
 // opts only reads Now, Location/Timezone and DayCutoffHour: "today's usage" is counted by the user's own review day,
 // and must match the semantics written into reviews.review_day at grading time. An empty deckIDs resolves to the user's default study scope:
 // the visible decks minus the ones the user paused, the same set as the whole-library review queue.
-func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []uint64, opts QueueOptions) (map[uint64]DeckQueueCounts, error) {
+func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []uint64, opts QueueOptions) (map[uint64]store.DeckQueueCounts, error) {
 	if userID == 0 {
 		return nil, errors.New("schedule: deck counts: user id is required")
 	}
@@ -342,7 +337,7 @@ func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[uint64]DeckQueueCounts, len(scope))
+	out := make(map[uint64]store.DeckQueueCounts, len(scope))
 	if len(scope) == 0 {
 		return out, nil
 	}
@@ -351,11 +346,11 @@ func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []
 		ids = append(ids, d.id)
 	}
 
-	learning, err := countByDeck(learningDueWhere(b.stateFrom(ctx, userID, ids, nil), now))
+	learning, err := countByDeck(store.WhereLearningDue(b.stateFrom(ctx, userID, ids, nil), now))
 	if err != nil {
 		return nil, fmt.Errorf("schedule: count learning cards: %w", err)
 	}
-	reviews, err := countByDeck(reviewDueWhere(b.stateFrom(ctx, userID, ids, nil), now))
+	reviews, err := countByDeck(store.WhereReviewDue(b.stateFrom(ctx, userID, ids, nil), now))
 	if err != nil {
 		return nil, fmt.Errorf("schedule: count due reviews: %w", err)
 	}
@@ -364,12 +359,30 @@ func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []
 		return nil, fmt.Errorf("schedule: count new cards: %w", err)
 	}
 	for _, d := range scope {
-		out[d.id] = DeckQueueCounts{
+		out[d.id] = store.DeckQueueCounts{
 			New:    capCount(fresh[d.id], d.newLeft),
 			Review: learning[d.id] + capCount(reviews[d.id], d.reviewLeft),
 		}
 	}
 	return out, nil
+}
+
+// DueNow returns how many due cards userID can review right now in their default study scope (the active decks): the
+// Review half of DeckCounts summed over those decks, so learning cards plus review cards within each deck's reviews_per_day.
+// It is the single "due" number shown by the home summary, the reminder mail and the weekly digest, so each of them
+// announces exactly the cards /review serves.
+//
+// opts is read like DeckCounts reads it: Now, Location/Timezone and DayCutoffHour.
+func (b *QueueBuilder) DueNow(ctx context.Context, userID uint64, opts QueueOptions) (int64, error) {
+	counts, err := b.DeckCounts(ctx, userID, nil, opts)
+	if err != nil {
+		return 0, err
+	}
+	var due int64
+	for _, c := range counts {
+		due += int64(c.Review)
+	}
+	return due, nil
 }
 
 // capCount truncates the available count to the remaining allowance; no truncation when the allowance is deckUnlimited.
@@ -685,18 +698,11 @@ func (b *QueueBuilder) countUsage(ctx context.Context, userID uint64, day string
 	return out, nil
 }
 
-// stateFrom is the FROM and filters shared by learning and review cards: only cards that are neither soft-deleted nor suspended,
-// joined to notes that are not soft-deleted (consistent with CardStore's visibility rules). It carries no SELECT;
-// row fetching (baseStateQuery) and counting (countByDeck) each add their own.
-// deckIDs is the already-resolved scope set and is always non-empty (an empty set returns early in the caller); empty tags mean no tag filtering.
+// stateFrom is the FROM and filters shared by learning and review cards: the user's live, unsuspended state rows from
+// store.UserCardStates, narrowed by tags. It carries no SELECT; row fetching (baseStateQuery) and counting (countByDeck)
+// each add their own. Empty tags mean no tag filtering.
 func (b *QueueBuilder) stateFrom(ctx context.Context, userID uint64, deckIDs []uint64, tags []string) *gorm.DB {
-	q := b.db.WithContext(ctx).Table("card_states AS cs").
-		Joins("JOIN cards AS cards ON cards.id = cs.card_id AND cards.deleted_at IS NULL").
-		Joins("JOIN notes AS notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
-		Where("cs.user_id = ?", userID).
-		Where("cs.suspended_at IS NULL").
-		Where("notes.deck_id IN ?", deckIDs)
-	return store.WhereNoteTagsAny(q, tags)
+	return store.WhereNoteTagsAny(store.UserCardStates(b.db.WithContext(ctx), userID, deckIDs), tags)
 }
 
 // baseStateQuery adds the columns needed for row fetching on top of stateFrom.
@@ -707,22 +713,10 @@ func (b *QueueBuilder) baseStateQuery(ctx context.Context, userID uint64, deckID
 			"cs.difficulty AS difficulty, cs.last_review_at AS last_review_at")
 }
 
-// learningDueWhere restricts to due cards in the learning/relearning phase.
-func learningDueWhere(q *gorm.DB, now time.Time) *gorm.DB {
-	return q.Where("cs.state IN ?", []string{StateLearning.String(), StateRelearning.String()}).
-		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now)
-}
-
-// reviewDueWhere restricts to due cards in the review phase.
-func reviewDueWhere(q *gorm.DB, now time.Time) *gorm.DB {
-	return q.Where("cs.state = ?", StateReview.String()).
-		Where("cs.due_at IS NOT NULL AND cs.due_at <= ?", now)
-}
-
 // learningDue fetches due cards in the learning/relearning phase, in ascending due time.
 func (b *QueueBuilder) learningDue(ctx context.Context, userID uint64, now time.Time, deckIDs []uint64, tags []string) ([]QueueItem, error) {
 	var rows []stateRow
-	err := learningDueWhere(b.baseStateQuery(ctx, userID, deckIDs, tags), now).
+	err := store.WhereLearningDue(b.baseStateQuery(ctx, userID, deckIDs, tags), now).
 		Order("cs.due_at ASC, cs.card_id ASC").
 		Scan(&rows).Error
 	if err != nil {
@@ -735,7 +729,7 @@ func (b *QueueBuilder) learningDue(ctx context.Context, userID uint64, now time.
 // Fetching deck by deck is how each deck's own reviews_per_day lands in the SQL LIMIT; the global sort after merging is up to the caller.
 func (b *QueueBuilder) reviewDueDeck(ctx context.Context, userID uint64, now time.Time, deckID uint64, tags []string, limit int) ([]dueReview, error) {
 	var rows []stateRow
-	err := reviewDueWhere(b.baseStateQuery(ctx, userID, []uint64{deckID}, tags), now).
+	err := store.WhereReviewDue(b.baseStateQuery(ctx, userID, []uint64{deckID}, tags), now).
 		Order("cs.due_at ASC, cs.card_id ASC").
 		Limit(limit).
 		Scan(&rows).Error
@@ -799,7 +793,7 @@ func (o *newCardOrder) sortKeySQL() string {
 func (b *QueueBuilder) newCardsDeck(ctx context.Context, userID uint64, deckID uint64, tags []string, limit int, now time.Time, order *newCardOrder) ([]QueueItem, error) {
 	q := b.newCardsFrom(ctx, userID, []uint64{deckID}, tags, now).
 		Select("cards.id AS card_id, cards.note_id AS note_id, notes.deck_id AS deck_id, " +
-			"COALESCE(cs.state, 'new') AS state, cs.due_at AS due_at, cs.stability AS stability, " +
+			"COALESCE(cs.state, '" + store.CardStateNew + "') AS state, cs.due_at AS due_at, cs.stability AS stability, " +
 			"cs.difficulty AS difficulty, cs.last_review_at AS last_review_at")
 	if order != nil {
 		// It must be wrapped in clause.OrderBy: GORM's Order silently ignores a bare clause.Expr — no error, no sorting.
@@ -817,16 +811,10 @@ func (b *QueueBuilder) newCardsDeck(ctx context.Context, userID uint64, deckID u
 	return rowsToItems(rows, QueueNew, now)
 }
 
-// newCardsFrom is the FROM and filters for new cards (shared by row fetching and counting): cards whose state is new, including those with no
-// card_states row; buried new cards (due_at in the future) are excluded. Empty tags mean no tag filtering.
+// newCardsFrom is the FROM and filters for new cards (shared by row fetching and counting): store.UserNewCards without the
+// ones buried until a later review day, narrowed by tags. Empty tags mean no tag filtering.
 func (b *QueueBuilder) newCardsFrom(ctx context.Context, userID uint64, deckIDs []uint64, tags []string, now time.Time) *gorm.DB {
-	q := b.db.WithContext(ctx).Table("cards AS cards").
-		Joins("JOIN notes AS notes ON notes.id = cards.note_id AND notes.deleted_at IS NULL").
-		Joins("LEFT JOIN card_states AS cs ON cs.card_id = cards.id AND cs.user_id = ?", userID).
-		Where("cards.deleted_at IS NULL AND cs.suspended_at IS NULL").
-		Where("(cs.card_id IS NULL OR cs.state = ?)", StateNew.String()).
-		Where("(cs.due_at IS NULL OR cs.due_at <= ?)", now).
-		Where("notes.deck_id IN ?", deckIDs)
+	q := store.WhereNewAvailable(store.UserNewCards(b.db.WithContext(ctx), userID, deckIDs), now)
 	return store.WhereNoteTagsAny(q, tags)
 }
 

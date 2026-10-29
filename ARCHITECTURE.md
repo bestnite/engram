@@ -127,8 +127,8 @@ change.
   the owner and every member decide alone, and no `decks` column is involved. Visibility and
   the default study scope are two predicates in `internal/store`: `visibleDeckIDsQuery` (owned or
   granted) decides what a user can see, and `activeDeckIDsQuery` (visible minus paused) decides what
-  is studied when no deck is named — the whole-library queue, the summary `due`, the unfiltered due
-  forecast, and the weekly digest built on it. The reminder query applies the same exclusion.
+  is studied when no deck is named — the whole-library queue, the "due now" number, and the unfiltered
+  due forecast.
 - **Presets.** A preset holds the FSRS weights, desired retention, learning and relearning
   steps, and fuzz switch that the scheduler for a deck uses.
 - **Audit.** Security-relevant and settings-changing actions append rows to the audit log; the
@@ -137,6 +137,15 @@ change.
 ## 6. Scheduling
 
 - `internal/schedule` builds a go-fsrs scheduler per deck from the member's effective preset.
+- **Card predicates.** `internal/store/card_scope.go` is the only definition of which cards a user can
+  study (live and not suspended), which are due (learning or review state with `due_at` reached) and
+  which are new (no state row, or state new; a buried new card is still new, never due). The queue,
+  the deck list counts, deck progress, the due forecast, the health page and the reminder prefilter
+  all build on it.
+- **Due now.** `QueueBuilder.DueNow` sums the review half of `DeckCounts` over the active decks. It is
+  the only "due" number shown to a user outside a deck: the home summary (REST and MCP), the review
+  reminder mail and the weekly digest. The stats page's per-deck table shows `DeckCounts` too, so every
+  page agrees with what `/review` serves.
 - **Queue.** The queue builder selects due reviews and new cards for one or more decks and a tag
   filter, for the user's current review day. With no deck named it covers the user's active decks
   (`DeckStore.ActiveIDs`), so a paused deck only enters the queue when it is named.
@@ -146,11 +155,11 @@ change.
 - **Daily limits are goals, not caps.** After the daily new-card goal is met, a user can add
   another batch of new cards to one deck for the current review day. The extra amount is stored
   per deck, per user, per review day in `deck_daily_extras`, and `deckBudget` adds it to the new
-  card limit. It expires with the review day. REST (`/api/v1/decks/:id/extra-new`) and MCP
+  card limit. It expires with the review day. Review days themselves come from `internal/reviewday`. REST (`/api/v1/decks/:id/extra-new`) and MCP
   (`add_extra_new_cards`) share one service method.
 - **Deck progress.** `DeckProgress` in `internal/schedule/deck_progress.go` counts, per deck and
-  per user, the cards studied and the new cards left, independent of the daily budgets. A new card
-  follows the queue's rule: no state row, or state new. A suspended new card is not counted as
+  per user, the cards studied and the new cards left, independent of the daily budgets. The new
+  cards left are `store.UserNewCards`, the queue's own definition. A suspended new card is not counted as
   left; a suspended studied card still counts as studied. The SPA reads both numbers from the
   session-only `/api/v1/decks/queue-counts`, next to the daily budget counts.
 - **Interval preview.** The review screen shows the next interval for each rating. The preview

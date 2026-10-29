@@ -143,9 +143,6 @@ func TestReminderCandidatesOnlyReturnsDueActiveUsers(t *testing.T) {
 			if got[0].Email != "due@example.com" {
 				t.Errorf("candidate email = %q, want due@example.com", got[0].Email)
 			}
-			if got[0].DueCount != 1 {
-				t.Errorf("candidate due_count = %d, want 1", got[0].DueCount)
-			}
 			if got[0].DayCutoffHour == nil || *got[0].DayCutoffHour != 4 {
 				t.Errorf("candidate day_cutoff_hour = %d, want 4", got[0].DayCutoffHour)
 			}

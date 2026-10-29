@@ -15,11 +15,12 @@ import (
 // named outright rather than argued over.
 //
 // Relationship to stats_test.go: those cases cross-check the aggregate functions against "one hand-written SQL", but the expected values are still hard-coded
-// in the test; the retro check is a second implementation reusable at runtime -- it likewise starts from the raw tables but goes through none of
-// StatsStore's aggregate functions, so it can be replayed on a real database (a cmd tool or `go test -run Retro`).
+// in the test; the retro check is a deliberate second implementation that lives only in tests -- it likewise starts from the raw tables but goes through
+// none of StatsStore's aggregate functions or the shared predicates in card_scope.go, so a drift in either shows up as a named difference.
 //
-// Coverage: review volume, due volume (new cards not yet due included), retention (total/passed), time invested, streak,
-// learning curve (newly introduced/review totals), deck dimension (review count/due count/total elapsed time).
+// Coverage: review volume, due forecast (today bucket and unstudied new cards), retention (total/passed), time invested, streak,
+// learning curve (newly introduced/review totals), deck dimension (review count/total elapsed time). The per-deck due counts are
+// not covered here: they come from the review queue (schedule.QueueBuilder.DeckCounts), which has its own tests.
 // Not covered: the tag dimension and the grading-source distribution -- their definition depends on decoding tags_json and grouping by arbitrary source,
 // which stats_test.go's hand-written SQL cases already cover, so it is not duplicated here.
 
@@ -30,8 +31,8 @@ type PageNumbers struct {
 	Review7d    int64
 	Review30d   int64
 
-	DueToday     int64
-	DueNewNotDue int64
+	DueToday int64
+	DueNew   int64
 
 	RetentionTotal  int64
 	RetentionPassed int64
@@ -46,7 +47,6 @@ type PageNumbers struct {
 	CurveReview int64
 
 	DeckReviews   int64
-	DeckDue       int64
 	DeckElapsedMS int64
 }
 
@@ -79,7 +79,7 @@ func PageNumbersFromStats(ctx context.Context, db *gorm.DB, userID uint64, now t
 	if err != nil {
 		return PageNumbers{}, err
 	}
-	decks, err := s.DeckBreakdown(ctx, userID, now)
+	decks, err := s.DeckBreakdown(ctx, userID, nil)
 	if err != nil {
 		return PageNumbers{}, err
 	}
@@ -89,7 +89,7 @@ func PageNumbersFromStats(ctx context.Context, db *gorm.DB, userID uint64, now t
 		Review7d:        vol.Last7Days,
 		Review30d:       vol.Last30Days,
 		DueToday:        due.Today,
-		DueNewNotDue:    due.NewNotDue,
+		DueNew:          due.New,
 		RetentionTotal:  ret.Total,
 		RetentionPassed: ret.Passed,
 		TimeTotalMS:     tm.TotalMS,
@@ -103,7 +103,6 @@ func PageNumbersFromStats(ctx context.Context, db *gorm.DB, userID uint64, now t
 	}
 	for _, d := range decks {
 		p.DeckReviews += d.Reviews
-		p.DeckDue += d.DueCount
 		p.DeckElapsedMS += d.ElapsedMS
 	}
 	return p, nil
@@ -136,13 +135,14 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 
 	// Due and new: the day boundary matches the queue (the review day starts at 04:00, local).
 	// Both are scoped to the default study scope, the same predicate as StatsStore.DueForecast with no deck (activeDeckIDsQuery):
-	// without the visibility part, cards in someone else's private deck with no state row would be counted as "new cards not yet due",
-	// and without the pause part, a paused deck would still feed the forecast.
+	// without the visibility part, cards in someone else's private deck with no state row would be counted as new cards,
+	// and without the pause part, a paused deck would still feed the forecast. A new card is never due, buried or not,
+	// so the today bucket counts only rows that have left the new state and the new count takes every new card.
 	e1 := reviewday.Start(now, loc, cutoffHour).Add(24 * time.Hour)
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(*) FROM card_states cs
 		JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
-		WHERE cs.user_id = ? AND n.deck_id IN (?) AND cs.due_at IS NOT NULL AND cs.due_at <= ?`,
+		WHERE cs.user_id = ? AND n.deck_id IN (?) AND cs.state <> 'new' AND cs.due_at IS NOT NULL AND cs.due_at <= ?`,
 		userID, activeDeckIDsQuery(db, userID), e1).
 		Row().Scan(&p.DueToday); err != nil {
 		return p, fmt.Errorf("retro check: due today: %w", err)
@@ -152,10 +152,10 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
 		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		  AND n.deck_id IN (?)
-		  AND (cs.card_id IS NULL OR (cs.state = 'new' AND (cs.due_at IS NULL OR cs.due_at > ?)))`,
-		userID, activeDeckIDsQuery(db, userID), now.UTC()).
-		Row().Scan(&p.DueNewNotDue); err != nil {
-		return p, fmt.Errorf("retro check: new not due: %w", err)
+		  AND (cs.card_id IS NULL OR cs.state = 'new')`,
+		userID, activeDeckIDsQuery(db, userID)).
+		Row().Scan(&p.DueNew); err != nil {
+		return p, fmt.Errorf("retro check: new cards: %w", err)
 	}
 
 	// Retention: the share of due reviews (state_before=Review) rated something other than Again, counting only rows with a non-null stability.
@@ -185,17 +185,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 		return p, fmt.Errorf("retro check: learning curve: %w", err)
 	}
 
-	// Deck-dimension totals. Both are likewise scoped to visible decks (matching StatsStore.DeckBreakdown).
-	if err := db.WithContext(ctx).Raw(`SELECT COUNT(c.id) FROM cards c
-		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
-		LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ?
-		WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL
-		  AND n.deck_id IN (?)
-		  AND (cs.card_id IS NULL OR cs.state = 'new' OR cs.due_at IS NULL OR cs.due_at <= ?)`,
-		userID, visibleDeckIDsQuery(db, userID), now.UTC()).
-		Row().Scan(&p.DeckDue); err != nil {
-		return p, fmt.Errorf("retro check: deck due: %w", err)
-	}
+	// Deck-dimension totals, likewise scoped to visible decks (matching StatsStore.DeckBreakdown).
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(r.id), COALESCE(SUM(r.elapsed_ms), 0)
 		FROM reviews r
 		JOIN cards c ON c.id = r.card_id AND c.deleted_at IS NULL
@@ -260,7 +250,7 @@ func DiffPageNumbers(page, raw PageNumbers) []string {
 	add("review_volume.last_7_days", page.Review7d, raw.Review7d)
 	add("review_volume.last_30_days", page.Review30d, raw.Review30d)
 	add("due_forecast.today", page.DueToday, raw.DueToday)
-	add("due_forecast.new_not_due", page.DueNewNotDue, raw.DueNewNotDue)
+	add("due_forecast.new", page.DueNew, raw.DueNew)
 	add("retention.total", page.RetentionTotal, raw.RetentionTotal)
 	add("retention.passed", page.RetentionPassed, raw.RetentionPassed)
 	add("time_spent.total_ms", page.TimeTotalMS, raw.TimeTotalMS)
@@ -270,7 +260,6 @@ func DiffPageNumbers(page, raw PageNumbers) []string {
 	add("learning_curve.new", page.CurveNew, raw.CurveNew)
 	add("learning_curve.review", page.CurveReview, raw.CurveReview)
 	add("deck_breakdown.reviews", page.DeckReviews, raw.DeckReviews)
-	add("deck_breakdown.due", page.DeckDue, raw.DeckDue)
 	add("deck_breakdown.elapsed_ms", page.DeckElapsedMS, raw.DeckElapsedMS)
 	return drift
 }

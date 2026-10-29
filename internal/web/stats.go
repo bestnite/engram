@@ -4,9 +4,9 @@ import "github.com/gin-gonic/gin"
 
 // registerStatsRoutes mounts the stats page.
 //
-// Every number on the page comes from the existing aggregate queries in internal/store; the handler writes no
-// stats SQL of its own. The reason: the retro check (store.RetroCheck) validates against exactly these queries, and once a handler
-// writes its own SQL, the page's numbers leave the verifiable path.
+// Every number on the page comes from the aggregate queries in internal/store and the queue counts in internal/schedule;
+// the handler writes no stats SQL of its own. The reason: the store tests' retro check recomputes exactly these queries from
+// the raw tables, and a handler with its own SQL would put the page's numbers outside that check.
 //
 // Skips when the dependencies are not wired, so M0-stage tests can still construct a Server.
 func (s *Server) registerStatsRoutes(router *gin.Engine) {

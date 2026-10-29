@@ -987,7 +987,7 @@ type StatsSummary struct {
 // The convention is deliberately asymmetric (2026-10-06 decision): decks/due/notes/cards count only currently visible
 // decks (the same store predicate as list_decks, the web list page and the review queue), and are 0 when the deck set is empty;
 // due is the review part of the default review queue (due learning/relearning cards + due review cards within each deck's
-// reviews_per_day), taken from schedule.QueueBuilder.DeckCounts: a hand-written count drifted from the queue and counted
+// reviews_per_day), taken from schedule.QueueBuilder.DueNow: a hand-written count drifted from the queue and counted
 // suspended cards and buried new cards that /review never shows, so the home page announced cards the review page did not have;
 // like the default queue it leaves out the decks the user paused, and new cards are not part of it;
 // reviews_today / reviews_total / retention keep the full history per user_id - reviews are the person's own record,
@@ -1003,20 +1003,13 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
 	}
 	resp := StatsSummary{Decks: len(deckIDs)}
-	// due follows the default review queue: an empty deck set resolves to the user's active decks, so the paused ones are
-	// left out while the deck, note and card counts keep them. DeckCounts needs no scheduler.
-	counts, err := schedule.NewQueueBuilder(a.db, a.decks, nil).DeckCounts(ctx, u.ID, nil, schedule.QueueOptions{
-		Now:           now,
-		Timezone:      u.Timezone,
-		DayCutoffHour: u.DayCutoffHour,
+	// due follows the default review queue, so the paused decks are left out while the deck, note and card counts keep them.
+	due, err := schedule.NewQueueBuilder(a.db, a.decks, nil).DueNow(ctx, u.ID, schedule.QueueOptions{
+		Now: now, Timezone: u.Timezone, DayCutoffHour: u.DayCutoffHour,
 	})
 	if err != nil {
 		a.logger.Error("count due cards failed", "user_id", u.ID, "error", err)
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
-	}
-	var due int64
-	for _, c := range counts {
-		due += int64(c.Review)
 	}
 
 	day := reviewday.Day(now, reviewday.Location(u.Timezone), reviewday.ResolveCutoff(u.DayCutoffHour))

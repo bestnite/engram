@@ -3,6 +3,7 @@ package reminder
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -273,5 +274,85 @@ func TestNoDueCardsNoReminder(t *testing.T) {
 	}
 	if got := enq.count(); got != 0 {
 		t.Fatalf("no due cards: enqueued %d, want 0", got)
+	}
+}
+
+// TestReminderAnnouncesOnlyWhatTheQueueServes pins the reminder to the review queue: the mail is sent only when
+// schedule.QueueBuilder.DueNow is above zero and carries that number. A card the queue would not serve today (paused deck,
+// suspended card, review cap reached, deck no longer visible) neither sends a mail nor consumes the day's ledger entry.
+func TestReminderAnnouncesOnlyWhatTheQueueServes(t *testing.T) {
+	clock := shanghaiAt(t, 20, 0)
+	cases := []struct {
+		name     string
+		setup    func(t *testing.T, db *gorm.DB, userID, deckID, cardID uint64)
+		wantSent bool
+	}{
+		{name: "due card in an active deck is announced", setup: func(*testing.T, *gorm.DB, uint64, uint64, uint64) {}, wantSent: true},
+		{name: "paused deck", wantSent: false, setup: func(t *testing.T, db *gorm.DB, userID, deckID, _ uint64) {
+			if _, err := store.NewDeckStore(db).SetPaused(context.Background(), userID, deckID, true, clock); err != nil {
+				t.Fatalf("SetPaused: %v", err)
+			}
+		}},
+		{name: "suspended card", wantSent: false, setup: func(t *testing.T, db *gorm.DB, userID, _, cardID uint64) {
+			if err := db.Model(&store.CardState{}).Where("card_id = ? AND user_id = ?", cardID, userID).
+				Update("suspended_at", clock).Error; err != nil {
+				t.Fatalf("suspend: %v", err)
+			}
+		}},
+		{name: "daily review cap already reached", wantSent: false, setup: func(t *testing.T, db *gorm.DB, userID, deckID, cardID uint64) {
+			if err := db.Model(&store.Deck{}).Where("id = ?", deckID).Update("reviews_per_day", 1).Error; err != nil {
+				t.Fatalf("set cap: %v", err)
+			}
+			stability := 5.0
+			if err := db.Create(&store.Review{CardID: cardID, UserID: userID, Rating: 3, GradeSource: "self",
+				ReviewedAt: clock.Add(-time.Hour), ReviewDay: "2026-06-01", StateBefore: 2, Stability: &stability}).Error; err != nil {
+				t.Fatalf("create review: %v", err)
+			}
+		}},
+		{name: "deck no longer visible", wantSent: false, setup: func(t *testing.T, db *gorm.DB, _, deckID, _ uint64) {
+			other := seedUserWithDueCard(t, db, "owner", "owner@example.com", "en", "UTC", 4, clock.Add(time.Hour))
+			if err := db.Model(&store.Deck{}).Where("id = ?", deckID).Update("owner_user_id", other).Error; err != nil {
+				t.Fatalf("hand deck over: %v", err)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newTestDB(t)
+			userID := seedUserWithDueCard(t, db, "gina", "gina@example.com", "en", "Asia/Shanghai", 4,
+				time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
+			enableReminder(t, db, userID)
+			var deck store.Deck
+			if err := db.Where("owner_user_id = ?", userID).Take(&deck).Error; err != nil {
+				t.Fatalf("load deck: %v", err)
+			}
+			var state store.CardState
+			if err := db.Where("user_id = ?", userID).Take(&state).Error; err != nil {
+				t.Fatalf("load state: %v", err)
+			}
+			tc.setup(t, db, userID, deck.ID, state.CardID)
+
+			enq := &fakeEnqueuer{configured: true}
+			r := newReminder(t, db, enq, func() time.Time { return clock })
+			if err := r.RunOnce(context.Background()); err != nil {
+				t.Fatalf("RunOnce: %v", err)
+			}
+			sent, err := store.HasReminderBeenSent(context.Background(), db, userID, "2026-06-01")
+			if err != nil {
+				t.Fatalf("HasReminderBeenSent: %v", err)
+			}
+			if !tc.wantSent {
+				if enq.count() != 0 || sent {
+					t.Fatalf("enqueued %d mails, ledger written %v; want no mail and no ledger entry", enq.count(), sent)
+				}
+				return
+			}
+			if enq.count() != 1 || !sent {
+				t.Fatalf("enqueued %d mails, ledger written %v; want one mail and a ledger entry", enq.count(), sent)
+			}
+			if body := enq.last().TextBody; !strings.Contains(body, "1") {
+				t.Errorf("mail body %q does not announce the one queued card", body)
+			}
+		})
 	}
 }

@@ -165,7 +165,7 @@
           detail.due.within_7_days,
           detail.due.within_30_days,
           detail.due.later,
-          detail.due.new_not_due,
+          detail.due.new,
         ])
       : 0
   );
@@ -270,7 +270,7 @@
               { key: 'stats.due.within7', value: detail.due.within_7_days },
               { key: 'stats.due.within30', value: detail.due.within_30_days },
               { key: 'stats.due.later', value: detail.due.later },
-              { key: 'stats.due.new_not_due', value: detail.due.new_not_due },
+              { key: 'stats.due.new', value: detail.due.new },
             ] as row}
               <li>
                 <div class="flex items-center justify-between text-[13px]">
@@ -387,7 +387,8 @@
                   <tr>
                     <th class="px-4 py-2.5 font-medium">{$t('stats.deck.col.name')}</th>
                     {#each [
-                      { key: 'stats.deck.col.due', help: 'help.stats.deck.due', id: 'due' },
+                      { key: 'stats.deck.col.review', help: 'help.stats.deck.review', id: 'review' },
+                      { key: 'stats.deck.col.new', help: 'help.stats.deck.new', id: 'new' },
                       { key: 'stats.deck.col.reviews', help: 'help.stats.deck.reviews', id: 'reviews' },
                       { key: 'stats.deck.col.retention', help: 'help.stats.deck.retention', id: 'retention' },
                       { key: 'stats.deck.col.elapsed', help: 'help.stats.deck.elapsed', id: 'elapsed' },
@@ -405,7 +406,8 @@
                   {#each detail.decks as deck}
                     <tr>
                       <td class="px-4 py-2.5 font-medium text-foreground">{deck.name}</td>
-                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.due.value', { count: formatNumber(deck.due_count) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.due.value', { count: formatNumber(deck.review) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.due.value', { count: formatNumber(deck.new) })}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.volume.value', { count: formatNumber(deck.reviews) })}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{rowRetention(deck.retention, deck.retention_total)}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{formatDuration(deck.elapsed_ms)}</td>
