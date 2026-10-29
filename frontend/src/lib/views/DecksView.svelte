@@ -645,7 +645,8 @@
   <div class="mt-5 flex items-center justify-end gap-2">
     <Button type="button" variant="outline" size="lg" disabled={batchDeleting} onclick={closeBatchDelete}>{$t('note_edit.cancel')}</Button>
     <Button type="button" testId="decks-batch-delete-confirm" variant="danger" size="lg" loading={batchDeleting} onclick={handleBatchDelete}>
-      {$t('decks.bulk_delete.confirm_btn')}
+      <Trash2 class="size-4" aria-hidden="true" />
+      <span>{$t('decks.bulk_delete.confirm_btn')}</span>
     </Button>
   </div>
 </Dialog>
@@ -741,7 +742,12 @@
           onclick={confirmDeckAction}
           testId={deckAction.kind === 'delete' ? 'deck-delete-confirm' : 'deck-leave-confirm'}
         >
-          {$t(deckAction.kind === 'delete' ? 'decks.delete.confirm_btn' : 'decks.leave.confirm_btn')}
+          {#if deckAction.kind === 'delete'}
+            <Trash2 class="size-4" aria-hidden="true" />
+          {:else}
+            <LogOut class="size-4" aria-hidden="true" />
+          {/if}
+          <span>{$t(deckAction.kind === 'delete' ? 'decks.delete.confirm_btn' : 'decks.leave.confirm_btn')}</span>
         </Button>
       </div>
   </Dialog>

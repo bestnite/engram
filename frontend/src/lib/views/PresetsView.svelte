@@ -742,7 +742,8 @@
           {$t('presets.delete.cancel_btn')}
         </Button>
         <Button variant="danger" size="lg" loading={deletingPreset} onclick={confirmDeletePreset} testId="preset-delete-confirm">
-          {$t('presets.delete.confirm_btn')}
+          <Trash2 class="size-4" aria-hidden="true" />
+          <span>{$t('presets.delete.confirm_btn')}</span>
         </Button>
       </div>
   </Dialog>

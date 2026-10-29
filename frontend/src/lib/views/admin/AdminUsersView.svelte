@@ -16,7 +16,7 @@
   import { listClasses, menuClasses } from '../../components/ui/variants';
   import { toast } from '../../components/ui/toast';
   import { DropdownMenu } from 'bits-ui';
-  import { Ban, CheckCircle, Copy, KeyRound, LogOut, MoreHorizontal, Plus, Search, Shield, Trash2, User, X } from '@lucide/svelte';
+  import { Ban, CheckCircle, Copy, KeyRound, LogOut, MoreHorizontal, Plus, RefreshCw, Search, Shield, Trash2, User, X } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -246,7 +246,7 @@
   {:else if loadError}
     <div data-testid="admin-users-failed" class="py-16 text-center">
       <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="admin-users-retry" onclick={() => load(1)} variant="outline" size="lg" class="mt-4">{$t('common.retry')}</Button>
+      <Button type="button" testId="admin-users-retry" onclick={() => load(1)} variant="outline" size="lg" class="mt-4"><RefreshCw class="size-4" aria-hidden="true" /><span>{$t('common.retry')}</span></Button>
     </div>
   {:else if data}
     {@const view = data}

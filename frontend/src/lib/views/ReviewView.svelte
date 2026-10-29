@@ -15,6 +15,7 @@
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
   import HelpTip from '../components/ui/HelpTip.svelte';
+  import { RefreshCw } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { cardTypes, descriptionOf, loadCardTypes, type CardTypeCatalog } from '../card-types';
   import { withReturn } from '../return-to';
@@ -903,10 +904,10 @@
     {:else if error}
       <div class="text-center space-y-4 py-6" data-testid="review-error">
         <p class="text-rose-700 dark:text-rose-300 font-medium">{error instanceof ApiClientError ? $t('error.' + (error.isConflict ? 'conflict' : error.isUnauthorized ? 'unauthorized' : error.isForbidden ? 'forbidden' : error.isNetworkError ? 'network' : 'unknown')) : $t('review.failed')}</p>
-        <button class="inline-flex items-center gap-2 px-4 py-2 min-h-10 rounded-lg border border-input hover:bg-muted text-sm font-medium transition-colors cursor-pointer" onclick={() => void loadQueue()}>
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></svg>
+        <Button variant="outline" size="lg" testId="review-retry" onclick={() => void loadQueue()}>
+          <RefreshCw class="size-4" aria-hidden="true" />
           <span>{$t('common.retry')}</span>
-        </button>
+        </Button>
       </div>
     {:else if !current && extraLoading}
       <Skeleton testId="review-extra-loading" label={$t('review.loading')} lines={2} />

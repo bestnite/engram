@@ -718,7 +718,8 @@
           loading={deleting}
           onclick={() => void deleteCurrent()}
         >
-          {$t('notes.delete')}
+          <Trash2 class="size-4" aria-hidden="true" />
+          <span>{$t('notes.delete')}</span>
         </Button>
       </div>
     </Dialog>

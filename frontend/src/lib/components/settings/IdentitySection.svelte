@@ -9,6 +9,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import { toast } from '../ui/toast';
   import { askConfirm } from '../ui/confirm';
+  import { RefreshCw } from '@lucide/svelte';
 
   /**
    * Linked sign-in identities (security page): lists the OIDC identities bound to the account, starts a new link, and removes one.
@@ -150,7 +151,8 @@
     {:else if loadError}
       <p role="alert" data-testid="identities-failed" class="text-sm text-warning">{$t('settings.identity.load_failed')}</p>
       <Button type="button" testId="identities-retry" variant="outline" size="sm" class="mt-3" onclick={() => load()}>
-        {$t('common.retry')}
+        <RefreshCw class="size-4" aria-hidden="true" />
+        <span>{$t('common.retry')}</span>
       </Button>
     {:else if data}
       {#if data.identities.length === 0}

@@ -12,6 +12,7 @@
   import DeckProgressBar from '../components/DeckProgressBar.svelte';
   import { listClasses } from '../components/ui/variants';
   import { cn } from '../components/ui/utils';
+  import { RefreshCw } from '@lucide/svelte';
 
   interface Props {
     client?: ApiClient;
@@ -113,7 +114,8 @@
       </p>
       <div class="mt-4">
         <Button testId="home-retry" type="button" onclick={loadHomeData} variant="outline" size="lg">
-          {$t('home.retry')}
+          <RefreshCw class="size-4" aria-hidden="true" />
+          <span>{$t('home.retry')}</span>
         </Button>
       </div>
     </div>

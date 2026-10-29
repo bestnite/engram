@@ -12,7 +12,7 @@
   import Badge from '../../components/ui/Badge.svelte';
   import { listClasses } from '../../components/ui/variants';
   import { toast } from '../../components/ui/toast';
-  import { Link2, X } from '@lucide/svelte';
+  import { Link2, RefreshCw, X } from '@lucide/svelte';
   import Select from '../../components/ui/Select.svelte';
   import Checkbox from '../../components/ui/Checkbox.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
@@ -182,7 +182,7 @@
   {:else if loadError}
     <div data-testid="admin-registration-failed" class="py-16 text-center">
       <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="admin-registration-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4">{$t('common.retry')}</Button>
+      <Button type="button" testId="admin-registration-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4"><RefreshCw class="size-4" aria-hidden="true" /><span>{$t('common.retry')}</span></Button>
     </div>
   {:else if data}
     {@const view = data}

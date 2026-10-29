@@ -8,6 +8,7 @@
   import Button from '../components/ui/Button.svelte';
   import { toast } from '../components/ui/toast';
   import Badge from '../components/ui/Badge.svelte';
+  import { RefreshCw } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -170,7 +171,8 @@
     <div data-testid="totp-failed" class="py-16 text-center">
       <p role="alert" class="text-base font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="totp-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4">
-        {$t('common.retry')}
+        <RefreshCw class="size-4" aria-hidden="true" />
+        <span>{$t('common.retry')}</span>
       </Button>
     </div>
   {:else if status}

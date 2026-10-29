@@ -12,6 +12,7 @@
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import { draftFor } from '../../mail-template-draft';
+  import { RefreshCw } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -192,7 +193,8 @@
         {$t(loadErrorKey())}
       </p>
       <Button variant="outline" size="lg" testId="admin-mail-templates-retry" class="mt-4" onclick={load}>
-        {$t('common.retry')}
+        <RefreshCw class="size-4" aria-hidden="true" />
+        <span>{$t('common.retry')}</span>
       </Button>
     </div>
   {:else if data}

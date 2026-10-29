@@ -13,6 +13,7 @@
   import Checkbox from '../../components/ui/Checkbox.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
+  import { RefreshCw } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -186,7 +187,7 @@
   {:else if loadError}
     <div data-testid="admin-oidc-failed" class="py-16 text-center">
       <p role="alert" class="font-medium text-foreground">{$t(loadErrorKey())}</p>
-      <Button type="button" testId="admin-oidc-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4">{$t('common.retry')}</Button>
+      <Button type="button" testId="admin-oidc-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4"><RefreshCw class="size-4" aria-hidden="true" /><span>{$t('common.retry')}</span></Button>
     </div>
   {:else if data}
     {@const view = data}

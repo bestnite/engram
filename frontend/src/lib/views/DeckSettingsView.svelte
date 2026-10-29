@@ -11,6 +11,7 @@
   import { toast } from '../components/ui/toast';
   import Page from '../components/ui/Page.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
+  import { RefreshCw } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -155,7 +156,8 @@
     >
       <p role="alert" class="text-base font-medium text-foreground">{$t(loadErrorKey())}</p>
       <Button type="button" testId="deck-settings-retry" onclick={() => load()} variant="outline" size="lg" class="mt-4">
-        {$t('common.retry')}
+        <RefreshCw class="size-4" aria-hidden="true" />
+        <span>{$t('common.retry')}</span>
       </Button>
     </div>
   {:else if settings}

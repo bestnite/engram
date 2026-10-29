@@ -22,7 +22,7 @@
   import InlineEdit from '../components/InlineEdit.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
-  import { CirclePause, CirclePlay, Copy, Download, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Search, Tags, Trash2 } from '@lucide/svelte';
+  import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, Tags, Trash2 } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { backField, cardTypes, frontField, kindOrder, loadCardTypes } from '../card-types';
 
@@ -692,7 +692,8 @@
           {/if}
         </p>
         <Button testId="notes-retry" type="button" onclick={() => loadData(page)} variant="outline" size="lg">
-          {$t('notes.retry')}
+          <RefreshCw class="size-4" aria-hidden="true" />
+          <span>{$t('notes.retry')}</span>
         </Button>
       </div>
     {:else if notes.length === 0}
@@ -835,10 +836,12 @@
           <div data-testid="notes-pagination" class="flex items-center gap-2">
             <span data-testid="notes-page-info" class="tabular-nums">{$t('notes.page_info', { page, totalPages })}</span>
             <Button testId="notes-prev-page" type="button" disabled={page <= 1} onclick={handlePrevPage} variant="outline" size="sm">
-              {$t('notes.prev_page')}
+              <ChevronLeft class="size-4" aria-hidden="true" />
+              <span>{$t('notes.prev_page')}</span>
             </Button>
             <Button testId="notes-next-page" type="button" disabled={page >= totalPages} onclick={handleNextPage} variant="outline" size="sm">
-              {$t('notes.next_page')}
+              <span>{$t('notes.next_page')}</span>
+              <ChevronRight class="size-4" aria-hidden="true" />
             </Button>
           </div>
         {/if}
@@ -958,7 +961,8 @@
   <div class="mt-2 flex items-center justify-end gap-2">
     <Button type="button" testId="bulk-cancel-delete" variant="outline" size="lg" disabled={bulkBusy} onclick={() => (confirmingBulkDelete = false)}>{$t('note_edit.cancel')}</Button>
     <Button type="button" testId="bulk-confirm-delete" variant="danger" size="lg" loading={bulkPending === 'delete'} disabled={bulkBusy} onclick={() => runBulk('delete')}>
-      {$t('notes.bulk_delete')}
+      <Trash2 class="size-4" aria-hidden="true" />
+      <span>{$t('notes.bulk_delete')}</span>
     </Button>
   </div>
 </Dialog>
@@ -985,7 +989,8 @@
       loading={deletingNoteId !== null}
       onclick={() => noteToDelete && deleteNote(noteToDelete)}
     >
-      {$t('notes.delete')}
+      <Trash2 class="size-4" aria-hidden="true" />
+      <span>{$t('notes.delete')}</span>
     </Button>
   </div>
 </Dialog>
@@ -1033,7 +1038,8 @@
       {$t('decks.delete.cancel_btn')}
     </Button>
     <Button type="button" variant="danger" size="lg" loading={deletingDeck} testId="deck-delete-confirm" onclick={deleteDeck}>
-      {$t('decks.delete.confirm_btn')}
+      <Trash2 class="size-4" aria-hidden="true" />
+      <span>{$t('decks.delete.confirm_btn')}</span>
     </Button>
   </div>
 </Dialog>
