@@ -12,7 +12,8 @@
   import DeckProgressBar from '../components/DeckProgressBar.svelte';
   import { listClasses } from '../components/ui/variants';
   import { cn } from '../components/ui/utils';
-  import { RefreshCw } from '@lucide/svelte';
+  import { CirclePause, Layers, RefreshCw } from '@lucide/svelte';
+  import EmptyState from '../components/ui/EmptyState.svelte';
 
   interface Props {
     client?: ApiClient;
@@ -173,9 +174,12 @@
         </div>
 
         {#if activeDecks.length === 0}
-          <div data-testid="home-empty-decks" class="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-            {$t(decks.length === 0 ? 'home.no_decks' : 'home.all_paused')}
-          </div>
+          <EmptyState
+            testId="home-empty-decks"
+            class="py-10"
+            icon={decks.length === 0 ? Layers : CirclePause}
+            text={$t(decks.length === 0 ? 'home.no_decks' : 'home.all_paused')}
+          />
         {:else}
           <!-- A table: every row is a subgrid of the list, so each column takes the width of its widest cell and the counts and
                the bars line up across rows whatever the numbers are. From sm up the name is the first of four columns; below sm it

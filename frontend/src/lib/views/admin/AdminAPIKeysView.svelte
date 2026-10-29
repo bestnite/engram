@@ -12,7 +12,8 @@
   import { toast } from '../../components/ui/toast';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
-  import { RefreshCw } from '@lucide/svelte';
+  import { KeyRound, RefreshCw } from '@lucide/svelte';
+  import EmptyState from '../../components/ui/EmptyState.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -115,7 +116,7 @@
   {:else if data}
     {@const view = data}
     {#if view.keys.length === 0}
-      <p data-testid="admin-api-keys-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">{$t('admin.keys.empty')}</p>
+      <EmptyState testId="admin-api-keys-empty" icon={KeyRound} text={$t('admin.keys.empty')} />
     {:else}
       <div class="overflow-x-auto rounded-lg border border-border">
         <table class="w-full min-w-[760px] text-left text-sm">

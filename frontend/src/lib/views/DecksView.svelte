@@ -16,8 +16,9 @@
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import DeckProgressBar from '../components/DeckProgressBar.svelte';
   import { listClasses, selectionBarButton } from '../components/ui/variants';
-  import { CirclePause, CirclePlay, Download, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
+  import { CirclePause, CirclePlay, Download, Layers, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
   import { deckActionKind, presetSelectOptions } from '../labels';
+  import EmptyState from '../components/ui/EmptyState.svelte';
 
   // View reactive state definitions (Svelte 5 runes)
   let loading = $state(true);
@@ -460,13 +461,12 @@
       </Button>
     </div>
   {:else if decks.length === 0}
-    <div data-testid="decks-empty" class="space-y-4 rounded-lg border border-dashed border-border py-16 text-center">
-      <p class="text-sm text-muted-foreground">{$t('decks.empty')}</p>
+    <EmptyState testId="decks-empty" icon={Layers} text={$t('decks.empty')}>
       <Button variant="outline" size="lg" onclick={openCreateModal}>
         <Plus class="size-4" aria-hidden="true" />
         {$t('decks.create.heading')}
       </Button>
-    </div>
+    </EmptyState>
   {:else}
     <div data-testid="decks-list" class={listClasses.root}>
       <!-- The header doubles as select-all: a selection state change only alters this row's checkbox, without inserting any toolbar that would make the page taller. -->

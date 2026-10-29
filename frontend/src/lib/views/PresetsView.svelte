@@ -10,8 +10,9 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
-  import { Pencil, Plus, RefreshCw, RotateCcw, Sparkles, Trash2 } from '@lucide/svelte';
+  import { Pencil, Plus, RefreshCw, RotateCcw, SlidersHorizontal, Sparkles, Trash2 } from '@lucide/svelte';
   import { presetDisplayName } from '../labels';
+  import EmptyState from '../components/ui/EmptyState.svelte';
   import type {
     PresetsResponse,
     PresetRecord,
@@ -435,9 +436,7 @@
       </Button>
     </div>
   {:else if data && presets.length === 0}
-    <div data-testid="presets-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
-      {$t('presets.empty')}
-    </div>
+    <EmptyState testId="presets-empty" icon={SlidersHorizontal} text={$t('presets.empty')} />
   {:else if data}
     <div class="space-y-4" data-testid="presets-list">
       {#each presets as p (p.id)}

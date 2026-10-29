@@ -11,7 +11,8 @@
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
-  import { RefreshCw } from '@lucide/svelte';
+  import { RefreshCw, ScrollText } from '@lucide/svelte';
+  import EmptyState from '../../components/ui/EmptyState.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -152,7 +153,7 @@
     </div>
 
     {#if view.rows.length === 0}
-      <p data-testid="admin-audit-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">{$t('admin.audit.empty')}</p>
+      <EmptyState testId="admin-audit-empty" icon={ScrollText} text={$t('admin.audit.empty')} />
     {:else}
       <div class="overflow-x-auto rounded-lg border border-border">
         <table class="w-full min-w-[760px] text-left text-sm">

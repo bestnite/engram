@@ -9,7 +9,8 @@
   import Badge from '../../components/ui/Badge.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
-  import { RefreshCw } from '@lucide/svelte';
+  import { Languages, RefreshCw } from '@lucide/svelte';
+  import EmptyState from '../../components/ui/EmptyState.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -72,7 +73,7 @@
   {:else if data}
     {@const view = data}
     {#if view.locales.length === 0}
-      <p data-testid="admin-i18n-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">{$t('admin.i18n.empty')}</p>
+      <EmptyState testId="admin-i18n-empty" icon={Languages} text={$t('admin.i18n.empty')} />
     {:else}
       <div class="overflow-x-auto rounded-lg border border-border">
         <table class="w-full min-w-[560px] text-left text-sm">

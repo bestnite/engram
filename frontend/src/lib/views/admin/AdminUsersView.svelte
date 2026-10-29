@@ -16,7 +16,8 @@
   import { listClasses, menuClasses } from '../../components/ui/variants';
   import { toast } from '../../components/ui/toast';
   import { DropdownMenu } from 'bits-ui';
-  import { Ban, CheckCircle, Copy, KeyRound, LogOut, MoreHorizontal, Plus, RefreshCw, Search, Shield, Trash2, User, X } from '@lucide/svelte';
+  import { Ban, CheckCircle, Copy, KeyRound, LogOut, MoreHorizontal, Plus, RefreshCw, Search, Shield, Trash2, User, Users, X } from '@lucide/svelte';
+  import EmptyState from '../../components/ui/EmptyState.svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -251,7 +252,7 @@
   {:else if data}
     {@const view = data}
     {#if view.users.length === 0}
-      <p data-testid="admin-users-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">{$t('admin.users.empty')}</p>
+      <EmptyState testId="admin-users-empty" icon={Users} text={$t('admin.users.empty')} />
     {:else}
       <div class="{listClasses.root} overflow-x-auto">
         <table class="w-full min-w-[760px] text-left text-sm">

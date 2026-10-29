@@ -2,7 +2,7 @@
   import LearningCurveChart from '../components/LearningCurveChart.svelte';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
-  import { RefreshCw } from '@lucide/svelte';
+  import { ChartColumn, RefreshCw } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
@@ -10,6 +10,7 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
   import HelpTip from '../components/ui/HelpTip.svelte';
+  import EmptyState from '../components/ui/EmptyState.svelte';
 
   interface Props {
     client?: ApiClient;
@@ -202,9 +203,7 @@
       </Button>
     </div>
   {:else if detail && detail.empty}
-    <div data-testid="stats-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
-      {$t('stats.empty')}
-    </div>
+    <EmptyState testId="stats-empty" icon={ChartColumn} text={$t('stats.empty')} />
   {:else if detail}
     <div data-testid="stats-data" class="divide-y divide-border">
       <!-- Metric band: review volume and consecutive check-ins, the five numbers people look at most at a glance. -->

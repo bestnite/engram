@@ -22,9 +22,10 @@
   import InlineEdit from '../components/InlineEdit.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
-  import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, Tags, Trash2 } from '@lucide/svelte';
+  import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, FileText, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, SearchX, Tags, Trash2 } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { backField, cardTypes, frontField, kindOrder, loadCardTypes } from '../card-types';
+  import EmptyState from '../components/ui/EmptyState.svelte';
 
   interface Props {
     /** Test injection: when provided, nothing is fetched on mount (same convention as HomeView and other views). */
@@ -697,9 +698,11 @@
         </Button>
       </div>
     {:else if notes.length === 0}
-      <div data-testid="notes-empty" class="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
-        {hasFilter ? $t('notes.empty_filter') : $t('notes.empty')}
-      </div>
+      <EmptyState
+        testId="notes-empty"
+        icon={hasFilter ? SearchX : FileText}
+        text={hasFilter ? $t('notes.empty_filter') : $t('notes.empty')}
+      />
     {:else}
       {@const cols = canEditContent
         ? 'grid-cols-[1.25rem_minmax(0,1fr)_4.5rem] md:grid-cols-[1.25rem_minmax(0,1fr)_7rem_10rem_6rem_4.5rem]'
