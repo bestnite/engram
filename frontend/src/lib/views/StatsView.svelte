@@ -5,6 +5,7 @@
   import { ChartColumn, RefreshCw } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
+  import { formatNumber, formatPercent } from '../format';
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, StatsDetail } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
@@ -33,17 +34,9 @@
   // svelte-ignore state_referenced_locally
   let detail = $state<StatsDetail | null>(initialDetail);
 
-  function formatNumber(val: number): string {
-    return new Intl.NumberFormat($localeStore).format(val);
-  }
-
-  function formatPercentValue(rate: number): string {
-    return (rate * 100).toFixed(1);
-  }
-
   /** Retention rate of a table row: when the denominator (due review count) is 0 there is no readable ratio, so "no data" is shown instead of 0.0%. */
   function rowRetention(rate: number, total: number): string {
-    return total > 0 ? $t('stats.table.rate', { rate: formatPercentValue(rate) }) : $t('stats.retention_na');
+    return total > 0 ? formatPercent(rate, $localeStore) : $t('stats.retention_na');
   }
 
   /** The learning curve and the bars share one maximum baseline, so bar lengths can be compared with each other directly. */
@@ -221,7 +214,7 @@
                   <HelpTip testId="stats-volume-help" label={$t('stats.volume.heading')} text={$t('help.stats.volume')} />
                 {/if}
               </dt>
-              <dd class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.volume.value', { count: formatNumber(row.value) })}</dd>
+              <dd class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.volume.value', { count: formatNumber(row.value, $localeStore) })}</dd>
             </dl>
           {/each}
         </div>
@@ -231,11 +224,11 @@
               {$t('stats.streak.current_label')}
               <HelpTip testId="stats-streak-help" label={$t('stats.streak.heading')} text={$t('help.stats.streak')} />
             </dt>
-            <dd data-testid="stats-streak-current" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.current) })}</dd>
+            <dd data-testid="stats-streak-current" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.current, $localeStore) })}</dd>
           </dl>
           <dl class="px-4 py-2">
             <dt class="text-xs text-muted-foreground">{$t('stats.streak.longest_label')}</dt>
-            <dd data-testid="stats-streak-longest" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.longest) })}</dd>
+            <dd data-testid="stats-streak-longest" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.longest, $localeStore) })}</dd>
           </dl>
         </div>
       </div>
@@ -275,7 +268,7 @@
               <li>
                 <div class="flex items-center justify-between text-[13px]">
                   <span class="text-muted-foreground">{$t(row.key)}</span>
-                  <span class="font-medium tabular-nums text-foreground">{$t('stats.due.value', { count: formatNumber(row.value) })}</span>
+                  <span class="font-medium tabular-nums text-foreground">{$t('stats.due.value', { count: formatNumber(row.value, $localeStore) })}</span>
                 </div>
                   {#if barWidth(row.value, dueMax) > 0}
                     <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -301,7 +294,7 @@
               <div class="flex items-center justify-between text-[13px]">
                 <span class="font-medium text-foreground">{$t('stats.retention.overall')}</span>
                 <span class="font-medium tabular-nums text-foreground">
-                  {$t('stats.retention.rate', { rate: formatPercentValue(detail.retention.rate), passed: detail.retention.passed, total: detail.retention.total })}
+                  {$t('stats.retention.rate', { rate: formatPercent(detail.retention.rate, $localeStore), passed: detail.retention.passed, total: detail.retention.total })}
                 </span>
               </div>
                   {#if percentWidth(detail.retention.rate) > 0}
@@ -315,7 +308,7 @@
                 <div class="flex items-center justify-between text-[13px]">
                   <span class="text-muted-foreground">{$t(retentionBucketKey(bucket.label))}</span>
                   <span class="tabular-nums text-foreground">
-                    {$t('stats.retention.rate', { rate: formatPercentValue(bucket.rate), passed: bucket.passed, total: bucket.total })}
+                    {$t('stats.retention.rate', { rate: formatPercent(bucket.rate, $localeStore), passed: bucket.passed, total: bucket.total })}
                   </span>
                 </div>
                   {#if percentWidth(bucket.rate) > 0}
@@ -341,7 +334,7 @@
               { key: 'stats.time.total_label', value: formatDuration(detail.time_spent.total_ms) },
               { key: 'stats.time.avg_label', value: formatDuration(Math.trunc(detail.time_spent.avg_ms)) },
               { key: 'stats.time.median_label', value: formatDuration(detail.time_spent.median_ms) },
-              { key: 'stats.time.count_label', value: $t('stats.time.count', { count: formatNumber(detail.time_spent.count) }) },
+              { key: 'stats.time.count_label', value: $t('stats.time.count', { count: formatNumber(detail.time_spent.count, $localeStore) }) },
             ] as row}
               <div class="flex items-center justify-between text-[13px]">
                 <dt class="text-muted-foreground">{$t(row.key)}</dt>
@@ -361,7 +354,7 @@
               <li>
                 <div class="flex items-center justify-between text-[13px]">
                   <span class="text-muted-foreground">{$t(gradeSourceKey(grade.source))}</span>
-                  <span class="font-medium tabular-nums text-foreground">{$t('stats.grade.value', { count: formatNumber(grade.count) })}</span>
+                  <span class="font-medium tabular-nums text-foreground">{$t('stats.grade.value', { count: formatNumber(grade.count, $localeStore) })}</span>
                 </div>
                   {#if barWidth(grade.count, gradeMax) > 0}
                     <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
@@ -406,9 +399,9 @@
                   {#each detail.decks as deck}
                     <tr>
                       <td class="px-4 py-2.5 font-medium text-foreground">{deck.name}</td>
-                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.due.value', { count: formatNumber(deck.review) })}</td>
-                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.due.value', { count: formatNumber(deck.new) })}</td>
-                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.volume.value', { count: formatNumber(deck.reviews) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.due.value', { count: formatNumber(deck.review, $localeStore) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.due.value', { count: formatNumber(deck.new, $localeStore) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.volume.value', { count: formatNumber(deck.reviews, $localeStore) })}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{rowRetention(deck.retention, deck.retention_total)}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{formatDuration(deck.elapsed_ms)}</td>
                     </tr>
@@ -448,7 +441,7 @@
                   {#each detail.tags as tag}
                     <tr>
                       <td class="px-4 py-2.5 font-medium text-foreground">{tag.tag}</td>
-                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.volume.value', { count: formatNumber(tag.reviews) })}</td>
+                      <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{$t('stats.volume.value', { count: formatNumber(tag.reviews, $localeStore) })}</td>
                       <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{rowRetention(tag.retention, tag.retention_total)}</td>
                     </tr>
                   {/each}

@@ -2,6 +2,7 @@
   import Page from '../components/ui/Page.svelte';
   import { onMount, tick } from 'svelte';
   import { t } from '../i18n';
+  import { fieldText } from '../format';
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
   import { toast } from '../components/ui/toast';
@@ -216,14 +217,7 @@
     const answerKey = reverse ? description.front_field : description.back_field;
     const key = back ? answerKey : frontKey;
     const value = fields[key];
-    return value === undefined ? [] : [[key, formatValue(value)]];
-  }
-
-  function formatValue(value: unknown): string {
-    if (typeof value === 'string') return value;
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'object') return JSON.stringify(value, null, 2);
-    return String(value);
+    return value === undefined ? [] : [[key, fieldText(value)]];
   }
 
   /** The prompt text of an answer-type card type: the field name comes from the metadata's prompt_field. */

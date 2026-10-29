@@ -58,7 +58,7 @@ describe('Admin panel views render server-provided truth', () => {
     const { html } = render(AdminHealthView, { props: { initialLoading: false, initialData: health } });
     expect(html).toContain('已连通');
     expect(html).toContain('42');
-    expect(html).toContain('2.00 KiB');
+    expect(html).toContain('2 KiB');
   });
 
   it('renders audit rows with system actor and empty detail fallbacks', () => {

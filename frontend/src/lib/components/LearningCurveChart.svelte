@@ -1,6 +1,7 @@
 <script lang="ts">
   import { BarController, BarElement, CategoryScale, Chart, Legend, LinearScale, Tooltip } from 'chart.js';
   import { t, localeStore } from '../i18n';
+  import { formatNumber } from '../format';
   import type { StatsCurvePoint } from '../api';
 
   /**
@@ -38,7 +39,6 @@
     return out;
   });
 
-  const fmt = (n: number) => new Intl.NumberFormat($localeStore).format(n);
   const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
   function render(): Chart {
@@ -74,7 +74,7 @@
             footerColor: muted,
             callbacks: {
               title: (items) => days[items[0]?.dataIndex ?? 0]?.day ?? '',
-              footer: (items) => $t('stats.curve.total', { count: fmt(items.reduce((sum, i) => sum + Number(i.raw), 0)) }),
+              footer: (items) => $t('stats.curve.total', { count: formatNumber(items.reduce((sum, i) => sum + Number(i.raw), 0), $localeStore) }),
             },
           },
         },
@@ -102,8 +102,8 @@
 <div class="space-y-2" data-testid="stats-curve-chart">
   <p class="text-xs text-muted-foreground" data-testid="stats-curve-summary">
     {$t('stats.curve.summary', {
-      new: fmt(points.reduce((sum, p) => sum + p.new, 0)),
-      review: fmt(points.reduce((sum, p) => sum + p.review, 0)),
+      new: formatNumber(points.reduce((sum, p) => sum + p.new, 0), $localeStore),
+      review: formatNumber(points.reduce((sum, p) => sum + p.review, 0), $localeStore),
     })}
   </p>
   <div class="relative h-56">

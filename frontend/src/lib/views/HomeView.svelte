@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
+  import { formatNumber, formatPercent } from '../format';
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, StatsSummary, Deck, DeckQueueCount } from '../api';
   import Skeleton from '../components/ui/Skeleton.svelte';
@@ -44,21 +45,9 @@
   // The home list shows what the default review queue draws on, so the decks the user paused stay on the deck list page only.
   let activeDecks = $derived(decks.filter((deck) => !deck.paused));
 
-  function formatNumber(val: number): string {
-    return new Intl.NumberFormat($localeStore).format(val);
-  }
-
   // A count above zero is today's work and reads in the foreground colour; a zero fades to grey.
   function countClass(count: number): string {
     return count > 0 ? 'font-medium text-foreground' : 'text-muted-foreground';
-  }
-
-  function formatPercent(rate: number): string {
-    return new Intl.NumberFormat($localeStore, {
-      style: 'percent',
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }).format(rate);
   }
 
   /**
@@ -128,7 +117,7 @@
             <Button href="/review" testId="home-start-review" variant="primary" size="lg">
               <Play class="size-4" aria-hidden="true" />
               <span>{$t('home.start_review')}</span>
-              <span class="rounded bg-primary-foreground/15 px-1.5 text-xs tabular-nums">{formatNumber(summary.due)}</span>
+              <span class="rounded bg-primary-foreground/15 px-1.5 text-xs tabular-nums">{formatNumber(summary.due, $localeStore)}</span>
             </Button>
           {:else}
             <Badge variant="success" class="px-2.5 py-1"><CircleCheck class="size-3.5" aria-hidden="true" />{$t('home.all_caught_up')}</Badge>
@@ -144,7 +133,7 @@
             {$t('home.due_count')}
             <HelpTip testId="home-due-help" label={$t('home.due_count')} text={$t('help.home.due')} />
           </dt>
-          <dd data-testid="home-due-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.due)}</dd>
+          <dd data-testid="home-due-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.due, $localeStore)}</dd>
         </div>
         <div class="border-border px-4 py-4 text-center max-sm:border-b sm:border-r">
           <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
@@ -152,7 +141,7 @@
             {$t('home.reviews_today')}
             <HelpTip testId="home-reviews-today-help" label={$t('home.reviews_today')} text={$t('help.home.reviews_today')} />
           </dt>
-          <dd data-testid="home-reviews-today" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.reviews_today)}</dd>
+          <dd data-testid="home-reviews-today" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.reviews_today, $localeStore)}</dd>
         </div>
         <div class="border-border px-4 py-4 text-center max-sm:border-r sm:border-r">
           <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
@@ -161,14 +150,14 @@
             <HelpTip testId="home-retention-help" label={$t('home.retention')} text={$t('help.retention')} />
           </dt>
           <!-- The denominator only counts due reviews: it is 0 when only new cards and learning steps have been done, and there is no readable retention rate then, so "no data" is shown. -->
-          <dd data-testid="home-retention" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{summary.retention_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}</dd>
+          <dd data-testid="home-retention" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{summary.retention_total > 0 ? formatPercent(summary.retention, $localeStore) : $t('stats.retention_na')}</dd>
         </div>
         <div class="px-4 py-4 text-center">
           <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
             <Layers class="mr-0.5 size-3.5" aria-hidden="true" />
             {$t('stats.metric_decks')}
           </dt>
-          <dd data-testid="home-decks-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.decks)}</dd>
+          <dd data-testid="home-decks-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.decks, $localeStore)}</dd>
         </div>
       </dl>
 
@@ -224,11 +213,11 @@
                   <div data-testid={`home-deck-stats-${deck.id}`} class="contents">
                     <span data-testid={`home-deck-new-${deck.id}`} class="text-[13px] tabular-nums sm:text-right {countClass(counts.new_count)}">
                       <span class="font-normal text-muted-foreground sm:hidden">{$t('home.col.new')}</span>
-                      {formatNumber(counts.new_count)}
+                      {formatNumber(counts.new_count, $localeStore)}
                     </span>
                     <span data-testid={`home-deck-review-${deck.id}`} class="text-[13px] tabular-nums sm:text-right {countClass(counts.review_count)}">
                       <span class="font-normal text-muted-foreground sm:hidden">{$t('home.col.review')}</span>
-                      {formatNumber(counts.review_count)}
+                      {formatNumber(counts.review_count, $localeStore)}
                     </span>
                     <span class="flex items-center gap-2">
                       <DeckProgressBar

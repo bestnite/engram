@@ -373,7 +373,7 @@ export const en: LocaleCatalog = {
   'stats.retention.heading': 'Retention',
   'stats.retention.intro': 'Share still remembered when due, grouped by memory strength (days).',
   'stats.retention.overall': 'Overall',
-  'stats.retention.rate': '{rate}% ({passed}/{total})',
+  'stats.retention.rate': '{rate} ({passed}/{total})',
   'stats.retention.bucket.lt1': 'Under 1 day',
   'stats.retention.bucket.d1_7': '1–7 days',
   'stats.retention.bucket.d7_30': '7–30 days',
@@ -421,7 +421,6 @@ export const en: LocaleCatalog = {
   'stats.tag.col.tag': 'Tag',
   'stats.tag.col.reviews': 'Reviews',
   'stats.tag.col.retention': 'Retention',
-  'stats.table.rate': '{rate}%',
   // ---- Deck daily-cap settings (/decks/:id/settings) ----
   'deck.settings.entry': 'Settings',
   'deck.settings.title': 'Deck settings',

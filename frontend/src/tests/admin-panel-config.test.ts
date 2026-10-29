@@ -57,7 +57,7 @@ describe('Admin config views render server-provided truth', () => {
     expect(html).toContain('data-testid="admin-settings-value-site.name"');
     expect(html).toContain('data-testid="admin-settings-secret-oidc_client_secret"');
     expect(html).toContain('data-testid="admin-settings-row-media_usage"');
-    expect(html).toContain('2.00 KiB');
+    expect(html).toContain('2 KiB');
     expect(html).toContain('已配置');
   });
 

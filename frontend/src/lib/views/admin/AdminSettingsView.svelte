@@ -1,7 +1,8 @@
 <script lang="ts">
   import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
-  import { t } from '../../i18n';
+  import { t, localeStore } from '../../i18n';
+  import { formatBytes } from '../../format';
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminSettingsResponse } from '../../api';
   import AdminNav from './AdminNav.svelte';
@@ -81,19 +82,8 @@
     return $t('admin.settings.source.' + source);
   }
 
-  function formatBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    const units = ['KiB', 'MiB', 'GiB', 'TiB'];
-    let value = n;
-    for (let i = 0; i < units.length; i++) {
-      value /= 1024;
-      if (value < 1024 || i === units.length - 1) return `${value.toFixed(2)} ${units[i]}`;
-    }
-    return `${n} B`;
-  }
-
   function displayValue(row: { key: string; value: string; unit?: string }): string {
-    return row.unit === 'bytes' ? formatBytes(Number(row.value) || 0) : row.value;
+    return row.unit === 'bytes' ? formatBytes(Number(row.value) || 0, $localeStore) : row.value;
   }
 
   function loadErrorKey(): string {

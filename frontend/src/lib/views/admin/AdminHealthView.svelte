@@ -1,7 +1,8 @@
 <script lang="ts">
   import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
-  import { t } from '../../i18n';
+  import { t, localeStore } from '../../i18n';
+  import { formatBytes } from '../../format';
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminHealth } from '../../api';
   import AdminNav from './AdminNav.svelte';
@@ -24,20 +25,6 @@
   let loadError = $state<ApiClientError | Error | null>(initialError);
   // svelte-ignore state_referenced_locally
   let data = $state<AdminHealth | null>(initialData);
-
-  /** Same criterion as humanBytes on the Go side: convert a byte count into a readable unit (B/KiB/MiB/GiB/TiB). */
-  function formatBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    const units = ['KiB', 'MiB', 'GiB', 'TiB'];
-    let value = n;
-    for (let i = 0; i < units.length; i++) {
-      value /= 1024;
-      if (value < 1024 || i === units.length - 1) {
-        return `${value.toFixed(2)} ${units[i]}`;
-      }
-    }
-    return `${n} B`;
-  }
 
   async function load(): Promise<void> {
     loading = true;
@@ -74,7 +61,7 @@
           {
             key: 'media',
             label: $t('admin.health.media.label'),
-            value: data.media_truncated ? `${formatBytes(data.media_bytes)} ${$t('admin.health.media.truncated')}` : formatBytes(data.media_bytes),
+            value: data.media_truncated ? `${formatBytes(data.media_bytes, $localeStore)} ${$t('admin.health.media.truncated')}` : formatBytes(data.media_bytes, $localeStore),
           },
           {
             key: 'due',

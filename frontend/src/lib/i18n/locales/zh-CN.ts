@@ -373,7 +373,7 @@ export const zhCN: LocaleCatalog = {
   'stats.retention.heading': '留存率',
   'stats.retention.intro': '到期时还记得的比例，按记忆强度（天）分组。',
   'stats.retention.overall': '总体',
-  'stats.retention.rate': '{rate}%（{passed}/{total}）',
+  'stats.retention.rate': '{rate}（{passed}/{total}）',
   'stats.retention.bucket.lt1': '小于 1 天',
   'stats.retention.bucket.d1_7': '1–7 天',
   'stats.retention.bucket.d7_30': '7–30 天',
@@ -421,7 +421,6 @@ export const zhCN: LocaleCatalog = {
   'stats.tag.col.tag': '标签',
   'stats.tag.col.reviews': '复习量',
   'stats.tag.col.retention': '留存率',
-  'stats.table.rate': '{rate}%',
   // ---- Deck daily limit settings (/decks/:id/settings) ----
   'deck.settings.entry': '设置',
   'deck.settings.title': '卡组设置',

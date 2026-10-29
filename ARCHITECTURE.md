@@ -184,6 +184,8 @@ change.
 
 - `frontend/src/lib/views/` holds one view per page, `frontend/src/lib/components/` the shared
   components, and `frontend/src/lib/api/` the typed client for the JSON endpoints.
+- `frontend/src/lib/format.ts` is the only place numbers, percentages, byte counts, dates and raw field
+  values become text; components pass the current locale.
 - UI text comes from `frontend/src/lib/i18n/locales/{zh-CN,en}.ts`. Text produced by the
   server (emails, server-side messages) comes from `internal/i18n/locales/{zh-CN,en}.yaml`.
 - Tests run in two vitest suites: an SSR suite and a happy-dom suite for `*.client.ts` files.

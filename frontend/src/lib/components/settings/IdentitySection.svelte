@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { t, getLocale } from '../../i18n';
+  import { t, localeStore } from '../../i18n';
+  import { formatDate } from '../../format';
   import { apiClient, ApiClientError } from '../../api';
   import type { IdentitiesResponse, IdentityItem } from '../../api';
   import { authStore } from '../../auth';
@@ -49,12 +50,6 @@
   const hidden = $derived(
     data !== null && !data.oidc_enabled && data.identities.length === 0
   );
-
-  function formatLinkedAt(value: string): string {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return new Intl.DateTimeFormat(getLocale(), { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
-  }
 
   async function load(): Promise<void> {
     loading = true;
@@ -176,7 +171,7 @@
                 <tr class="border-t border-border align-middle" data-testid={`identity-row-${identity.id}`}>
                   <td class="min-w-0 break-all py-2.5 pr-4 font-medium text-foreground">{identity.provider}</td>
                   <td class="min-w-0 break-all py-2.5 pr-4 text-muted-foreground">{identity.email || '—'}</td>
-                  <td class="whitespace-nowrap py-2.5 pr-4 text-muted-foreground">{formatLinkedAt(identity.linked_at)}</td>
+                  <td class="whitespace-nowrap py-2.5 pr-4 text-muted-foreground">{formatDate(identity.linked_at, $localeStore)}</td>
                   <td class="whitespace-nowrap py-2.5 text-right">
                     <Button
                       testId={`identity-unlink-${identity.id}`}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Upload, FileText, X } from '@lucide/svelte';
   import { t, localeStore } from '../../i18n';
+  import { formatBytes } from '../../format';
   import { cn } from './utils';
 
   /**
@@ -100,18 +101,6 @@
     file = null;
     if (input) input.value = '';
   }
-
-  function formatSize(bytes: number): string {
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let value = bytes;
-    let unit = 0;
-    while (value >= 1024 && unit < units.length - 1) {
-      value /= 1024;
-      unit += 1;
-    }
-    const digits = unit === 0 ? 0 : 1;
-    return `${new Intl.NumberFormat($localeStore, { maximumFractionDigits: digits }).format(value)} ${units[unit]}`;
-  }
 </script>
 
 <div class={cn('space-y-2', klass)}>
@@ -167,7 +156,7 @@
     >
       <FileText class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       <span class="min-w-0 flex-1 truncate text-sm text-foreground">{file.name}</span>
-      <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{formatSize(file.size)}</span>
+      <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{formatBytes(file.size, $localeStore)}</span>
       <button
         type="button"
         onclick={clear}

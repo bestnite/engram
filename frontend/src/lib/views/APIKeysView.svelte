@@ -10,6 +10,7 @@
   import { Ban, Copy, Plus, X } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
+  import { formatDate } from '../format';
   import { apiClient, getApiErrorMessageKey, type APIKeyRecord } from '../api';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -56,11 +57,6 @@
     { value: '1y', label: $t('keys.expiry.year_1') },
     { value: 'custom', label: $t('keys.expiry.custom') },
   ]);
-
-  /** Expiry is displayed in the reader's local time zone, because that is the day they picked in the create form. */
-  function formatExpiry(iso: string): string {
-    return new Intl.DateTimeFormat($localeStore, { dateStyle: 'medium' }).format(new Date(iso));
-  }
 
   /** Today as `YYYY-MM-DD` in local time, the earliest day the date input offers. */
   function todayLocal(): string {
@@ -307,7 +303,7 @@
               <p class="truncate text-sm font-medium text-foreground">{key.name}</p>
               <p class="truncate font-mono text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
               <p class="mt-0.5 text-xs text-muted-foreground">
-                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatExpiry(key.expires_at) }) : $t('keys.expiry.never_expires')}
+                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatDate(key.expires_at, $localeStore) }) : $t('keys.expiry.never_expires')}
               </p>
             </div>
             <Button
@@ -328,7 +324,7 @@
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium text-foreground">{key.name}</p>
                 <p class="truncate font-mono text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
-                <p class="mt-0.5 text-xs text-muted-foreground">{key.expires_at ? $t('keys.expiry.expired_on', { date: formatExpiry(key.expires_at) }) : ''}</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">{key.expires_at ? $t('keys.expiry.expired_on', { date: formatDate(key.expires_at, $localeStore) }) : ''}</p>
               </div>
               <Badge variant="warning" testId={`keys-expired-badge-${key.id}`}>{$t('keys.state.expired')}</Badge>
               <Button
@@ -348,7 +344,7 @@
               <p class="truncate text-sm text-muted-foreground line-through">{key.name}</p>
               <p class="truncate font-mono text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
               <p class="mt-0.5 text-xs text-muted-foreground">
-                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatExpiry(key.expires_at) }) : $t('keys.expiry.never_expires')}
+                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatDate(key.expires_at, $localeStore) }) : $t('keys.expiry.never_expires')}
               </p>
             </div>
             <Badge testId={`keys-revoked-badge-${key.id}`}>{$t('keys.revoked')}</Badge>

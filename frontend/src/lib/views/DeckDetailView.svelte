@@ -4,6 +4,7 @@
   import { navigate, replaceAddress, routeStore } from '../router';
   import { withReturn } from '../return-to';
   import { t } from '../i18n';
+  import { fieldText } from '../format';
   import { apiClient, ApiClientError } from '../api';
   import type { Deck, DeckQueueCount, DeckTag, Note, BulkNotesResponse } from '../api';
   import DeckSharingView from './DeckSharingView.svelte';
@@ -464,7 +465,7 @@
    * Newlines and consecutive whitespace are squeezed into a single space — the row only shows one line, the full content is on the edit page.
    */
   function noteSummary(note: Note): { primary: string; secondary: string } {
-    const flat = (value: unknown) => formatFieldValue(value).replace(/\s+/g, ' ').trim();
+    const flat = (value: unknown) => fieldText(value).replace(/\s+/g, ' ').trim();
     const front = frontField($cardTypes, note.kind);
     const back = backField($cardTypes, note.kind);
     const filled = Object.entries(note.fields)
@@ -474,18 +475,6 @@
     const primary = pick(front) || filled[0]?.[1] || '';
     const secondary = pick(back) || filled.find(([, value]) => value !== primary)?.[1] || '';
     return { primary, secondary };
-  }
-
-  function formatFieldValue(val: unknown): string {
-    if (val === null || val === undefined) return '';
-    if (typeof val === 'string') return val;
-    if (typeof val === 'number' || typeof val === 'boolean') return String(val);
-    if (Array.isArray(val)) {
-      return val
-        .map((item) => (typeof item === 'object' ? JSON.stringify(item) : String(item)))
-        .join(', ');
-    }
-    return JSON.stringify(val, null, 2);
   }
 
   onMount(() => {
