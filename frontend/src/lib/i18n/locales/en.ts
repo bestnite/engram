@@ -242,6 +242,7 @@ export const en: LocaleCatalog = {
   'note_edit.action': 'Edit',
   'note_edit.title': 'Edit note',
   'note_edit.back': 'Back to deck',
+  'note_edit.back_review': 'Back to review',
   'note_edit.loading': 'Loading note...',
   'note_edit.not_found': 'Note not found',
   'note_edit.tags': 'Tags (comma-separated)',

@@ -1,7 +1,8 @@
 <script lang="ts">
   import Skeleton from '../components/ui/Skeleton.svelte';
   import { onMount, tick, untrack } from 'svelte';
-  import { routeStore, navigate } from '../router';
+  import { routeStore, navigate, matchRoute } from '../router';
+  import { RETURN_PARAM, safeReturnPath } from '../return-to';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Note } from '../api';
@@ -24,10 +25,17 @@
   import { Eye, X } from '@lucide/svelte';
 
   // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
-  // (card type, fields with their own insertion tools, tags and live preview). A successful create always jumps back to the deck page, leaving no second "create another" path.
+  // (card type, fields with their own insertion tools, tags and live preview). A successful create always leaves the editor, leaving no second "create another" path.
   const deckId = $derived($routeStore.params.id || '');
   const noteId = $derived($routeStore.params.noteId || '');
   const isCreate = $derived(noteId === '');
+
+  // Where leaving the editor goes: back, cancel and a finished create all lead to the page that opened the editor when
+  // it said so in the address (the review page does), and to the deck page otherwise.
+  const returnTo = $derived(
+    safeReturnPath($routeStore.query[RETURN_PARAM]) ?? `/decks/${encodeURIComponent(deckId)}`
+  );
+  const returnsToReview = $derived(matchRoute(returnTo).route?.path === '/review');
 
   // Debounce window of the live preview: the request fires about half a second after typing in the fields stops, avoiding a request per character.
   const PREVIEW_DEBOUNCE_MS = 500;
@@ -417,20 +425,20 @@
     else toast.error($t(invalid ? 'note_edit.invalid' : 'note_edit.failed'));
   }
 
-  /** Create: it only jumps back to the deck page once creation is confirmed successful (not dry_run, created==1, no per-row errors). */
+  /** Create: it only leaves the editor once creation is confirmed successful (not dry_run, created==1, no per-row errors). */
   async function create(): Promise<void> {
     saving = true;
     try {
       const result = await apiClient.createNotes(deckId, {
         notes: [{ kind, fields: collectFields(), tags: parseTags() }],
       });
-      // The user left while the request was in flight (route change/unmount): no more state writes, and do not pull them to the deck page either.
+      // The user left while the request was in flight (route change/unmount): no more state writes, and do not pull them to the return page either.
       if (disposed) return;
       if (result.dry_run || result.created !== 1 || result.errors.length > 0) {
         reportSaveError(null);
         return;
       }
-      navigate(`/decks/${encodeURIComponent(deckId)}`);
+      navigate(returnTo);
     } catch (err) {
       if (disposed) return;
       reportSaveError(err);
@@ -471,7 +479,11 @@
 <Page as="section">
   <PageHeader
     title={isCreate ? $t('note_create.title') : $t('note_edit.title')}
-    back={{ href: `/decks/${encodeURIComponent(deckId)}`, label: $t('note_edit.back') }}
+    back={{
+      href: returnTo,
+      label: returnsToReview ? $t('note_edit.back_review') : $t('note_edit.back'),
+      testId: 'note-edit-back',
+    }}
   >
     <!-- Below lg the preview is not a column but a drawer, so it needs a way in. The button is absent at lg,
          where the preview is already on screen. -->
@@ -625,11 +637,12 @@
         <Button type="submit" size="lg" testId="note-submit" loading={saving}>
           {isCreate ? $t('note_create.submit') : $t('note_edit.save')}
         </Button>
-        <Button variant="ghost" size="lg" testId="note-cancel" onclick={() => navigate(`/decks/${encodeURIComponent(deckId)}`)}>
+        <Button variant="ghost" size="lg" testId="note-cancel" onclick={() => navigate(returnTo)}>
           {$t('note_edit.cancel')}
         </Button>
       </div>
     </form>
+
 
     <!-- One dialog serves both insertion actions; which one is open, and for which field, is the state above.
          Its content is not inside the form element: an upload or a pick writes into the form model, and neither

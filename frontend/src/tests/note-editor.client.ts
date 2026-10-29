@@ -53,9 +53,9 @@ function createResponse(cards: Array<{ front_html: string; back_html: string }>)
 let target: HTMLElement;
 const mountedInstances: Array<ReturnType<typeof mount>> = [];
 
-function mountEditor(params: Record<string, string>): void {
+function mountEditor(params: Record<string, string>, query: Record<string, string> = {}): void {
   seedCardTypes();
-  routeStore.set({ path: '/decks/5/notes', params, query: {}, search: '', route: null });
+  routeStore.set({ path: '/decks/5/notes', params, query, search: '', route: null });
   target = document.createElement('div');
   document.body.appendChild(target);
   mountedInstances.push(mount(NoteEditView, { target }));
@@ -1207,3 +1207,55 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     expect(panel().getAttribute('data-open')).toBeNull();
   });
 });
+
+/**
+ * The editor is reached from the deck page and from the review page. Leaving it — back, cancel, or a
+ * delete — must return to the page that opened it, which the review page names in `?return=`. A
+ * return value that is not an in-app path is ignored, so the link can never send the user off-site.
+ */
+describe('note editor — return path', () => {
+  function backLink(): HTMLAnchorElement {
+    return target.querySelector('[data-testid="note-edit-back"]') as HTMLAnchorElement;
+  }
+
+  it('leads back to the review scope it was opened from', async () => {
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture({ deck_id: '5' }));
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5', noteId: '9' }, { return: '/review?deck=5&tag=verbs' });
+    await flush();
+
+    expect(backLink().getAttribute('href')).toBe('/review?deck=5&tag=verbs');
+    expect(backLink().textContent?.trim()).toBe('返回复习');
+
+    (target.querySelector('[data-testid="note-cancel"]') as HTMLButtonElement).click();
+    await flush();
+    expect(get(routeStore).path).toBe('/review');
+    expect(get(routeStore).query).toEqual({ deck: '5', tag: 'verbs' });
+  });
+
+  it('falls back to the deck page without a return path', async () => {
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture({ deck_id: '5' }));
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5', noteId: '9' });
+    await flush();
+
+    expect(backLink().getAttribute('href')).toBe('/decks/5');
+    expect(backLink().textContent?.trim()).toBe('返回卡组');
+  });
+
+  it.each(['//example.com/review', '/\\example.com', 'https://example.com/', '/api/v1/notes'])(
+    'ignores the return path %s, which is not a page of this app',
+    async (raw) => {
+      vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture({ deck_id: '5' }));
+      vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+      mountEditor({ id: '5', noteId: '9' }, { return: raw });
+      await flush();
+
+      expect(backLink().getAttribute('href')).toBe('/decks/5');
+    }
+  );
+});
+

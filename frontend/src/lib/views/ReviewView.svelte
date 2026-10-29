@@ -17,6 +17,8 @@
   import HelpTip from '../components/ui/HelpTip.svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { cardTypes, descriptionOf, loadCardTypes, type CardTypeCatalog } from '../card-types';
+  import { withReturn } from '../return-to';
+  import { navigate } from '../router';
   interface Props {
     client?: ApiClient;
     initialCards?: DueCard[];
@@ -581,10 +583,16 @@
     }
   }
 
-  /** Edit entry: jump to the edit_href returned by the server (joined from the canonical path when absent). */
+  /**
+   * Edit entry: jump to the edit_href returned by the server (joined from the canonical path when absent).
+   * The review address, scope included, rides along as the return path, so the editor's own back and
+   * cancel actions lead back here instead of to the deck page.
+   */
   function gotoEdit(): void {
     const href = editHref || fallbackEditHref;
-    if (href) window.location.assign(href);
+    // A client-side route change: the editor is a page of this app, so a full document reload would only
+    // refetch the shell.
+    if (href) navigate(withReturn(href, window.location.pathname + window.location.search));
   }
 
   /**

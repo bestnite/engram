@@ -242,6 +242,7 @@ export const zhCN: LocaleCatalog = {
   'note_edit.action': '编辑',
   'note_edit.title': '编辑卡片',
   'note_edit.back': '返回卡组',
+  'note_edit.back_review': '返回复习',
   'note_edit.loading': '正在加载卡片...',
   'note_edit.not_found': '卡片不存在',
   'note_edit.tags': '标签（逗号分隔）',
