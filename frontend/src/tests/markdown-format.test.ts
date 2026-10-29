@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  insertCodeBlock,
+  insertLink,
+  insertTable,
   markerForShortcut,
+  toggleLinePrefix,
   toggleMarkdown,
+  type LinePrefix,
   type MarkdownEdit,
   type MarkdownMarker,
 } from '../lib/markdown-format';
@@ -192,6 +197,30 @@ describe('toggleMarkdown', () => {
       marker: '*',
       expected: { text: '******', start: 3, end: 3 },
     },
+    {
+      name: 'wraps a selection in a code span',
+      text: 'run ls now',
+      start: 4,
+      end: 6,
+      marker: '`',
+      expected: { text: 'run `ls` now', start: 5, end: 7 },
+    },
+    {
+      name: 'removes a code span around the selection',
+      text: 'run `ls` now',
+      start: 5,
+      end: 7,
+      marker: '`',
+      expected: { text: 'run ls now', start: 4, end: 6 },
+    },
+    {
+      name: 'does not read a code fence as a code span pair',
+      text: '```x```',
+      start: 3,
+      end: 4,
+      marker: '`',
+      expected: { text: '````x````', start: 4, end: 5 },
+    },
   ];
 
   it.each(cases)('$name', ({ text, start, end, marker, expected }) => {
@@ -232,5 +261,209 @@ describe('markerForShortcut', () => {
     { key: 'u', ctrlKey: true },
   ])('ignores %j', (input) => {
     expect(markerForShortcut(input)).toBeNull();
+  });
+});
+
+/**
+ * Line blocks rewrite whole lines, so these cases pin which lines a selection touches, how an
+ * existing marker of the same or the other list kind is treated, and where the caret ends up.
+ */
+describe('toggleLinePrefix', () => {
+  interface Case {
+    name: string;
+    text: string;
+    start: number;
+    end: number;
+    kind: LinePrefix;
+    expected: MarkdownEdit;
+  }
+
+  const cases: Case[] = [
+    {
+      name: 'quotes the caret line and keeps the caret on the same character',
+      text: 'one\ntwo',
+      start: 5,
+      end: 5,
+      kind: 'quote',
+      expected: { text: 'one\n> two', start: 7, end: 7 },
+    },
+    {
+      name: 'unquotes a quoted caret line',
+      text: '> two',
+      start: 3,
+      end: 3,
+      kind: 'quote',
+      expected: { text: 'two', start: 1, end: 1 },
+    },
+    {
+      name: 'keeps the caret at the line start when the removed prefix was in front of it',
+      text: '> two',
+      start: 1,
+      end: 1,
+      kind: 'quote',
+      expected: { text: 'two', start: 0, end: 0 },
+    },
+    {
+      name: 'bullets every selected line and selects the edited block',
+      text: 'a\nb',
+      start: 0,
+      end: 3,
+      kind: 'bullet',
+      expected: { text: '- a\n- b', start: 0, end: 7 },
+    },
+    {
+      name: 'numbers non-empty lines from one and leaves a blank line empty',
+      text: 'a\n\nb',
+      start: 0,
+      end: 4,
+      kind: 'ordered',
+      expected: { text: '1. a\n\n2. b', start: 0, end: 10 },
+    },
+    {
+      name: 'removes bullets when every selected line already has one',
+      text: '- a\n- b',
+      start: 0,
+      end: 7,
+      kind: 'bullet',
+      expected: { text: 'a\nb', start: 0, end: 3 },
+    },
+    {
+      name: 'adds the prefix to all lines when only some carry it',
+      text: '> a\nb',
+      start: 0,
+      end: 5,
+      kind: 'quote',
+      expected: { text: '> a\n> b', start: 0, end: 7 },
+    },
+    {
+      name: 'converts a bulleted list into a numbered one instead of nesting the markers',
+      text: '- a\n- b',
+      start: 0,
+      end: 7,
+      kind: 'ordered',
+      expected: { text: '1. a\n2. b', start: 0, end: 9 },
+    },
+    {
+      name: 'excludes the line a selection ends at the very start of',
+      text: 'a\nb',
+      start: 0,
+      end: 2,
+      kind: 'quote',
+      expected: { text: '> a\nb', start: 0, end: 3 },
+    },
+    {
+      name: 'starts an item on an empty field',
+      text: '',
+      start: 0,
+      end: 0,
+      kind: 'bullet',
+      expected: { text: '- ', start: 2, end: 2 },
+    },
+  ];
+
+  it.each(cases)('$name', ({ text, start, end, kind, expected }) => {
+    expect(toggleLinePrefix(text, start, end, kind)).toEqual(expected);
+  });
+});
+
+/** A fenced block always stands on lines of its own, so the cases pin the padding at each position. */
+describe('insertCodeBlock', () => {
+  it.each([
+    {
+      name: 'inserts an empty block on an empty field with the caret inside',
+      text: '',
+      start: 0,
+      end: 0,
+      expected: { text: '```\n\n```', start: 4, end: 4 },
+    },
+    {
+      name: 'wraps a selection and keeps it selected',
+      text: 'x = 1',
+      start: 0,
+      end: 5,
+      expected: { text: '```\nx = 1\n```', start: 4, end: 9 },
+    },
+    {
+      name: 'pads a block inserted after a paragraph with a blank line',
+      text: 'Intro',
+      start: 5,
+      end: 5,
+      expected: { text: 'Intro\n\n```\n\n```', start: 11, end: 11 },
+    },
+    {
+      name: 'pads off text on both sides of a selection in the middle of a line',
+      text: 'a b c',
+      start: 2,
+      end: 3,
+      expected: { text: 'a \n\n```\nb\n```\n\n c', start: 8, end: 9 },
+    },
+    {
+      name: 'keeps a trailing newline of the selection outside the closing fence',
+      text: 'x\nnext',
+      start: 0,
+      end: 2,
+      expected: { text: '```\nx\n```\n\nnext', start: 4, end: 5 },
+    },
+  ])('$name', ({ text, start, end, expected }) => {
+    expect(insertCodeBlock(text, start, end)).toEqual(expected);
+  });
+});
+
+/** A table never replaces the writer's text, and the first header cell is ready to be typed over. */
+describe('insertTable', () => {
+  const headers = ['H1', 'H2'] as const;
+
+  it.each([
+    {
+      name: 'inserts a table on an empty field and selects the first header',
+      text: '',
+      start: 0,
+      end: 0,
+      expected: { text: '| H1 | H2 |\n| --- | --- |\n|  |  |', start: 2, end: 4 },
+    },
+    {
+      name: 'puts the table after a selection without removing it',
+      text: 'keep me',
+      start: 0,
+      end: 4,
+      expected: { text: 'keep\n\n| H1 | H2 |\n| --- | --- |\n|  |  |\n\n me', start: 8, end: 10 },
+    },
+    {
+      name: 'reuses the newline that already ends the previous line',
+      text: 'Intro\n',
+      start: 6,
+      end: 6,
+      expected: { text: 'Intro\n\n| H1 | H2 |\n| --- | --- |\n|  |  |', start: 9, end: 11 },
+    },
+  ])('$name', ({ text, start, end, expected }) => {
+    expect(insertTable(text, start, end, headers)).toEqual(expected);
+  });
+});
+
+describe('insertLink', () => {
+  it.each([
+    {
+      name: 'inserts an empty link at the caret and waits in its text',
+      text: 'see ',
+      start: 4,
+      end: 4,
+      expected: { text: 'see [](https://)', start: 5, end: 5 },
+    },
+    {
+      name: 'uses the selection as the link text and selects the placeholder target',
+      text: 'see docs',
+      start: 4,
+      end: 8,
+      expected: { text: 'see [docs](https://)', start: 11, end: 19 },
+    },
+    {
+      name: 'uses a selected web address as the target and waits in the empty text',
+      text: 'https://example.com',
+      start: 0,
+      end: 19,
+      expected: { text: '[](https://example.com)', start: 1, end: 1 },
+    },
+  ])('$name', ({ text, start, end, expected }) => {
+    expect(insertLink(text, start, end)).toEqual(expected);
   });
 });

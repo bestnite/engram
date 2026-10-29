@@ -145,7 +145,8 @@
     transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1), background-color 150ms ease;
   }
 
-  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):focus {
+  /* A field-frame-body draws no border of its own: its frame takes the focus ring instead (see field-frame below). */
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea):where(:not(.field-frame-body)):focus {
     outline: none !important;
     border-color: var(--ring) !important;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent) !important;
@@ -265,6 +266,49 @@ html.dark #review-done {
   /* 7px vertical padding + 20px line height + border = 36px, the same height as Select and lg buttons, so controls in one row align naturally. */
   padding: 0.4375rem 0.75rem;
   color: var(--foreground);
+
+  &::placeholder {
+    color: var(--muted-foreground);
+  }
+}
+
+/* A framed field: one bordered box whose header row carries tools and whose body is the input itself.
+   The frame owns the field-input skin and its focus ring, and the body draws no border, so the input is never a
+   box inside a box. The ring follows the body's focus only: a focused header button has its own outline, and
+   ringing the whole frame for it would mark the field as being typed into. */
+@utility field-frame {
+  border-radius: var(--radius);
+  border: 1px solid var(--input);
+  background-color: var(--background);
+  transition: border-color 150ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:has(.field-frame-body:focus) {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+  }
+}
+
+/* The frame's header: a tinted strip separated from the body by the frame's own border color. The inner corners
+   are one border width smaller than the frame's, so the tint does not poke out of the rounded edge. */
+@utility field-frame-header {
+  border-bottom: 1px solid var(--input);
+  border-top-left-radius: calc(var(--radius) - 1px);
+  border-top-right-radius: calc(var(--radius) - 1px);
+  background-color: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+
+/* The frame's body is the input: the field-input padding and colors without a border or a background of its own. */
+@utility field-frame-body {
+  display: block;
+  width: 100%;
+  border: 0;
+  background-color: transparent;
+  padding: 0.4375rem 0.75rem;
+  color: var(--foreground);
+
+  &:focus {
+    outline: none;
+  }
 
   &::placeholder {
     color: var(--muted-foreground);

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render } from 'svelte/server';
 import NoteFieldsForm from '../lib/components/NoteFieldsForm.svelte';
 import { emptyFields } from '../lib/card-fields';
-import { createCatalog, fieldsForKind } from '../lib/card-types';
+import { backField, createCatalog, fieldsForKind, frontField } from '../lib/card-types';
 import { setLocale } from '../lib/i18n';
 import { CARD_TYPES } from './card-type-fixture';
 
@@ -37,9 +37,10 @@ describe('NoteFieldsForm field help', () => {
 });
 
 /**
- * The insertion toolbar lives in the label row of the field it writes into. Both callbacks are
- * optional: a host that inserts nothing renders the same form without a toolbar, and a `lines`
- * field never gets one because an inline insertion cannot address one element of an array.
+ * The insertion actions live in the header of the card face field they write into. Both callbacks
+ * are optional: a host that inserts nothing renders the same form without them. Only a face field
+ * that holds Markdown gets them; a `lines` field never does, because an inline insertion cannot
+ * address one element of an array.
  */
 describe('NoteFieldsForm insertion toolbar', () => {
   const catalog = createCatalog(CARD_TYPES.kinds);
@@ -54,6 +55,7 @@ describe('NoteFieldsForm insertion toolbar', () => {
       props: {
         specs,
         fields: emptyFields(specs),
+        faceFields: [frontField(catalog, kind), backField(catalog, kind)],
         ...(withActions
           ? { oninsertimage: () => {}, oninsertshortcode: () => {} }
           : {}),
@@ -61,9 +63,9 @@ describe('NoteFieldsForm insertion toolbar', () => {
     }).html;
   }
 
-  it('gives every text and textarea field the two insertion actions', () => {
+  it('gives the front and back fields the two insertion actions', () => {
     const html = renderKind('basic', true);
-    for (const key of ['front', 'back', 'source_url', 'extra']) {
+    for (const key of ['front', 'back']) {
       expect(html).toContain(`data-testid="note-field-${key}-toolbar"`);
       expect(html).toContain(`data-testid="note-field-${key}-insert-image"`);
       expect(html).toContain(`data-testid="note-field-${key}-insert-shortcode"`);
@@ -73,16 +75,51 @@ describe('NoteFieldsForm insertion toolbar', () => {
     expect(html).toContain('aria-label="在「正面」插入短代码"');
   });
 
-  it('gives a lines field no toolbar and a bool field none either', () => {
+  it('gives the fields off the card face no insertion actions', () => {
+    const html = renderKind('basic', true);
+    for (const key of ['source_url', 'extra']) {
+      expect(html).toContain(`data-testid="note-field-${key}"`);
+      expect(html).not.toContain(`data-testid="note-field-${key}-toolbar"`);
+      expect(html).not.toContain(`data-testid="note-field-${key}-insert-image"`);
+    }
+  });
+
+  it('gives a lines back field no toolbar and a bool field none either', () => {
     const html = renderKind('list', true);
     expect(html).toContain('data-testid="note-field-prompt-toolbar"');
     expect(html).not.toContain('data-testid="note-field-items-toolbar"');
     expect(html).not.toContain('data-testid="note-field-ordered-toolbar"');
   });
 
-  it('renders no toolbar at all when the host passes no insertion action', () => {
+  it('gives a single-line back field no toolbar, since its text is compared as the answer', () => {
+    const html = renderKind('typed', true);
+    expect(html).toContain('data-testid="note-field-prompt-toolbar"');
+    expect(html).not.toContain('data-testid="note-field-answer-toolbar"');
+  });
+
+  it('renders no insertion action when the host passes none', () => {
     const html = renderKind('basic', false);
+    expect(html).toContain('data-testid="note-field-front-toolbar"');
     expect(html).not.toContain('-insert-image"');
     expect(html).not.toContain('-insert-shortcode"');
+  });
+
+  it('renders no toolbar at all when the host names no face field', () => {
+    const specs = fieldsForKind(catalog, 'basic');
+    const html = render(NoteFieldsForm, {
+      props: { specs, fields: emptyFields(specs), oninsertimage: () => {}, oninsertshortcode: () => {} },
+    }).html;
+    expect(html).not.toContain('-toolbar"');
+  });
+
+  it('puts the insertion actions in the same header row as the formatting actions', () => {
+    const html = renderKind('basic', true);
+    const header = html.slice(
+      html.indexOf('data-testid="note-field-front-toolbar"'),
+      html.indexOf('data-testid="note-field-front"')
+    );
+    expect(header).toContain('data-testid="note-field-front-format-bold"');
+    expect(header).toContain('data-testid="note-field-front-insert-image"');
+    expect(header).toContain('data-testid="note-field-front-insert-shortcode"');
   });
 });

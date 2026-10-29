@@ -18,7 +18,7 @@
   import PageHeader from '../components/ui/PageHeader.svelte';
   import Dropzone from '../components/ui/Dropzone.svelte';
   import { emptyFields, toFormFields, toPayloadFields } from '../card-fields';
-  import { cardTypes, fieldsForKind, kindOrder, loadCardTypes } from '../card-types';
+  import { backField, cardTypes, fieldsForKind, frontField, kindOrder, loadCardTypes } from '../card-types';
   import { insertSource, type Caret } from '../shortcode-source';
   import { uploadErrorKeyFor } from '../media-upload';
   import { Eye, X } from '@lucide/svelte';
@@ -499,8 +499,9 @@
   {:else}
     <form onsubmit={submit} data-testid="note-editor-form">
       <div class="grid gap-8 lg:grid-cols-2 lg:items-start">
-        <!-- Left column: input. Card type, its fields (each with its own insertion tools) and the tags; the
-             insertion tools sit on the field they write into, so nothing has to be scrolled to on a phone. -->
+        <!-- Left column: input. Card type, its fields (the front and back fields carry their own formatting and
+             insertion tools) and the tags; the tools sit on the field they write into, so nothing has to be
+             scrolled to on a phone. -->
         <div class="min-w-0 space-y-8">
           <div class="space-y-5">
             <div>
@@ -518,6 +519,7 @@
             <NoteFieldsForm
               specs={fieldsForKind($cardTypes, kind)}
               {fields}
+              faceFields={[frontField($cardTypes, kind), backField($cardTypes, kind)]}
               testIdPrefix="note-field"
               oncaret={trackCaret}
               oninsertimage={(key, trigger) => openInsert('image', key, trigger)}

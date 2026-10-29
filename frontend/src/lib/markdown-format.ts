@@ -1,18 +1,20 @@
 /**
- * Markdown emphasis toggling for a plain text control.
+ * Markdown source edits for a plain text control.
  *
  * The editor keeps a field's value as Markdown source, so a formatting action edits that source
  * instead of replacing the control with a rich-text surface. This module holds only the text
- * transformation: it takes the current text, the selection offsets and one marker, and returns the
- * new text with the offsets the caret or selection must take afterwards. It never touches the DOM,
- * which is what makes every case here testable without a browser.
+ * transformation: it takes the current text and the selection offsets, and returns the new text
+ * with the offsets the caret or selection must take afterwards. It never touches the DOM, which is
+ * what makes every case here testable without a browser.
  *
- * CommonMark reads `*` as emphasis and `~~` as strikethrough (GitHub Flavored Markdown); `**` is
- * strong emphasis. Those three are the whole vocabulary the toolbar offers.
+ * The vocabulary is what the card renderer keeps (GitHub Flavored Markdown, sanitized): inline
+ * emphasis, strikethrough, code and links, plus quotes, lists, fenced code and tables as blocks.
+ * Headings are left out on purpose: the card sanitizer strips them, so a heading button would write
+ * markup that never shows.
  */
 
-/** The three emphasis markers the toolbar writes. */
-export type MarkdownMarker = '**' | '*' | '~~';
+/** The inline markers the toolbar toggles around a selection. */
+export type MarkdownMarker = '**' | '*' | '~~' | '`';
 
 /** The result of one toggle: the new field text and where the selection sits inside it. */
 export interface MarkdownEdit {
@@ -61,6 +63,8 @@ function runAfter(text: string, index: number, char: string): number {
 function isPairRun(width: number, marker: MarkdownMarker): boolean {
   if (marker === '*') return width === 1;
   if (marker === '**') return width === 2 || width === 3;
+  // A code span is one backtick on each side here; a run of three is a code fence, not a span.
+  if (marker === '`') return width === 1;
   return width === 2;
 }
 
@@ -162,4 +166,141 @@ export function markerForShortcut(input: ShortcutInput): MarkdownMarker | null {
     default:
       return null;
   }
+}
+
+/** Offsets clamped into the text and put in order, so every edit below reads one selection shape. */
+function orderedRange(text: string, start: number, end: number): [number, number] {
+  return [clampOffset(Math.min(start, end), text.length), clampOffset(Math.max(start, end), text.length)];
+}
+
+/**
+ * The separators a block needs so it stands on its own lines with a blank line on each side.
+ *
+ * A table only starts at a line of its own, and a blank line keeps the paragraph before it from
+ * swallowing its header row; the same spacing keeps a fenced block visibly apart in the source. The
+ * start and the end of the field need no separator.
+ */
+function blockPadding(before: string, after: string): [string, string] {
+  const lead = before === '' || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+  const trail = after === '' || after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+  return [lead, trail];
+}
+
+/** The line-level blocks the toolbar toggles: a quote, a bulleted list and a numbered list. */
+export type LinePrefix = 'quote' | 'bullet' | 'ordered';
+
+const PREFIX_PATTERNS: Record<LinePrefix, RegExp> = {
+  quote: /^> ?/,
+  bullet: /^[-*+] /,
+  ordered: /^\d+[.)] /,
+};
+
+/**
+ * Toggles a line prefix on every line the selection touches.
+ *
+ * - When every non-empty line already carries the prefix, the prefix is removed from all of them.
+ * - Otherwise each non-empty line gets it. A line that is a list item of the other kind is
+ *   converted instead of being double-marked, so a bulleted list turns into a numbered one.
+ * - A numbered list counts only the non-empty lines, from 1.
+ * - An empty line inside the selection stays empty, so a paragraph break is not turned into an
+ *   empty item; a selection that is one empty line gets the prefix, so the writer can start typing.
+ *
+ * A selection that ends at the very start of a line does not include that line: that is where a
+ * selection made by dragging over whole lines ends. A collapsed caret stays on the same character;
+ * a selection afterwards covers the edited lines.
+ */
+export function toggleLinePrefix(text: string, start: number, end: number, kind: LinePrefix): MarkdownEdit {
+  const [first, last] = orderedRange(text, start, end);
+  const effectiveLast = last > first && text[last - 1] === '\n' ? last - 1 : last;
+  const blockStart = text.lastIndexOf('\n', first - 1) + 1;
+  const newline = text.indexOf('\n', effectiveLast);
+  const blockEnd = newline === -1 ? text.length : newline;
+  const lines = text.slice(blockStart, blockEnd).split('\n');
+
+  const pattern = PREFIX_PATTERNS[kind];
+  const filled = lines.filter((line) => line.trim() !== '');
+  const remove = filled.length > 0 && filled.every((line) => pattern.test(line));
+
+  let count = 0;
+  const edited = lines.map((line) => {
+    if (remove) return line.replace(pattern, '');
+    if (line.trim() === '' && filled.length > 0) return line;
+    let body = line.replace(pattern, '');
+    // Converting between the two list kinds drops the other marker rather than nesting it.
+    if (kind === 'bullet') body = body.replace(PREFIX_PATTERNS.ordered, '');
+    if (kind === 'ordered') body = body.replace(PREFIX_PATTERNS.bullet, '');
+    count += 1;
+    const prefix = kind === 'quote' ? '> ' : kind === 'bullet' ? '- ' : `${count}. `;
+    return prefix + body;
+  });
+
+  const block = edited.join('\n');
+  const result = text.slice(0, blockStart) + block + text.slice(blockEnd);
+  if (first === last) {
+    // One line only: the caret moves by however much its line grew or shrank, but never in front of the line.
+    const caret = Math.max(blockStart, first + (edited[0] ?? '').length - (lines[0] ?? '').length);
+    return { text: result, start: caret, end: caret };
+  }
+  return { text: result, start: blockStart, end: blockStart + block.length };
+}
+
+/**
+ * Wraps the selection in a fenced code block, or inserts an empty one at the caret.
+ *
+ * The fences go on lines of their own, padded off the surrounding text. The selected text stays
+ * selected inside the fences; an empty block leaves the caret on the empty line between them. A
+ * trailing newline in the selection is kept outside the closing fence, so the block does not end
+ * with a blank code line.
+ */
+export function insertCodeBlock(text: string, start: number, end: number): MarkdownEdit {
+  const [first, last] = orderedRange(text, start, end);
+  const before = text.slice(0, first);
+  const selected = text.slice(first, last);
+  const inner = selected.replace(/\n$/, '');
+  const after = selected.slice(inner.length) + text.slice(last);
+  const [lead, trail] = blockPadding(before, after);
+  const open = `${lead}\`\`\`\n`;
+  const block = `${open}${inner}\n\`\`\`${trail}`;
+  const innerStart = first + open.length;
+  return { text: before + block + after, start: innerStart, end: innerStart + inner.length };
+}
+
+/**
+ * Inserts a two-column table after the selection, keeping the selected text as it was.
+ *
+ * The header cells come from the caller, because they are words the writer sees and edits in the
+ * active language. The first header cell is selected afterwards, so typing replaces it.
+ */
+export function insertTable(text: string, start: number, end: number, headers: readonly [string, string]): MarkdownEdit {
+  const [, last] = orderedRange(text, start, end);
+  const before = text.slice(0, last);
+  const after = text.slice(last);
+  const [lead, trail] = blockPadding(before, after);
+  const block = `| ${headers[0]} | ${headers[1]} |\n| --- | --- |\n|  |  |`;
+  const cell = last + lead.length + 2;
+  return { text: before + lead + block + trail + after, start: cell, end: cell + headers[0].length };
+}
+
+/**
+ * Turns the selection into a link.
+ *
+ * - A selection that is a web address becomes the link target, and the caret waits in the empty
+ *   link text.
+ * - Any other selection becomes the link text, and the placeholder target `https://` is selected so
+ *   pasting an address replaces it.
+ * - A collapsed caret inserts an empty link and waits in its text.
+ */
+export function insertLink(text: string, start: number, end: number): MarkdownEdit {
+  const [first, last] = orderedRange(text, start, end);
+  const before = text.slice(0, first);
+  const selected = text.slice(first, last);
+  const after = text.slice(last);
+  if (/^https?:\/\/\S+$/i.test(selected)) {
+    return { text: `${before}[](${selected})${after}`, start: first + 1, end: first + 1 };
+  }
+  const target = 'https://';
+  const source = `[${selected}](${target})`;
+  if (selected === '') return { text: before + source + after, start: first + 1, end: first + 1 };
+  const targetStart = first + selected.length + 3;
+  return { text: before + source + after, start: targetStart, end: targetStart + target.length };
 }
