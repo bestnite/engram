@@ -153,7 +153,7 @@ func newLinkEnv(t *testing.T) *linkEnv {
 		t.Fatalf("NewAccountService() error = %v", err)
 	}
 	auditStore := store.NewAuditStore(db)
-	auditor, err := NewAuditor(auditStore)
+	auditor, err := NewAuditor(auditStore, nil)
 	if err != nil {
 		t.Fatalf("NewAuditor() error = %v", err)
 	}

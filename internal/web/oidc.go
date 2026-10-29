@@ -256,7 +256,7 @@ func (s *Server) oidcCallback(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID),
 		Action: store.ActionUserLoginSucceeded,
 		Detail: map[string]any{"method": "oidc", "provider": profile.Provider, "decision": string(decision.Kind)},
@@ -313,7 +313,7 @@ func (s *Server) oidcBindCallback(c *gin.Context, cfg *auth.OIDCConfig, pending 
 
 // oidcRecordFailure leaves an audit record for a state validation failure (no user_id: identity is unknown at this point).
 func (s *Server) oidcRecordFailure(ctx context.Context, reason string) {
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		Action:     store.ActionUserLoginFailed,
 		TargetType: "oidc",
 		Detail:     map[string]any{"reason": reason},

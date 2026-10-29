@@ -109,7 +109,7 @@ func (s *Server) adminJobCancel(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "failed")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionJobCancel,
 		TargetType: "job", TargetID: store.Ptr(job.ID),
 	})

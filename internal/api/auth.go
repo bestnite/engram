@@ -148,7 +148,7 @@ func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {
 	c.Set(string(ctxUserKey), u)
 	c.Set(string(ctxKeyKey), key)
 	// Every key call writes an audit entry carrying api_key_id; a failed write does not block the request.
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: store.Ptr(key.ID),
 		Action:   "api.request",

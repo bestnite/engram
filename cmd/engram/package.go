@@ -37,7 +37,7 @@ func openPackageCLI(ctx context.Context) (*api.API, *store.UserStore, *gorm.DB, 
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
+	auditor, err := auth.NewAuditor(store.NewAuditStore(db), nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}

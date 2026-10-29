@@ -164,7 +164,7 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 		return
 	}
 	if presetID != nil {
-		s.audit(ctx, store.AuditEntry{
+		s.auditor.Record(ctx, store.AuditEntry{
 			UserID:     store.Ptr(user.ID),
 			Action:     store.ActionDeckPreset,
 			TargetType: "deck",
@@ -172,7 +172,7 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 			Detail:     map[string]any{"preset_id": presetPublic},
 		})
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionDeckCaps,
 		TargetType: "deck",

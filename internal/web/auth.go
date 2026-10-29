@@ -66,17 +66,6 @@ func (s *Server) localizer(c *gin.Context) (*i18n.Localizer, bool) {
 	return loc, true
 }
 
-// audit is the single exit for writing audits: every change lands in audit_log through here.
-// An audit write failure only logs in English and does not roll back business changes that already happened — but it is never silent, otherwise the audit would quietly lose rows.
-func (s *Server) audit(ctx context.Context, e store.AuditEntry) {
-	if s.auditor == nil {
-		return
-	}
-	if err := s.auditor.Record(ctx, e); err != nil {
-		s.logger.Error("write audit log failed", "action", e.Action, "error", err)
-	}
-}
-
 // anonRateLimited reports whether an anonymous entry request should be rejected by the rate limit, and adds the Retry-After response header when rejecting.
 // /register and /forgot-password share the same two-dimension count of "IP + target mailbox, 5 times each / 15 minutes"
 // When no limiter is wired up everything is allowed, consistent with the wiring convention of loginLimiter.
@@ -215,7 +204,7 @@ func (s *Server) attemptRegistration(ctx context.Context, clientIP, username, em
 		}
 		u = created
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		Action:     store.ActionUserCreate,
 		TargetType: "user",
@@ -247,7 +236,7 @@ func (s *Server) attemptSetup(ctx context.Context, username, email, displayName,
 		s.logger.Error("create bootstrap admin failed", "username", username, "error", err)
 		return registrationOutcome{Status: http.StatusConflict, Code: "create_failed"}
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		Action:     store.ActionUserCreate,
 		TargetType: "user",

@@ -195,7 +195,7 @@ func (s *Server) shareInviteAccept(c *gin.Context) {
 	if err := s.shareInvites.Delete(ctx, deckID, u.ID); err != nil {
 		s.logger.Error("delete accepted share invite failed", "deck_id", deckID, "user_id", u.ID, "error", err)
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionDeckShareAccept,
 		TargetType: "deck", TargetID: store.Ptr(deckID),
 		Detail: map[string]any{"role": inv.Role, "invited_by": s.userPublicID(ctx, inv.InvitedBy)},
@@ -225,7 +225,7 @@ func (s *Server) shareInviteReject(c *gin.Context) {
 		shareError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionDeckShareReject,
 		TargetType: "deck", TargetID: store.Ptr(deckID),
 		Detail: map[string]any{"invited_by": s.userPublicID(ctx, inv.InvitedBy)},
@@ -321,7 +321,7 @@ func (s *Server) sharePolicySave(c *gin.Context) {
 			return
 		}
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionSharePolicyUpdate,
 		TargetType: "user", TargetID: store.Ptr(u.ID),
 		Detail: map[string]any{"policy": policyRaw, "allow": len(allowIDs), "revoke": len(revokeIDs)},

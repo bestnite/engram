@@ -174,7 +174,7 @@ func (s *Server) presetCreate(c *gin.Context) {
 		presetError(c, http.StatusBadRequest, presetStoreCode(err))
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionPresetCreate,
 		TargetType: "preset",
@@ -206,7 +206,7 @@ func (s *Server) presetUpdate(c *gin.Context) {
 		presetError(c, http.StatusBadRequest, presetStoreCode(err))
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionPresetUpdate,
 		TargetType: "preset",
@@ -240,7 +240,7 @@ func (s *Server) presetDelete(c *gin.Context) {
 		presetError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionPresetDelete,
 		TargetType: "preset",
@@ -289,7 +289,7 @@ func (s *Server) presetOptimize(c *gin.Context) {
 		presetError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionPresetOptimize,
 		TargetType: "preset",
@@ -348,7 +348,7 @@ func (s *Server) presetOptimizeRevert(c *gin.Context) {
 		presetError(c, http.StatusInternalServerError, "internal_error")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionPresetOptimizeRevert,
 		TargetType: "preset",

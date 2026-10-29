@@ -52,7 +52,7 @@ func newEnvWithPackageFetcher(t *testing.T, fetcher api.PackageFetcher) (*api.AP
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
+	auditor, err := auth.NewAuditor(store.NewAuditStore(db), nil)
 	if err != nil {
 		t.Fatalf("NewAuditor() error = %v", err)
 	}

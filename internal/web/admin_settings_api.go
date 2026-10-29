@@ -219,7 +219,7 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 	}
 
 	if len(changed) > 0 {
-		s.audit(ctx, store.AuditEntry{
+		s.auditor.Record(ctx, store.AuditEntry{
 			UserID: store.Ptr(u.ID), Action: store.ActionSettingUpdate,
 			TargetType: "setting", Detail: map[string]any{"keys": changed, "via": "spa"},
 		})

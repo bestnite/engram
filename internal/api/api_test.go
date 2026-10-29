@@ -39,7 +39,7 @@ func newTestEnv(t *testing.T, readLimit, writeLimit int) *testEnv {
 	if err := store.AutoMigrate(context.Background(), db); err != nil {
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}
-	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
+	auditor, err := auth.NewAuditor(store.NewAuditStore(db), nil)
 	if err != nil {
 		t.Fatalf("NewAuditor() error = %v", err)
 	}

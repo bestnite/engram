@@ -39,7 +39,7 @@ func newNotesServer(t *testing.T) (srv *Server, db *gorm.DB, ownerID uint64, coo
 	if err != nil {
 		t.Fatalf("NewSessionManager() error = %v", err)
 	}
-	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
+	auditor, err := auth.NewAuditor(store.NewAuditStore(db), nil)
 	if err != nil {
 		t.Fatalf("NewAuditor() error = %v", err)
 	}

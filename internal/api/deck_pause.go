@@ -35,7 +35,7 @@ func (a *API) SetDeckPaused(ctx context.Context, u *store.User, apiKeyID *uint64
 		if paused {
 			action = store.ActionDeckPause
 		}
-		recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+		a.auditor.Record(ctx, store.AuditEntry{
 			UserID:     store.Ptr(u.ID),
 			APIKeyID:   apiKeyID,
 			Action:     action,

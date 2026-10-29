@@ -90,7 +90,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 			s.loginLimiter.RecordFailure(username, ip)
 		}
 		s.logger.Info("login failed", "username", username, "error", err)
-		s.audit(ctx, store.AuditEntry{
+		s.auditor.Record(ctx, store.AuditEntry{
 			Action: store.ActionUserLoginFailed,
 			Detail: map[string]any{"username": username, "ip": ip, "reason": err.Error()},
 		})
@@ -151,7 +151,7 @@ func (s *Server) apiLogin(c *gin.Context) {
 		return
 	}
 
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID),
 		Action: store.ActionUserLoginSucceeded,
 		Detail: map[string]any{"ip": ip},
@@ -432,7 +432,7 @@ func (s *Server) apiLogout(c *gin.Context) {
 		})
 		return
 	}
-	s.audit(ctx, store.AuditEntry{UserID: userID, Action: store.ActionUserLogout})
+	s.auditor.Record(ctx, store.AuditEntry{UserID: userID, Action: store.ActionUserLogout})
 	doubleToken := auth.EnsureDoubleSubmitToken(c, s.secureCookies())
 	c.JSON(http.StatusOK, gin.H{
 		"authenticated": false,

@@ -167,7 +167,7 @@ func (s *Server) consumeUnsubscribe(ctx context.Context, token string) (mail.Typ
 	if err := prefs.SetChoices(ctx, tok.UserID, choices, time.Now().UTC()); err != nil {
 		return "", fmt.Errorf("save email preferences: %w", err)
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(tok.UserID),
 		Action:     store.ActionUserEmailUnsubscribe,
 		TargetType: "user",

@@ -238,7 +238,7 @@ func (s *IdentityLinkService) Bind(ctx context.Context, profile OAuthProfile, us
 		}
 		return err
 	}
-	s.recordLinkAudit(ctx, userID, profile, map[string]any{
+	s.recordLinkAudit(ctx, userID, map[string]any{
 		"provider":       profile.Provider,
 		"subject":        profile.Subject,
 		"email_verified": profile.EmailVerified,
@@ -254,7 +254,7 @@ func (s *IdentityLinkService) link(ctx context.Context, profile OAuthProfile, us
 	if err := s.createLink(ctx, profile, userID, email); err != nil {
 		return err
 	}
-	s.recordLinkAudit(ctx, userID, profile, map[string]any{
+	s.recordLinkAudit(ctx, userID, map[string]any{
 		"provider":       profile.Provider,
 		"subject":        profile.Subject,
 		"email_verified": profile.EmailVerified,
@@ -280,21 +280,14 @@ func (s *IdentityLinkService) createLink(ctx context.Context, profile OAuthProfi
 }
 
 // recordLinkAudit writes one identity.link row; an audit failure only logs in English and does not affect a link already made.
-func (s *IdentityLinkService) recordLinkAudit(ctx context.Context, userID uint64, profile OAuthProfile, detail map[string]any) {
-	if s.audit == nil {
-		return
-	}
-	err := s.audit.Record(ctx, store.AuditEntry{
+func (s *IdentityLinkService) recordLinkAudit(ctx context.Context, userID uint64, detail map[string]any) {
+	s.audit.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		Action:     store.ActionIdentityLink,
 		TargetType: "user",
 		TargetID:   store.Ptr(userID),
 		Detail:     detail,
 	})
-	if err != nil {
-		s.logger.Error("record identity link audit failed",
-			"user_id", userID, "provider", profile.Provider, "error", err)
-	}
 }
 
 // oidcUsername generates a deterministic and unique login name for auto-created accounts: the email local part (oidc when there is no email)

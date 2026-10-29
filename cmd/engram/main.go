@@ -260,7 +260,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		return nil, err
 	}
 	// Audit and login rate limiting are assembled explicitly here; both are stateless/in-memory, so a single instance reuses them directly.
-	auditor, err := auth.NewAuditor(store.NewAuditStore(db))
+	auditor, err := auth.NewAuditor(store.NewAuditStore(db), nil)
 	if err != nil {
 		return nil, err
 	}

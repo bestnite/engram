@@ -196,7 +196,7 @@ func (s *Server) adminSMTPSave(c *gin.Context) {
 	}
 
 	if len(changed) > 0 {
-		s.audit(ctx, store.AuditEntry{
+		s.auditor.Record(ctx, store.AuditEntry{
 			UserID: store.Ptr(u.ID), Action: store.ActionSettingUpdate,
 			TargetType: "setting", Detail: map[string]any{"keys": changed, "scope": "smtp", "via": "spa"},
 		})
@@ -259,7 +259,7 @@ func (s *Server) adminSMTPTest(c *gin.Context) {
 		result.OK = true
 	}
 	// "Test connection" makes an outbound connection to an admin-chosen target: both success and failure leave a trace, recording only the host and the result.
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionAdminSMTPTest,
 		TargetType: "smtp",
 		Detail:     map[string]any{"host": cfg.Host, "ok": result.OK, "via": "spa"},

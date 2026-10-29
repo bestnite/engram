@@ -62,7 +62,7 @@ func (s *Server) deckClone(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionDeckClone,
 		TargetType: "deck",

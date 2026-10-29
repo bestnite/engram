@@ -142,7 +142,7 @@ func (s *Server) adminUserCreate(c *gin.Context) {
 		adminError(c, http.StatusBadRequest, "create_failed")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionUserCreate,
 		TargetType: "user", TargetID: store.Ptr(created.ID),
 		Detail: map[string]any{"username": created.Username, "role": created.Role, "by_admin": true},
@@ -188,7 +188,7 @@ func (s *Server) adminUserStatus(c *gin.Context) {
 			adminError(c, http.StatusInternalServerError, "save_failed")
 			return
 		}
-		s.audit(ctx, store.AuditEntry{
+		s.auditor.Record(ctx, store.AuditEntry{
 			UserID: store.Ptr(actor.ID), Action: store.ActionUserDisable,
 			TargetType: "user", TargetID: store.Ptr(target.ID),
 		})
@@ -199,7 +199,7 @@ func (s *Server) adminUserStatus(c *gin.Context) {
 			adminError(c, http.StatusInternalServerError, "save_failed")
 			return
 		}
-		s.audit(ctx, store.AuditEntry{
+		s.auditor.Record(ctx, store.AuditEntry{
 			UserID: store.Ptr(actor.ID), Action: store.ActionUserEnable,
 			TargetType: "user", TargetID: store.Ptr(target.ID),
 		})
@@ -241,7 +241,7 @@ func (s *Server) adminUserRole(c *gin.Context) {
 	if s.writeAdminGateError(c, err, "set role", target.ID) {
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionUserRoleChange,
 		TargetType: "user", TargetID: store.Ptr(target.ID),
 		Detail: map[string]any{"from": target.Role, "to": req.Role},
@@ -277,7 +277,7 @@ func (s *Server) adminUserResetPassword(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionUserPasswordReset,
 		TargetType: "user", TargetID: store.Ptr(target.ID),
 	})
@@ -301,7 +301,7 @@ func (s *Server) adminUserForceLogout(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionUserForceLogout,
 		TargetType: "user", TargetID: store.Ptr(target.ID),
 	})
@@ -354,7 +354,7 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 	if s.writeAdminGateError(c, err, "delete user", target.ID) {
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionUserDelete,
 		TargetType: "user", TargetID: store.Ptr(target.ID),
 		Detail: map[string]any{"username": target.Username},

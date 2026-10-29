@@ -133,7 +133,7 @@ func (s *Server) totpBegin(c *gin.Context) {
 		totpError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionTOTPBegin,
 		TargetType: "user",
@@ -170,7 +170,7 @@ func (s *Server) totpConfirm(c *gin.Context) {
 		}
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionTOTPEnable,
 		TargetType: "user",
@@ -213,7 +213,7 @@ func (s *Server) totpDisable(c *gin.Context) {
 		totpError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionTOTPDisable,
 		TargetType: "user",
@@ -263,7 +263,7 @@ func (s *Server) totpRecovery(c *gin.Context) {
 		totpError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionTOTPRecoveryRegenerate,
 		TargetType: "user",

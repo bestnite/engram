@@ -68,7 +68,7 @@ func (a *API) createKey(c *gin.Context) {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, err.Error())
 		return
 	}
-	recordAudit(c.Request.Context(), a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(c.Request.Context(), store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: CurrentAPIKeyID(c),
 		Action:   store.ActionAPIKeyCreate,
@@ -99,7 +99,7 @@ func (a *API) deleteKey(c *gin.Context) {
 		abortError(c, http.StatusInternalServerError, CodeInternal, "")
 		return
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:   store.Ptr(u.ID),
 		APIKeyID: CurrentAPIKeyID(c),
 		Action:   "api_key.revoke",

@@ -210,17 +210,6 @@ func (a *API) Register(r gin.IRouter) {
 	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeKeys), a.deleteKey)
 }
 
-// recordAudit writes one audit entry; a failed write only logs in English and does not roll back the business action (AGENTS.md §2.1: logs are always English).
-// Two receivers, *API and *Authenticator, share this implementation so the same guard is not written twice.
-func recordAudit(ctx context.Context, auditor *auth.Auditor, logger *slog.Logger, e store.AuditEntry) {
-	if auditor == nil {
-		return
-	}
-	if err := auditor.Record(ctx, e); err != nil {
-		logger.Error("write audit log failed", "action", e.Action, "error", err)
-	}
-}
-
 // pathPublicID reads the external id parameter from the path (an opaque UUID string); an empty string writes 404 and returns false immediately.
 // Entity resolution is the caller's job via the matching store's ByPublicID; the routing layer only hands the external id over.
 func pathPublicID(c *gin.Context, name string) (string, bool) {

@@ -171,7 +171,7 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		writeMediaError(c, status, code, msg)
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionMediaUpload,
 		TargetType: "media",

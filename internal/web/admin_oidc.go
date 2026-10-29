@@ -200,7 +200,7 @@ func (s *Server) adminOIDCSave(c *gin.Context) {
 	// Invalidate the discovery document cache after a config change: clear both the old and the new issuer.
 	s.oidc.Invalidate(old.Issuer)
 	s.oidc.Invalidate(issuer)
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionSettingUpdate,
 		TargetType: "setting", Detail: map[string]any{"keys": changed, "scope": "oidc", "via": "spa"},
 	})
@@ -243,7 +243,7 @@ func (s *Server) adminOIDCTest(c *gin.Context) {
 		result.OK = true
 	}
 	// "Test connection" makes an outbound connection to an admin-chosen target: both success and failure leave a trace, recording only the issuer and the result.
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionAdminOIDCTest,
 		TargetType: "oidc",
 		Detail:     map[string]any{"issuer": issuer, "ok": result.OK, "via": "spa"},
@@ -284,7 +284,7 @@ func (s *Server) adminOIDCUnlink(c *gin.Context) {
 		}
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionIdentityUnlink,
 		TargetType: "identity", TargetID: store.Ptr(ident.ID),
 		Detail: map[string]any{"provider": ident.Provider, "subject": ident.Subject, "user_id": s.userPublicID(ctx, ident.UserID), "via": "spa"},

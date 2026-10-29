@@ -76,7 +76,7 @@ func (a *API) setSuspended(ctx context.Context, u *store.User, apiKeyID *uint64,
 		action = store.ActionCardSuspend
 	}
 	for _, c := range cards {
-		recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+		a.auditor.Record(ctx, store.AuditEntry{
 			UserID: store.Ptr(u.ID), APIKeyID: apiKeyID, Action: action,
 			TargetType: "card", TargetID: store.Ptr(c.ID),
 		})

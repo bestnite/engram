@@ -94,7 +94,7 @@ func (s *Server) loadDeckWithRole(c *gin.Context, user *store.User, deckID uint6
 		c.AbortWithStatus(http.StatusNotFound)
 		return nil, "", false
 	}
-	s.audit(c.Request.Context(), store.AuditEntry{
+	s.auditor.Record(c.Request.Context(), store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionPermissionDenied,
 		TargetType: "deck",

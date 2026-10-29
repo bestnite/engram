@@ -101,7 +101,7 @@ func (s *Server) passwordPatch(c *gin.Context) {
 	if initial {
 		detail = map[string]any{"initial": true}
 	}
-	s.audit(c.Request.Context(), store.AuditEntry{
+	s.auditor.Record(c.Request.Context(), store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionUserPasswordChange, TargetType: "user", TargetID: store.Ptr(u.ID),
 		Detail: detail,
 	})
@@ -218,7 +218,7 @@ func (s *Server) profilePatch(c *gin.Context) {
 		}})
 		return
 	}
-	s.audit(c.Request.Context(), store.AuditEntry{
+	s.auditor.Record(c.Request.Context(), store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionUserProfileUpdate, TargetType: "user", TargetID: store.Ptr(u.ID),
 		Detail: map[string]any{"locale": req.Locale, "timezone": req.Timezone, "day_cutoff_hour": req.DayCutoffHour,
 			"learn_ahead_minutes": req.LearnAheadMinutes, "via": "spa"},
@@ -254,7 +254,7 @@ func (s *Server) localePatch(c *gin.Context) {
 			}})
 			return
 		}
-		s.audit(c.Request.Context(), store.AuditEntry{
+		s.auditor.Record(c.Request.Context(), store.AuditEntry{
 			UserID: store.Ptr(u.ID), Action: store.ActionUserProfileUpdate, TargetType: "user", TargetID: store.Ptr(u.ID),
 			Detail: map[string]any{"locale": locale, "via": "spa"},
 		})

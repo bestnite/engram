@@ -160,7 +160,7 @@ func (s *Server) resetPasswordSubmit(c *gin.Context) {
 		apiAuthError(c, http.StatusBadRequest, "token_invalid", "The reset link is invalid.")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(tok.UserID),
 		Action:     store.ActionUserPasswordResetComplete,
 		TargetType: "user",
@@ -194,7 +194,7 @@ func (s *Server) verifyEmailSubmit(c *gin.Context) {
 		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(tok.UserID),
 		Action:     store.ActionUserEmailVerified,
 		TargetType: "user",
@@ -228,7 +228,7 @@ func (s *Server) confirmEmailChangeSubmit(c *gin.Context) {
 		apiAuthError(c, http.StatusConflict, "email_conflict", "That email address could not be used.")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(tok.UserID),
 		Action:     store.ActionUserEmailChanged,
 		TargetType: "user",
@@ -305,7 +305,7 @@ func (s *Server) emailChangeSubmit(c *gin.Context) {
 		apiAuthError(c, http.StatusBadRequest, "mail_not_configured", "Email is not configured on this site.")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionUserEmailChangeRequest,
 		TargetType: "user",
@@ -326,7 +326,7 @@ func (s *Server) resendVerificationSubmit(c *gin.Context) {
 		apiAuthError(c, http.StatusBadRequest, "mail_not_configured", "Email is not configured on this site.")
 		return
 	}
-	s.audit(c.Request.Context(), store.AuditEntry{
+	s.auditor.Record(c.Request.Context(), store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionUserEmailVerifyRequest,
 		TargetType: "user",

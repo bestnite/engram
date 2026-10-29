@@ -141,7 +141,7 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 		}
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "")
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   in.APIKeyID,
 		Action:     store.ActionDeckCreate,
@@ -190,7 +190,7 @@ func (a *API) UpdateDeck(ctx context.Context, u *store.User, deckID uint64, in U
 		a.logger.Error("reload deck after update failed", "deck_id", deckID, "error", err)
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   in.APIKeyID,
 		Action:     store.ActionDeckUpdate,
@@ -218,7 +218,7 @@ func (a *API) DeleteDeck(ctx context.Context, u *store.User, deckID uint64, apiK
 		a.logger.Error("delete deck failed", "deck_id", deckID, "user_id", u.ID, "error", err)
 		return newServiceError(http.StatusInternalServerError, CodeInternal, "")
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   apiKeyID,
 		Action:     store.ActionDeckDelete,
@@ -306,7 +306,7 @@ func (a *API) BulkDecks(ctx context.Context, userID uint64, apiKeyID *uint64, in
 	if !in.DryRun {
 		// One row per deck keeps the same shape as the single-deck delete audit, so history stays aggregatable by target.
 		for _, deckID := range permitted {
-			recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+			a.auditor.Record(ctx, store.AuditEntry{
 				UserID:     store.Ptr(userID),
 				APIKeyID:   apiKeyID,
 				Action:     store.ActionDeckDelete,
@@ -351,7 +351,7 @@ func (a *API) LeaveDeck(ctx context.Context, u *store.User, deckID uint64, apiKe
 		a.logger.Error("leave deck failed", "deck_id", deckID, "user_id", u.ID, "error", err)
 		return newServiceError(http.StatusInternalServerError, CodeInternal, "")
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   apiKeyID,
 		Action:     store.ActionDeckRevoke,
@@ -379,7 +379,7 @@ func (a *API) RequireDeckRole(ctx context.Context, userID, deckID uint64, want s
 	if role != "" {
 		code = CodeInsufficientRole
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		Action:     store.ActionPermissionDenied,
 		TargetType: "deck",
@@ -650,7 +650,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		}
 	}
 
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		APIKeyID:   apiKeyID,
 		Action:     "note.import",
@@ -752,7 +752,7 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 		a.logger.Error("update note failed", "note_id", existing.ID, "error", err)
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		APIKeyID:   apiKeyID,
 		Action:     store.ActionNoteUpdate,
@@ -776,7 +776,7 @@ func (a *API) DeleteNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 		a.logger.Error("delete note failed", "note_id", existing.ID, "error", err)
 		return 0, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to delete note")
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),
 		APIKeyID:   apiKeyID,
 		Action:     store.ActionNoteDelete,
@@ -894,7 +894,7 @@ func (a *API) BulkNotes(ctx context.Context, userID uint64, apiKeyID *uint64, in
 
 	if !in.DryRun {
 		// Aligned with the web bulk form: one audit row for the batch, with the action, the requested id list and the number of changed rows in detail.
-		recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+		a.auditor.Record(ctx, store.AuditEntry{
 			UserID:     store.Ptr(userID),
 			APIKeyID:   apiKeyID,
 			Action:     bulkAuditAction(action),
@@ -1405,7 +1405,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 		a.logger.Error("submit review failed", "card_id", card.ID, "user_id", u.ID, "error", err)
 		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to submit review")
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   apiKeyID,
 		Action:     "review.submit",

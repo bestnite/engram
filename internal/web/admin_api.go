@@ -60,7 +60,7 @@ func (s *Server) adminGuard() gin.HandlerFunc {
 		}
 		if u.Role != store.RoleAdmin {
 			// Record privilege-escalation attempts: exactly the same audit as requireAdmin, making it easy to work out "who is trying".
-			s.audit(c.Request.Context(), store.AuditEntry{
+			s.auditor.Record(c.Request.Context(), store.AuditEntry{
 				UserID:     store.Ptr(u.ID),
 				Action:     store.ActionPermissionDenied,
 				TargetType: "admin",

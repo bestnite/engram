@@ -153,7 +153,7 @@ func (s *Server) adminRegistrationSave(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionSettingUpdate,
 		TargetType: "setting",
 		Detail:     map[string]any{"keys": []string{auth.SettingKeyRegistrationPolicy, auth.SettingKeyEmailAllowlist}, "policy": policy},
@@ -204,7 +204,7 @@ func (s *Server) adminInviteCreate(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "invite_create_failed")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionInviteCreate,
 		TargetType: "invite", TargetID: store.Ptr(inv.ID),
 		// The audit does not record the token in plaintext (it is equivalent to a credential).
@@ -253,7 +253,7 @@ func (s *Server) adminInviteRevoke(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionInviteRevoke,
 		TargetType: "invite", TargetID: store.Ptr(inv.ID),
 	})

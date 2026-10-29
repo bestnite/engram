@@ -81,7 +81,7 @@ func (a *API) AddExtraNew(ctx context.Context, u *store.User, apiKeyID *uint64, 
 		a.logger.Error("add extra new cards failed", "deck_id", deck.ID, "user_id", u.ID, "error", err)
 		return ExtraNewStatus{}, newServiceError(http.StatusInternalServerError, CodeInternal, "")
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   apiKeyID,
 		Action:     store.ActionDeckExtraNew,

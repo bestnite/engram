@@ -137,7 +137,7 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 					shareError(c, 500, "internal_error")
 					return
 				}
-				s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRoleChange, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.PublicID, "role": role, "previous_role": existing}})
+				s.auditor.Record(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRoleChange, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.PublicID, "role": role, "previous_role": existing}})
 				// Notification (class B, unsubscribable). It sits after the audit and returns no error: the notification is only a side effect.
 				s.notifyDeckGrantChange(c, deck, user, target, existing, role)
 				break
@@ -164,7 +164,7 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 				shareError(c, 500, "internal_error")
 				return
 			}
-			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckShareInvite, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.PublicID, "role": role}})
+			s.auditor.Record(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckShareInvite, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"username": target.Username, "user_id": target.PublicID, "role": role}})
 			s.notifyDeckGrantChange(c, deck, user, target, "", role)
 		}
 	case "revoke":
@@ -191,7 +191,7 @@ func (s *Server) sharingWrite(c *gin.Context, action string) {
 			return
 		}
 		if existing != "" {
-			s.audit(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRevoke, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"user_id": target.PublicID, "previous_role": existing}})
+			s.auditor.Record(ctx, store.AuditEntry{UserID: store.Ptr(user.ID), Action: store.ActionDeckRevoke, TargetType: "deck", TargetID: store.Ptr(deck.ID), Detail: map[string]any{"user_id": target.PublicID, "previous_role": existing}})
 			s.notifyDeckRevoke(c, deck, user, id, existing)
 			break
 		}

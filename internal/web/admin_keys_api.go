@@ -127,7 +127,7 @@ func (s *Server) adminAPIKeyRevoke(c *gin.Context) {
 		return
 	}
 	// The audit records only "who revoked which key"; no key content is written (plaintext does not exist, and the hash should not enter the audit either).
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionAPIKeyRevoke,
 		TargetType: "api_key", TargetID: store.Ptr(key.ID),
 	})

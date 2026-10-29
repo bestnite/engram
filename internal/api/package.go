@@ -57,7 +57,7 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 	if err != nil {
 		return nil, mapPackageError(err)
 	}
-	recordAudit(ctx, a.auditor, a.logger, store.AuditEntry{
+	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		APIKeyID:   apiKeyID,
 		Action:     "deck.package_import",

@@ -172,7 +172,7 @@ func (s *Server) identityUnlink(c *gin.Context) {
 		}
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID), Action: store.ActionIdentityUnlink,
 		TargetType: "identity", TargetID: store.Ptr(ident.ID),
 		Detail: map[string]any{"provider": ident.Provider, "subject": ident.Subject, "via": "self"},

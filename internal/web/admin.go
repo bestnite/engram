@@ -68,7 +68,7 @@ func (s *Server) requireAdmin() gin.HandlerFunc {
 		}
 		if u.Role != store.RoleAdmin {
 			// Record privilege-escalation attempts: once several people share an account this is the key clue for working out "who is trying".
-			s.audit(c.Request.Context(), store.AuditEntry{
+			s.auditor.Record(c.Request.Context(), store.AuditEntry{
 				UserID:     store.Ptr(u.ID),
 				Action:     store.ActionPermissionDenied,
 				TargetType: "admin",

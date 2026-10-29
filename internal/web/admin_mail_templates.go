@@ -231,7 +231,7 @@ func (s *Server) adminMailTemplateSave(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		Action:     store.ActionMailTemplateUpdate,
 		TargetType: "mail_template",
@@ -257,7 +257,7 @@ func (s *Server) adminMailTemplateDelete(c *gin.Context) {
 		adminError(c, http.StatusInternalServerError, "delete_failed")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),
 		Action:     store.ActionMailTemplateUpdate,
 		TargetType: "mail_template",

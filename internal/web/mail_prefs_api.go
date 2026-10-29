@@ -199,7 +199,7 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 		return
 	}
 	// The audit action and Detail shape match the SSR save (internal/web/mail_prefs.go).
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(user.ID),
 		Action:     store.ActionUserEmailPrefsUpdate,
 		TargetType: "user",

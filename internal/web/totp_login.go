@@ -100,7 +100,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 			s.loginLimiter.RecordFailure(u.Username, c.ClientIP())
 		}
 		s.logger.Info("totp second step rejected", "user_id", userID)
-		s.audit(ctx, store.AuditEntry{
+		s.auditor.Record(ctx, store.AuditEntry{
 			UserID: store.Ptr(userID),
 			Action: store.ActionTOTPVerifyFailed,
 			Detail: map[string]any{"ip": c.ClientIP()},
@@ -110,7 +110,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 	}
 	if usedRecovery {
 		// A recovery code was consumed: this is a security-relevant event and must leave a trace (both using one up and generating new ones are audited).
-		s.audit(ctx, store.AuditEntry{
+		s.auditor.Record(ctx, store.AuditEntry{
 			UserID: store.Ptr(userID),
 			Action: store.ActionTOTPRecoveryUsed,
 			Detail: map[string]any{"ip": c.ClientIP()},
@@ -127,7 +127,7 @@ func (s *Server) apiTOTPSubmit(c *gin.Context) {
 		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
 		return
 	}
-	s.audit(ctx, store.AuditEntry{
+	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(u.ID),
 		Action: store.ActionUserLoginSucceeded,
 		Detail: map[string]any{"ip": c.ClientIP(), "second_factor": "totp"},
