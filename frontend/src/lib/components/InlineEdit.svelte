@@ -115,7 +115,7 @@
   {/if}
 {:else if editable}
   <span class="group/inline flex min-w-0 items-start gap-1.5">
-    <!-- 文字本身也可点：编辑入口不该只有一个小图标。 -->
+    <!-- The text itself is clickable too: a small icon should not be the only way into editing. -->
     <span
       class={cn('min-w-0 cursor-text break-words rounded-sm', !value && 'text-muted-foreground/70', klass)}
       onclick={start}

@@ -82,7 +82,7 @@
     </aside>
 
     <div class="flex min-w-0 flex-1 flex-col">
-      <!-- 窄屏顶栏：侧边栏收进抽屉，这里只留打开按钮与品牌。 -->
+      <!-- Narrow-screen top bar: the sidebar folds into a drawer, so only the button that opens it and the brand stay here. -->
       <header
         class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur-md md:hidden"
       >

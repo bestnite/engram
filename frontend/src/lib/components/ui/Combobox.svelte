@@ -74,8 +74,8 @@
   onValueChange={(next) => onValueChange?.(next)}
 >
   <div class="relative">
-    <!-- 点一下字段就展开列表：bits-ui 只在打字或点触发器时开菜单，仅靠 Trigger 会让
-         「点开看看有哪些选项」这个最自然的操作落空。 -->
+    <!-- A click on the field opens the list: bits-ui opens the menu only on typing or on a click on the trigger, so with the
+         Trigger alone the most natural action, clicking to see which options exist, would do nothing. -->
     <BitsCombobox.Input
       {id}
       data-testid={testId}

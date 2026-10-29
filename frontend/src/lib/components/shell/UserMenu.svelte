@@ -122,7 +122,7 @@
     </DropdownMenu.Portal>
   </DropdownMenu.Root>
 {:else}
-  <!-- 会话还在加载：占住与账户按钮相同的高度，加载完成时侧边栏不跳。 -->
+  <!-- The session is still loading: hold the account button's height so the sidebar does not jump when loading finishes. -->
   <div class={cn('flex items-center gap-2.5', collapsed ? 'size-10 justify-center' : 'h-11 px-1.5')} aria-hidden="true">
     <span class="size-7 shrink-0 rounded-full skeleton-block"></span>
     {#if !collapsed}

@@ -12,8 +12,9 @@
   });
 </script>
 
-<!-- 刻意**不加** data-theme-toggle：pwa.js 的加载期绑定会往该属性上写 btn.onclick，
-     与 Svelte 的事件监听叠加会在一次点击里切换两次（看起来没反应）。本按钮由 theme.ts 全权处理。 -->
+<!-- Deliberately carries no data-theme-toggle attribute: internal/web/static/js/pwa.js binds btn.onclick at load time to
+     every element with that attribute, and together with Svelte's listener one click would toggle the theme twice, which
+     looks like nothing happened. frontend/src/lib/theme.ts alone handles this button. -->
 <button
   type="button"
   data-testid="nav-theme-toggle"

@@ -107,10 +107,10 @@
     })}
   </p>
   <div class="relative h-56">
-    <!-- 画布对读屏隐藏：同样的数据由下面的表格给出。 -->
+    <!-- The canvas is hidden from screen readers: the table below carries the same data. -->
     <canvas bind:this={canvas} aria-hidden="true"></canvas>
   </div>
-  <!-- 读屏与无法分辨颜色的读者：同一份数据的表格形式。 -->
+  <!-- The same data as a table, for screen readers and for readers who cannot tell the colours apart. -->
   <table class="sr-only" data-testid="stats-curve-table">
     <caption>{$t('stats.curve.table')}</caption>
     <thead>

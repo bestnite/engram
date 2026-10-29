@@ -74,7 +74,7 @@
     onclick={onclick}
   >
     {#if loading}
-      <!-- 文字用透明占位而不是移除：按钮宽度不变，读屏也仍能读到按钮名称。 -->
+      <!-- The text turns into a transparent placeholder instead of being removed: the button keeps its width and screen readers still read its name. -->
       <span class="inline-flex items-center justify-center gap-1.5 opacity-0">{@render children?.()}</span>
       <span class="absolute inset-0 flex items-center justify-center" aria-hidden="true">
         <LoaderCircle class="size-4 animate-spin" />
