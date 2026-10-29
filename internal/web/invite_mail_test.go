@@ -79,7 +79,7 @@ func startInviteMail(t *testing.T, srv *Server, db *gorm.DB) *recordingMailSende
 		ob.Stop()
 		cancel()
 	})
-	srv.mail = ob
+	srv.setMailOutbox(ob, srv.baseURL)
 	return sender
 }
 
@@ -237,7 +237,7 @@ func TestRevokedAndExpiredInviteRefused(t *testing.T) {
 func TestInviteMailUnconfiguredStillCreatesInvite(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	srv.invites = store.NewInviteStore(db)
-	srv.mail = nil // mail not wired up
+	srv.setMailOutbox(nil, srv.baseURL) // mail not wired up
 
 	created, resp := createInviteJSON(t, srv, cookies, csrf, map[string]any{
 		"role": "user", "email": "invitee@example.com", "send_email": true,

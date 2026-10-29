@@ -28,13 +28,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/url"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/mail"
 	"git.nite07.com/nite/engram/internal/reminder"
@@ -56,20 +54,12 @@ const (
 	runFailedLog = "weekly digest run failed"
 )
 
-// Enqueuer is the mail entry point the digest worker depends on; production is satisfied by *mail.Outbox, tests inject a stub.
-type Enqueuer interface {
-	// Enqueue only enqueues; it does not send mail synchronously.
-	Enqueue(ctx context.Context, m mail.Message) error
-	// Configured reports whether SMTP is configured.
-	Configured() bool
-}
-
 // Deps holds the Worker's explicit dependencies.
 type Deps struct {
 	// DB is required (candidate query and send ledger).
 	DB *gorm.DB
-	// Outbox is the required mail entry point.
-	Outbox Enqueuer
+	// Mailer is required: it decides whether mail can go out and composes and enqueues it.
+	Mailer *mail.Mailer
 	// Translator is required: mail copy is user-visible copy and always goes through the language pack.
 	Translator *i18n.Translator
 	// Logger is optional; slog.Default() is used when empty.
@@ -78,16 +68,8 @@ type Deps struct {
 	Now func() time.Time
 	// Interval is the polling interval; DefaultInterval is used when <=0.
 	Interval time.Duration
-	// BaseURL is the site root address, used to build the stats page and unsubscribe links; falls back to a relative path when empty.
-	BaseURL string
 	// StatsPath overrides the stats page path; DefaultStatsPath is used when empty.
 	StatsPath string
-	// Tokens issues one-click unsubscribe tokens; the mail carries no unsubscribe header when empty.
-	Tokens *auth.ActionTokenService
-	// Templates fetches the administrator-defined mail templates; empty means only the built-in body is used.
-	Templates mail.LookupFunc
-	// SiteDefaultLocale is the site default language, the second level of the template fallback chain; that level is skipped when empty.
-	SiteDefaultLocale func() string
 }
 
 // Worker holds the background worker and its configuration.
@@ -98,17 +80,11 @@ type Worker struct {
 	*worker.Lifecycle
 
 	db         *gorm.DB
-	outbox     Enqueuer
+	mailer     *mail.Mailer
 	translator *i18n.Translator
 	logger     *slog.Logger
 	now        func() time.Time
-	baseURL    string
 	statsPath  string
-	tokens     *auth.ActionTokenService
-	// templates fetches custom mail templates; when missing, the built-in body is used.
-	templates mail.LookupFunc
-	// siteLocale provides the site default language (second level of the fallback chain); may be nil.
-	siteLocale func() string
 }
 
 // New constructs a Worker; it does not start the worker, call Start afterwards.
@@ -116,8 +92,8 @@ func New(deps Deps) (*Worker, error) {
 	if deps.DB == nil {
 		return nil, errors.New("digest: Deps.DB is required")
 	}
-	if deps.Outbox == nil {
-		return nil, errors.New("digest: Deps.Outbox is required")
+	if deps.Mailer == nil {
+		return nil, errors.New("digest: Deps.Mailer is required")
 	}
 	if deps.Translator == nil {
 		return nil, errors.New("digest: Deps.Translator is required")
@@ -136,15 +112,11 @@ func New(deps Deps) (*Worker, error) {
 	}
 	w := &Worker{
 		db:         deps.DB,
-		outbox:     deps.Outbox,
+		mailer:     deps.Mailer,
 		translator: deps.Translator,
 		logger:     logger,
 		now:        now,
-		baseURL:    strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
 		statsPath:  path,
-		tokens:     deps.Tokens,
-		templates:  deps.Templates,
-		siteLocale: deps.SiteDefaultLocale,
 	}
 	// Start/stop and the tick loop are delegated to the shared skeleton; RunOnce is injected as the business phase, and the failure log copy is kept verbatim.
 	lifecycle, err := worker.New(worker.Config{
@@ -163,7 +135,7 @@ func New(deps Deps) (*Worker, error) {
 // RunOnce runs one scan round: for each active user who can receive mail, decide whether the weekly digest should be sent.
 // Exported for tests and manual operations triggering; a single user's failure is logged and processing continues with the rest.
 func (w *Worker) RunOnce(ctx context.Context) error {
-	if !w.outbox.Configured() {
+	if !w.mailer.Configured() {
 		w.logger.Info("weekly digest skipped: smtp not configured")
 		return nil
 	}
@@ -219,11 +191,12 @@ func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now tim
 		return nil
 	}
 
-	choices, err := store.NewEmailPrefStore(w.db).Choices(ctx, c.ID)
+	// Preferences are checked before the statistics are computed, so an opted-out user costs no aggregation.
+	enabled, err := w.mailer.Enabled(ctx, c.ID, mail.TypeStudyDigest)
 	if err != nil {
 		return err
 	}
-	if !mail.ResolveEnabled(choices, mail.TypeStudyDigest) {
+	if !enabled {
 		return nil
 	}
 
@@ -231,8 +204,23 @@ func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now tim
 	if err != nil {
 		return err
 	}
-	if err := w.outbox.Enqueue(ctx, w.message(ctx, c, stats)); err != nil {
-		return err
+	lc := w.translator.Localizer(w.translator.Pick("", c.Locale, ""))
+	switch w.mailer.Send(ctx, lc, mail.Mail{
+		Type: mail.TypeStudyDigest, To: c.Email, UserID: c.ID,
+		Vars: mail.Vars{
+			"count":     strconv.FormatInt(stats.Reviewed, 10),
+			"rate":      store.FormatPercent(stats.PassRate),
+			"days":      strconv.Itoa(stats.StreakCurrent),
+			"new_cards": strconv.FormatInt(stats.NewCards, 10),
+			"due":       strconv.FormatInt(stats.DueNow, 10),
+			"url":       w.mailer.URL("", w.statsPath),
+		},
+	}) {
+	case mail.SendQueued:
+	case mail.SendOptedOut, mail.SendNotConfigured:
+		return nil
+	default:
+		return errors.New("digest: enqueue failed")
 	}
 	if err := store.RecordDigestSent(ctx, w.db, c.ID, weekStart, now); err != nil {
 		return err
@@ -304,87 +292,6 @@ func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time
 	}, nil
 }
 
-// message assembles the digest mail in the user's language. The digest is a C-class optional mail and therefore carries the
-// RFC 8058 one-click unsubscribe header: the token names the single type study_digest, so the recipient can turn it off without
-// signing in. A failed token issue only logs and the mail is still sent.
-func (w *Worker) message(ctx context.Context, c store.DigestCandidate, s DigestStats) mail.Message {
-	lc := w.translator.Localizer(w.translator.Pick("", c.Locale, ""))
-	site := lc.T("app.name")
-	statsURL := w.statsURL()
-	unsubURL := w.unsubscribeLink(ctx, c.ID)
-	// All six stat lines are in the built-in body (mail.DefaultTemplate), so the new-cards/due numbers must go into
-	// the variable table — passing them only to the render function leaves no variable behind, the admin page cannot see them, and templates cannot use them.
-	vars := mail.Vars{
-		"site":      site,
-		"count":     strconv.FormatInt(s.Reviewed, 10),
-		"rate":      store.FormatPercent(s.PassRate),
-		"days":      strconv.Itoa(s.StreakCurrent),
-		"new_cards": strconv.FormatInt(s.NewCards, 10),
-		"due":       strconv.FormatInt(s.DueNow, 10),
-		"url":       statsURL,
-	}
-	if unsubURL != "" {
-		vars["unsubscribe_url"] = unsubURL
-	}
-	footerNote, unsubLabel := lc.T("mail.footer.automated"), ""
-	if unsubURL != "" {
-		footerNote = lc.T("mail.footer.note")
-		unsubLabel = lc.T("mail.footer.unsubscribe")
-	}
-	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeStudyDigest, mail.VariantDefault, lc.Tf, vars)
-	tpl := mail.Resolve(w.templates, mail.TypeStudyDigest, lc.Locale(), w.siteDefaultLocale())
-	out := mail.RenderOrFallback(mail.RenderInput{
-		Type:             mail.TypeStudyDigest,
-		Site:             site,
-		Lang:             lc.Locale(),
-		Vars:             vars,
-		Subject:          tpl.Subject,
-		BodyMD:           tpl.Body,
-		FallbackSubject:  fbSubject,
-		FallbackBodyMD:   fallbackBodyMD,
-		UnsubscribeURL:   unsubURL,
-		FooterNote:       footerNote,
-		UnsubscribeLabel: unsubLabel,
-	})
-	msg := mail.Message{
-		To:       c.Email,
-		Type:     string(mail.TypeStudyDigest),
-		Subject:  out.Subject,
-		TextBody: out.Text,
-		HTMLBody: out.HTML,
-	}
-	msg.Headers = mail.UnsubscribeHeaders(mail.TypeStudyDigest, unsubURL)
-	return msg
-}
-
-// siteDefaultLocale returns the site default language (second level of the template fallback chain); returns an empty string when not injected.
-func (w *Worker) siteDefaultLocale() string {
-	if w.siteLocale == nil {
-		return ""
-	}
-	return strings.TrimSpace(w.siteLocale())
-}
-
-// unsubscribeLink issues an unsubscribe token for study_digest and returns the unsubscribe link; returns an empty string when unavailable.
-//
-// It returns a link rather than a header: the body footer and the plain-text part need it too (headers are only visible to mail clients).
-func (w *Worker) unsubscribeLink(ctx context.Context, userID uint64) string {
-	if w.tokens == nil {
-		return ""
-	}
-	token, err := w.tokens.Issue(ctx, userID, store.ActionTokenUnsubscribe, string(mail.TypeStudyDigest), auth.UnsubscribeTTL)
-	if err != nil {
-		w.logger.Error("weekly digest: issue unsubscribe token failed", "user_id", userID, "error", err)
-		return ""
-	}
-	return w.baseURL + "/unsubscribe?token=" + url.QueryEscape(token)
-}
-
-// statsURL builds the stats page link; falls back to a relative path when BaseURL is not configured.
-func (w *Worker) statsURL() string {
-	return w.baseURL + w.statsPath
-}
-
 // weekStartOf returns the Monday of the week containing day (YYYY-MM-DD). Go's Weekday uses Sunday as 0, so this converts to
 // "days since this week's Monday" and subtracts it, guaranteeing local Monday early morning and Sunday of the same week fall on the same week_start.
 func weekStartOf(day string) string {
@@ -395,6 +302,3 @@ func weekStartOf(day string) string {
 	offset := (int(t.Weekday()) + 6) % 7
 	return t.AddDate(0, 0, -offset).Format("2006-01-02")
 }
-
-// Compile-time confirmation that *mail.Outbox satisfies Enqueuer (so contract drift breaks here, not at the assembly site).
-var _ Enqueuer = (*mail.Outbox)(nil)

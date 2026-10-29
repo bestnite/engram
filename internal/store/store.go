@@ -60,6 +60,16 @@ func Open(driver, dsn string) (*gorm.DB, error) {
 	return db, nil
 }
 
+// Keys of the site identity settings an admin can override.
+const (
+	// SettingSiteName is the site name; unset means the language pack's app.name.
+	SettingSiteName = "site.name"
+	// SettingSiteDescription is the site description; unset means the site name.
+	SettingSiteDescription = "site.description"
+	// SettingSiteDefaultLocale is the site's default locale, the last fallback of language resolution.
+	SettingSiteDefaultLocale = "site.default_locale"
+)
+
 // LoadSettings reads the override values out of the settings table; value is JSON-encoded text and string values are decoded here.
 func LoadSettings(ctx context.Context, db *gorm.DB) (map[string]string, error) {
 	var rows []Setting

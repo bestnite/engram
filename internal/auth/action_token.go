@@ -28,10 +28,6 @@ const (
 	EmailVerifyTTL = 24 * time.Hour
 	// EmailChangeTTL is the validity of an email change confirmation link.
 	EmailChangeTTL = 24 * time.Hour
-	// UnsubscribeTTL is the validity of a one-click unsubscribe link.
-	// Unsubscribe links stay in old mail for a long time and a user may only think of clicking months later, so it gets a generous validity;
-	// but it is still a "one-time + expiring" token (reusing the consumption semantics of action_tokens).
-	UnsubscribeTTL = 90 * 24 * time.Hour
 )
 
 // ActionTokenService issues and consumes one-time action tokens.

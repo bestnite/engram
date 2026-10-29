@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -195,23 +194,4 @@ func (s *Server) writeUnsubscribeError(c *gin.Context, err error) {
 		s.logger.Error("unsubscribe: consume failed", "error", err)
 		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
 	}
-}
-
-// optionalUnsubscribeLink issues a login-free unsubscribe token naming that type for an optional type, and returns the unsubscribe link.
-//
-// Class A (not disableable) or a failed issue returns an empty string — better that this mail lacks an unsubscribe entry than to give security mail
-// an unsubscribe entry, or to let sending fail because the unsubscribe token failed (a failed send must not fail the triggering action).
-//
-// The "get the link" layer is separate because **the mail body needs it too**: with only the RFC 8058 headers, a reader of the plain-text part
-// sees no unsubscribe entry at all (the headers are there for the mail client to read).
-func (s *Server) optionalUnsubscribeLink(c *gin.Context, userID uint64, typ mail.Type) string {
-	if s.tokens == nil || !mail.CanUnsubscribe(typ) {
-		return ""
-	}
-	token, err := s.tokens.Issue(c.Request.Context(), userID, store.ActionTokenUnsubscribe, string(typ), auth.UnsubscribeTTL)
-	if err != nil {
-		s.logger.Error("unsubscribe: issue token failed", "user_id", userID, "type", string(typ), "error", err)
-		return ""
-	}
-	return s.securityAbsoluteURL(c, "/unsubscribe?token="+url.QueryEscape(token))
 }

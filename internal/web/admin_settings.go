@@ -32,11 +32,11 @@ type settingSpec struct {
 func generalSettingSpecs() []settingSpec {
 	return []settingSpec{
 		{
-			key: settingKeySiteName,
+			key: store.SettingSiteName,
 			def: func(loc *i18n.Localizer) string { return loc.T("app.name") },
 		},
 		{
-			key: settingKeySiteDefaultLocale,
+			key: store.SettingSiteDefaultLocale,
 			def: func(*i18n.Localizer) string { return i18n.DefaultLocaleCode },
 		},
 	}

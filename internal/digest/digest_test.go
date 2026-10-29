@@ -155,7 +155,7 @@ func setDigestPref(t *testing.T, db *gorm.DB, userID uint64, enabled bool) {
 }
 
 // newWorker builds a worker with a controllable clock and a fake enqueuer.
-func newWorker(t *testing.T, db *gorm.DB, enq Enqueuer, now func() time.Time) *Worker {
+func newWorker(t *testing.T, db *gorm.DB, enq mail.Enqueuer, now func() time.Time) *Worker {
 	t.Helper()
 	translator, err := i18n.New()
 	if err != nil {
@@ -165,10 +165,10 @@ func newWorker(t *testing.T, db *gorm.DB, enq Enqueuer, now func() time.Time) *W
 	if err != nil {
 		t.Fatalf("NewActionTokenService: %v", err)
 	}
-	w, err := New(Deps{
-		DB: db, Outbox: enq, Translator: translator, Now: now,
-		BaseURL: "http://localhost:3012", Tokens: tokens,
+	mailer := mail.NewMailer(mail.MailerDeps{
+		DB: db, Outbox: enq, Tokens: tokens, BaseURL: "http://localhost:3012", Locales: translator.SupportedCodes(),
 	})
+	w, err := New(Deps{DB: db, Mailer: mailer, Translator: translator, Now: now})
 	if err != nil {
 		t.Fatalf("digest.New: %v", err)
 	}

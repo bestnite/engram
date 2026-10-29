@@ -289,11 +289,7 @@ func (s *Server) adminMailTemplatePreview(c *gin.Context) {
 		// placeholder data and carries no token, so the preview stays side-effect free.
 		unsubURL = vars["unsubscribe_url"]
 	}
-	footerNote, unsubLabel := loc.T("mail.footer.automated"), ""
-	if unsubURL != "" {
-		footerNote = loc.T("mail.footer.note")
-		unsubLabel = loc.T("mail.footer.unsubscribe")
-	}
+	footerNote, unsubLabel := mail.Footer(loc.T, unsubURL)
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             mailType,
 		Site:             vars["site"],
@@ -347,19 +343,16 @@ func (s *Server) adminMailTemplateTest(c *gin.Context) {
 	unsubURL := ""
 	if mail.CanUnsubscribe(mailType) {
 		// The test mail carries the unsubscribe entry too, so the admin can see where it sits in the mail; the token points at the admin and may simply expire.
-		unsubURL = s.optionalUnsubscribeLink(c, u.ID, mailType)
+		unsubURL = s.mailer.UnsubscribeLink(c.Request.Context(), mail.Mail{Type: mailType, UserID: u.ID, BaseURL: s.requestBaseURL(c)})
 		if unsubURL != "" {
 			vars["unsubscribe_url"] = unsubURL
 		}
 	}
-	footerNote, unsubLabel := loc.T("mail.footer.automated"), ""
-	if unsubURL != "" {
-		footerNote = loc.T("mail.footer.note")
-		unsubLabel = loc.T("mail.footer.unsubscribe")
-	}
+	footerNote, unsubLabel := mail.Footer(loc.T, unsubURL)
+	site := s.mailer.SiteName(c.Request.Context(), loc)
 	out := mail.RenderOrFallback(mail.RenderInput{
 		Type:             mailType,
-		Site:             securitySiteName(loc),
+		Site:             site,
 		Lang:             loc.Locale(),
 		Vars:             vars,
 		Subject:          req.Subject,

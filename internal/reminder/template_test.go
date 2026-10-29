@@ -14,12 +14,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Reminders are sent by a periodic worker and take a different wiring path (not the web layer's renderMail). This case
-// asserts the template takes effect **on this path** too, and that the unsubscribe entry appears in both the body footer and the end of the plain-text part —
+// Reminders are sent by a periodic worker rather than a web request. This case asserts the admin template takes
+// effect **on this path** too, and that the unsubscribe entry appears in both the body footer and the end of the plain-text part —
 // if it were only in the RFC 8058 header, people reading plain text would not see it.
 
 // newReminderWithTemplates is the same as newReminder but injects the template lookup and the token service.
-func newReminderWithTemplates(t *testing.T, db *gorm.DB, enq Enqueuer, now func() time.Time) *Reminder {
+func newReminderWithTemplates(t *testing.T, db *gorm.DB, enq mail.Enqueuer, now func() time.Time) *Reminder {
 	t.Helper()
 	translator, err := i18n.New()
 	if err != nil {
@@ -29,12 +29,11 @@ func newReminderWithTemplates(t *testing.T, db *gorm.DB, enq Enqueuer, now func(
 	if err != nil {
 		t.Fatalf("NewActionTokenService: %v", err)
 	}
-	r, err := New(Deps{
-		DB: db, Outbox: enq, Translator: translator, Now: now,
-		BaseURL: "http://localhost:3012", Tokens: tokens,
-		Templates:         mail.StoreLookup(store.NewMailTemplateStore(db), nil),
-		SiteDefaultLocale: func() string { return "" },
+	mailer := mail.NewMailer(mail.MailerDeps{
+		DB: db, Outbox: enq, Tokens: tokens, BaseURL: "http://localhost:3012", Locales: translator.SupportedCodes(),
+		Templates: mail.StoreLookup(store.NewMailTemplateStore(db), nil),
 	})
+	r, err := New(Deps{DB: db, Mailer: mailer, Translator: translator, Now: now})
 	if err != nil {
 		t.Fatalf("reminder.New: %v", err)
 	}

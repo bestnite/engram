@@ -25,20 +25,18 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/mail"
 	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/worker"
-	"strconv"
 )
 
 const (
@@ -75,20 +73,12 @@ const (
 	runFailedLog = "review reminder run failed"
 )
 
-// Enqueuer is the send entry point the reminder worker depends on; in production it is satisfied by *mail.Outbox, tests inject a stand-in.
-type Enqueuer interface {
-	// Enqueue only enqueues; it does not send synchronously.
-	Enqueue(ctx context.Context, m mail.Message) error
-	// Configured reports whether SMTP is configured.
-	Configured() bool
-}
-
 // Deps are the explicit dependencies of Reminder.
 type Deps struct {
 	// DB is required (candidate query and send ledger).
 	DB *gorm.DB
-	// Outbox is the required send entry point.
-	Outbox Enqueuer
+	// Mailer is required: it decides whether mail can go out and composes and enqueues it.
+	Mailer *mail.Mailer
 	// Translator is required: mail copy is user-visible copy and always goes through the language catalogs.
 	Translator *i18n.Translator
 	// Logger is optional; slog.Default() is used when nil.
@@ -97,16 +87,8 @@ type Deps struct {
 	Now func() time.Time
 	// Interval is the poll interval; DefaultInterval when <=0.
 	Interval time.Duration
-	// BaseURL is the site root, used to build the review page link; when empty the link is a relative path.
-	BaseURL string
 	// ReviewPath overrides the review page path; DefaultReviewPath when empty.
 	ReviewPath string
-	// Tokens issues one-click unsubscribe tokens; when nil the reminder mail carries no unsubscribe header (only optional types need it).
-	Tokens *auth.ActionTokenService
-	// Templates fetches admin-customised mail templates; nil means built-in bodies only.
-	Templates mail.LookupFunc
-	// SiteDefaultLocale is the site default locale, the second level of the template fallback chain; that level is skipped when empty.
-	SiteDefaultLocale func() string
 }
 
 // Reminder holds the background worker and its configuration.
@@ -117,18 +99,11 @@ type Reminder struct {
 	*worker.Lifecycle
 
 	db         *gorm.DB
-	outbox     Enqueuer
+	mailer     *mail.Mailer
 	translator *i18n.Translator
 	logger     *slog.Logger
 	now        func() time.Time
-	baseURL    string
 	reviewPath string
-	// tokens issues unsubscribe tokens; no unsubscribe header when nil.
-	tokens *auth.ActionTokenService
-	// templates fetches custom mail templates; built-in bodies are used when absent.
-	templates mail.LookupFunc
-	// siteLocale provides the site default locale (second level of the fallback chain); may be nil.
-	siteLocale func() string
 	// queue counts the cards the user's review queue serves right now; the reminder announces exactly that number.
 	queue *schedule.QueueBuilder
 }
@@ -138,8 +113,8 @@ func New(deps Deps) (*Reminder, error) {
 	if deps.DB == nil {
 		return nil, errors.New("reminder: Deps.DB is required")
 	}
-	if deps.Outbox == nil {
-		return nil, errors.New("reminder: Deps.Outbox is required")
+	if deps.Mailer == nil {
+		return nil, errors.New("reminder: Deps.Mailer is required")
 	}
 	if deps.Translator == nil {
 		return nil, errors.New("reminder: Deps.Translator is required")
@@ -158,15 +133,11 @@ func New(deps Deps) (*Reminder, error) {
 	}
 	r := &Reminder{
 		db:         deps.DB,
-		outbox:     deps.Outbox,
+		mailer:     deps.Mailer,
 		translator: deps.Translator,
 		logger:     logger,
 		now:        now,
-		baseURL:    strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
 		reviewPath: path,
-		tokens:     deps.Tokens,
-		templates:  deps.Templates,
-		siteLocale: deps.SiteDefaultLocale,
 		queue:      schedule.NewQueueBuilder(deps.DB, store.NewDeckStore(deps.DB), nil),
 	}
 	// Start/stop and the tick loop are handed to the shared skeleton; RunOnce is injected as the business phase, and the failure log wording is kept verbatim.
@@ -187,7 +158,7 @@ func New(deps Deps) (*Reminder, error) {
 // Exported so tests and operators can trigger it manually; the returned error only reflects query/enqueue-level failures, a single user's failure
 // is logged and the remaining users are still processed.
 func (r *Reminder) RunOnce(ctx context.Context) error {
-	if !r.outbox.Configured() {
+	if !r.mailer.Configured() {
 		// Class C is optional operational mail: skip silently when SMTP is unconfigured, no error, but leave an English log line.
 		r.logger.Info("review reminder skipped: smtp not configured")
 		return nil
@@ -248,11 +219,11 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 		return nil
 	}
 
-	choices, err := store.NewEmailPrefStore(r.db).Choices(ctx, c.ID)
+	enabled, err := r.mailer.Enabled(ctx, c.ID, mail.TypeReviewReminder)
 	if err != nil {
 		return err
 	}
-	if !mail.ResolveEnabled(choices, mail.TypeReviewReminder) {
+	if !enabled {
 		return nil
 	}
 
@@ -266,87 +237,22 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 		return nil
 	}
 
-	if err := r.outbox.Enqueue(ctx, r.message(ctx, c, due)); err != nil {
-		return err
+	lc := r.translator.Localizer(r.translator.Pick("", c.Locale, ""))
+	switch r.mailer.Send(ctx, lc, mail.Mail{
+		Type: mail.TypeReviewReminder, To: c.Email, UserID: c.ID,
+		Vars: mail.Vars{"count": strconv.FormatInt(due, 10), "url": r.mailer.URL("", r.reviewPath)},
+	}) {
+	case mail.SendQueued:
+	case mail.SendOptedOut, mail.SendNotConfigured:
+		return nil
+	default:
+		return errors.New("reminder: enqueue failed")
 	}
 	if err := store.RecordReminderSent(ctx, r.db, c.ID, day, now); err != nil {
 		return err
 	}
 	r.logger.Info("review reminder enqueued", "user_id", c.ID, "review_day", day, "due_count", due)
 	return nil
-}
-
-// message assembles the reminder mail in the user's language. A reminder is class-C optional mail, so it carries the RFC 8058 one-click unsubscribe header:
-// the token names the single type review_reminder, and the recipient (necessarily a user of this site) can turn it off without logging in.
-// A failed token issuance is only logged and the mail is still sent: a missing unsubscribe entry must not stop the reminder from going out.
-func (r *Reminder) message(ctx context.Context, c store.ReminderCandidate, due int64) mail.Message {
-	lc := r.translator.Localizer(r.translator.Pick("", c.Locale, ""))
-	site := lc.T("app.name")
-	reviewURL := r.reviewURL()
-	unsubURL := r.unsubscribeLink(ctx, c.ID)
-
-	vars := mail.Vars{"site": site, "count": strconv.FormatInt(due, 10), "url": reviewURL}
-	if unsubURL != "" {
-		vars["unsubscribe_url"] = unsubURL
-	}
-	footerNote, unsubLabel := lc.T("mail.footer.automated"), ""
-	if unsubURL != "" {
-		footerNote = lc.T("mail.footer.note")
-		unsubLabel = lc.T("mail.footer.unsubscribe")
-	}
-	fbSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypeReviewReminder, mail.VariantDefault, lc.Tf, vars)
-	tpl := mail.Resolve(r.templates, mail.TypeReviewReminder, lc.Locale(), r.siteDefaultLocale())
-	out := mail.RenderOrFallback(mail.RenderInput{
-		Type:             mail.TypeReviewReminder,
-		Site:             site,
-		Lang:             lc.Locale(),
-		Vars:             vars,
-		Subject:          tpl.Subject,
-		BodyMD:           tpl.Body,
-		FallbackSubject:  fbSubject,
-		FallbackBodyMD:   fallbackBodyMD,
-		UnsubscribeURL:   unsubURL,
-		FooterNote:       footerNote,
-		UnsubscribeLabel: unsubLabel,
-	})
-	msg := mail.Message{
-		To:       c.Email,
-		Type:     string(mail.TypeReviewReminder),
-		Subject:  out.Subject,
-		TextBody: out.Text,
-		HTMLBody: out.HTML,
-	}
-	msg.Headers = mail.UnsubscribeHeaders(mail.TypeReviewReminder, unsubURL)
-	return msg
-}
-
-// siteDefaultLocale returns the site default locale (second level of the template fallback chain); returns an empty string when not injected.
-func (r *Reminder) siteDefaultLocale() string {
-	if r.siteLocale == nil {
-		return ""
-	}
-	return strings.TrimSpace(r.siteLocale())
-}
-
-// unsubscribeHeaders issues an unsubscribe token for review_reminder and returns the RFC 8058 headers; returns nil when unavailable.
-// unsubscribeLink issues an unsubscribe token for review_reminder and returns the unsubscribe link; returns an empty string when unavailable.
-//
-// Returns a link rather than a header: the body footer and the plain-text part need it too (headers are only visible to mail clients).
-func (r *Reminder) unsubscribeLink(ctx context.Context, userID uint64) string {
-	if r.tokens == nil {
-		return ""
-	}
-	token, err := r.tokens.Issue(ctx, userID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), auth.UnsubscribeTTL)
-	if err != nil {
-		r.logger.Error("review reminder: issue unsubscribe token failed", "user_id", userID, "error", err)
-		return ""
-	}
-	return r.baseURL + "/unsubscribe?token=" + url.QueryEscape(token)
-}
-
-// reviewURL builds the review page link; degrades to a relative path when BaseURL is unconfigured.
-func (r *Reminder) reviewURL() string {
-	return r.baseURL + r.reviewPath
 }
 
 // SendHour resolves the user's chosen send hour into the hour actually used: nil (unset) or out-of-range values fall back to
@@ -370,6 +276,3 @@ func SendHour(userHour *int) int {
 func ReachedSendHour(local time.Time, hour int) bool {
 	return local.Hour() >= hour
 }
-
-// Makes the compiler confirm *mail.Outbox satisfies Enqueuer (so contract drift errors here rather than at the wiring site).
-var _ Enqueuer = (*mail.Outbox)(nil)

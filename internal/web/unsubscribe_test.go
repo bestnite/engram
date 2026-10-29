@@ -165,7 +165,7 @@ func TestUnsubscribeTokenNotReplayableAcrossTypesOrUsers(t *testing.T) {
 		t.Fatalf("CreateLocalUser B: %v", err)
 	}
 
-	token, err := ts.srv.tokens.Issue(ctx, userA.ID, store.ActionTokenUnsubscribe, string(mail.TypeInvite), auth.UnsubscribeTTL)
+	token, err := ts.srv.tokens.Issue(ctx, userA.ID, store.ActionTokenUnsubscribe, string(mail.TypeInvite), mail.UnsubscribeTTL)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestUnsubscribeRefusesClassAToken(t *testing.T) {
 	ts := newSecurityServer(t, false)
 	ctx := context.Background()
 
-	token, err := ts.srv.tokens.Issue(ctx, 1, store.ActionTokenUnsubscribe, string(mail.TypePasswordReset), auth.UnsubscribeTTL)
+	token, err := ts.srv.tokens.Issue(ctx, 1, store.ActionTokenUnsubscribe, string(mail.TypePasswordReset), mail.UnsubscribeTTL)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -233,7 +233,7 @@ func TestUnsubscribePageDoesNotConsumeToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateLocalUser: %v", err)
 	}
-	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), auth.UnsubscribeTTL)
+	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), mail.UnsubscribeTTL)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestUnsubscribeJSONReadDoesNotConsume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateLocalUser: %v", err)
 	}
-	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), auth.UnsubscribeTTL)
+	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), mail.UnsubscribeTTL)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestUnsubscribeJSONConfirmConsumesOnlyNamedType(t *testing.T) {
 	if err := prefs.SetChoices(ctx, user.ID, map[string]bool{string(mail.TypeDeckShared): true}, time.Now().UTC()); err != nil {
 		t.Fatalf("SetChoices: %v", err)
 	}
-	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), auth.UnsubscribeTTL)
+	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeReviewReminder), mail.UnsubscribeTTL)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestUnsubscribeJSONConfirmRequiresPreSessionCSRF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateLocalUser: %v", err)
 	}
-	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeInvite), auth.UnsubscribeTTL)
+	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeInvite), mail.UnsubscribeTTL)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestUnsubscribeMachineEndpointDoesNotRenderTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateLocalUser: %v", err)
 	}
-	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeInvite), auth.UnsubscribeTTL)
+	token, err := ts.srv.tokens.Issue(ctx, user.ID, store.ActionTokenUnsubscribe, string(mail.TypeInvite), mail.UnsubscribeTTL)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}

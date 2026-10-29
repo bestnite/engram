@@ -216,36 +216,13 @@ func runServe(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		// Unsubscribe token service: the reminder is an optional type, so it carries a login-free one-click unsubscribe header.
-		tokens, err := auth.NewActionTokenService(store.NewActionTokenStore(db))
-		if err != nil {
-			return err
-		}
-		// Mail templates: the periodic workers and the web layer share one lookup implementation,
-		// otherwise you get hard-to-notice inconsistencies like "mail sent from the web UI has a template, reminder mail does not".
-		templates := mail.StoreLookup(store.NewMailTemplateStore(db), logger)
-		siteLocale := func() string {
-			settings, err := store.LoadSettings(context.Background(), db)
-			if err != nil {
-				return ""
-			}
-			raw := strings.TrimSpace(settings["site.default_locale"])
-			for _, code := range translator.SupportedCodes() {
-				if code == raw {
-					return code
-				}
-			}
-			return ""
-		}
+		// The reminder and digest send through the web layer's Mailer, so they share its templates, site name,
+		// unsubscribe links and preference gates with every other mail.
 		reminderWorker, err := reminder.New(reminder.Deps{
-			DB:                db,
-			Outbox:            mb,
-			Translator:        translator,
-			Logger:            logger,
-			BaseURL:           cfg.Get(config.KeyBaseURL).Value,
-			Tokens:            tokens,
-			Templates:         templates,
-			SiteDefaultLocale: siteLocale,
+			DB:         db,
+			Mailer:     srv.Mailer(),
+			Translator: translator,
+			Logger:     logger,
 		})
 		if err != nil {
 			return err
@@ -255,14 +232,10 @@ func runServe(ctx context.Context) error {
 		// Weekly study digest worker (C-class): also a periodic scan, but weekly, with every mail-receivable user as the
 		// candidate set (due cards are not required) and its own dedup ledger digest_log, so it does not reuse the reminder worker.
 		digestWorker, err := digest.New(digest.Deps{
-			DB:                db,
-			Outbox:            mb,
-			Translator:        translator,
-			Logger:            logger,
-			BaseURL:           cfg.Get(config.KeyBaseURL).Value,
-			Tokens:            tokens,
-			Templates:         templates,
-			SiteDefaultLocale: siteLocale,
+			DB:         db,
+			Mailer:     srv.Mailer(),
+			Translator: translator,
+			Logger:     logger,
 		})
 		if err != nil {
 			return err

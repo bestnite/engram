@@ -64,7 +64,7 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/render` | Markdown to HTML (goldmark), including the `{{name:body|key=value}}` shortcode form, followed by allowlist sanitising (bluemonday). Card content and mail bodies share the pipeline; the mail allowlist additionally permits headings, and the mail renderer turns a shortcode into plain text instead of an element. |
 | `internal/texmath` | The single rule for locating TeX math, shared by `internal/render` and `internal/cardtype`. |
 | `internal/i18n` | Server-side translation catalogs (`internal/i18n/locales/*.yaml`), request language resolution, and the localiser placed in the request context. |
-| `internal/mail` | Mail templates (built-in defaults and admin overrides share one Markdown renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. |
+| `internal/mail` | Mail templates (built-in defaults and admin overrides share one Markdown renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. `Mailer` is the single send path: it checks SMTP and the recipient's preference, resolves the site name and template, adds the footer and the unsubscribe link, and enqueues. The web layer builds the process's one `Mailer` and the reminder and digest workers receive it from `cmd/engram`. |
 | `internal/reminder` | Worker that emails users who have due cards. |
 | `internal/digest` | Worker that sends the weekly digest email. |
 | `internal/retention` | Worker that deletes expired sessions, used or expired action tokens, expired invites, and old login fingerprints. |
@@ -82,8 +82,8 @@ cmd/engram → web, api, mcp, auth, config, digest, i18n, jobs, mail, media, rem
 web        → api, mcp, auth, cardtype, config, i18n, jobs, mail, media, mediatype, reminder, render, reviewday, schedule, store
 mcp        → api, store
 api        → auth, cardtype, media, reviewday, schedule, store, urlfetch
-digest     → auth, i18n, mail, reminder, reviewday, store, worker
-reminder   → auth, i18n, mail, reviewday, store, worker
+digest     → i18n, mail, reminder, reviewday, schedule, store, worker
+reminder   → i18n, mail, reviewday, schedule, store, worker
 jobs       → schedule, store
 mail       → config, render, store
 schedule   → reviewday, store

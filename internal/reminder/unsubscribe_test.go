@@ -32,10 +32,10 @@ func TestReminderCarriesUnsubscribeHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewActionTokenService: %v", err)
 	}
-	r, err := New(Deps{
-		DB: db, Outbox: enq, Translator: translator, Tokens: tokens,
-		Now: func() time.Time { return clock }, BaseURL: "https://example.com",
+	mailer := mail.NewMailer(mail.MailerDeps{
+		DB: db, Outbox: enq, Tokens: tokens, BaseURL: "https://example.com", Locales: translator.SupportedCodes(),
 	})
+	r, err := New(Deps{DB: db, Mailer: mailer, Translator: translator, Now: func() time.Time { return clock }})
 	if err != nil {
 		t.Fatalf("reminder.New: %v", err)
 	}

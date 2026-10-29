@@ -28,6 +28,38 @@ func newGrantee(t *testing.T, srv *Server, name, email string) *store.User {
 	return u
 }
 
+// deckMailTypes are the two sharing notifications. A login during a test sends its own new-device alert, so assertions
+// about sharing mail look at these types only.
+var deckMailTypes = []string{string(mail.TypeDeckShared), string(mail.TypeDeckPermissionChanged)}
+
+// sentOf returns the delivered messages whose type is one of types, in delivery order.
+func sentOf(sender *recordingMailSender, types ...string) []mail.Message {
+	var out []mail.Message
+	for _, m := range sender.messages() {
+		for _, typ := range types {
+			if m.Type == typ {
+				out = append(out, m)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// waitForMailOf polls until at least n messages of the given types have been delivered.
+func waitForMailOf(t *testing.T, sender *recordingMailSender, n int, types ...string) []mail.Message {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if msgs := sentOf(sender, types...); len(msgs) >= n {
+			return msgs
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d delivered messages of %v, got %d", n, types, len(sentOf(sender, types...)))
+	return nil
+}
+
 // TestDeckGrantMailNotifiesTheGrantee covers the notification type and recipient across the four steps invite→accept→role change→revoke.
 func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
@@ -43,7 +75,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	if rec.Code >= 300 {
 		t.Fatalf("POST grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	msgs := waitForMail(t, sender, 1)
+	msgs := waitForMailOf(t, sender, 1, deckMailTypes...)
 	first := msgs[0]
 	if first.Type != string(mail.TypeDeckShared) {
 		t.Errorf("mail type = %q, want %q", first.Type, mail.TypeDeckShared)
@@ -65,7 +97,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 		t.Fatalf("accept invite = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	// Acceptance itself sends no mail (the invite mail was already sent), so there is still only 1 message here.
-	if got := len(sender.messages()); got != 1 {
+	if got := len(sentOf(sender, deckMailTypes...)); got != 1 {
 		t.Errorf("delivered %d messages after acceptance, want 1 (acceptance itself must not mail)", got)
 	}
 
@@ -75,7 +107,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	if rec.Code >= 300 {
 		t.Fatalf("PATCH grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	msgs = waitForMail(t, sender, 2)
+	msgs = waitForMailOf(t, sender, 2, deckMailTypes...)
 	if msgs[1].Type != string(mail.TypeDeckPermissionChanged) {
 		t.Errorf("second mail type = %q, want %q", msgs[1].Type, mail.TypeDeckPermissionChanged)
 	}
@@ -85,7 +117,7 @@ func TestDeckGrantMailNotifiesTheGrantee(t *testing.T) {
 	if rec.Code >= 300 {
 		t.Fatalf("DELETE grant = %d, want success (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	msgs = waitForMail(t, sender, 3)
+	msgs = waitForMailOf(t, sender, 3, deckMailTypes...)
 	if msgs[2].Type != string(mail.TypeDeckPermissionChanged) {
 		t.Errorf("third mail type = %q, want %q", msgs[2].Type, mail.TypeDeckPermissionChanged)
 	}
@@ -114,7 +146,7 @@ func TestDeckGrantMailHonorsPreference(t *testing.T) {
 		t.Fatalf("POST grant = %d, want success", rec.Code)
 	}
 	time.Sleep(150 * time.Millisecond)
-	if got := len(sender.messages()); got != 0 {
+	if got := len(sentOf(sender, deckMailTypes...)); got != 0 {
 		t.Errorf("delivered %d messages, want 0 (recipient opted out)", got)
 	}
 	// The sharing itself must take effect as usual: notifying is only a side effect. Under opt-in, this step's product is an **invite** (the grant waits for acceptance).
@@ -147,7 +179,7 @@ func TestOptimizeDoneMailNotifiesPresetOwner(t *testing.T) {
 	// Off by default: not sent.
 	srv.NotifyOptimizeDone(ctx, job)
 	time.Sleep(150 * time.Millisecond)
-	if got := len(sender.messages()); got != 0 {
+	if got := len(sentOf(sender, deckMailTypes...)); got != 0 {
 		t.Fatalf("delivered %d messages, want 0 while the type is off by default", got)
 	}
 

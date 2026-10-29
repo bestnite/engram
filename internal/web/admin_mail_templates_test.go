@@ -284,8 +284,8 @@ func TestAdminMailTemplatePreviewMatchesBuiltinDefaultSend(t *testing.T) {
 	// Sending the saved template with the same variables and locale goes through the real sender entry point.
 	vars := sampleVars(mail.TypePasswordReset)
 	loc := srv.i18n.Localizer(srv.i18n.Pick("en", "", ""))
-	fallbackSubject, fallbackBodyMD, _ := mail.DefaultTemplate(mail.TypePasswordReset, mail.VariantDefault, loc.Tf, vars)
-	subject, text, html := srv.renderMail(context.Background(), loc, mail.TypePasswordReset, vars, fallbackSubject, fallbackBodyMD, "")
+	sent := srv.mailer.Compose(context.Background(), loc, mail.Mail{Type: mail.TypePasswordReset, Vars: vars})
+	subject, text, html := sent.Subject, sent.TextBody, sent.HTMLBody
 
 	if preview.Subject != subject {
 		t.Errorf("preview subject = %q, sent subject = %q", preview.Subject, subject)

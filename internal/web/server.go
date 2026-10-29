@@ -143,8 +143,8 @@ type Server struct {
 	jobStore  *jobs.Store
 	// mail is the mail outbox; cmd/engram starts and stops its worker.
 	mail *mail.Outbox
-	// securityMail is the delivery helper for class A transactional security mail.
-	securityMail *mail.SecurityNotifier
+	// mailer is the single path for composing and sending mail.
+	mailer *mail.Mailer
 	// tokens issues and consumes one-time action tokens: password reset, email verification, email change confirmation.
 	tokens *auth.ActionTokenService
 	// fingerprints records login fingerprints, for "new device / new IP login alerts".
@@ -266,11 +266,9 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.tokens = tokens
 	s.fingerprints = store.NewLoginFingerprintStore(deps.DB)
 	s.mailTemplates = store.NewMailTemplateStore(deps.DB)
+	s.setMailOutbox(deps.Mail, deps.BaseURL)
 	s.shareInvites = store.NewDeckShareInviteStore(deps.DB)
 	s.sharePolicy = store.NewSharePolicyStore(deps.DB)
-	if deps.Mail != nil {
-		s.securityMail = mail.NewSecurityNotifier(deps.Mail, store.NewEmailPrefStore(deps.DB), logger)
-	}
 	// The grant store can be built from the DB on demand; the decision engine is only wired when the deck store is complete too.
 	s.grants = deps.Grants
 	if s.grants == nil {
@@ -404,6 +402,29 @@ func (s *Server) Handler() http.Handler { return s.router }
 // Mail returns the mail outbox; cmd/engram uses it to start and gracefully stop its background worker.
 // nil when not wired.
 func (s *Server) Mail() *mail.Outbox { return s.mail }
+
+// setMailOutbox attaches the outbox and builds the process's one Mailer around it: the web layer sends through it and
+// cmd/engram hands it to the periodic workers (Server.Mailer), so templates, site name, unsubscribe links and
+// preference gates are wired exactly once. ob may be nil when mail is not wired.
+func (s *Server) setMailOutbox(ob *mail.Outbox, baseURL string) {
+	s.mail = ob
+	md := mail.MailerDeps{
+		DB:        s.db,
+		Templates: mail.StoreLookup(s.mailTemplates, s.logger),
+		Tokens:    s.tokens,
+		BaseURL:   baseURL,
+		Locales:   s.i18n.SupportedCodes(),
+		Logger:    s.logger,
+	}
+	// A nil *Outbox stored in the interface would not compare equal to nil, so it is only set when present.
+	if ob != nil {
+		md.Outbox = ob
+	}
+	s.mailer = mail.NewMailer(md)
+}
+
+// Mailer returns the process's single mail.Mailer, for cmd/engram to hand to the review reminder and weekly digest workers.
+func (s *Server) Mailer() *mail.Mailer { return s.mailer }
 
 // Connection-level timeouts. Only request headers and idle connections are limited; there is no overall read/write timeout, because media uploads and deck package imports can have
 // very large request bodies and streaming export responses can be very long, and an overall timeout would cut off legitimate slow connections.

@@ -133,16 +133,16 @@ func disableReminder(t *testing.T, db *gorm.DB, userID uint64) {
 }
 
 // newReminder builds a Reminder with a controllable clock and a fake enqueuer.
-func newReminder(t *testing.T, db *gorm.DB, enq Enqueuer, now func() time.Time) *Reminder {
+func newReminder(t *testing.T, db *gorm.DB, enq mail.Enqueuer, now func() time.Time) *Reminder {
 	t.Helper()
 	translator, err := i18n.New()
 	if err != nil {
 		t.Fatalf("i18n.New: %v", err)
 	}
-	r, err := New(Deps{
-		DB: db, Outbox: enq, Translator: translator, Now: now,
-		BaseURL: "http://localhost:3012",
+	mailer := mail.NewMailer(mail.MailerDeps{
+		DB: db, Outbox: enq, BaseURL: "http://localhost:3012", Locales: translator.SupportedCodes(),
 	})
+	r, err := New(Deps{DB: db, Mailer: mailer, Translator: translator, Now: now})
 	if err != nil {
 		t.Fatalf("reminder.New: %v", err)
 	}

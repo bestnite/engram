@@ -54,8 +54,13 @@ func (s *Server) issuePasswordReset(c *gin.Context, u *store.User) {
 		s.logger.Error("security mail: issue password reset token failed", "user_id", u.ID, "error", err)
 		return
 	}
-	loc := s.userLocalizer(u)
-	link := s.securityAbsoluteURL(c, "/reset-password?token="+url.QueryEscape(token))
-	msg := s.passwordResetMessage(ctx, loc, u.Email, u.Username, link, securitySiteName(loc), now.Add(auth.PasswordResetTTL))
-	s.sendSecurity(ctx, u.ID, msg.To, mail.TypePasswordReset, msg.Subject, msg.TextBody, msg.HTMLBody)
+	// The plaintext link appears only in the mail and never reaches the database or the logs.
+	s.sendMail(ctx, s.userLocalizer(u), mail.Mail{
+		Type: mail.TypePasswordReset, To: u.Email, UserID: u.ID,
+		Vars: mail.Vars{
+			"username": u.Username,
+			"url":      s.absoluteURL(c, "/reset-password?token="+url.QueryEscape(token)),
+			"expires":  mailTime(now.Add(auth.PasswordResetTTL)),
+		},
+	})
 }

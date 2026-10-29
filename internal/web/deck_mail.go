@@ -1,7 +1,6 @@
 package web
 
 import (
-	"context"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -39,72 +38,16 @@ func (s *Server) notifyDeckGrantChange(c *gin.Context, deck *store.Deck, actor, 
 		// Changing your own permission (including the owner acting on themselves) has no notification value.
 		return
 	}
-	if s.mail == nil || !s.mail.Configured() {
-		// When SMTP is unconfigured a note is enough: the sharing operation itself already succeeded, and the user does not need to see "mail not sent" here.
-		s.logger.Info("deck mail: smtp is not configured; notification skipped", "deck_id", deck.ID)
-		return
-	}
-	ctx := c.Request.Context()
-	choices, err := store.NewEmailPrefStore(s.db).Choices(ctx, target.ID)
-	if err != nil {
-		s.logger.Error("deck mail: read recipient preferences failed", "user_id", target.ID, "error", err)
-		return
-	}
-	typ := deckMailType(previousRole, newRole)
-	if !mail.ResolveEnabled(choices, typ) {
-		return
-	}
 	loc := s.userLocalizer(target)
-	link := s.securityAbsoluteURL(c, "/decks/"+deck.PublicID)
-	unsubURL := s.optionalUnsubscribeLink(c, target.ID, typ)
-	msg := s.deckGrantMessage(ctx, loc, target.Email, typ, actor.Username, deck.Name, newRole, link, unsubURL)
-	if err := s.mail.Enqueue(ctx, msg); err != nil {
-		s.logger.Error("deck mail: enqueue failed", "mail_type", string(typ), "user_id", target.ID, "error", err)
-	}
-}
-
-// deckGrantMessage assembles the share/permission-change mail. The built-in body is Markdown and renders to HTML; a custom template replaces it.
-func (s *Server) deckGrantMessage(ctx context.Context, loc *i18n.Localizer, to string, typ mail.Type,
-	inviter, deck, role, link, unsubURL string) mail.Message {
-	site := securitySiteName(loc)
-	roleLabel := roleLabelFor(loc, role)
-	// On revocation role is empty: the mail must say "access was revoked", not "permission was changed to empty". That decision now
-	// lives in mail.DefaultTemplate (which decides by the role variable), so it is no longer recomputed here.
-
-	vars := mail.Vars{
-		"site": site, "inviter": inviter, "actor": inviter,
-		"deck": deck, "role": roleLabel, "url": link,
-	}
-	if unsubURL != "" {
-		vars["unsubscribe_url"] = unsubURL
-	}
-
-	// The built-in body comes from mail.DefaultTemplate: the "default" pre-filled on the admin page and what is sent here are the same text.
-	// On revocation roleLabel is empty, and that branch is decided by the function from the variable itself (no separate parameter).
-	fallbackSubject, fallbackBodyMD, _ := mail.DefaultTemplate(typ, mail.VariantDefault, loc.Tf, vars)
-
-	footerNote, unsubLabel := loc.T("mail.footer.automated"), ""
-	if unsubURL != "" {
-		footerNote = loc.T("mail.footer.note")
-		unsubLabel = loc.T("mail.footer.unsubscribe")
-	}
-	tpl := mail.Resolve(s.mailTemplateLookup(), typ, loc.Locale(), s.siteDefaultLocale(ctx))
-	out := mail.RenderOrFallback(mail.RenderInput{
-		Type:             typ,
-		Site:             site,
-		Lang:             loc.Locale(),
-		Vars:             vars,
-		Subject:          tpl.Subject,
-		BodyMD:           tpl.Body,
-		FallbackSubject:  fallbackSubject,
-		FallbackBodyMD:   fallbackBodyMD,
-		UnsubscribeURL:   unsubURL,
-		FooterNote:       footerNote,
-		UnsubscribeLabel: unsubLabel,
+	// On revocation newRole is empty: the built-in body decides from the role variable that the mail says "access was
+	// revoked", not "permission was changed to empty".
+	s.sendMail(c.Request.Context(), loc, mail.Mail{
+		Type: deckMailType(previousRole, newRole), To: target.Email, UserID: target.ID, BaseURL: s.requestBaseURL(c),
+		Vars: mail.Vars{
+			"inviter": actor.Username, "actor": actor.Username, "deck": deck.Name,
+			"role": roleLabelFor(loc, newRole), "url": s.absoluteURL(c, "/decks/"+deck.PublicID),
+		},
 	})
-	msg := mail.Message{To: to, Type: string(typ), Subject: out.Subject, TextBody: out.Text, HTMLBody: out.HTML}
-	msg.Headers = mail.UnsubscribeHeaders(typ, unsubURL)
-	return msg
 }
 
 // roleLabelFor translates identifiers like reader/editor into the recipient's language; unknown values are returned as-is (never leaking an empty string).

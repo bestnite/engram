@@ -25,7 +25,7 @@ import (
 func attachAdminMail(t *testing.T, srv *Server, db *gorm.DB) {
 	t.Helper()
 	configureSMTP(t, db)
-	srv.mail = mail.NewOutbox(mail.Deps{DB: db, Logger: discardLogger()})
+	srv.setMailOutbox(mail.NewOutbox(mail.Deps{DB: db, Logger: discardLogger()}), srv.baseURL)
 }
 
 // waitOutboxType polls until a mail of the given type appears in the outbox (the job-failure hook fires asynchronously inside the worker).
@@ -165,7 +165,7 @@ func brokenMailOutbox(t *testing.T) *mail.Outbox {
 // operation, still succeeds (413) and never fails because of mail.
 func TestAdminMailFailureDoesNotBreakTrigger(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	srv.mail = brokenMailOutbox(t)
+	srv.setMailOutbox(brokenMailOutbox(t), srv.baseURL)
 
 	t.Setenv(envMediaUserQuotaBytes, "")
 	if err := store.PutSetting(context.Background(), db, settingKeyMediaUserQuotaBytes, "2048", nil, time.Now().UTC()); err != nil {
@@ -191,8 +191,9 @@ func TestAdminMailFailureDoesNotBreakTrigger(t *testing.T) {
 // class D is optional mail, so the receiving admin must be able to turn it off without logging in.
 func TestAdminMailCarriesUnsubscribeHeaders(t *testing.T) {
 	srv, db, _, _, _ := newNotesServer(t)
-	attachAdminMail(t, srv, db)
+	// The base URL is set before the outbox is attached, because the mailer is built around both.
 	srv.baseURL = "https://example.com"
+	attachAdminMail(t, srv, db)
 
 	srv.NotifyMediaAlert(context.Background(), &store.User{ID: 9001, Username: "heavy-user", Email: "heavy@example.com"}, 2<<20, 4<<20)
 

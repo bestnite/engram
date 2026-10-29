@@ -128,23 +128,19 @@ func (s *Server) webManifest(c *gin.Context) {
 	}
 }
 
-// pwaIdentity returns the app name and description: settings-table overrides first, the site-name key by default.
+// pwaIdentity returns the app name and description: the site name as mail.Composer resolves it, and the configured
+// description or, when unset, the name again.
 func (s *Server) pwaIdentity(c *gin.Context, loc *i18n.Localizer) (name, description string) {
-	name = loc.T("app.name")
+	ctx := c.Request.Context()
+	name = s.mailer.SiteName(ctx, loc)
 	description = name
 	if s.db == nil {
 		return name, description
 	}
-	settings, err := store.LoadSettings(c.Request.Context(), s.db)
-	if err != nil {
-		// The settings table may not be migrated yet; the default values are enough to render the manifest.
-		return name, description
-	}
-	if v := strings.TrimSpace(settings["site.name"]); v != "" {
-		name = v
-	}
-	if v := strings.TrimSpace(settings["site.description"]); v != "" {
-		description = v
+	if settings, err := store.LoadSettings(ctx, s.db); err == nil {
+		if v := strings.TrimSpace(settings[store.SettingSiteDescription]); v != "" {
+			description = v
+		}
 	}
 	return name, description
 }

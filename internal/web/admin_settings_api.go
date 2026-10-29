@@ -162,7 +162,7 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 			continue
 		}
 		switch spec.key {
-		case settingKeySiteDefaultLocale:
+		case store.SettingSiteDefaultLocale:
 			if !s.supportedLocale(raw) {
 				adminError(c, http.StatusBadRequest, "invalid_locale")
 				return

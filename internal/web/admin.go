@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -16,13 +15,6 @@ import (
 //
 // Hard constraint: only role = admin gets in; everyone else is always 403. The SSR page layer has been removed: every GET route first passes
 // requireAdmin, then serves the SPA app shell; the panel's reads and writes live on the /api/v1/admin/* JSON endpoints (the files starting at admin_api.go).
-
-const (
-	// settingKeySiteName is the site name; falls back to language pack app.name when absent.
-	settingKeySiteName = "site.name"
-	// settingKeySiteDefaultLocale is the site's default locale, used as the last fallback level in locale resolution.
-	settingKeySiteDefaultLocale = "site.default_locale"
-)
 
 // adminRoute describes one implemented admin route; registration and the "non-admin is always 403" test share the same list,
 // so the two cannot drift apart.
@@ -89,33 +81,13 @@ func (s *Server) requireAdmin() gin.HandlerFunc {
 	}
 }
 
-// siteName returns the effective site name: settings table > language pack app.name.
+// siteName returns the effective site name: the settings table, then the language pack's app.name (mail.Composer decides).
 func (s *Server) siteName(ctx context.Context, loc *i18n.Localizer) string {
-	if s.db != nil {
-		if settings, err := store.LoadSettings(ctx, s.db); err == nil {
-			if raw := strings.TrimSpace(settings[settingKeySiteName]); raw != "" {
-				return raw
-			}
-		}
-	}
-	return loc.T("app.name")
+	return s.mailer.SiteName(ctx, loc)
 }
 
-// siteDefaultLocale returns the site default locale configured by the admin; returns an empty string when unset or unsupported.
+// siteDefaultLocale returns the site default locale configured by the admin; empty when unset or unsupported.
 // In locale resolution it is only the last fallback level and never overrides ?lang / user settings / Accept-Language.
 func (s *Server) siteDefaultLocale(ctx context.Context) string {
-	if s.db == nil {
-		return ""
-	}
-	settings, err := store.LoadSettings(ctx, s.db)
-	if err != nil {
-		return ""
-	}
-	raw := strings.TrimSpace(settings[settingKeySiteDefaultLocale])
-	for _, code := range s.i18n.SupportedCodes() {
-		if code == raw {
-			return raw
-		}
-	}
-	return ""
+	return s.mailer.SiteDefaultLocale(ctx)
 }

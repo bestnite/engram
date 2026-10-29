@@ -158,7 +158,7 @@ func tokenFromBody(t *testing.T, body string) string {
 }
 
 // assertNoUnsubscribeHeader asserts none of these class A mails carries an unsubscribe header.
-// SecurityNotifier never writes Headers, so headers_json is an empty object and neither
+// mail.Mailer gives a class A type no unsubscribe link, so headers_json is an empty object and neither
 // List-Unsubscribe nor List-Unsubscribe-Post ever appears.
 func assertNoUnsubscribeHeader(t *testing.T, rows []store.OutboxMessage) {
 	t.Helper()
