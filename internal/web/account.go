@@ -3,7 +3,6 @@ package web
 import (
 	"errors"
 	"net/http"
-	netmail "net/mail"
 	"strings"
 	"time"
 
@@ -103,7 +102,7 @@ func (s *Server) forgotPasswordSubmit(c *gin.Context) {
 		apiAuthError(c, http.StatusBadRequest, api.CodeInvalidRequest, "The request is invalid.")
 		return
 	}
-	email := strings.ToLower(strings.TrimSpace(req.Email))
+	email := store.NormalizeEmail(req.Email)
 	if s.anonRateLimited(c, email) {
 		apiAuthError(c, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again later.")
 		return
@@ -217,7 +216,7 @@ func (s *Server) confirmEmailChangeSubmit(c *gin.Context) {
 		apiAuthError(c, http.StatusBadRequest, actionTokenErrorCode(err), "The confirmation link is invalid or has expired.")
 		return
 	}
-	newEmail := strings.ToLower(strings.TrimSpace(tok.Payload))
+	newEmail := store.NormalizeEmail(tok.Payload)
 	if newEmail == "" {
 		apiAuthError(c, http.StatusBadRequest, "token_invalid", "The confirmation link is invalid.")
 		return
@@ -280,16 +279,16 @@ func (s *Server) emailChangeSubmit(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	newEmail := strings.ToLower(strings.TrimSpace(req.Email))
+	newEmail := store.NormalizeEmail(req.Email)
 	if !s.securityMailReady() {
 		apiAuthError(c, http.StatusBadRequest, "mail_not_configured", "Email is not configured on this site.")
 		return
 	}
-	if _, err := netmail.ParseAddress(newEmail); err != nil {
+	if !auth.ValidEmail(newEmail) {
 		apiAuthError(c, http.StatusBadRequest, "email_invalid", "Enter a valid email address.")
 		return
 	}
-	if newEmail == strings.ToLower(strings.TrimSpace(user.Email)) {
+	if newEmail == store.NormalizeEmail(user.Email) {
 		apiAuthError(c, http.StatusBadRequest, "email_same", "That is already your current email address.")
 		return
 	}

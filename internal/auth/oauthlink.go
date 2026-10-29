@@ -74,7 +74,7 @@ func DecideIdentityLink(profile OAuthProfile, existing *store.Identity, matched 
 	if existing != nil {
 		return LinkDecision{Kind: LinkDecisionExisting, UserID: existing.UserID}
 	}
-	email := normalizeEmail(profile.Email)
+	email := store.NormalizeEmail(profile.Email)
 	if profile.EmailVerified && email != "" && matched != nil && strings.EqualFold(matched.Email, email) {
 		return LinkDecision{Kind: LinkDecisionAutoLink, UserID: matched.ID}
 	}
@@ -89,11 +89,6 @@ func DecideIdentityLink(profile OAuthProfile, existing *store.Identity, matched 
 	default:
 		return LinkDecision{Kind: LinkDecisionDeny, Err: ErrIdentityLinkDenied}
 	}
-}
-
-// normalizeEmail normalizes an email: lowercase + trim surrounding whitespace. An empty string stays empty, meaning the IdP returned no email.
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
 }
 
 // IdentityLinkStore is the storage capability the linking flow needs, defined on the consumer side (AGENTS.md §2.4).
@@ -148,7 +143,7 @@ func (s *IdentityLinkService) Resolve(ctx context.Context, profile OAuthProfile,
 
 	// Only when the IdP supplied an email do we look up an account with the same name; the matched user, verified or not, goes to the pure function,
 	// which decides whether it suffices to trigger auto-linking or must deny account creation.
-	email := normalizeEmail(profile.Email)
+	email := store.NormalizeEmail(profile.Email)
 	var matched *store.User
 	if email != "" {
 		matched, err = s.store.FindUserByEmail(ctx, email)
@@ -225,7 +220,7 @@ func (s *IdentityLinkService) Bind(ctx context.Context, profile OAuthProfile, us
 		return ErrIdentityAlreadyLinked
 	}
 
-	email := normalizeEmail(profile.Email)
+	email := store.NormalizeEmail(profile.Email)
 	if err := s.createLink(ctx, profile, userID, email); err != nil {
 		// A concurrent bind can win the unique constraint between the lookup above and the insert: re-read to tell a duplicate
 		// from a genuine failure, and answer with the same decision the pre-check would have produced.
@@ -308,7 +303,7 @@ func oidcUsername(profile OAuthProfile) string {
 
 // oidcAccountEmail returns the email to persist: use the IdP's when given, otherwise synthesize a placeholder so the unique constraint holds.
 func oidcAccountEmail(profile OAuthProfile) string {
-	if email := normalizeEmail(profile.Email); email != "" {
+	if email := store.NormalizeEmail(profile.Email); email != "" {
 		return email
 	}
 	return oidcUsername(profile) + oidcPlaceholderEmailSuffix
@@ -327,7 +322,7 @@ func oidcDisplayName(profile OAuthProfile) string {
 
 // emailLocalPart takes the part before @; an empty string when there is no @ or it is empty.
 func emailLocalPart(email string) string {
-	email = normalizeEmail(email)
+	email = store.NormalizeEmail(email)
 	at := strings.IndexByte(email, '@')
 	if at <= 0 {
 		return ""

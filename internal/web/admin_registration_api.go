@@ -184,7 +184,7 @@ func (s *Server) adminInviteCreate(c *gin.Context) {
 		return
 	}
 	inv := &store.Invite{Role: role, CreatedBy: store.Ptr(actor.ID), CreatedAt: time.Now().UTC()}
-	if email := strings.ToLower(strings.TrimSpace(req.Email)); email != "" {
+	if email := store.NormalizeEmail(req.Email); email != "" {
 		inv.Email = &email
 	}
 	// Validity days: blank or 0 means no expiry; invalid values are rejected rather than silently treated as no expiry.

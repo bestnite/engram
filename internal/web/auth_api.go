@@ -285,7 +285,7 @@ func (s *Server) apiRegister(c *gin.Context) {
 	ctx := c.Request.Context()
 	outcome := s.attemptRegistration(ctx, c.ClientIP(),
 		strings.TrimSpace(req.Username),
-		strings.ToLower(strings.TrimSpace(req.Email)),
+		store.NormalizeEmail(req.Email),
 		strings.TrimSpace(req.DisplayName),
 		req.Password,
 		strings.TrimSpace(req.Invite),
@@ -314,10 +314,10 @@ func (s *Server) apiSetup(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	email := strings.ToLower(strings.TrimSpace(req.Email))
+	email := store.NormalizeEmail(req.Email)
 	if email == "" && s.bootstrapEmail != "" {
 		// Containerized deployments fall back to BOOTSTRAP_ADMIN_EMAIL: when the request leaves the email blank, the env var value is used.
-		email = strings.ToLower(strings.TrimSpace(s.bootstrapEmail))
+		email = store.NormalizeEmail(s.bootstrapEmail)
 	}
 	outcome := s.attemptSetup(ctx,
 		strings.TrimSpace(req.Username), email,

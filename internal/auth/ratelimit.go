@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // Default parameters for login rate limiting. The delay grows as base × 2^(failure count-1) and is capped at MaxDelay.
@@ -383,6 +385,6 @@ func (l *AnonymousLimiter) Allow(ip, email string) bool {
 	defer l.mu.Unlock()
 	now := l.now()
 	okIP := l.allowLocked("ip:", strings.TrimSpace(ip), now)
-	okEmail := l.allowLocked("email:", strings.ToLower(strings.TrimSpace(email)), now)
+	okEmail := l.allowLocked("email:", store.NormalizeEmail(email), now)
 	return okIP && okEmail
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -107,7 +106,7 @@ func UsableInvite(inv *Invite, email string, now time.Time) error {
 	if inv.ExpiresAt != nil && !inv.ExpiresAt.After(now) {
 		return ErrInviteExpired
 	}
-	if inv.Email != nil && strings.ToLower(strings.TrimSpace(*inv.Email)) != strings.ToLower(strings.TrimSpace(email)) {
+	if inv.Email != nil && NormalizeEmail(*inv.Email) != NormalizeEmail(email) {
 		return ErrInviteEmailMismatch
 	}
 	return nil

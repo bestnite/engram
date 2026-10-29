@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -46,10 +47,16 @@ func (s *UserStore) ByUsername(ctx context.Context, username string) (*User, err
 	return &u, nil
 }
 
+// NormalizeEmail returns the canonical form of an email address, the form users.email and invites.email are stored in:
+// surrounding whitespace removed and lowercased, so a lookup or a comparison never depends on how the address was typed.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 // ByEmail fetches a user by email (used by OIDC auto-linking and admin lookups).
 func (s *UserStore) ByEmail(ctx context.Context, email string) (*User, error) {
 	var u User
-	if err := s.db.WithContext(ctx).First(&u, "email = ?", email).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&u, "email = ?", NormalizeEmail(email)).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil

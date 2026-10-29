@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -108,13 +109,47 @@ func (s *AccountService) CreateOIDCUser(ctx context.Context, in CreateUserInput)
 	return u, nil
 }
 
+// ValidEmail reports whether email, already in store.NormalizeEmail form, is one bare address. A display-name form such as
+// "Name <a@example.com>" is rejected: it would be stored verbatim and never match the address a user types to sign in.
+func ValidEmail(email string) bool {
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Address == email
+}
+
+// AccountInputCode checks the fields every local account needs and returns a stable English error code, or "" when they
+// are acceptable. email must already be in store.NormalizeEmail form. Registration, first-admin setup and admin account
+// creation all call it before creating the account; the password rules are the ones ValidatePasswordPolicy and the
+// length bounds define.
+func AccountInputCode(username, email, password string) string {
+	switch {
+	case username == "":
+		return "username_required"
+	case email == "":
+		return "email_required"
+	case !ValidEmail(email):
+		return "email_invalid"
+	case password == "":
+		return "password_required"
+	case len(password) < MinPasswordLength:
+		return "password_too_short"
+	case len(password) > MaxPasswordLength:
+		return "password_too_long"
+	case ValidatePasswordPolicy(password) != nil:
+		return "password_too_common"
+	}
+	return ""
+}
+
 // newUserFromInput normalizes the input into a user ready to persist; a nil passwordHash means no local password.
 // Defaults are centralized here so the two account-creation paths cannot drift (AGENTS.md §2.6: one behavior, one implementation).
 func newUserFromInput(in CreateUserInput, passwordHash *string, now time.Time) (*store.User, error) {
 	username := strings.TrimSpace(in.Username)
-	email := strings.ToLower(strings.TrimSpace(in.Email))
+	email := store.NormalizeEmail(in.Email)
 	if username == "" || email == "" {
 		return nil, errors.New("username and email are required")
+	}
+	if !ValidEmail(email) {
+		return nil, errors.New("email is not a valid address")
 	}
 	role := in.Role
 	if role == "" {

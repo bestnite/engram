@@ -80,12 +80,12 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 }
 
 // inviteRecipient finds the site user by email; returns nil when it is not a site user (or the lookup fails).
-// Email matching is case-insensitive: emails in the users table are normalized to lowercase at signup.
+// Email matching is case-insensitive: UserStore.ByEmail compares store.NormalizeEmail forms.
 func (s *Server) inviteRecipient(ctx context.Context, email string) *store.User {
 	if s.users == nil {
 		return nil
 	}
-	u, err := s.users.ByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+	u, err := s.users.ByEmail(ctx, email)
 	if err != nil || u == nil {
 		return nil
 	}

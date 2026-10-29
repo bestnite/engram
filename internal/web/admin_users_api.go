@@ -122,13 +122,13 @@ func (s *Server) adminUserCreate(c *gin.Context) {
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	req.Email = store.NormalizeEmail(req.Email)
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
 	if req.Role != store.RoleAdmin && req.Role != store.RoleUser {
 		adminError(c, http.StatusBadRequest, "invalid_role")
 		return
 	}
-	if code := registerInputErrorCode(req.Username, req.Email, req.Password); code != "" {
+	if code := auth.AccountInputCode(req.Username, req.Email, req.Password); code != "" {
 		adminError(c, http.StatusBadRequest, code)
 		return
 	}

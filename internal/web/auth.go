@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/mail"
 	"strconv"
 	"time"
 
@@ -116,7 +115,7 @@ func (s *Server) attemptRegistration(ctx context.Context, clientIP, username, em
 	if s.anonLimiter != nil && !s.anonLimiter.Allow(clientIP, email) {
 		return registrationOutcome{Status: http.StatusTooManyRequests, Code: "rate_limited"}
 	}
-	if code := registerInputErrorCode(username, email, password); code != "" {
+	if code := auth.AccountInputCode(username, email, password); code != "" {
 		return registrationOutcome{Status: http.StatusBadRequest, Code: code}
 	}
 
@@ -217,7 +216,7 @@ func (s *Server) attemptRegistration(ctx context.Context, clientIP, username, em
 // attemptSetup performs first-admin bootstrap account creation and audit. The SPA JSON interface (apiSetup) is the only transport,
 // and the one-time admin gate (CountActiveAdmins==0) is checked by the caller at the entry point. Bootstrap does not send an email verification mail.
 func (s *Server) attemptSetup(ctx context.Context, username, email, displayName, password, locale string) registrationOutcome {
-	if code := registerInputErrorCode(username, email, password); code != "" {
+	if code := auth.AccountInputCode(username, email, password); code != "" {
 		return registrationOutcome{Status: http.StatusBadRequest, Code: code}
 	}
 	u, err := s.createBootstrapAdmin(ctx, auth.CreateUserInput{
@@ -270,35 +269,4 @@ func (s *Server) setupAvailable(c *gin.Context) bool {
 		return false
 	}
 	return n == 0
-}
-
-// registerInputErrorCode validates registration and setup form input and returns a stable English code; returns an empty string when it passes.
-//
-// The SPA JSON interfaces (apiRegister/apiSetup) and the admin account-creation form share it, avoiding two transports each writing their own validation and
-// drifting apart (AGENTS.md §2.4 "one business layer, two transports").
-// The code values are exactly the stable codes in the JSON error envelope and the source of the English fallback message.
-// Password strength reuses internal/auth's policy; no second set of rules is defined here.
-func registerInputErrorCode(username, email, password string) string {
-	if username == "" {
-		return "username_required"
-	}
-	if email == "" {
-		return "email_required"
-	}
-	if _, err := mail.ParseAddress(email); err != nil {
-		return "email_invalid"
-	}
-	if password == "" {
-		return "password_required"
-	}
-	if len(password) < auth.MinPasswordLength {
-		return "password_too_short"
-	}
-	if len(password) > auth.MaxPasswordLength {
-		return "password_too_long"
-	}
-	if err := auth.ValidatePasswordPolicy(password); err != nil {
-		return "password_too_common"
-	}
-	return ""
 }
