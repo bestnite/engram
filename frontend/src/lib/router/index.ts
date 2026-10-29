@@ -125,6 +125,22 @@ export function navigate(to: string, replace = false): void {
 }
 
 /**
+ * Rewrite the address bar in place without a route change.
+ *
+ * For a view that mirrors its own state (filters, page number) into the query string, so a reload, the
+ * browser's back button and a `?return=` link all land on the same state. The store is deliberately left
+ * alone: the query string is part of the view rebuild key, and committing it would destroy and recreate
+ * the view on every keystroke. The next navigate or popstate reads the address afresh, so nothing keeps
+ * the stale store value.
+ */
+export function replaceAddress(to: string): void {
+  if (typeof window === 'undefined') return;
+  const target = withLanguage(to);
+  if (window.location.pathname + window.location.search === target) return;
+  window.history.replaceState(window.history.state, '', target);
+}
+
+/**
  * Write the new route into the store, wrapping it in a View Transition when the browser supports it
  * (app.css defines a 140ms fade).
  *

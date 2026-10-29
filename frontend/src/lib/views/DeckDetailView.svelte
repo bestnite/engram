@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { navigate, routeStore } from '../router';
+  import { get } from 'svelte/store';
+  import { navigate, replaceAddress, routeStore } from '../router';
+  import { withReturn } from '../return-to';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Deck, DeckQueueCount, DeckTag, Note, BulkNotesResponse } from '../api';
@@ -75,9 +77,17 @@
 
   // Filter criteria: input takes effect immediately (there is no "apply" button), text input is debounced 300ms.
   // Deleted cards no longer offer a filter entry (the list only presents non-deleted content).
-  let queryInput = $state('');
-  let tagInput = $state('');
-  let kindSelect = $state('');
+  // The filters and the page number live in the address as well (q, tag, kind, page), so a reload, the
+  // browser's back button and the card editor's return link all come back to the same list. They are read
+  // once on mount; afterwards the page writes them back after every load.
+  const initialQuery = get(routeStore).query;
+  const initialPage = Math.max(1, Number.parseInt(initialQuery.page ?? '', 10) || 1);
+  let queryInput = $state(initialQuery.q ?? '');
+  let tagInput = $state(initialQuery.tag ?? '');
+  let kindSelect = $state(initialQuery.kind ?? '');
+  // The filters of the list on screen. The inputs can run ahead of it while the debounce is pending, and an
+  // address must describe the list the user sees, not the half-typed next one.
+  let appliedFilters = $state({ q: '', tag: '', kind: '' });
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Study by tag: tags are only selectable within this deck (a same-named tag in another deck is not the same category); multiple selections take the union.
@@ -131,6 +141,24 @@
   const cardKinds = $derived(kindOrder($cardTypes));
 
   const deckId = $derived($routeStore.params.id || '');
+
+  // This list's address, filters and page included: mirrored into the address bar, and handed to the card
+  // editor as its return path.
+  const listAddress = $derived.by(() => {
+    const params = new URLSearchParams();
+    if (appliedFilters.q) params.set('q', appliedFilters.q);
+    if (appliedFilters.tag) params.set('tag', appliedFilters.tag);
+    if (appliedFilters.kind) params.set('kind', appliedFilters.kind);
+    if (page > 1) params.set('page', String(page));
+    const search = params.toString();
+    return `${$routeStore.path}${search ? `?${search}` : ''}`;
+  });
+  const createHref = $derived(withReturn(`/decks/${encodeURIComponent(deckId)}/notes/new`, listAddress));
+
+  /** The editor link of one card, returning to this list as it is now. */
+  function editHref(noteId: string): string {
+    return withReturn(`/decks/${encodeURIComponent(deckId)}/notes/${encodeURIComponent(noteId)}/edit`, listAddress);
+  }
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
   const hasFilter = $derived(Boolean(queryInput.trim() || tagInput.trim() || kindSelect));
   const allSelected = $derived(notes.length > 0 && notes.every((n) => selectedIds.includes(n.id)));
@@ -200,6 +228,8 @@
     selectedIds = [];
     confirmingBulkDelete = false;
 
+    const filters = { q: queryInput.trim(), tag: tagInput.trim(), kind: kindSelect };
+
     try {
       if (!deck) {
         try {
@@ -210,14 +240,16 @@
       const res = await apiClient.getDeckNotes(deckId, {
         page: targetPage,
         per_page: perPage,
-        q: queryInput.trim() || undefined,
-        tag: tagInput.trim() || undefined,
-        kind: kindSelect || undefined,
+        q: filters.q || undefined,
+        tag: filters.tag || undefined,
+        kind: filters.kind || undefined,
       });
 
       notes = res.notes;
       total = res.total;
       page = res.page;
+      appliedFilters = filters;
+      replaceAddress(listAddress);
     } catch (err) {
       error = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -456,7 +488,7 @@
   }
 
   onMount(() => {
-    if (initialLoading) loadData(1);
+    if (initialLoading) loadData(initialPage);
     void loadProgress();
     // Metadata is loaded only once (idempotent within the module); on failure the filter dropdown degrades to just "all card types" without interrupting the page.
     void loadCardTypes(apiClient).catch(() => {});
@@ -519,7 +551,7 @@
         <span>{$t('package.export.short')}</span>
       </Button>
       {#if canEditContent}
-        <Button variant="outline" size="lg" href="/decks/{encodeURIComponent(deckId)}/notes/new" testId="create-note-link">
+        <Button variant="outline" size="lg" href={createHref} testId="create-note-link">
           <Plus class="size-4" aria-hidden="true" />
           <span>{$t('notes.create')}</span>
         </Button>
@@ -707,7 +739,7 @@
               <div class="flex min-w-0 items-center gap-2">
                 {#if canEditContent}
                   <a
-                    href="/decks/{encodeURIComponent(deckId)}/notes/{encodeURIComponent(note.id)}/edit"
+                    href={editHref(note.id)}
                     class="{listClasses.rowLink} text-sm {note.suspended ? 'text-muted-foreground' : ''}"
                   >{summary.primary || '—'}</a>
                 {:else}
@@ -746,7 +778,7 @@
               {#if canEditContent}
                 <a
                   data-testid="edit-note-{note.id}"
-                  href="/decks/{encodeURIComponent(deckId)}/notes/{encodeURIComponent(note.id)}/edit"
+                  href={editHref(note.id)}
                   class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 max-md:opacity-100"
                   aria-label={$t('note_edit.action')}
                   title={$t('note_edit.action')}

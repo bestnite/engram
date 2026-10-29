@@ -49,7 +49,8 @@ describe('DeckDetailView notes table', () => {
     expect(html).toContain('うながす · 催促');
     // Internal IDs appear only in data-testid and links, never as visible text.
     expect(html).not.toContain(`#${id}`);
-    expect(html).toMatch(new RegExp(`href="/decks/d1/notes/${id}/edit"`));
+    // The editor link carries the list's address, so leaving the editor comes back to this list.
+    expect(html).toContain(`href="/decks/d1/notes/${id}/edit?return=%2Fdecks%2Fd1"`);
   });
 
   it('renders the external reference as a labelled chip and marks suspended notes', () => {
