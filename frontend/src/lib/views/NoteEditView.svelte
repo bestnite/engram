@@ -22,7 +22,7 @@
   import { backField, cardTypes, fieldsForKind, frontField, kindOrder, loadCardTypes } from '../card-types';
   import { insertSource, type Caret } from '../shortcode-source';
   import { uploadErrorKeyFor } from '../media-upload';
-  import { Eye, X } from '@lucide/svelte';
+  import { Eye, Trash2, X } from '@lucide/svelte';
 
   // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
   // (card type, fields with their own insertion tools, tags and live preview). A successful create always leaves the editor, leaving no second "create another" path.
@@ -51,6 +51,11 @@
   let saving = $state(false);
   let loadError = $state(false);
   let metaError = $state(false);
+
+  // Delete confirmation: open, in flight, and the catalog key of the last failure shown inside the dialog.
+  let deleteOpen = $state(false);
+  let deleting = $state(false);
+  let deleteError = $state('');
 
   // Last known caret per field, reported by NoteFieldsForm. A field the user never placed the caret in has
   // no entry, so an insertion there appends to the end instead of guessing a position.
@@ -301,8 +306,8 @@
 
   function handleWindowKeydown(event: KeyboardEvent): void {
     if (event.key !== 'Escape' || !previewOpen) return;
-    // The insertion dialogs close themselves on Esc; a key press they already answered must not also shut the drawer.
-    if (insertOpen) return;
+    // The dialogs close themselves on Esc; a key press they already answered must not also shut the drawer.
+    if (insertOpen || deleteOpen) return;
     closePreview();
   }
 
@@ -415,6 +420,33 @@
       reportSaveError(err);
     } finally {
       if (!disposed) saving = false;
+    }
+  }
+
+  /**
+   * Deletes the note being edited, then leaves for the return page. The editor's own history entry is
+   * replaced rather than kept: going back to it would only show a note that no longer exists.
+   */
+  async function deleteCurrent(): Promise<void> {
+    if (!note || deleting) return;
+    deleting = true;
+    deleteError = '';
+    try {
+      await apiClient.deleteNote(note.id);
+      if (disposed) return;
+      deleteOpen = false;
+      toast.success($t('notes.delete_success'));
+      navigate(returnTo, true);
+    } catch (err) {
+      if (disposed) return;
+      deleteError =
+        err instanceof ApiClientError && err.code === 'insufficient_role'
+          ? 'error.forbidden'
+          : err instanceof ApiClientError && err.code === 'not_found'
+            ? 'error.not_found'
+            : 'error.unknown';
+    } finally {
+      if (!disposed) deleting = false;
     }
   }
 
@@ -640,9 +672,56 @@
         <Button variant="ghost" size="lg" testId="note-cancel" onclick={() => navigate(returnTo)}>
           {$t('note_edit.cancel')}
         </Button>
+        {#if !isCreate && note}
+          <!-- Kept apart from save and cancel at the far end of the bar, so a destructive action is never the next
+               button a hurried click lands on. -->
+          <Button
+            variant="danger-outline"
+            size="lg"
+            class="ml-auto"
+            testId="note-delete"
+            disabled={saving}
+            onclick={() => {
+              deleteError = '';
+              deleteOpen = true;
+            }}
+          >
+            <Trash2 class="size-4" aria-hidden="true" />
+            <span>{$t('notes.delete')}</span>
+          </Button>
+        {/if}
       </div>
     </form>
 
+    <Dialog
+      open={deleteOpen}
+      onOpenChange={(open) => {
+        if (!open && !deleting) deleteOpen = false;
+      }}
+      title={$t('notes.delete_confirm')}
+      description={$t('notes.delete_desc')}
+      testId="note-edit-delete-dialog"
+      size="sm"
+    >
+      {#if deleteError}
+        <p role="alert" data-testid="note-edit-delete-error" class="text-sm text-destructive-foreground">{$t(deleteError)}</p>
+      {/if}
+      <div class="mt-2 flex items-center justify-end gap-2">
+        <Button type="button" variant="outline" size="lg" disabled={deleting} onclick={() => (deleteOpen = false)}>
+          {$t('note_edit.cancel')}
+        </Button>
+        <Button
+          type="button"
+          variant="danger"
+          size="lg"
+          testId="note-edit-delete-confirm"
+          loading={deleting}
+          onclick={() => void deleteCurrent()}
+        >
+          {$t('notes.delete')}
+        </Button>
+      </div>
+    </Dialog>
 
     <!-- One dialog serves both insertion actions; which one is open, and for which field, is the state above.
          Its content is not inside the form element: an upload or a pick writes into the form model, and neither

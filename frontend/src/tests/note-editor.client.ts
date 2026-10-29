@@ -1259,3 +1259,68 @@ describe('note editor — return path', () => {
   );
 });
 
+describe('note editor — delete', () => {
+  async function openDelete(query: Record<string, string> = {}): Promise<void> {
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture({ deck_id: '5' }));
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5', noteId: '9' }, query);
+    await flush();
+    (target.querySelector('[data-testid="note-delete"]') as HTMLButtonElement).click();
+    await flush();
+  }
+
+  function confirmButton(): HTMLButtonElement {
+    return document.body.querySelector('[data-testid="note-edit-delete-confirm"]') as HTMLButtonElement;
+  }
+
+  it('asks first, then deletes and replaces the editor entry with the return page', async () => {
+    const deleteNote = vi.spyOn(apiClient, 'deleteNote').mockResolvedValue({ deleted: true, id: '9' });
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+
+    await openDelete({ return: '/review?deck=5' });
+    // Opening the dialog deletes nothing.
+    expect(deleteNote).not.toHaveBeenCalled();
+    expect(document.body.querySelector('[data-testid="note-edit-delete-dialog"]')).toBeTruthy();
+
+    confirmButton().click();
+    await flush();
+
+    expect(deleteNote).toHaveBeenCalledWith('9');
+    expect(toast.success).toHaveBeenCalledWith('笔记已删除。');
+    expect(get(routeStore).path).toBe('/review');
+    expect(replaceState).toHaveBeenCalledWith({}, '', '/review?deck=5');
+  });
+
+  it('returns to the deck page after a delete opened from the deck', async () => {
+    vi.spyOn(apiClient, 'deleteNote').mockResolvedValue({ deleted: true, id: '9' });
+
+    await openDelete();
+    confirmButton().click();
+    await flush();
+
+    expect(get(routeStore).path).toBe('/decks/5');
+  });
+
+  it('stays on the page and explains a refused delete', async () => {
+    vi.spyOn(apiClient, 'deleteNote').mockRejectedValue(
+      new ApiClientError('insufficient role', { status: 403, code: 'insufficient_role' })
+    );
+
+    await openDelete({ return: '/review' });
+    const pathBefore = get(routeStore).path;
+    confirmButton().click();
+    await flush();
+
+    expect(get(routeStore).path).toBe(pathBefore);
+    expect(document.body.querySelector('[data-testid="note-edit-delete-error"]')?.textContent).toBe('没有访问权限');
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('offers no delete while creating a note', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5' });
+    await flush();
+
+    expect(target.querySelector('[data-testid="note-delete"]')).toBeNull();
+  });
+});
