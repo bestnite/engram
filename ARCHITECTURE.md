@@ -85,7 +85,7 @@ api        → auth, cardtype, media, reviewday, schedule, store, urlfetch
 digest     → i18n, mail, reminder, reviewday, schedule, store, worker
 reminder   → i18n, mail, reviewday, schedule, store, worker
 jobs       → schedule, store
-mail       → config, render, store
+mail       → config, render, store, worker
 schedule   → reviewday, store
 auth       → store
 media      → mediatype, store
@@ -175,7 +175,8 @@ change.
 
 - the retention worker (`internal/retention`), always;
 - the mail delivery worker (`internal/mail`) and the reminder and digest workers, when the mail
-  outbox is wired; the reminder, digest, and retention workers share `internal/worker`;
+  outbox is wired; the mail outbox and the reminder, digest, and retention workers share
+  `internal/worker`;
 - the jobs runner (`internal/jobs`), which runs at most one optimisation job at a time and
   answers `409` when another job is already unfinished.
 

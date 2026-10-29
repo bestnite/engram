@@ -8,6 +8,7 @@
 // internal/digest are identical verbatim apart from the receiver name and runAndLog's log text;
 // their tick interval (each one's DefaultInterval = 10 minutes) and error handling (log and continue, a failed round does not exit)
 // are exactly the same too. The only behavioral difference is the failure log text, so it is injected via Config.FailMessage, keeping each original text verbatim.
+// The mail outbox runs on the same skeleton; its extra trigger (a wake-up on every enqueue) is Config.Wake.
 package worker
 
 import (
@@ -34,6 +35,9 @@ type Config struct {
 	FailMessage string
 	// Interval is the polling interval; <=0 means DefaultInterval.
 	Interval time.Duration
+	// Wake optionally runs a round as soon as it receives, between ticks (the mail outbox uses it so an enqueued mail
+	// does not wait for the next poll). nil means ticks only.
+	Wake <-chan struct{}
 }
 
 // Lifecycle is the start/stop and tick skeleton of a periodic worker. The zero value is not usable; construct it with New.
@@ -42,6 +46,7 @@ type Lifecycle struct {
 	logger      *slog.Logger
 	failMessage string
 	interval    time.Duration
+	wake        <-chan struct{}
 
 	mu      sync.Mutex
 	started bool
@@ -69,6 +74,7 @@ func New(cfg Config) (*Lifecycle, error) {
 		logger:      cfg.Logger,
 		failMessage: cfg.FailMessage,
 		interval:    interval,
+		wake:        cfg.Wake,
 	}, nil
 }
 
@@ -120,6 +126,9 @@ func (l *Lifecycle) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			l.runAndLog(ctx)
+		case <-l.wake:
+			// A nil wake channel never receives, so a worker without one only ticks.
 			l.runAndLog(ctx)
 		}
 	}

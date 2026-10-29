@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/worker"
 )
 
 // Outbox is the mail queue and the background worker.
@@ -106,11 +106,8 @@ type Outbox struct {
 
 	// wake is the signal with which Enqueue wakes the worker; capacity 1, non-blocking send.
 	wake chan struct{}
-
-	mu      sync.Mutex
-	started bool
-	cancel  context.CancelFunc
-	done    chan struct{}
+	// life is the shared start/stop and tick skeleton (internal/worker); drain is its round, wake its extra trigger.
+	life *worker.Lifecycle
 }
 
 // NewOutbox builds an Outbox; it does not start the worker, call Start for that.
@@ -149,7 +146,7 @@ func NewOutbox(deps Deps) *Outbox {
 	if batch <= 0 {
 		batch = DefaultBatchSize
 	}
-	return &Outbox{
+	o := &Outbox{
 		db:       deps.DB,
 		resolver: NewResolver(deps.DB, deps.Secrets),
 		sender:   sender,
@@ -160,6 +157,19 @@ func NewOutbox(deps Deps) *Outbox {
 		batch:    batch,
 		wake:     make(chan struct{}, 1),
 	}
+	life, err := worker.New(worker.Config{
+		RunOnce:     func(ctx context.Context) error { o.drain(ctx); return nil },
+		Logger:      logger,
+		FailMessage: "mail: outbox round failed",
+		Interval:    poll,
+		Wake:        o.wake,
+	})
+	if err != nil {
+		// Every required field is set just above, so this only fires if the worker package changes its contract.
+		panic("mail: build outbox worker: " + err.Error())
+	}
+	o.life = life
+	return o
 }
 
 // Configured reports whether SMTP is configured. When it is not, flows that depend on mail must
@@ -224,65 +234,21 @@ func (o *Outbox) notify() {
 
 // Start launches the single worker goroutine; repeated calls are idempotent. The worker exits when
 // ctx is canceled. Without a database it returns immediately: there is no queue table to deliver from,
-// and starting a worker would only report errors over and over in the polling loop.
+// and starting a worker would only report errors over and over in the polling loop. The first round runs
+// at once, because a previous process may have left due pending mail behind; later rounds run on every
+// poll and whenever Enqueue wakes the worker.
 func (o *Outbox) Start(ctx context.Context) {
 	if o.db == nil {
 		o.logger.Error("mail: outbox has no database; worker not started")
 		return
 	}
-	o.mu.Lock()
-	if o.started {
-		o.mu.Unlock()
-		return
-	}
-	o.started = true
-	runCtx, cancel := context.WithCancel(ctx)
-	o.cancel = cancel
-	done := make(chan struct{})
-	o.done = done
-	o.mu.Unlock()
-	go func() {
-		defer close(done)
-		o.loop(runCtx)
-	}()
+	o.life.Start(ctx)
 }
 
 // Stop stops the worker gracefully: it cancels the context and waits for the current round to finish.
 // Safe to call repeatedly.
 func (o *Outbox) Stop() {
-	o.mu.Lock()
-	if !o.started {
-		o.mu.Unlock()
-		return
-	}
-	o.started = false
-	cancel := o.cancel
-	done := o.done
-	o.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-	if done != nil {
-		<-done
-	}
-}
-
-// loop is the main worker loop: periodic polling plus wake-ups on enqueue.
-func (o *Outbox) loop(ctx context.Context) {
-	ticker := time.NewTicker(o.poll)
-	defer ticker.Stop()
-	// Try once at startup: a previous process may have left due pending mail behind.
-	o.drain(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-o.wake:
-			o.drain(ctx)
-		case <-ticker.C:
-			o.drain(ctx)
-		}
-	}
+	o.life.Stop()
 }
 
 // drain delivers every due mail. When SMTP is not configured it returns immediately: pending mail

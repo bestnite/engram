@@ -96,6 +96,46 @@ func TestLifecycleRunsAndStops(t *testing.T) {
 	}
 }
 
+// TestLifecycleWakeRunsBetweenTicks: with a long interval, a signal on Wake still runs a round right away, while a worker
+// built without Wake only runs its initial round.
+func TestLifecycleWakeRunsBetweenTicks(t *testing.T) {
+	cases := []struct {
+		name     string
+		withWake bool
+		want     int64
+	}{
+		{name: "wake runs a round", withWake: true, want: 2},
+		{name: "no wake channel, ticks only", withWake: false, want: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var c counter
+			wake := make(chan struct{}, 1)
+			cfg := Config{
+				RunOnce:     c.run,
+				Logger:      slog.New(discardHandler{}),
+				FailMessage: "test run failed",
+				Interval:    time.Hour,
+			}
+			if tc.withWake {
+				cfg.Wake = wake
+			}
+			l, err := New(cfg)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			l.Start(context.Background())
+			defer l.Stop()
+			waitFor(t, "the startup run", func() bool { return c.n.Load() >= 1 })
+			wake <- struct{}{}
+			time.Sleep(30 * time.Millisecond)
+			if got := c.n.Load(); got != tc.want {
+				t.Errorf("rounds = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestLifecycleContextCancel covers: the worker exits after ctx cancellation and Stop returns immediately (without hanging).
 func TestLifecycleContextCancel(t *testing.T) {
 	var c counter
