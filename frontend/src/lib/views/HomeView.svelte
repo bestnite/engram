@@ -12,7 +12,7 @@
   import DeckProgressBar from '../components/DeckProgressBar.svelte';
   import { listClasses } from '../components/ui/variants';
   import { cn } from '../components/ui/utils';
-  import { CirclePause, Layers, RefreshCw } from '@lucide/svelte';
+  import { ArrowRight, CalendarClock, CheckCheck, CircleCheck, CirclePause, Layers, Play, RefreshCw, Target } from '@lucide/svelte';
   import EmptyState from '../components/ui/EmptyState.svelte';
 
   interface Props {
@@ -126,11 +126,12 @@
         {#snippet actions()}
           {#if summary && summary.due > 0}
             <Button href="/review" testId="home-start-review" variant="primary" size="lg">
-              {$t('home.start_review')}
+              <Play class="size-4" aria-hidden="true" />
+              <span>{$t('home.start_review')}</span>
               <span class="rounded bg-primary-foreground/15 px-1.5 text-xs tabular-nums">{formatNumber(summary.due)}</span>
             </Button>
           {:else}
-            <Badge variant="success" class="px-2.5 py-1">{$t('home.all_caught_up')}</Badge>
+            <Badge variant="success" class="px-2.5 py-1"><CircleCheck class="size-3.5" aria-hidden="true" />{$t('home.all_caught_up')}</Badge>
           {/if}
         {/snippet}
       </PageHeader>
@@ -139,6 +140,7 @@
       <dl data-testid="home-summary" class="grid grid-cols-2 border-y border-border sm:grid-cols-4">
         <div class="border-border px-4 py-4 text-center max-sm:border-b max-sm:border-r sm:border-r">
           <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
+            <CalendarClock class="mr-0.5 size-3.5" aria-hidden="true" />
             {$t('home.due_count')}
             <HelpTip testId="home-due-help" label={$t('home.due_count')} text={$t('help.home.due')} />
           </dt>
@@ -146,6 +148,7 @@
         </div>
         <div class="border-border px-4 py-4 text-center max-sm:border-b sm:border-r">
           <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
+            <CheckCheck class="mr-0.5 size-3.5" aria-hidden="true" />
             {$t('home.reviews_today')}
             <HelpTip testId="home-reviews-today-help" label={$t('home.reviews_today')} text={$t('help.home.reviews_today')} />
           </dt>
@@ -153,6 +156,7 @@
         </div>
         <div class="border-border px-4 py-4 text-center max-sm:border-r sm:border-r">
           <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
+            <Target class="mr-0.5 size-3.5" aria-hidden="true" />
             {$t('home.retention')}
             <HelpTip testId="home-retention-help" label={$t('home.retention')} text={$t('help.retention')} />
           </dt>
@@ -160,7 +164,10 @@
           <dd data-testid="home-retention" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{summary.retention_total > 0 ? formatPercent(summary.retention) : $t('stats.retention_na')}</dd>
         </div>
         <div class="px-4 py-4 text-center">
-          <dt class="text-xs text-muted-foreground">{$t('stats.metric_decks')}</dt>
+          <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
+            <Layers class="mr-0.5 size-3.5" aria-hidden="true" />
+            {$t('stats.metric_decks')}
+          </dt>
           <dd data-testid="home-decks-count" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.decks)}</dd>
         </div>
       </dl>
@@ -168,8 +175,9 @@
       <section class="mt-10">
         <div class="mb-3 flex items-center justify-between">
           <h2 class="text-base font-semibold text-foreground">{$t('home.decks_title')}</h2>
-          <a href="/decks" class="text-[13px] text-muted-foreground transition-colors hover:text-foreground">
-            {$t('home.view_all_decks')}
+          <a href="/decks" class="inline-flex items-center gap-0.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground">
+            <span>{$t('home.view_all_decks')}</span>
+            <ArrowRight class="size-3.5" aria-hidden="true" />
           </a>
         </div>
 
