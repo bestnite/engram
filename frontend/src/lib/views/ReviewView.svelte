@@ -15,7 +15,7 @@
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
   import HelpTip from '../components/ui/HelpTip.svelte';
-  import { RefreshCw } from '@lucide/svelte';
+  import { Check, CircleAlert, CircleCheckBig, CircleX, Pencil, RefreshCw, X } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { cardTypes, descriptionOf, loadCardTypes, type CardTypeCatalog } from '../card-types';
   import { withReturn } from '../return-to';
@@ -968,9 +968,7 @@
             data-testid="review-edit"
             class="text-xs text-muted-foreground hover:text-foreground hover:bg-muted px-2.5 py-1 rounded-md transition-colors inline-flex items-center gap-1.5 cursor-pointer border border-input"
           >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-            </svg>
+            <Pencil class="size-3.5" aria-hidden="true" />
             <span>{$t('review.edit')}</span>
           </button>
         </div>
@@ -1064,17 +1062,11 @@
                 <div class="flex items-center justify-between">
                   <Badge variant={verdictVariant(feedback.verdict)} class="gap-1.5 px-3 py-1 text-sm font-semibold" testId="review-graded-verdict">
                     {#if feedback.verdict === 'correct'}
-                      <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                      </svg>
+                      <CircleCheckBig class="size-4 text-emerald-600 dark:text-emerald-400" strokeWidth={2.5} aria-hidden="true" />
                     {:else if feedback.verdict === 'partial'}
-                      <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                      </svg>
+                      <CircleAlert class="size-4 text-amber-600 dark:text-amber-400" strokeWidth={2.5} aria-hidden="true" />
                     {:else}
-                      <svg class="w-4 h-4 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-                      </svg>
+                      <CircleX class="size-4 text-rose-600 dark:text-rose-400" strokeWidth={2.5} aria-hidden="true" />
                     {/if}
                     <span>{$t(`review.graded.${feedback.verdict}`)}</span>
                   </Badge>
@@ -1090,9 +1082,9 @@
                       {#each feedback.breakdown as item, index (index)}
                         <li class="flex items-start gap-2" data-testid="review-graded-breakdown-item" data-correct={item.correct}>
                           {#if item.correct}
-                            <svg class="mt-1.5 w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label={$t('review.graded.correct')}><polyline points="20 6 9 17 4 12"/></svg>
+                            <Check class="mt-1.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" strokeWidth={3} aria-label={$t('review.graded.correct')} />
                           {:else}
-                            <svg class="mt-1.5 w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-label={$t('review.graded.incorrect')}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            <X class="mt-1.5 size-4 shrink-0 text-rose-600 dark:text-rose-400" strokeWidth={3} aria-label={$t('review.graded.incorrect')} />
                           {/if}
                           <div class="min-w-0 break-words font-medium [&_p]:m-0">{@html item.answer_html}</div>
                         </li>

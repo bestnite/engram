@@ -11,7 +11,7 @@
   import { toast } from '../components/ui/toast';
   import Page from '../components/ui/Page.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
-  import { RefreshCw } from '@lucide/svelte';
+  import { ChevronLeft, RefreshCw } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -142,7 +142,7 @@
       data-testid="deck-settings-back"
       class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
     >
-      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+      <ChevronLeft class="size-4" aria-hidden="true" />
       <span>{$t('deck.settings.back')}</span>
     </a>
   {/if}
