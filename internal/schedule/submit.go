@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -227,8 +228,8 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 	interval := o.IntervalDays
 	stability := o.Stability
 	difficulty := o.Difficulty
-	loc := queueLocation(in.Location, in.Timezone)
-	cutoff := store.ResolveCutoff(in.DayCutoffHour)
+	loc := resolveLocation(in.Location, in.Timezone)
+	cutoff := reviewday.ResolveCutoff(in.DayCutoffHour)
 	// Snapshot of the remaining learning steps before the grade. A brand-new card has no state row, so base.StepIndex is 0,
 	// which is exactly the "before the grade" value; an existing state row contributes its step_index from before the grade.
 	stepIndexBefore := 0
@@ -249,7 +250,7 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 		GradeSource:     gradeSourceOrSelf(in.GradeSource),
 		GradeDetailJSON: in.GradeDetailJSON,
 		ReviewedAt:      now,
-		ReviewDay:       ReviewDay(now, loc, cutoff),
+		ReviewDay:       reviewday.Day(now, loc, cutoff),
 		ElapsedMS:       in.ElapsedMS,
 		DurationDays:    durationDaysSince(base, now),
 		StateBefore:     int(stateBefore),
@@ -275,17 +276,13 @@ func durationDaysSince(base *store.CardState, now time.Time) *float64 {
 	return &d
 }
 
-// queueLocation resolves the timezone; when unspecified it falls back to UTC (the review day is still computable, so submission is never blocked).
-func queueLocation(loc *time.Location, tz string) *time.Location {
+// resolveLocation returns the explicit loc when the caller already holds one, otherwise the user's timezone name resolved
+// through reviewday.Location (empty or unknown names fall back to UTC, so a review is never blocked by dirty data).
+func resolveLocation(loc *time.Location, tz string) *time.Location {
 	if loc != nil {
 		return loc
 	}
-	if tz != "" {
-		if loaded, err := time.LoadLocation(tz); err == nil {
-			return loaded
-		}
-	}
-	return time.UTC
+	return reviewday.Location(tz)
 }
 
 func gradeSourceOrSelf(source string) string {

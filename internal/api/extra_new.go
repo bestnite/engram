@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -127,7 +128,7 @@ func (a *API) extraNewStatus(ctx context.Context, u *store.User, deck *store.Dec
 
 // reviewDay returns the review day u is in right now, consistent with what grading writes to reviews.review_day.
 func (a *API) reviewDay(u *store.User) string {
-	return schedule.ReviewDay(a.now(), userLocation(u.Timezone), store.ResolveCutoff(u.DayCutoffHour))
+	return reviewday.Day(a.now(), reviewday.Location(u.Timezone), reviewday.ResolveCutoff(u.DayCutoffHour))
 }
 
 // getExtraNew reads today's new-card allowance and the suggested count for "one more batch", scope: review.

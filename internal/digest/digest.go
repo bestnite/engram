@@ -38,7 +38,7 @@ import (
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/mail"
 	"git.nite07.com/nite/engram/internal/reminder"
-	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/worker"
 	"strconv"
@@ -196,7 +196,7 @@ const MinDigestInterval = 20 * time.Hour
 //
 // The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume the current week's quota.
 func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now time.Time) error {
-	loc := store.LoadLocation(c.Timezone)
+	loc := reviewday.Location(c.Timezone)
 	if !reminder.ReachedSendHour(now.In(loc), reminder.SendHour(c.ReminderHour)) {
 		return nil
 	}
@@ -206,8 +206,8 @@ func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now tim
 	} else if ok && now.Sub(last) < MinDigestInterval {
 		return nil
 	}
-	cutoff := store.ResolveCutoff(c.DayCutoffHour)
-	day := schedule.ReviewDay(now, loc, cutoff)
+	cutoff := reviewday.ResolveCutoff(c.DayCutoffHour)
+	day := reviewday.Day(now, loc, cutoff)
 	weekStart := weekStartOf(day)
 
 	sent, err := store.HasDigestBeenSent(ctx, w.db, c.ID, weekStart)
@@ -260,8 +260,8 @@ type DigestStats struct {
 // ComputeStats uses the stats service to compute the digest numbers. This is the single source of digest numbers: it calls
 // the same batch of StatsStore methods and the same review-day window as the stats JSON endpoint, so the two cannot diverge.
 func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time, loc *time.Location, cutoffHour int) (DigestStats, error) {
-	today := schedule.ReviewDay(now, loc, cutoffHour)
-	from := store.ShiftReviewDay(today, -6)
+	today := reviewday.Day(now, loc, cutoffHour)
+	from := reviewday.Shift(today, -6)
 
 	stats := store.NewStatsStore(db)
 	volume, err := stats.ReviewVolume(ctx, userID, today)

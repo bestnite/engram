@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -324,8 +325,8 @@ func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, erro
 		return store.CardState{}, errors.New("schedule: bury: card id and user id are required")
 	}
 	now := nowOr(in.Now)
-	loc := queueLocation(in.Location, in.Timezone)
-	due := nextReviewDayStart(now, loc, store.ResolveCutoff(in.DayCutoffHour))
+	loc := resolveLocation(in.Location, in.Timezone)
+	due := reviewday.NextStart(now, loc, reviewday.ResolveCutoff(in.DayCutoffHour))
 
 	cur, err := loadStateForUpdate(ctx, tx, in.CardID, in.UserID)
 	if err != nil {
@@ -355,18 +356,6 @@ func Bury(ctx context.Context, tx *gorm.DB, in BuryInput) (store.CardState, erro
 			ErrVersionConflict, in.CardID, in.UserID)
 	}
 	return row, nil
-}
-
-// nextReviewDayStart returns the start of "the next review day" (local time = date + 1, hour = cutoff), converted to UTC.
-// For example cutoff 4, local 2026-10-02 12:00 → 2026-10-03 04:00 local.
-func nextReviewDayStart(now time.Time, loc *time.Location, cutoffHour int) time.Time {
-	if loc == nil {
-		loc = time.UTC
-	}
-	local := now.In(loc)
-	day := local.Add(-time.Duration(cutoffHour) * time.Hour)
-	next := time.Date(day.Year(), day.Month(), day.Day(), cutoffHour, 0, 0, 0, loc).AddDate(0, 0, 1)
-	return next.UTC()
 }
 
 func nowOr(t time.Time) time.Time {

@@ -15,7 +15,7 @@ import (
 	"git.nite07.com/nite/engram/internal/mail"
 	"git.nite07.com/nite/engram/internal/pgtest"
 	"git.nite07.com/nite/engram/internal/reminder"
-	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -314,7 +314,7 @@ func TestDigestNumbersMatchStatsPage(t *testing.T) {
 
 	// --- stats page basis: same batch of StatsStore calls, same arguments ---
 	stats := store.NewStatsStore(db)
-	today := schedule.ReviewDay(now, loc, cutoff)
+	today := reviewday.Day(now, loc, cutoff)
 	volume, err := stats.ReviewVolume(context.Background(), userID, today)
 	if err != nil {
 		t.Fatalf("ReviewVolume: %v", err)

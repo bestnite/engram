@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"git.nite07.com/nite/engram/internal/reviewday"
 )
 
 // This file implements the "retro check": every number the stats page shows is compared one by one against
@@ -136,7 +138,7 @@ func RecomputePageNumbers(ctx context.Context, db *gorm.DB, userID uint64, now t
 	// Both are scoped to the default study scope, the same predicate as StatsStore.DueForecast with no deck (activeDeckIDsQuery):
 	// without the visibility part, cards in someone else's private deck with no state row would be counted as "new cards not yet due",
 	// and without the pause part, a paused deck would still feed the forecast.
-	e1 := reviewDayStart(now, loc, cutoffHour).Add(24 * time.Hour)
+	e1 := reviewday.Start(now, loc, cutoffHour).Add(24 * time.Hour)
 	if err := db.WithContext(ctx).Raw(`SELECT COUNT(*) FROM card_states cs
 		JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL
 		JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL
@@ -227,7 +229,7 @@ func streakFromDays(days []string, today string) (current, longest int) {
 	}
 	run := 0
 	for i, d := range days {
-		if i > 0 && d == nextReviewDay(days[i-1]) {
+		if i > 0 && d == reviewday.Shift(days[i-1], 1) {
 			run++
 		} else {
 			run = 1
@@ -237,8 +239,8 @@ func streakFromDays(days []string, today string) (current, longest int) {
 		}
 	}
 	last := days[len(days)-1]
-	if last == today || last == prevReviewDay(today) {
-		for d := last; present[d]; d = prevReviewDay(d) {
+	if last == today || last == reviewday.Shift(today, -1) {
+		for d := last; present[d]; d = reviewday.Shift(d, -1) {
 			current++
 		}
 	}

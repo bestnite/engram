@@ -7,6 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -19,7 +20,7 @@ import (
 func TestNewCardQuotaIsCountedPerDeck(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
-	day := ReviewDay(now, time.UTC, DefaultDayCutoffHour)
+	day := reviewday.Day(now, time.UTC, reviewday.DefaultCutoffHour)
 
 	// Two decks, each with a daily new-card cap of 1.
 	deckA := seedDeckWithNewCap(t, db, now, "A", 1)

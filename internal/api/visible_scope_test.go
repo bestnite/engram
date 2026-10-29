@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -116,7 +116,7 @@ func TestStatsVisibleContentButFullReviewHistory(t *testing.T) {
 
 	// viewer's three reviews today: two due reviews (rating=4, rating=1) and one new card's first review.
 	// Retention counts only due reviews = 1/2; the new-card one only counts into the review volume.
-	day := schedule.ReviewDay(env.now, time.UTC, 4)
+	day := reviewday.Day(env.now, time.UTC, 4)
 	stability := 5.0
 	for _, rv := range []struct{ rating, stateBefore int }{{4, 2}, {1, 2}, {3, 0}} {
 		if err := env.db.Create(&store.Review{

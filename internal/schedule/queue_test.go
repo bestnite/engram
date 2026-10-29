@@ -9,6 +9,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -178,11 +179,11 @@ func TestDailyNewCapAcrossDayBoundary(t *testing.T) {
 	seedReview(t, db, 1, 1, "2026-10-01", int(StateNew), time.Date(2026, 10, 1, 20, 0, 0, 0, time.UTC))
 	seedReview(t, db, 1, 2, "2026-10-01", int(StateNew), time.Date(2026, 10, 1, 20, 5, 0, 0, time.UTC))
 
-	if got := ReviewDay(time.Date(2026, 10, 2, 3, 59, 0, 0, loc), loc, 4); got != "2026-10-01" {
-		t.Fatalf("ReviewDay(03:59) = %q, want 2026-10-01", got)
+	if got := reviewday.Day(time.Date(2026, 10, 2, 3, 59, 0, 0, loc), loc, 4); got != "2026-10-01" {
+		t.Fatalf("reviewday.Day(03:59) = %q, want 2026-10-01", got)
 	}
-	if got := ReviewDay(time.Date(2026, 10, 2, 4, 0, 0, 0, loc), loc, 4); got != "2026-10-02" {
-		t.Fatalf("ReviewDay(04:00) = %q, want 2026-10-02", got)
+	if got := reviewday.Day(time.Date(2026, 10, 2, 4, 0, 0, 0, loc), loc, 4); got != "2026-10-02" {
+		t.Fatalf("reviewday.Day(04:00) = %q, want 2026-10-02", got)
 	}
 
 	s := mustScheduler(t, testPreset(t))

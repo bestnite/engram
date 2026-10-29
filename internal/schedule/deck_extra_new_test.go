@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/pgtest"
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -34,8 +35,8 @@ func extraNewDrivers() map[string]func(t *testing.T) *gorm.DB {
 func TestExtraNewRaisesTodaysNewBudget(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
-	day := ReviewDay(now, time.UTC, DefaultDayCutoffHour)
-	yesterday := ReviewDay(now.Add(-24*time.Hour), time.UTC, DefaultDayCutoffHour)
+	day := reviewday.Day(now, time.UTC, reviewday.DefaultCutoffHour)
+	yesterday := reviewday.Day(now.Add(-24*time.Hour), time.UTC, reviewday.DefaultCutoffHour)
 	at := now.Add(-time.Hour)
 	future := now.Add(48 * time.Hour)
 	last := now.Add(-48 * time.Hour)

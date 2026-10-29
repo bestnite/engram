@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -26,7 +27,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	day := ReviewDay(now, time.UTC, DefaultDayCutoffHour)
+	day := reviewday.Day(now, time.UTC, reviewday.DefaultCutoffHour)
 	future := now.Add(48 * time.Hour)
 	last := now.Add(-48 * time.Hour)
 	at := now.Add(-time.Hour)
@@ -264,8 +265,8 @@ func TestDeckCountsUseTheUsersReviewDay(t *testing.T) {
 		Updates(map[string]any{"new_per_day": 1, "reviews_per_day": 0}).Error; err != nil {
 		t.Fatalf("set caps: %v", err)
 	}
-	userDay := ReviewDay(now, shanghai, DefaultDayCutoffHour)
-	if utcDay := ReviewDay(now, time.UTC, DefaultDayCutoffHour); utcDay == userDay {
+	userDay := reviewday.Day(now, shanghai, reviewday.DefaultCutoffHour)
+	if utcDay := reviewday.Day(now, time.UTC, reviewday.DefaultCutoffHour); utcDay == userDay {
 		t.Fatalf("fixture error: user day %s equals UTC day", userDay)
 	}
 	used := seedCard(t, db, d.ID, "used", now)

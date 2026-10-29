@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -115,7 +116,7 @@ func TestTagQueueSharesDeckBudget(t *testing.T) {
 	}
 	// 1 new card was already introduced today under the 创新 tag (a review log with state_before = New).
 	introduced := seedTaggedCard(t, db, deckID, []string{"创新"}, now)
-	seedReview(t, db, 1, introduced, ReviewDay(now, time.UTC, 4), int(StateNew), now.Add(-time.Hour))
+	seedReview(t, db, 1, introduced, reviewday.Day(now, time.UTC, 4), int(StateNew), now.Add(-time.Hour))
 
 	builder := NewQueueBuilder(db, store.NewDeckStore(db), mustScheduler(t, testPreset(t)))
 	items, err := builder.Build(context.Background(), 1, QueueOptions{

@@ -14,6 +14,7 @@ import (
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -1018,7 +1019,7 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 		due += int64(c.Review)
 	}
 
-	day := schedule.ReviewDay(now, userLocation(u.Timezone), store.ResolveCutoff(u.DayCutoffHour))
+	day := reviewday.Day(now, reviewday.Location(u.Timezone), reviewday.ResolveCutoff(u.DayCutoffHour))
 	var reviewsToday int64
 	if err := a.db.WithContext(ctx).Model(&store.Review{}).
 		Where("user_id = ? AND review_day = ?", u.ID, day).Count(&reviewsToday).Error; err != nil {
@@ -1398,7 +1399,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 			GradeDetailJSON: detailJSON,
 			Scheduler:       sched,
 			Now:             a.now(),
-			Location:        userLocation(u.Timezone),
+			Location:        reviewday.Location(u.Timezone),
 			Timezone:        u.Timezone,
 			DayCutoffHour:   u.DayCutoffHour,
 		})

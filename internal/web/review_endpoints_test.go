@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -435,7 +436,7 @@ func TestReviewBuryUsesTheUsersReviewDay(t *testing.T) {
 		t.Fatalf("load state: %v", err)
 	}
 	local := st.DueAt.In(loc)
-	if local.Hour() != store.DefaultDayCutoffHour || local.Minute() != 0 {
-		t.Errorf("buried until %s local, want the next %02d:00 in %s", local.Format(time.RFC3339), store.DefaultDayCutoffHour, tz)
+	if local.Hour() != reviewday.DefaultCutoffHour || local.Minute() != 0 {
+		t.Errorf("buried until %s local, want the next %02d:00 in %s", local.Format(time.RFC3339), reviewday.DefaultCutoffHour, tz)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -30,11 +29,6 @@ func (a *API) presetForDeck(ctx context.Context, userID uint64, deck *store.Deck
 		return nil, err
 	}
 	return a.presets.ByID(ctx, settings.PresetID)
-}
-
-// userLocation loads the Location for the user's timezone; fallback rules in store.LoadLocation (empty/invalid name -> UTC).
-func userLocation(tz string) *time.Location {
-	return store.LoadLocation(tz)
 }
 
 // dueCards returns the due cards (with raw field text), scope: review (the logic lives in the service layer's DueCards).

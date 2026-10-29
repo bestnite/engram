@@ -13,13 +13,12 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Documented defaults for queue construction. The day-cutoff default takes store as the single source of truth,
-// because the normalisation rule (0/out of range → default) must be shared by store/schedule/web/reminder/digest.
+// Documented defaults for queue construction; the day-cutoff default is reviewday.DefaultCutoffHour.
 const (
-	DefaultDayCutoffHour = store.DefaultDayCutoffHour
 	DefaultNewPerDay     = 20
 	DefaultReviewsPerDay = 200
 	DefaultReviewBatch   = 200
@@ -224,7 +223,7 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 		rng = opts.Rand
 		if rng == nil {
 			loc := opts.location()
-			rng = rand.New(rand.NewSource(queueShuffleSeed(userID, ReviewDay(now, loc, store.ResolveCutoff(opts.DayCutoffHour)))))
+			rng = rand.New(rand.NewSource(queueShuffleSeed(userID, reviewday.Day(now, loc, reviewday.ResolveCutoff(opts.DayCutoffHour)))))
 		}
 		order = randomNewCardOrder(rng)
 	}
@@ -526,7 +525,7 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 	}
 	now := opts.now()
 	loc := opts.location()
-	day := ReviewDay(now, loc, store.ResolveCutoff(opts.DayCutoffHour))
+	day := reviewday.Day(now, loc, reviewday.ResolveCutoff(opts.DayCutoffHour))
 	usage, err := b.countUsage(ctx, userID, day, ids)
 	if err != nil {
 		return nil, err
@@ -612,16 +611,9 @@ func dedupeIDs(ids []uint64) []uint64 {
 	return out
 }
 
-// location resolves the user's timezone; when unspecified it is loaded from Timezone, falling back to UTC on failure (so review is never blocked).
+// location resolves the user's timezone: the explicit Location wins, otherwise Timezone goes through resolveLocation.
 func (o QueueOptions) location() *time.Location {
-	if o.Location != nil {
-		return o.Location
-	}
-	loc, err := time.LoadLocation(o.Timezone)
-	if err != nil {
-		return time.UTC
-	}
-	return loc
+	return resolveLocation(o.Location, o.Timezone)
 }
 
 // now returns the observation instant (UTC).
@@ -869,18 +861,4 @@ func rowsToItems(rows []stateRow, kind QueueKind, now time.Time) ([]QueueItem, e
 		items = append(items, it)
 	}
 	return items, nil
-}
-
-// ReviewDay computes the review day (YYYY-MM-DD) from the user's local time and the cutoff: take the date after subtracting day_cutoff_hour from local time,
-// so early-morning instants before the cutoff count as the previous day.
-//
-// The resolved cutoff only falls back to the default 4 when out of range, and midnight 0 is preserved — the same semantics as store.ReviewDayString:
-// writes of the review day (this package's submit/bury) and reads (stats/streak/reminder/digest) must land on the same day, otherwise the same
-// user would see a different "today" on the two sides. Nullable user settings are resolved via ResolveCutoff first; the computation function takes only a valid hour.
-func ReviewDay(now time.Time, loc *time.Location, cutoffHour int) string {
-	if loc == nil {
-		loc = time.UTC
-	}
-	cutoffHour = store.NormalizedCutoff(cutoffHour)
-	return now.In(loc).Add(-time.Duration(cutoffHour) * time.Hour).Format("2006-01-02")
 }

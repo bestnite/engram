@@ -1,12 +1,6 @@
 package web
 
-import (
-	"time"
-
-	"github.com/gin-gonic/gin"
-
-	"git.nite07.com/nite/engram/internal/store"
-)
+import "github.com/gin-gonic/gin"
 
 // registerStatsRoutes mounts the stats page.
 //
@@ -37,10 +31,4 @@ func (s *Server) statsRoute(c *gin.Context) {
 		return
 	}
 	s.shell.ServeIndex(c)
-}
-
-// userLocation resolves the user's timezone; the fallback rules are in store.LoadLocation (empty/illegal name → UTC),
-// so dirty data cannot make the page 500.
-func userLocation(user *store.User) *time.Location {
-	return store.LoadLocation(user.Timezone)
 }

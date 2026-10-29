@@ -34,7 +34,7 @@ func TestAuditSearchFilters(t *testing.T) {
 
 	shanghai, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
-		t.Fatalf("LoadLocation(Asia/Shanghai): %v", err)
+		t.Fatalf("reviewday.Location(Asia/Shanghai): %v", err)
 	}
 	// one local day 2026-03-10 → UTC [2026-03-09 16:00, 2026-03-10 16:00).
 	// Only r1 (UTC 3/10 12:00 = local 3/10 20:00) falls on local 3/10; r5 (UTC 3/10 23:30)

@@ -7,6 +7,8 @@ import (
 	"io"
 
 	"gorm.io/gorm"
+
+	"git.nite07.com/nite/engram/internal/reviewday"
 )
 
 // ReviewStore wraps reads of the reviews table. reviews is append-only,
@@ -124,7 +126,7 @@ func (s *ReviewStore) ExportOptimizerLog(ctx context.Context, userID, presetID u
 		tz = "UTC"
 	}
 	// The export must use the same cutoff as grading, the queue and stats: NULL means 4, an explicit 0 means midnight.
-	dayStart := ResolveCutoff(user.DayCutoffHour)
+	dayStart := reviewday.ResolveCutoff(user.DayCutoffHour)
 
 	enc := json.NewEncoder(w)
 	return s.StreamForPreset(ctx, userID, presetID, func(r *Review) error {

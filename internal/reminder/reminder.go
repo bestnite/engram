@@ -34,7 +34,7 @@ import (
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/mail"
-	"git.nite07.com/nite/engram/internal/schedule"
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/worker"
 	"strconv"
@@ -222,7 +222,7 @@ func (r *Reminder) RunOnce(ctx context.Context) error {
 // the previous review day, so 0 and 4 in the same calendar day each hit a different review day; the ledger cannot help here, so the
 // second minimum-interval gate above (MinSendInterval) catches it, see that constant's comment.
 func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now time.Time) error {
-	loc := store.LoadLocation(c.Timezone)
+	loc := reviewday.Location(c.Timezone)
 	if !ReachedSendHour(now.In(loc), SendHour(c.ReminderHour)) {
 		return nil
 	}
@@ -231,8 +231,8 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 	} else if ok && now.Sub(last) < MinSendInterval {
 		return nil
 	}
-	cutoff := store.ResolveCutoff(c.DayCutoffHour)
-	day := schedule.ReviewDay(now, loc, cutoff)
+	cutoff := reviewday.ResolveCutoff(c.DayCutoffHour)
+	day := reviewday.Day(now, loc, cutoff)
 
 	sent, err := store.HasReminderBeenSent(ctx, r.db, c.ID, day)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -52,7 +53,7 @@ func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 			if err := env.db.Where("note_id = ?", note.ID).First(&card).Error; err != nil {
 				t.Fatalf("load card: %v", err)
 			}
-			day := schedule.ReviewDay(env.now, time.UTC, 4)
+			day := reviewday.Day(env.now, time.UTC, 4)
 			stability := 5.0
 			for i, rv := range tc.reviews {
 				if err := env.db.Create(&store.Review{

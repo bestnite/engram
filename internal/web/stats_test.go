@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -74,8 +75,8 @@ func seedStatsFixture(t *testing.T, db *gorm.DB, userID uint64) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
-	today := store.ReviewDayString(now, time.UTC, 0)
-	yesterday := store.ShiftReviewDay(today, -1)
+	today := reviewday.Day(now, time.UTC, 0)
+	yesterday := reviewday.Shift(today, -1)
 	dueSoon := now.Add(-1 * time.Hour)
 
 	preset := store.NewPreset(userID, "Stats preset")

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/reviewday"
 )
 
 // TestStatsDetailMatchesStoreMeasures asserts every number from the SPA detail endpoint can be recomputed independently
@@ -71,7 +71,7 @@ func TestStatsDetailMatchesStoreMeasures(t *testing.T) {
 	if detail.CurveFrom == "" || detail.CurveTo == "" {
 		t.Fatalf("curve window = [%q, %q], want both bounds", detail.CurveFrom, detail.CurveTo)
 	}
-	if got := store.ShiftReviewDay(detail.CurveTo, -29); got != detail.CurveFrom {
+	if got := reviewday.Shift(detail.CurveTo, -29); got != detail.CurveFrom {
 		t.Errorf("curve_from = %q, want %q (29 days before curve_to)", detail.CurveFrom, got)
 	}
 	for _, p := range detail.Curve {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -63,7 +64,7 @@ func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs [
 		return nil, err
 	}
 	loc := opts.location()
-	day := ReviewDay(opts.now(), loc, store.ResolveCutoff(opts.DayCutoffHour))
+	day := reviewday.Day(opts.now(), loc, reviewday.ResolveCutoff(opts.DayCutoffHour))
 	usage, err := b.countUsage(ctx, userID, day, ids)
 	if err != nil {
 		return nil, err

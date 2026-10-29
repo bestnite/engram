@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -21,7 +22,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
-	day := ReviewDay(now, time.UTC, DefaultDayCutoffHour)
+	day := reviewday.Day(now, time.UTC, reviewday.DefaultCutoffHour)
 	at := now.Add(-time.Hour)
 	future := now.Add(48 * time.Hour)
 	last := now.Add(-48 * time.Hour)
@@ -169,7 +170,7 @@ func TestDeckBudgetsUseTheUsersReviewDay(t *testing.T) {
 		t.Skipf("tzdata unavailable: %v", err)
 	}
 	deckID := seedDeck(t, db, now)
-	userDay := ReviewDay(now, shanghai, DefaultDayCutoffHour)
+	userDay := reviewday.Day(now, shanghai, reviewday.DefaultCutoffHour)
 	used := seedCard(t, db, deckID, "used", now)
 	seedReview(t, db, 1, used, userDay, int(StateNew), now.Add(-time.Minute))
 	builder := NewQueueBuilder(db, store.NewDeckStore(db), nil)

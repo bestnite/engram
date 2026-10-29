@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -22,12 +23,12 @@ import (
 // adminAuditPageSize is the number of rows per page in the audit list.
 const adminAuditPageSize = 50
 
-// auditLocation returns the timezone the current admin uses for display and date conversion; see store.LoadLocation for the fallback rules.
+// auditLocation returns the timezone the current admin uses for display and date conversion; see reviewday.Location for the fallback rules.
 func auditLocation(u *store.User) *time.Location {
 	if u == nil {
 		return time.UTC
 	}
-	return store.LoadLocation(u.Timezone)
+	return reviewday.Location(u.Timezone)
 }
 
 // parseAuditDay parses YYYY-MM-DD in the given timezone into midnight of that day; ok=false when the format is invalid.

@@ -7,6 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -24,7 +25,7 @@ func seedTodayUsage(t *testing.T, db *gorm.DB, ownerID, deckID uint64, newUsed, 
 	if err != nil {
 		t.Fatalf("load owner %d: %v", ownerID, err)
 	}
-	day := schedule.ReviewDay(now, store.LoadLocation(owner.Timezone), store.ResolveCutoff(owner.DayCutoffHour))
+	day := reviewday.Day(now, reviewday.Location(owner.Timezone), reviewday.ResolveCutoff(owner.DayCutoffHour))
 	stability, difficulty := 5.0, 5.0
 	future := now.Add(48 * time.Hour)
 	last := now.Add(-48 * time.Hour)

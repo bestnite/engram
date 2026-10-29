@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"git.nite07.com/nite/engram/internal/reviewday"
 )
 
 // This file implements the stats page's read-only aggregate queries.
@@ -66,7 +68,7 @@ func (s *StatsStore) ReviewVolume(ctx context.Context, userID uint64, today stri
 // DueForecast is the bucket counts of the due forecast: today (overdue included) / tomorrow / within 7 days / within 30 days /
 // further out, plus "new cards not yet due" (no state row yet, or state new with a due date in the future).
 //
-// The day boundary is the review-day start: the cutoff moment of the date that local (now - day_cutoff_hour) falls in, see schedule's cross-day rule.
+// The day boundary is the review-day start from reviewday.Start: the cutoff moment of the date that local (now - day_cutoff_hour) falls in.
 // The "today" bucket holds every card with due_at <= the end of today, so overdue cards are never missed.
 type DueForecast struct {
 	Today     int64
@@ -88,7 +90,7 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 	if userID == 0 {
 		return DueForecast{}, fmt.Errorf("due forecast: user id is required")
 	}
-	dayStart := reviewDayStart(now, loc, cutoffHour)
+	dayStart := reviewday.Start(now, loc, cutoffHour)
 	e1 := dayStart.Add(24 * time.Hour) // end of today
 	e2 := e1.Add(24 * time.Hour)       // end of tomorrow
 	e7 := e1.Add(7 * 24 * time.Hour)   // end of the 7-day window
@@ -551,7 +553,7 @@ func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, l
 	if userID == 0 {
 		return StreakStats{}, fmt.Errorf("streak: user id is required")
 	}
-	today := reviewDayString(now, loc, cutoffHour)
+	today := reviewday.Day(now, loc, cutoffHour)
 
 	var days []string
 	sql := `SELECT DISTINCT review_day FROM reviews WHERE user_id = ? AND review_day <= ? ORDER BY review_day ASC`
@@ -570,7 +572,7 @@ func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, l
 	// Longest run: scan the dates ascending and start a new run at every gap.
 	longest, run := 0, 0
 	for i, d := range days {
-		if i > 0 && d == nextReviewDay(days[i-1]) {
+		if i > 0 && d == reviewday.Shift(days[i-1], 1) {
 			run++
 		} else {
 			run = 1
@@ -583,8 +585,8 @@ func (s *StatsStore) Streak(ctx context.Context, userID uint64, now time.Time, l
 	// Current run: count back from the last day, but it only counts as "unbroken" when the last day is today or yesterday.
 	current := 0
 	last := days[len(days)-1]
-	if last == today || last == prevReviewDay(today) {
-		for d := last; present[d]; d = prevReviewDay(d) {
+	if last == today || last == reviewday.Shift(today, -1) {
+		for d := last; present[d]; d = reviewday.Shift(d, -1) {
 			current++
 		}
 	}
@@ -630,27 +632,6 @@ func (s *StatsStore) LearningCurve(ctx context.Context, userID uint64, fromDay, 
 // reviewStateNew is the New value of reviews.state_before (0=New).
 const reviewStateNew = 0
 
-// DefaultDayCutoffHour is the documented default day-cutoff hour (the day changes at 04:00 local).
-// It lives in store rather than schedule: store is the lowest layer that schedule/web/reminder/digest can all depend on,
-// the normalization rule must be shared by those layers, and schedule depends on store (the reverse would make an import cycle).
-const DefaultDayCutoffHour = 4
-
-// NormalizedCutoff only catches a given hour that is out of range; 0 is a legal midnight and can no longer serve as the unset sentinel.
-func NormalizedCutoff(hour int) int {
-	if hour < 0 || hour > 23 {
-		return DefaultDayCutoffHour
-	}
-	return hour
-}
-
-// ResolveCutoff resolves the nullable setting at the boundary of every consumer, so the queue, the stats and the optimizer do not each interpret zero their own way.
-func ResolveCutoff(hour *int) int {
-	if hour == nil {
-		return DefaultDayCutoffHour
-	}
-	return NormalizedCutoff(*hour)
-}
-
 // The default and the cap of the learn-ahead window (minutes). The default 0 means off: learning-step intervals apply as configured,
 // and cards are not pulled forward before they are due; a user who wants learn-ahead turns it on in their profile.
 const (
@@ -673,74 +654,10 @@ func ResolveLearnAhead(minutes *int) time.Duration {
 	return time.Duration(m) * time.Minute
 }
 
-// LoadLocation resolves an IANA timezone name; an empty or illegal name always falls back to UTC, and dirty data never blocks the caller
-// (a 500 page, a reminder not sent).
-//
-// This is the only timezone-parsing entry point in the codebase: schedule, web, api, reminder and digest all call it,
-// so "fall back to UTC" behaves in exactly one way. Input is already normalized with strings.TrimSpace on the write side
-// (the web settings page, the CLI), so the whitespace is not trimmed again here.
-func LoadLocation(tz string) *time.Location {
-	if tz == "" {
-		return time.UTC
-	}
-	loc, err := time.LoadLocation(tz)
-	if err != nil {
-		return time.UTC
-	}
-	return loc
-}
-
 // FormatPercent formats a 0–1 ratio as a percentage with one decimal place (without the % sign).
 // The stats page and the weekly digest show the same numbers, so the format must match; hence this single implementation.
 func FormatPercent(rate float64) string {
 	return strconv.FormatFloat(rate*100, 'f', 1, 64)
-}
-
-// reviewDayString returns the review day now falls in (YYYY-MM-DD); the definition matches reviewDayStart,
-// i.e. take the date of local time minus the cutoff hours, with a default cutoff of 04:00.
-func reviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
-	return reviewDayStart(now, loc, cutoffHour).In(locOrUTC(loc)).Format("2006-01-02")
-}
-
-// ReviewDayString exports the review-day computation so the stats page and other callers share one definition.
-// The page must use the same day boundary as the aggregate queries, otherwise "today's review volume" disagrees with review_day in the database.
-func ReviewDayString(now time.Time, loc *time.Location, cutoffHour int) string {
-	return reviewDayString(now, loc, cutoffHour)
-}
-
-// prevReviewDay / nextReviewDay are the adjacent-day operations on review-day strings.
-func prevReviewDay(day string) string { return ShiftReviewDay(day, -1) }
-func nextReviewDay(day string) string { return ShiftReviewDay(day, 1) }
-
-// ShiftReviewDay moves a review_day string (YYYY-MM-DD) by delta days; on a parse failure it returns the input unchanged.
-// The stats page and the weekly digest both need adjacent-day arithmetic; keeping this single implementation avoids two definitions for the same string.
-func ShiftReviewDay(day string, delta int) string {
-	t, err := time.Parse("2006-01-02", day)
-	if err != nil {
-		return day
-	}
-	return t.AddDate(0, 0, delta).Format("2006-01-02")
-}
-
-// locOrUTC normalizes the timezone, so reviewDayStart does not fall back to UTC on a nil loc while this one uses nil.
-func locOrUTC(loc *time.Location) *time.Location {
-	if loc == nil {
-		return time.UTC
-	}
-	return loc
-}
-
-// reviewDayStart returns the start of the review day now falls in (local date + cutoff hour), converted to UTC.
-// The cutoff is normalized through NormalizedCutoff first, matching the schedule side's review-day definition exactly (0/out of range -> default 4);
-// store cannot import schedule (schedule depends on store, which would make a cycle), so store.NormalizedCutoff is shared.
-func reviewDayStart(now time.Time, loc *time.Location, cutoffHour int) time.Time {
-	if loc == nil {
-		loc = time.UTC
-	}
-	cutoffHour = NormalizedCutoff(cutoffHour)
-	local := now.In(loc)
-	day := local.Add(-time.Duration(cutoffHour) * time.Hour)
-	return time.Date(day.Year(), day.Month(), day.Day(), cutoffHour, 0, 0, 0, loc).UTC()
 }
 
 // mapInt64 turns an aggregate value scanned into a GORM map into int64; the driver may hand back int64 or another numeric type.

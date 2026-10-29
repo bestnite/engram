@@ -9,6 +9,7 @@ import (
 
 	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -44,10 +45,10 @@ type statsMeasures struct {
 // semantics for the same request, nor duplicate the orchestration logic each.
 func (s *Server) collectStatsMeasures(ctx context.Context, user *store.User) (statsMeasures, error) {
 	now := time.Now()
-	locTZ := userLocation(user)
-	cutoff := store.ResolveCutoff(user.DayCutoffHour)
-	today := store.ReviewDayString(now, locTZ, cutoff)
-	from30 := store.ShiftReviewDay(today, -29)
+	locTZ := reviewday.Location(user.Timezone)
+	cutoff := reviewday.ResolveCutoff(user.DayCutoffHour)
+	today := reviewday.Day(now, locTZ, cutoff)
+	from30 := reviewday.Shift(today, -29)
 
 	stats := store.NewStatsStore(s.db)
 

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"git.nite07.com/nite/engram/internal/reviewday"
 )
 
 // statsNow is the fixed observation moment of all stats cases; fixing it is what lets the bucket boundaries stay constants.
@@ -387,11 +389,11 @@ func TestStatsStreakBoundaryAtCutoff(t *testing.T) {
 			ctx := context.Background()
 
 			// The cutoff itself: 03:59:59 belongs to the previous day, 04:00:00 to the current one.
-			if got := reviewDayString(time.Date(2026, 10, 3, 3, 59, 59, 0, time.UTC), time.UTC, 4); got != "2026-10-02" {
-				t.Errorf("reviewDayString(03:59:59) = %q, want 2026-10-02", got)
+			if got := reviewday.Day(time.Date(2026, 10, 3, 3, 59, 59, 0, time.UTC), time.UTC, 4); got != "2026-10-02" {
+				t.Errorf("reviewday.Day(03:59:59) = %q, want 2026-10-02", got)
 			}
-			if got := reviewDayString(time.Date(2026, 10, 3, 4, 0, 0, 0, time.UTC), time.UTC, 4); got != "2026-10-03" {
-				t.Errorf("reviewDayString(04:00:00) = %q, want 2026-10-03", got)
+			if got := reviewday.Day(time.Date(2026, 10, 3, 4, 0, 0, 0, time.UTC), time.UTC, 4); got != "2026-10-03" {
+				t.Errorf("reviewday.Day(04:00:00) = %q, want 2026-10-03", got)
 			}
 
 			before, err := NewStatsStore(db).Streak(ctx, 1, time.Date(2026, 10, 4, 3, 30, 0, 0, time.UTC), time.UTC, 4)
