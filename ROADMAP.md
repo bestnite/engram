@@ -51,6 +51,36 @@ release; a task moves into a release milestone when it is scheduled.
   settings read as the first row.
   *Do not start until the callback shape is decided.*
 
+### M16 — Search correctness
+
+- [ ] **M16-1 Note search over a derived `search_text` column** — note search today runs
+  `LOWER(notes.fields_json) LIKE '%q%'` on the JSON encoding, so it matches field keys (`front`
+  hits every basic note), cannot match `<`, `>` or `&` (`json.Marshal` stores them as `\u003c`,
+  `\u003e`, `\u0026`), cannot match across a newline or a quote (stored as `\n`, `\"`), and lowers
+  non-ASCII letters on PostgreSQL but not on SQLite. Add a nullable `notes.search_text` TEXT column
+  (`json:"-"`, not in any payload) holding the note's string field values, collected recursively
+  through maps and arrays in sorted key order, joined with `\n` and lowered in Go with
+  `strings.ToLower`. Numbers and booleans are left out. `prepareNoteFields` in
+  `internal/store/note.go` computes it, so every write path (`Save`, import, clone) keeps it current.
+  Versioned migration `0011_backfill_note_search_text` fills it for existing rows, soft-deleted
+  ones included, in primary-key batches. `NoteStore.List` splits the query on whitespace and
+  requires every term: one `notes.search_text LIKE ? ESCAPE '\'` per term, joined with AND. Order
+  stays `created_at DESC, id DESC`. Files: `internal/store/models.go`, `internal/store/note.go`,
+  `internal/store/migrate.go`, new tests in `internal/store/`.
+  *Acceptance:* a table-driven test in `internal/store` creates notes through `NoteStore.Create`
+  and shows that `front` and `back` hit nothing, while `a<b`, `AT&T`, a quoted phrase, a
+  two-line value, `ÉTÉ` against `été`, a CJK substring, and a two-term query whose terms are not
+  adjacent each hit the expected note; `%` and `_` match literally. A migration test writes rows
+  with an empty `search_text`, runs 0011, and the same queries then hit. The `internal/store`
+  tests pass on SQLite and, with `TEST_PG_DSN` set, on PostgreSQL.
+- [ ] **M16-2 Escape wildcards in the admin user search** — `UserStore.ListForAdmin` in
+  `internal/store/user_admin.go` builds `'%' + query + '%'` without escaping, so `_` matches any
+  character and `%` matches anything. Escape the query with `escapeLike`, add `ESCAPE '\'` to the
+  three conditions, and lower the query in Go as note search does.
+  *Acceptance:* a table-driven test in `internal/store` shows that `_` and `%` match only users
+  whose username, email or display name contains that character; a plain substring still matches
+  case-insensitively; an empty query returns every user.
+
 ---
 
 ## 2. Release ledger
