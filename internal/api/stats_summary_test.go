@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -85,6 +86,94 @@ func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 			}
 			if raw["retention_total"] != float64(tc.wantTotal) || raw["retention_passed"] != float64(tc.wantPassed) {
 				t.Errorf("GET /stats/summary = %v, want retention_total %d retention_passed %d", raw, tc.wantTotal, tc.wantPassed)
+			}
+		})
+	}
+}
+
+// TestStatsSummaryDueMatchesReviewQueue pins the home due count to the review part of the default review queue. The count used to be
+// a hand-written query over card_states that ignored suspended_at, the card state and reviews_per_day, so the home page announced
+// cards that /review then reported as "nothing due" (measured: two suspended learning cards gave due=2 against an empty queue).
+// Every case also checks the count against the non-new cards DueCards actually returns.
+func TestStatsSummaryDueMatchesReviewQueue(t *testing.T) {
+	type seed struct {
+		state     string
+		dueIn     time.Duration // relative to env.now; negative means already due
+		suspended bool
+	}
+	cases := []struct {
+		name          string
+		seeds         []seed
+		reviewsPerDay int // 0 keeps the deck default
+		wantDue       int64
+	}{
+		{name: "due review card counts", seeds: []seed{{"review", -time.Hour, false}}, wantDue: 1},
+		{name: "due learning card counts", seeds: []seed{{"learning", -time.Minute, false}}, wantDue: 1},
+		{name: "due relearning card counts", seeds: []seed{{"relearning", -time.Minute, false}}, wantDue: 1},
+		{name: "review card not due yet is left out", seeds: []seed{{"review", time.Hour, false}}, wantDue: 0},
+		{name: "suspended due learning card is left out", seeds: []seed{{"learning", -time.Hour, true}, {"learning", -time.Hour, true}}, wantDue: 0},
+		{name: "suspended due review card is left out", seeds: []seed{{"review", -time.Hour, true}}, wantDue: 0},
+		{name: "buried new card past its due_at is a new card, not a due one", seeds: []seed{{"new", -time.Hour, false}}, wantDue: 0},
+		{
+			name:          "reviews_per_day caps due review cards",
+			seeds:         []seed{{"review", -time.Hour, false}, {"review", -2 * time.Hour, false}, {"review", -3 * time.Hour, false}},
+			reviewsPerDay: 2, wantDue: 2,
+		},
+		{
+			name:          "learning cards are not capped by reviews_per_day",
+			seeds:         []seed{{"learning", -time.Minute, false}, {"learning", -2 * time.Minute, false}, {"review", -time.Hour, false}},
+			reviewsPerDay: 1, wantDue: 3,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t, 60, 60)
+			ctx := context.Background()
+			user := seedUser(t, env.db, "due_user", store.RoleUser)
+			deck := seedDeck(t, env.db, user.ID)
+			if tc.reviewsPerDay > 0 {
+				if err := env.db.Model(&store.Deck{}).Where("id = ?", deck.ID).
+					Update("reviews_per_day", tc.reviewsPerDay).Error; err != nil {
+					t.Fatalf("set reviews_per_day: %v", err)
+				}
+			}
+			for i, s := range tc.seeds {
+				note := seedNote(t, env, deck.ID, user.ID, fmt.Sprintf("q%d", i))
+				var card store.Card
+				if err := env.db.Where("note_id = ?", note.ID).First(&card).Error; err != nil {
+					t.Fatalf("load card: %v", err)
+				}
+				due := env.now.Add(s.dueIn)
+				row := store.CardState{CardID: card.ID, UserID: user.ID, State: s.state, DueAt: &due, Version: 1}
+				if s.suspended {
+					at := env.now.Add(-time.Minute)
+					row.SuspendedAt = &at
+				}
+				if err := env.db.Create(&row).Error; err != nil {
+					t.Fatalf("create card state: %v", err)
+				}
+			}
+
+			got, err := env.api.Stats(ctx, user)
+			if err != nil {
+				t.Fatalf("Stats() error = %v", err)
+			}
+			if got.Due != tc.wantDue {
+				t.Errorf("Stats().Due = %d, want %d", got.Due, tc.wantDue)
+			}
+
+			queue, err := env.api.DueCards(ctx, user, nil, nil, 500)
+			if err != nil {
+				t.Fatalf("DueCards() error = %v", err)
+			}
+			var queued int64
+			for _, c := range queue {
+				if c.State != schedule.StateNew.String() {
+					queued++
+				}
+			}
+			if got.Due != queued {
+				t.Errorf("Stats().Due = %d, but the review queue holds %d non-new cards", got.Due, queued)
 			}
 		})
 	}

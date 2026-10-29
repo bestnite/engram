@@ -325,7 +325,8 @@ func queueShuffleSeed(userID uint64, day string) int64 {
 // and an unlimited deck will not pull every row into memory either.
 //
 // opts only reads Now, Location/Timezone and DayCutoffHour: "today's usage" is counted by the user's own review day,
-// and must match the semantics written into reviews.review_day at grading time. An empty deckIDs resolves to the deck set visible to that user.
+// and must match the semantics written into reviews.review_day at grading time. An empty deckIDs resolves to the user's default study scope:
+// the visible decks minus the ones the user paused, the same set as the whole-library review queue.
 func (b *QueueBuilder) DeckCounts(ctx context.Context, userID uint64, deckIDs []uint64, opts QueueOptions) (map[uint64]DeckQueueCounts, error) {
 	if userID == 0 {
 		return nil, errors.New("schedule: deck counts: user id is required")
