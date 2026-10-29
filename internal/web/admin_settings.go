@@ -11,6 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/config"
 	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/media"
+	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -51,7 +52,7 @@ func mediaSettingSpecs() []settingSpec {
 		},
 		{
 			key: settingKeyMediaAllowedMimes, envVar: envMediaAllowedMimes,
-			def: func(*i18n.Localizer) string { return strings.Join(media.DefaultAllowedMimes(), ", ") },
+			def: func(*i18n.Localizer) string { return strings.Join(mediatype.DefaultAllowedMimes(), ", ") },
 		},
 		{
 			// Per-user total media quota: 0 = unlimited (default). 0 follows the project's existing convention (the daily cap also uses 0 for unlimited),

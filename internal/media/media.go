@@ -90,10 +90,6 @@ func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
 	return defaultMaxBytes
 }
 
-// DefaultAllowedMimes is the default allowlist; the decision logic has moved to the leaf package mediatype,
-// and this same-name entry point is kept so that a large number of call sites do not have to change.
-func DefaultAllowedMimes() []string { return mediatype.DefaultAllowedMimes() }
-
 // The settings key and environment variable override name for the per-user total media quota.
 // Web upload, REST/MCP/CLI import and Web import share the single resolution below, so all four entry points use one definition.
 const (
@@ -179,7 +175,7 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	}
 	allowed := opts.AllowedMimes
 	if len(allowed) == 0 {
-		allowed = DefaultAllowedMimes()
+		allowed = mediatype.DefaultAllowedMimes()
 	}
 
 	tmp, err := os.CreateTemp(s.tempDir(), "upload-*")

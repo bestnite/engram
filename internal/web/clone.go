@@ -1,9 +1,7 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -16,7 +14,6 @@ func (s *Server) registerCloneRoutes(router *gin.Engine) {
 	if s.sessions == nil || s.decks == nil || s.notes == nil || s.presets == nil {
 		return
 	}
-	router.POST("/decks/:id/clone", s.sessions.CSRFMiddleware(), s.deckClone)
 	router.POST("/api/v1/decks/:id/clone", s.sessions.CSRFMiddleware(), s.deckClone)
 }
 
@@ -69,26 +66,5 @@ func (s *Server) deckClone(c *gin.Context) {
 		TargetID:   store.Ptr(cloned.ID),
 		Detail:     map[string]any{"source_deck_id": src.PublicID, "preset_id": cloned.PresetID},
 	})
-	if acceptsJSON(c) {
-		c.JSON(http.StatusCreated, gin.H{"id": cloned.PublicID, "name": cloned.Name})
-		return
-	}
-	c.Redirect(http.StatusSeeOther, fmt.Sprintf("/decks/%s/notes", cloned.PublicID))
-}
-
-// acceptsJSON reports whether the request asks for a JSON response (the SPA's fetch calls).
-//
-// It only looks at the application/json media type in the Accept header, allowing it to carry parameters or appear in a candidate list
-// (such as "application/json; charset=utf-8" or "application/json, text/plain, */*"):
-// with an exact whole-string comparison, as soon as a client appends a charset the JSON call would be misjudged as a form submission, so
-// the fetch would follow the 303, get HTML and fail to parse it as JSON. The Accept of a browser form submission does not contain
-// application/json, so it still gets the 303 redirect.
-func acceptsJSON(c *gin.Context) bool {
-	for _, part := range strings.Split(c.GetHeader("Accept"), ",") {
-		media := strings.TrimSpace(strings.SplitN(part, ";", 2)[0])
-		if strings.EqualFold(media, "application/json") {
-			return true
-		}
-	}
-	return false
+	c.JSON(http.StatusCreated, gin.H{"id": cloned.PublicID, "name": cloned.Name})
 }

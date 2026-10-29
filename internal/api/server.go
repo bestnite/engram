@@ -102,7 +102,7 @@ func New(deps Deps) (*API, error) {
 		missing = append(missing, "Cards")
 	}
 	if len(missing) > 0 {
-		return nil, errors.New("api: missing required dependencies: " + joinStrings(missing))
+		return nil, errors.New("api: missing required dependencies: " + strings.Join(missing, ", "))
 	}
 	// The grant store can be built from DB on demand, so not every caller (tests included) has to wire it explicitly.
 	grants := deps.Grants
@@ -252,16 +252,4 @@ func (a *API) ensureDefaultPreset(ctx context.Context, userID uint64) (uint64, e
 		return 0, store.ErrNoDefaultPreset
 	}
 	return p.ID, nil
-}
-
-// joinStrings joins dependency names with commas to build a readable English wiring error.
-func joinStrings(parts []string) string {
-	out := ""
-	for i, p := range parts {
-		if i > 0 {
-			out += ", "
-		}
-		out += p
-	}
-	return out
 }

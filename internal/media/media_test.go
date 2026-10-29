@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -75,7 +76,7 @@ func TestSaveRejectsOversized(t *testing.T) {
 	s := newTestStore(t)
 	body := bytes.Repeat([]byte("x"), 100)
 	_, err := s.Save(context.Background(), bytes.NewReader(body), SaveOptions{
-		Limit: 10, AllowedMimes: DefaultAllowedMimes(), DeclaredMime: "image/png",
+		Limit: 10, AllowedMimes: mediatype.DefaultAllowedMimes(), DeclaredMime: "image/png",
 	})
 	if !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("Save() error = %v, want ErrTooLarge", err)

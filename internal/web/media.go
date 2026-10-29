@@ -78,7 +78,7 @@ func (s *Server) allowedMimes(ctx context.Context) []string {
 			}
 		}
 	}
-	return media.DefaultAllowedMimes()
+	return mediatype.DefaultAllowedMimes()
 }
 
 // userMediaQuota resolves the effective per-user total media quota (bytes): environment variable > settings table > 0.

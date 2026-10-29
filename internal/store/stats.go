@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -205,7 +206,7 @@ func (s *StatsStore) RetentionByStability(ctx context.Context, userID, deckID ui
 			fmt.Sprintf("COALESCE(SUM(CASE WHEN %s AND %s THEN 1 ELSE 0 END), 0) AS p%d", cond, retentionPassedSQL, i))
 	}
 	var raw map[string]any
-	sql := fmt.Sprintf("SELECT %s FROM %s WHERE %s", joinStrings(cols, ", "), join, where)
+	sql := fmt.Sprintf("SELECT %s FROM %s WHERE %s", strings.Join(cols, ", "), join, where)
 	if err := s.db.WithContext(ctx).Raw(sql, args...).Scan(&raw).Error; err != nil {
 		return RetentionStats{}, fmt.Errorf("retention: %w", err)
 	}
@@ -641,17 +642,4 @@ func mapInt64(v any) int64 {
 	default:
 		return 0
 	}
-}
-
-// joinStrings joins string pieces with sep; the standard library's strings.Join would add one more import,
-// and only this fixed usage is needed here, keeping the file's dependencies minimal.
-func joinStrings(parts []string, sep string) string {
-	out := ""
-	for i, p := range parts {
-		if i > 0 {
-			out += sep
-		}
-		out += p
-	}
-	return out
 }

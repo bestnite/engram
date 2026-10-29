@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -38,11 +37,7 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 	}
 
 	// The owner clones their own deck.
-	rec := postForm(t, srv, "/decks/"+deck.PublicID+"/clone", url.Values{"csrf_token": {ownerCSRF}}, ownerCookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST clone status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
-	}
-	newID := parseDeckPublicIDFromLocation(t, rec.Header().Get("Location"))
+	newID := cloneViaAPI(t, srv, deck.PublicID, ownerCookies, ownerCSRF)
 
 	// The new deck belongs to the caller, its name carries the copy suffix, and it keeps the preset in effect for the caller on the source deck (the owner is the source deck's preset holder).
 	var cloned store.Deck
@@ -107,11 +102,7 @@ func TestDeckCloneAllowedForReader(t *testing.T) {
 	user2ID, u2Cookies, u2CSRF := createUserAndLogin(t, srv, db, "cloner2")
 	grantRole(t, srv, deck.ID, user2ID, store.RoleReader, ownerCookies, ownerCSRF)
 
-	rec := postForm(t, srv, "/decks/"+deck.PublicID+"/clone", url.Values{"csrf_token": {u2CSRF}}, u2Cookies)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("reader POST clone status = %d, want 303 (body %s)", rec.Code, rec.Body.String())
-	}
-	newID := parseDeckPublicIDFromLocation(t, rec.Header().Get("Location"))
+	newID := cloneViaAPI(t, srv, deck.PublicID, u2Cookies, u2CSRF)
 	var cloned store.Deck
 	if err := db.First(&cloned, "public_id = ?", newID).Error; err != nil {
 		t.Fatalf("load cloned deck: %v", err)
@@ -170,14 +161,18 @@ func cardIDSubquery(db *gorm.DB, deckID uint64) *gorm.DB {
 		Where("notes.deck_id = ? AND cards.deleted_at IS NULL", deckID)
 }
 
-// parseDeckPublicIDFromLocation extracts the deck's public id from a Location of the form /decks/<id>/notes.
-func parseDeckPublicIDFromLocation(t *testing.T, location string) string {
+// cloneViaAPI clones a deck through POST /api/v1/decks/:id/clone and returns the new deck's public id.
+func cloneViaAPI(t *testing.T, srv *Server, deckPublicID string, cookies []*http.Cookie, csrf string) string {
 	t.Helper()
-	parts := strings.Split(strings.Trim(location, "/"), "/")
-	if len(parts) < 2 || parts[0] != "decks" || parts[1] == "" {
-		t.Fatalf("unexpected clone redirect Location %q", location)
+	rec := postAccept(t, srv, "/api/v1/decks/"+deckPublicID+"/clone", "{}", "application/json", cookies, csrf)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST clone = %d, want 201 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	return parts[1]
+	var body cloneResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode clone response: %v (body %s)", err, rec.Body.String())
+	}
+	return body.ID
 }
 
 // TestCloneAPIAllowsOwnerEditorReader asserts owner/editor/reader can all use
@@ -260,32 +255,29 @@ func TestCloneAPIRejectsNonReaderAndMissingCSRF(t *testing.T) {
 	}
 }
 
-// TestCloneAcceptHeaderChoosesJSONOrRedirect asserts the clone endpoint's response shape is decided by Accept:
-// application/json with parameters (a client may append a charset) still returns 201 JSON, while a browser form-style Accept
-// still gets the 303 redirect to the new deck — avoiding a JSON call being misjudged as a form submission and following the 303 to HTML.
-func TestCloneAcceptHeaderChoosesJSONOrRedirect(t *testing.T) {
+// TestCloneAlwaysAnswersJSON asserts the clone endpoint answers 201 JSON whatever the Accept header says: the server no
+// longer renders pages, so there is no form-style redirect, and a client appending a charset or sending a browser-style
+// Accept still gets the new deck's id.
+func TestCloneAlwaysAnswersJSON(t *testing.T) {
 	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Clone accept source")
 	path := "/api/v1/decks/" + deck.PublicID + "/clone"
 
-	jsonRec := postAccept(t, srv, path, "{}", "application/json; charset=utf-8", ownerCookies, ownerCSRF)
-	if jsonRec.Code != http.StatusCreated {
-		t.Fatalf("clone with charset Accept = %d, want 201 (body %s)", jsonRec.Code, snippet(jsonRec.Body.String()))
-	}
-	if ct := jsonRec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
-		t.Errorf("clone Content-Type = %q, want application/json", ct)
-	}
-
-	htmlRec := postAccept(t, srv, path, "", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", ownerCookies, ownerCSRF)
-	if htmlRec.Code != http.StatusSeeOther {
-		t.Fatalf("clone with browser Accept = %d, want 303 (body %s)", htmlRec.Code, snippet(htmlRec.Body.String()))
-	}
-	if loc := htmlRec.Header().Get("Location"); !strings.HasPrefix(loc, "/decks/") || !strings.HasSuffix(loc, "/notes") {
-		t.Errorf("clone redirect Location = %q, want /decks/<id>/notes", loc)
+	for _, accept := range []string{
+		"application/json; charset=utf-8",
+		"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+	} {
+		rec := postAccept(t, srv, path, "{}", accept, ownerCookies, ownerCSRF)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("clone with Accept %q = %d, want 201 (body %s)", accept, rec.Code, snippet(rec.Body.String()))
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+			t.Errorf("clone with Accept %q Content-Type = %q, want application/json", accept, ct)
+		}
 	}
 }
 
-// postAccept issues a POST with an explicit Accept, to assert whether Accept decides on a JSON response or a 303 redirect.
+// postAccept issues a POST with an explicit Accept header.
 func postAccept(t *testing.T, srv *Server, target, body, accept string, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
