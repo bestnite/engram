@@ -1286,7 +1286,7 @@ describe('note editor — delete', () => {
     await flush();
 
     expect(deleteNote).toHaveBeenCalledWith('9');
-    expect(toast.success).toHaveBeenCalledWith('笔记已删除。');
+    expect(toast.success).toHaveBeenCalledWith('卡片已删除。');
     expect(get(routeStore).path).toBe('/review');
     expect(replaceState).toHaveBeenCalledWith({}, '', '/review?deck=5');
   });

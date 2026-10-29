@@ -63,7 +63,7 @@ describe('DeckDetailView notes table', () => {
     const html = renderView([note('n1')]);
     expect(html).toContain('data-testid="note-menu-n1"');
     expect(html).toContain('data-testid="edit-note-n1"');
-    expect(html).not.toContain('确定删除这条笔记？');
+    expect(html).not.toContain('确定删除这张卡片？');
   });
 
   it('collapses extra tags into a count', () => {

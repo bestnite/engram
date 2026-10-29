@@ -75,7 +75,7 @@ describe('DeckDetailView tag review', () => {
     expect(getDeckTags).toHaveBeenCalledWith('d1');
     const list = document.body.querySelector('[data-testid="deck-tag-review-list"]');
     expect(list?.textContent).toContain('文化传承类成语');
-    expect(list?.textContent).toContain('5 条笔记');
+    expect(list?.textContent).toContain('5 张卡片');
     const start = startControl();
     expect(start?.tagName).toBe('BUTTON');
     expect(start?.hasAttribute('disabled')).toBe(true);

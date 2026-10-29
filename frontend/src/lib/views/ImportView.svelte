@@ -183,7 +183,9 @@
       ['package.report.target', targetLabel(value.target)], ['package.report.dry_run', value.dry_run ? 1 : 0],
       ['package.report.deck_id', value.deck_id ?? '—'], ['package.report.notes_created', value.notes_created],
       ['package.report.notes_updated', value.notes_updated], ['package.report.notes_skipped', value.notes_skipped],
-      ['package.report.cards_created', value.cards_created], ['package.report.media_new', value.media_new],
+      // The cards generated from those notes are not listed: the interface calls a note a card, so a second
+      // "cards" count would read as the same thing counted twice. The API still reports cards_created.
+      ['package.report.media_new', value.media_new],
       ['package.report.media_missing', value.media_missing], ['package.report.progress_applied', value.progress_applied],
       ['package.report.progress_skipped', value.progress_skipped], ['package.report.progress_discarded', value.progress_discarded ? 1 : 0],
       ['package.report.weights_applied', value.weights_applied ? 1 : 0], ['package.report.weights_discarded', value.weights_discarded ? 1 : 0],
