@@ -15,7 +15,7 @@
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
   import HelpTip from '../components/ui/HelpTip.svelte';
-  import { Check, CircleAlert, CircleCheckBig, CircleX, Pencil, RefreshCw, X } from '@lucide/svelte';
+  import { ArrowLeft, Check, CircleAlert, CircleCheckBig, CircleX, Eye, EyeOff, PartyPopper, Pause, Pencil, RefreshCw, Undo2, X } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { cardTypes, descriptionOf, loadCardTypes, type CardTypeCatalog } from '../card-types';
   import { withReturn } from '../return-to';
@@ -864,7 +864,8 @@
       <!-- Undo the last rating: a self-graded submission has no result panel, so the entry lives here; it is hidden while the graded card's panel is open, avoiding two entries. -->
       {#if lastUndo && !feedback}
         <Button variant="outline" size="sm" testId="review-undo-last" disabled={submitting} onclick={() => void undo()}>
-          {undoLabel()}
+          <Undo2 class="size-3.5" aria-hidden="true" />
+          <span>{undoLabel()}</span>
         </Button>
       {/if}
       <div
@@ -913,6 +914,14 @@
       <Skeleton testId="review-extra-loading" label={$t('review.loading')} lines={2} />
     {:else if !current}
       <div class="text-center py-10" data-testid="review-empty">
+        <!-- A session that just cleared its queue gets a celebration; one that opened onto an empty queue only a quiet check mark. -->
+        <div class="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+          {#if done > 0}
+            <PartyPopper class="size-6" aria-hidden="true" />
+          {:else}
+            <CircleCheckBig class="size-6" aria-hidden="true" />
+          {/if}
+        </div>
         <p class="text-lg font-medium text-foreground/90">{$t('review.empty')}</p>
         {#if showExtra && extraStatus}
           <form
@@ -956,7 +965,10 @@
             {/if}
           </form>
         {/if}
-        <a class="inline-block mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium" href="/">{$t('review.home')}</a>
+        <a class="mt-4 inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium" href="/">
+          <ArrowLeft class="size-4" aria-hidden="true" />
+          <span>{$t('review.home')}</span>
+        </a>
       </div>
     {:else}
       <article data-testid="review-card" data-card-id={current.card_id} class="space-y-6">
@@ -1044,10 +1056,11 @@
             <button
               type="button"
               data-testid="review-reveal"
-              class="w-full min-h-12 rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-semibold transition-all btn-press shadow-sm cursor-pointer"
+              class="w-full min-h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-semibold transition-all btn-press shadow-sm cursor-pointer"
               onclick={() => void reveal()}
             >
-              {$t('review.show_answer')}
+              <Eye class="size-4" aria-hidden="true" />
+              <span>{$t('review.show_answer')}</span>
             </button>
           {/if}
         {:else if gradedKind}
@@ -1202,8 +1215,8 @@
                   <p class="text-sm text-rose-700 dark:text-rose-300" data-testid="review-graded-need-answer">{$t('review.graded.need_answer')}</p>
                 {/if}
                 <div class="flex flex-col sm:flex-row gap-3 pt-2">
-                  <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void submitGraded()} data-testid="review-graded-submit">{$t('review.graded.submit')}</button>
-                  <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void revealGraded()} data-testid="review-graded-reveal">{$t('review.graded.show_answer')}</button>
+                  <button type="button" disabled={submitting} class="flex-1 min-h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void submitGraded()} data-testid="review-graded-submit"><Check class="size-4" aria-hidden="true" /><span>{$t('review.graded.submit')}</span></button>
+                  <button type="button" disabled={submitting} class="flex-1 min-h-12 inline-flex items-center justify-center gap-2 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void revealGraded()} data-testid="review-graded-reveal"><Eye class="size-4" aria-hidden="true" /><span>{$t('review.graded.show_answer')}</span></button>
                 </div>
               </div>
             {/if}
@@ -1214,10 +1227,12 @@
           <div class="pt-4 border-t border-border flex items-center text-xs text-muted-foreground">
             <div class="flex items-center gap-2">
               <Button variant="outline" size="sm" testId="review-bury" disabled={submitting} onclick={() => void bury()}>
-                {$t('review.bury')}
+                <EyeOff class="size-3.5" aria-hidden="true" />
+                <span>{$t('review.bury')}</span>
               </Button>
               <Button variant="outline" size="sm" testId="review-suspend" disabled={submitting} onclick={() => void suspend()}>
-                {$t('review.suspend')}
+                <Pause class="size-3.5" aria-hidden="true" />
+                <span>{$t('review.suspend')}</span>
               </Button>
               <!-- The difference between the two buttons goes into a popover: keeping a whole sentence at the bottom of every card is too conspicuous, and one click the first time it is unclear is enough. -->
               <HelpTip testId="review-bury-hint" label={$t('help.review.bury_label')} text={$t('review.bury_hint')} />
