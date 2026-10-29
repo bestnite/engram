@@ -4,7 +4,7 @@
   import { t } from '../i18n';
   import { apiClient } from '../api';
   import type { MediaItem } from '../api';
-  import { Music } from '@lucide/svelte';
+  import { Images, Music } from '@lucide/svelte';
   import Button from './ui/Button.svelte';
 
   // Media library picker: data comes from the same-origin JSON of GET /api/v1/media and no longer fetches the removed
@@ -103,7 +103,8 @@
 <div class="space-y-2">
   {#if !embedded}
     <Button testId="{idPrefix}-picker-toggle" variant="outline" {size} onclick={toggle}>
-      {openLabel || $t('media.open')}
+      <Images class="size-4" aria-hidden="true" />
+      <span>{openLabel || $t('media.open')}</span>
     </Button>
   {/if}
   {#if embedded || open}

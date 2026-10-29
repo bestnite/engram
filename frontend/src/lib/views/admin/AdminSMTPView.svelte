@@ -12,7 +12,7 @@
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
-  import { RefreshCw } from '@lucide/svelte';
+  import { RefreshCw, Send } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -193,7 +193,7 @@
         </div>
         <div class="flex flex-wrap items-center gap-3">
           <Button type="submit" testId="admin-smtp-save" loading={saving} variant="primary" size="lg">{$t('admin.smtp.save')}</Button>
-          <Button type="button" testId="admin-smtp-test" variant="outline" size="lg" loading={testing} onclick={test}>{$t('admin.smtp.test')}</Button>
+          <Button type="button" testId="admin-smtp-test" variant="outline" size="lg" loading={testing} onclick={test}><Send class="size-4" aria-hidden="true" /><span>{$t('admin.smtp.test')}</span></Button>
         </div>
       </form>
     </SettingsSection>

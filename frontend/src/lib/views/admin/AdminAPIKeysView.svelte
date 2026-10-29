@@ -12,7 +12,7 @@
   import { toast } from '../../components/ui/toast';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
-  import { KeyRound, RefreshCw } from '@lucide/svelte';
+  import { Ban, KeyRound, RefreshCw } from '@lucide/svelte';
   import EmptyState from '../../components/ui/EmptyState.svelte';
 
   interface Props {
@@ -145,7 +145,7 @@
                 <td class="px-4 py-2.5"><Badge variant={k.state === 'active' ? 'success' : 'neutral'}>{stateLabel(k.state)}</Badge></td>
                 <td class="px-4 py-2.5 text-right">
                   {#if k.state === 'active'}
-                    <Button variant="ghost" size="sm" class="hover:bg-destructive-soft hover:text-destructive-foreground" testId="admin-api-keys-revoke-{k.id}" onclick={() => revoke(k)}>{$t('admin.keys.revoke')}</Button>
+                    <Button variant="ghost" size="sm" class="hover:bg-destructive-soft hover:text-destructive-foreground" testId="admin-api-keys-revoke-{k.id}" onclick={() => revoke(k)}><Ban class="size-4" aria-hidden="true" /><span>{$t('admin.keys.revoke')}</span></Button>
                   {/if}
                 </td>
               </tr>

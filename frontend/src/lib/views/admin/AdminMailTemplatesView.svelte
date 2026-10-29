@@ -12,7 +12,7 @@
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import { draftFor } from '../../mail-template-draft';
-  import { RefreshCw } from '@lucide/svelte';
+  import { Eye, RefreshCw, RotateCcw, Send } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -277,13 +277,16 @@
             {$t('admin.mail.save')}
           </Button>
           <Button variant="outline" size="lg" testId="admin-mail-template-preview" loading={pending === 'preview'} disabled={busy} onclick={runPreview}>
-            {$t('admin.mail.preview')}
+            <Eye class="size-4" aria-hidden="true" />
+            <span>{$t('admin.mail.preview')}</span>
           </Button>
           <Button variant="outline" size="lg" testId="admin-mail-template-test" loading={pending === 'test'} disabled={busy} onclick={sendTest}>
-            {$t('admin.mail.test')}
+            <Send class="size-4" aria-hidden="true" />
+            <span>{$t('admin.mail.test')}</span>
           </Button>
           <Button variant="ghost" size="lg" testId="admin-mail-template-restore" loading={pending === 'restore'} disabled={busy || !currentRow} onclick={remove} title={$t('admin.mail.restore_hint')}>
-            {$t('admin.mail.restore')}
+            <RotateCcw class="size-4" aria-hidden="true" />
+            <span>{$t('admin.mail.restore')}</span>
           </Button>
         </div>
         <p class="text-xs text-muted-foreground" data-testid="admin-mail-template-state">

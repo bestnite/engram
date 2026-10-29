@@ -11,7 +11,7 @@
   import SettingsSection from '../components/ui/SettingsSection.svelte';
   import { listClasses } from '../components/ui/variants';
   import { toast } from '../components/ui/toast';
-  import { UserMinus, X } from '@lucide/svelte';
+  import { UserMinus, UserPlus, X } from '@lucide/svelte';
 
   // When embedded is true this component sits inside the deck details' "sharing" tab: it does not render the page-level width/padding shell,
   // nor the page header title (the tab already indicates the current section). It is false when /decks/:id/sharing is visited directly, standing alone as a page.
@@ -71,7 +71,7 @@
           <input required bind:value={username} class="field-input mt-1.5 block w-full text-sm" />
         </label>
         <Select class="w-28" value={role} onValueChange={(value) => (role = value as typeof role)} ariaLabel={$t('deck.sharing.role_label')} options={roleOptions} />
-        <Button type="submit" size="lg" loading={submitting === 'grant'} disabled={saving} testId="sharing-grant">{$t('deck.sharing.grant')}</Button>
+        <Button type="submit" size="lg" loading={submitting === 'grant'} disabled={saving} testId="sharing-grant"><UserPlus class="size-4" aria-hidden="true" /><span>{$t('deck.sharing.grant')}</span></Button>
       </form>
 
       {#if data.grants.length > 0 || (data.pending_invites ?? []).length > 0}

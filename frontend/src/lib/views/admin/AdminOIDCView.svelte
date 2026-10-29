@@ -13,7 +13,7 @@
   import Checkbox from '../../components/ui/Checkbox.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
-  import { RefreshCw } from '@lucide/svelte';
+  import { PlugZap, RefreshCw, Unlink } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -236,7 +236,7 @@
       </SettingsSection>
 
       <div class="flex flex-wrap items-center justify-end gap-3 border-t border-border py-5">
-        <Button type="button" testId="admin-oidc-test" variant="outline" size="lg" loading={testing} onclick={test}>{$t('admin.oidc.test')}</Button>
+        <Button type="button" testId="admin-oidc-test" variant="outline" size="lg" loading={testing} onclick={test}><PlugZap class="size-4" aria-hidden="true" /><span>{$t('admin.oidc.test')}</span></Button>
         <Button type="submit" testId="admin-oidc-save" loading={saving} variant="primary" size="lg">{$t('admin.oidc.save')}</Button>
       </div>
     </form>
@@ -265,7 +265,7 @@
                   <td class="max-w-56 truncate px-4 py-2.5 font-mono text-xs text-muted-foreground" title={row.subject}>{row.subject}</td>
                   <td class="px-4 py-2.5 tabular-nums text-muted-foreground">{row.linked_at}</td>
                   <td class="px-4 py-2.5 text-right">
-                    <Button variant="ghost" size="sm" class="hover:bg-destructive-soft hover:text-destructive-foreground" testId="admin-oidc-unlink-{row.id}" onclick={() => unlink(row)}>{$t('admin.oidc.unlink')}</Button>
+                    <Button variant="ghost" size="sm" class="hover:bg-destructive-soft hover:text-destructive-foreground" testId="admin-oidc-unlink-{row.id}" onclick={() => unlink(row)}><Unlink class="size-4" aria-hidden="true" /><span>{$t('admin.oidc.unlink')}</span></Button>
                   </td>
                 </tr>
               {/each}

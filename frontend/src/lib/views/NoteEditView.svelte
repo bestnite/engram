@@ -22,7 +22,7 @@
   import { backField, cardTypes, fieldsForKind, frontField, kindOrder, loadCardTypes } from '../card-types';
   import { insertSource, type Caret } from '../shortcode-source';
   import { uploadErrorKeyFor } from '../media-upload';
-  import { Eye, Trash2, X } from '@lucide/svelte';
+  import { Check, Eye, Plus, Trash2, X } from '@lucide/svelte';
 
   // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
   // (card type, fields with their own insertion tools, tags and live preview). A successful create always leaves the editor, leaving no second "create another" path.
@@ -667,7 +667,12 @@
       <!-- The action bar sticks to the bottom of the viewport: a long form does not have to be scrolled to the end before saving. -->
       <div class="sticky bottom-0 z-10 -mx-4 mt-8 flex flex-wrap items-center gap-3 border-t border-border bg-background/90 px-4 py-3 backdrop-blur-md sm:-mx-8 sm:px-8">
         <Button type="submit" size="lg" testId="note-submit" loading={saving}>
-          {isCreate ? $t('note_create.submit') : $t('note_edit.save')}
+          {#if isCreate}
+            <Plus class="size-4" aria-hidden="true" />
+          {:else}
+            <Check class="size-4" aria-hidden="true" />
+          {/if}
+          <span>{isCreate ? $t('note_create.submit') : $t('note_edit.save')}</span>
         </Button>
         <Button variant="ghost" size="lg" testId="note-cancel" onclick={() => navigate(returnTo)}>
           {$t('note_edit.cancel')}

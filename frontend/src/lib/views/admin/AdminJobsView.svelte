@@ -12,7 +12,7 @@
   import { toast } from '../../components/ui/toast';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
-  import { ListChecks, RefreshCw } from '@lucide/svelte';
+  import { CircleStop, ListChecks, RefreshCw } from '@lucide/svelte';
   import EmptyState from '../../components/ui/EmptyState.svelte';
 
   interface Props {
@@ -152,7 +152,7 @@
                 </td>
                 <td class="px-4 py-2.5 text-right">
                   {#if job.can_cancel}
-                    <Button variant="ghost" size="sm" class="hover:bg-destructive-soft hover:text-destructive-foreground" testId="admin-jobs-cancel-{job.id}" onclick={() => cancel(job)}>{$t('admin.jobs.cancel')}</Button>
+                    <Button variant="ghost" size="sm" class="hover:bg-destructive-soft hover:text-destructive-foreground" testId="admin-jobs-cancel-{job.id}" onclick={() => cancel(job)}><CircleStop class="size-4" aria-hidden="true" /><span>{$t('admin.jobs.cancel')}</span></Button>
                   {/if}
                 </td>
               </tr>

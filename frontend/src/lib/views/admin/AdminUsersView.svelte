@@ -228,7 +228,7 @@
         class="field-input w-full pl-8 text-sm"
       />
     </label>
-    <Button type="submit" testId="admin-users-search-submit" variant="outline" size="lg">{$t('admin.users.search_submit')}</Button>
+    <Button type="submit" testId="admin-users-search-submit" variant="outline" size="lg"><Search class="size-4" aria-hidden="true" /><span>{$t('admin.users.search_submit')}</span></Button>
   </form>
 
   {#if tempPassword}

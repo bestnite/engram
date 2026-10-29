@@ -15,7 +15,7 @@
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
   import HelpTip from '../components/ui/HelpTip.svelte';
-  import { ArrowLeft, Check, CircleAlert, CircleCheckBig, CircleX, Eye, EyeOff, PartyPopper, Pause, Pencil, RefreshCw, Undo2, X } from '@lucide/svelte';
+  import { ArrowLeft, Check, CircleAlert, CircleCheckBig, CircleX, Eye, EyeOff, PartyPopper, Pause, Pencil, Plus, RefreshCw, Undo2, X } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { cardTypes, descriptionOf, loadCardTypes, type CardTypeCatalog } from '../card-types';
   import { withReturn } from '../return-to';
@@ -958,7 +958,7 @@
                   class="field-input mt-1.5 block w-full text-sm"
                 />
               </div>
-              <Button type="submit" testId="review-extra-submit" loading={extraBusy}>{$t('review.extra_new.submit')}</Button>
+              <Button type="submit" testId="review-extra-submit" loading={extraBusy}><Plus class="size-4" aria-hidden="true" /><span>{$t('review.extra_new.submit')}</span></Button>
             </div>
             {#if extraInvalid}
               <p class="text-xs text-destructive-foreground" role="alert" data-testid="review-extra-invalid">{$t('review.extra_new.invalid', { max: extraMax })}</p>

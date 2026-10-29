@@ -9,7 +9,7 @@
   import Skeleton from '../ui/Skeleton.svelte';
   import { toast } from '../ui/toast';
   import { askConfirm } from '../ui/confirm';
-  import { RefreshCw } from '@lucide/svelte';
+  import { RefreshCw, Unlink } from '@lucide/svelte';
 
   /**
    * Linked sign-in identities (security page): lists the OIDC identities bound to the account, starts a new link, and removes one.
@@ -186,7 +186,8 @@
                       loading={unlinkingId === identity.id}
                       onclick={() => unlink(identity)}
                     >
-                      {$t('settings.identity.unlink')}
+                      <Unlink class="size-4" aria-hidden="true" />
+                      <span>{$t('settings.identity.unlink')}</span>
                     </Button>
                   </td>
                 </tr>

@@ -11,7 +11,7 @@
   import Select from '../../components/ui/Select.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import Button from '../../components/ui/Button.svelte';
-  import { RefreshCw, ScrollText } from '@lucide/svelte';
+  import { RefreshCw, ScrollText, Search, X } from '@lucide/svelte';
   import EmptyState from '../../components/ui/EmptyState.svelte';
 
   interface Props {
@@ -130,8 +130,8 @@
       </label>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-      <Button type="submit" testId="admin-audit-filter-submit" variant="primary" size="lg">{$t('admin.audit.filter.submit')}</Button>
-      <Button type="button" testId="admin-audit-filter-clear" variant="ghost" size="lg" onclick={clearFilters}>{$t('admin.audit.filter.clear')}</Button>
+      <Button type="submit" testId="admin-audit-filter-submit" variant="primary" size="lg"><Search class="size-4" aria-hidden="true" /><span>{$t('admin.audit.filter.submit')}</span></Button>
+      <Button type="button" testId="admin-audit-filter-clear" variant="ghost" size="lg" onclick={clearFilters}><X class="size-4" aria-hidden="true" /><span>{$t('admin.audit.filter.clear')}</span></Button>
       <p class="text-xs text-muted-foreground">{$t('admin.audit.filter.range_hint')}</p>
     </div>
   </form>

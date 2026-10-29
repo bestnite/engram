@@ -229,7 +229,7 @@
             <Checkbox testId="admin-registration-invite-send" bind:checked={form.send_email} label={$t('admin.registration.field.send_email')} />
             {$t('admin.registration.field.send_email')}
           </label>
-          <Button type="submit" testId="admin-registration-invite-submit" variant="outline" size="lg">{$t('admin.registration.invite_submit')}</Button>
+          <Button type="submit" testId="admin-registration-invite-submit" variant="outline" size="lg"><Link2 class="size-4" aria-hidden="true" /><span>{$t('admin.registration.invite_submit')}</span></Button>
         </div>
       </form>
 

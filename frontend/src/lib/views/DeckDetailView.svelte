@@ -22,7 +22,7 @@
   import InlineEdit from '../components/InlineEdit.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
-  import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, FileText, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, SearchX, Tags, Trash2 } from '@lucide/svelte';
+  import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, FileText, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, SearchX, Tags, Trash2, X } from '@lucide/svelte';
   import { noteKindLabel as kindLabel } from '../labels';
   import { backField, cardTypes, frontField, kindOrder, loadCardTypes } from '../card-types';
   import EmptyState from '../components/ui/EmptyState.svelte';
@@ -663,7 +663,8 @@
       />
       {#if hasFilter}
         <Button variant="ghost" size="lg" testId="filter-reset-btn" onclick={handleFilterReset}>
-          {$t('notes.filter_reset')}
+          <X class="size-4" aria-hidden="true" />
+          <span>{$t('notes.filter_reset')}</span>
         </Button>
       {/if}
     </form>
@@ -1013,7 +1014,8 @@
   <div class="mt-5 flex items-center justify-end gap-2">
     <Button type="button" variant="outline" size="lg" onclick={() => (showExportModal = false)}>{$t('note_edit.cancel')}</Button>
     <Button type="button" testId="deck-package-export" loading={exporting} onclick={exportPackage} variant="primary" size="lg">
-      {$t('package.export.action')}
+      <Download class="size-4" aria-hidden="true" />
+      <span>{$t('package.export.action')}</span>
     </Button>
   </div>
 </Dialog>

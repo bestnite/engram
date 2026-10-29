@@ -7,7 +7,7 @@
   import SettingsSection from '../components/ui/SettingsSection.svelte';
   import { listClasses } from '../components/ui/variants';
   import { toast } from '../components/ui/toast';
-  import { Copy, X } from '@lucide/svelte';
+  import { Ban, Copy, Plus, X } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
   import { apiClient, getApiErrorMessageKey, type APIKeyRecord } from '../api';
@@ -278,7 +278,7 @@
           <p role="alert" data-testid="keys-expiry-error" class="mt-1.5 text-sm text-destructive-foreground">{$t(expiryError)}</p>
         {/if}
       </div>
-      <Button type="submit" size="lg" testId="keys-create" loading={saving}>{$t('keys.create')}</Button>
+      <Button type="submit" size="lg" testId="keys-create" loading={saving}><Plus class="size-4" aria-hidden="true" /><span>{$t('keys.create')}</span></Button>
     </form>
 
     {#if plaintext}
@@ -317,7 +317,7 @@
               testId="keys-revoke-{key.id}"
               loading={revokingId === key.id}
               onclick={() => revoke(key)}
-            >{$t('keys.revoke')}</Button>
+            ><Ban class="size-4" aria-hidden="true" /><span>{$t('keys.revoke')}</span></Button>
           </li>
         {/each}
         {#if expiredKeys.length > 0}
@@ -338,7 +338,7 @@
                 testId="keys-revoke-{key.id}"
                 loading={revokingId === key.id}
                 onclick={() => revoke(key)}
-              >{$t('keys.revoke')}</Button>
+              ><Ban class="size-4" aria-hidden="true" /><span>{$t('keys.revoke')}</span></Button>
             </li>
           {/each}
         {/if}

@@ -16,7 +16,7 @@
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import DeckProgressBar from '../components/DeckProgressBar.svelte';
   import { listClasses, selectionBarButton } from '../components/ui/variants';
-  import { CirclePause, CirclePlay, Download, Layers, LogOut, Plus, RefreshCw, Trash2, Upload } from '@lucide/svelte';
+  import { Check, CirclePause, CirclePlay, Download, Layers, LogOut, Plus, RefreshCw, Trash2, Upload, X } from '@lucide/svelte';
   import { deckActionKind, presetSelectOptions } from '../labels';
   import EmptyState from '../components/ui/EmptyState.svelte';
 
@@ -421,7 +421,8 @@
                 disabled={inviteBusy?.deckId === invite.deck_id}
                 onclick={() => respondToInvite(invite.deck_id, false)}
               >
-                {$t('decks.invites.reject')}
+                <X class="size-4" aria-hidden="true" />
+                <span>{$t('decks.invites.reject')}</span>
               </Button>
               <Button
                 testId="deck-invite-accept-{invite.deck_id}"
@@ -431,7 +432,8 @@
                 disabled={inviteBusy?.deckId === invite.deck_id}
                 onclick={() => respondToInvite(invite.deck_id, true)}
               >
-                {$t('decks.invites.accept')}
+                <Check class="size-4" aria-hidden="true" />
+                <span>{$t('decks.invites.accept')}</span>
               </Button>
             </div>
           </li>
@@ -620,7 +622,8 @@
   <div class="mt-5 flex items-center justify-end gap-2">
     <Button type="button" variant="outline" size="lg" onclick={() => (showBatchExport = false)}>{$t('note_edit.cancel')}</Button>
     <Button type="button" testId="decks-batch-export-submit" loading={batchExporting} onclick={handleBatchExport} variant="primary" size="lg">
-      {$t('package.batch_export', { count: selectedDeckIds.length })}
+      <Download class="size-4" aria-hidden="true" />
+      <span>{$t('package.batch_export', { count: selectedDeckIds.length })}</span>
     </Button>
   </div>
 </Dialog>

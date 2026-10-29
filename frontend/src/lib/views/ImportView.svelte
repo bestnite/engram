@@ -12,6 +12,7 @@
   import Dropzone from '../components/ui/Dropzone.svelte';
   import SegmentedControl from '../components/ui/SegmentedControl.svelte';
   import { toast } from '../components/ui/toast';
+  import { Upload } from '@lucide/svelte';
 
   // Import source: a file or a public HTTPS direct link. File by default; both entries share the same set of options below.
   let source = $state<'file' | 'url'>('file');
@@ -270,7 +271,7 @@
       {#if target === 'new_deck'}<label class="flex items-center gap-2"><Checkbox bind:checked={applyWeights} testId="package-import-apply-weights" label={$t('package.import.apply_weights')} />{$t('package.import.apply_weights')}</label>{/if}
     </div>
     <div class="flex flex-wrap items-center gap-3 border-t border-border pt-5">
-      <Button type="submit" size="lg" testId="import-submit" loading={submitting}>{$t(dryRun ? 'package.import.submit_dry' : 'package.import.submit')}</Button>
+      <Button type="submit" size="lg" testId="import-submit" loading={submitting}><Upload class="size-4" aria-hidden="true" /><span>{$t(dryRun ? 'package.import.submit_dry' : 'package.import.submit')}</span></Button>
       {#if errorKey}<p role="alert" class="text-sm text-destructive-foreground">{$t(errorKey)}</p>{/if}
     </div>
   </form>

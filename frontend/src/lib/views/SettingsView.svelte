@@ -4,7 +4,7 @@
   import PageHeader from '../components/ui/PageHeader.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
   import { listClasses } from '../components/ui/variants';
-  import { X } from '@lucide/svelte';
+  import { Plus, X } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { t, localeStore, setLocale, type SupportedLocale, isSupportedLocale } from '../i18n';
   import {
@@ -347,7 +347,8 @@
               data-testid="share-policy-allow-input"
             />
             <Button type="submit" variant="outline" size="lg" loading={shareSaving} testId="share-policy-allow-add">
-              {$t('settings.share_policy.allow_add')}
+              <Plus class="size-4" aria-hidden="true" />
+              <span>{$t('settings.share_policy.allow_add')}</span>
             </Button>
           </form>
           {#if allowList.length === 0}
