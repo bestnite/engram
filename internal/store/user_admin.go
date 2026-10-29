@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -19,6 +20,7 @@ const AdminListUsersPageSize = 50
 // ListForAdmin pages through users by search term. An empty query means no filter; it matches username, email or display name.
 // Searches always compare LOWER(...): SQLite's LIKE is case-insensitive for ASCII by default while PostgreSQL's is not,
 // and only lowering both sides makes the two databases behave the same (the two-database convention).
+// The query is lowered in Go and its LIKE wildcards are escaped, so "_" or "%" in a search matches only that character.
 func (s *UserStore) ListForAdmin(ctx context.Context, query string, page, size int) ([]User, int64, error) {
 	if size <= 0 || size > AdminListUsersPageSize {
 		size = AdminListUsersPageSize
@@ -28,8 +30,8 @@ func (s *UserStore) ListForAdmin(ctx context.Context, query string, page, size i
 	}
 	q := s.db.WithContext(ctx).Model(&User{})
 	if query != "" {
-		like := "%" + query + "%"
-		q = q.Where("LOWER(username) LIKE LOWER(?) OR LOWER(email) LIKE LOWER(?) OR LOWER(display_name) LIKE LOWER(?)",
+		like := "%" + escapeLike(strings.ToLower(query)) + "%"
+		q = q.Where("LOWER(username) LIKE ? ESCAPE '\\' OR LOWER(email) LIKE ? ESCAPE '\\' OR LOWER(display_name) LIKE ? ESCAPE '\\'",
 			like, like, like)
 	}
 	var total int64
