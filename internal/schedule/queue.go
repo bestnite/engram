@@ -19,8 +19,6 @@ import (
 
 // Documented defaults for queue construction; the day-cutoff default is reviewday.DefaultCutoffHour.
 const (
-	DefaultNewPerDay     = 20
-	DefaultReviewsPerDay = 200
 	DefaultReviewBatch   = 200
 	DefaultQueueTimezone = "UTC"
 )
@@ -76,7 +74,7 @@ const (
 //     0 means unlimited (the pointer distinguishes "unset" from "explicit 0");
 //  2. NewPerDay / ReviewsPerDay positive — likewise applies uniformly to every deck in scope (retained legacy entry);
 //  3. otherwise read each deck's new_per_day / reviews_per_day, where a column value of 0 means unlimited;
-//  4. only when the deck row does not exist (column unreadable) fall back to DefaultNewPerDay.
+//  4. only when the deck row does not exist (column unreadable) fall back to store.DefaultNewPerDay.
 type QueueOptions struct {
 	// When DeckID is 0, cards are taken across all decks visible to the user; this field is ignored when DeckIDs is non-empty.
 	DeckID uint64
@@ -532,25 +530,14 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 		return nil, nil
 	}
 
-	caps, err := b.loadDeckCaps(ctx, userID, ids)
-	if err != nil {
-		return nil, err
-	}
-	now := opts.now()
-	loc := opts.location()
-	day := reviewday.Day(now, loc, reviewday.ResolveCutoff(opts.DayCutoffHour))
-	usage, err := b.countUsage(ctx, userID, day, ids)
+	caps, usage, err := b.loadDeckDay(ctx, userID, ids, opts)
 	if err != nil {
 		return nil, err
 	}
 
 	out := make([]deckScope, 0, len(ids))
 	for _, id := range ids {
-		c, ok := caps[id]
-		if !ok {
-			// Only an unreadable deck column (deck row missing) falls back to the default; a deck column of 0 means unlimited, not falling back to the default.
-			c = store.DeckCaps{NewPerDay: DefaultNewPerDay}
-		}
+		c := caps[id]
 		// Explicit overrides apply uniformly to every deck in scope; the legacy entry's positive fields mean the same (see the QueueOptions doc).
 		if opts.NewPerDayOverride != nil {
 			c.NewPerDay = *opts.NewPerDayOverride
@@ -566,6 +553,28 @@ func (b *QueueBuilder) resolveScope(ctx context.Context, userID uint64, opts Que
 		out = append(out, deckScope{id: id, newLeft: newLeft, reviewLeft: reviewLeft})
 	}
 	return out, nil
+}
+
+// loadDeckDay loads, for each deck in ids, the inputs deckBudget turns into today's allowance: the user's daily caps and
+// today's usage, counted on the user's own review day. A deck whose row is missing (its caps are unreadable) gets
+// store.DefaultNewPerDay new cards and unlimited reviews; a stored 0 is never replaced, because 0 means unlimited.
+// Build, DeckCounts and DeckBudgets all start from here.
+func (b *QueueBuilder) loadDeckDay(ctx context.Context, userID uint64, ids []uint64, opts QueueOptions) (map[uint64]store.DeckCaps, map[uint64]deckUsage, error) {
+	caps, err := b.loadDeckCaps(ctx, userID, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	day := reviewday.Day(opts.now(), opts.location(), reviewday.ResolveCutoff(opts.DayCutoffHour))
+	usage, err := b.countUsage(ctx, userID, day, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, id := range ids {
+		if _, ok := caps[id]; !ok {
+			caps[id] = store.DeckCaps{NewPerDay: store.DefaultNewPerDay}
+		}
+	}
+	return caps, usage, nil
 }
 
 // scopeDeckIDs normalises the three deck modes into one deduplicated id set:

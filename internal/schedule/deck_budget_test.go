@@ -142,8 +142,8 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeckBudgets(missing) error = %v", err)
 	}
-	if got := missing[99999]; got.NewPerDay != DefaultNewPerDay || !got.ReviewUnlimited {
-		t.Errorf("missing deck: %+v, want NewPerDay=%d and ReviewUnlimited=true (documented fallback)", got, DefaultNewPerDay)
+	if got := missing[99999]; got.NewPerDay != store.DefaultNewPerDay || !got.ReviewUnlimited {
+		t.Errorf("missing deck: %+v, want NewPerDay=%d and ReviewUnlimited=true (documented fallback)", got, store.DefaultNewPerDay)
 	}
 
 	// Empty-set and non-zero userID validation.

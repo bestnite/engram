@@ -5,9 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"git.nite07.com/nite/engram/internal/reviewday"
-	"git.nite07.com/nite/engram/internal/store"
 )
 
 // DeckBudget is a deck's allowance situation today, for the settings page to show "used / left".
@@ -40,7 +37,7 @@ type DeckBudget struct {
 // written into reviews.review_day at grading time.
 //
 // deckIDs is the set of decks to query; an empty set returns an empty map (no error). When a deck column is unreadable (deck row missing)
-// the resolveScope fallback applies: NewPerDay uses DefaultNewPerDay, ReviewsPerDay stays 0 (unlimited).
+// the loadDeckDay fallback applies: NewPerDay uses store.DefaultNewPerDay, ReviewsPerDay stays 0 (unlimited).
 func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs []uint64, opts QueueOptions) (map[uint64]DeckBudget, error) {
 	if userID == 0 {
 		return nil, errors.New("schedule: deck budgets: user id is required")
@@ -59,23 +56,13 @@ func (b *QueueBuilder) DeckBudgets(ctx context.Context, userID uint64, deckIDs [
 		DayCutoffHour: opts.DayCutoffHour,
 	}.withDefaults()
 
-	caps, err := b.loadDeckCaps(ctx, userID, ids)
-	if err != nil {
-		return nil, err
-	}
-	loc := opts.location()
-	day := reviewday.Day(opts.now(), loc, reviewday.ResolveCutoff(opts.DayCutoffHour))
-	usage, err := b.countUsage(ctx, userID, day, ids)
+	caps, usage, err := b.loadDeckDay(ctx, userID, ids, opts)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, id := range ids {
-		c, ok := caps[id]
-		if !ok {
-			// Only an unreadable deck column (deck row missing) falls back to the default; keep the rule in one place with resolveScope.
-			c = store.DeckCaps{NewPerDay: DefaultNewPerDay}
-		}
+		c := caps[id]
 		u := usage[id]
 		newLeft, reviewLeft := deckBudget(c, u)
 		out[id] = DeckBudget{
