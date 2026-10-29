@@ -184,6 +184,11 @@ type addExtraNewCardsIn struct {
 	Count  int    `json:"count,omitempty" jsonschema:"number of extra new cards to allow today (1..1000); omit to use the caller's daily new card limit for the deck"`
 }
 
+// buryCardIn is the input of bury_card.
+type buryCardIn struct {
+	CardID string `json:"card_id" jsonschema:"public id of the card to postpone to the next review day"`
+}
+
 // setDeckPausedIn is the input of set_deck_paused.
 type setDeckPausedIn struct {
 	DeckID string `json:"deck_id" jsonschema:"public id of the deck to pause or resume"`
@@ -506,6 +511,10 @@ func (s *Server) addExtraNewCards(ctx context.Context, id Identity, in addExtraN
 }
 
 // setDeckPaused pauses or resumes a deck for the caller: the same service method as REST `PUT /decks/:id/paused`.
+func (s *Server) buryCard(ctx context.Context, id Identity, in buryCardIn) (any, error) {
+	return s.api.BuryCard(ctx, id.User, in.CardID)
+}
+
 func (s *Server) setDeckPaused(ctx context.Context, id Identity, in setDeckPausedIn) (any, error) {
 	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
 	if err != nil {

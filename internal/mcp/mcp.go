@@ -293,6 +293,7 @@ var toolScopes = map[string]string{
 	"submit_review":        store.ScopeReview,
 	"add_extra_new_cards":  store.ScopeReview,
 	"set_deck_paused":      store.ScopeReview,
+	"bury_card":            store.ScopeReview,
 }
 
 const instructions = "Engram library and scheduler. Tools mirror the REST /api/v1 surface " +
@@ -329,6 +330,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(s, srv, id, "get_due_cards", "Return cards due for review, including their source fields. A choice card's option_order gives the display order of its options: display slot b shows stored option index option_order[b], and a submitted answer still takes a stored option index.", s.getDueCards)
 	addTool(s, srv, id, "submit_review", "Submit a review for a card with optimistic version check: a self-assessed rating (1..4), or for card types graded by the server an answer (or give_up) that the server grades.", s.submitReview)
 	addTool(s, srv, id, "add_extra_new_cards", "Allow extra new cards in one deck for the caller's current review day only, after the daily new card limit is reached. The deck settings do not change, the next review day returns to the daily limit, and other members of a shared deck are not affected. Decks without a daily new card limit return invalid_request. get_due_cards then includes the extra new cards.", s.addExtraNewCards)
+	addTool(s, srv, id, "bury_card", "Postpone one card to the start of the caller's next review day: it leaves today's get_due_cards without any change to its progress and writes no review. The next day is computed in the caller's timezone and day cutoff. Only the caller's own progress is affected, so a reader of a shared deck may bury cards. Mirrors REST POST /cards/{id}/bury.", s.buryCard)
 	addTool(s, srv, id, "set_deck_paused", "Pause or resume one deck for the caller only. A paused deck stays in list_decks with paused=true but leaves get_due_cards when no deck is given, the due count of get_stats and the reminder mail; naming the deck in get_due_cards still returns its cards. Other members of a shared deck are not affected, progress is kept, and cards keep falling due while the deck is paused. Pausing twice or resuming twice is not an error.", s.setDeckPaused)
 
 	return srv

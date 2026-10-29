@@ -66,7 +66,7 @@ Engram 内置 Streamable HTTP MCP 服务（挂载于 `/mcp`），通过用户 AP
 
 ### 工具列表
 
-Engram 暴露 21 个业务 MCP 工具：
+Engram 暴露 22 个业务 MCP 工具：
 
 - `list_decks` / `create_deck` / `update_deck`：查看可访问卡组、创建新卡组并指定调度预设，或修改卡组名称与描述。
 - `delete_deck`：连同笔记、卡片和学习进度一起删除卡组。仅所有者可以执行，且删除后不可恢复。
@@ -76,6 +76,7 @@ Engram 暴露 21 个业务 MCP 工具：
 - `create_notes` / `update_note` / `delete_note` / `bulk_notes`：批量建卡、就地更新、删除，以及批量打标签或删除；支持 Dry-Run 校验。
 - `get_due_cards` / `submit_review`：拉取今日待复习卡片并提交复习结果、推动排程。自评题型提交评分（`Again`、`Hard`、`Good`、`Easy`），简答题还可以附带学习者写下的作答，随复习记录保存；作答类题型（填空、列表、输入作答、数值、选择、判断）提交作答，由服务端判分。
 - `add_extra_new_cards`：学完每日新卡上限后，为某个卡组追加今天的新卡额度，只对当前复习日生效；卡组设置不变，第二天回到每日上限。
+- `bury_card`：把一张卡推迟到你的下一个复习日开始时，不改动学习进度。对应 REST `POST /cards/{id}/bury`。
 - `set_deck_paused`：只为自己暂停或恢复一个卡组。暂停的卡组不进入默认复习队列、待复习数和提醒邮件，但学习进度保留，指定这个卡组时仍可复习。
 - `get_stats`：获取用户学习总览、各状态卡片数及留存率分析。
 - `export_deck` / `import_deck`：卡组包（`.edeck`）导出与导入。

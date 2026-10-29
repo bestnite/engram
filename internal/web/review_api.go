@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -170,10 +169,9 @@ func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest,
 	s.writeReviewResult(c, user, scope, result, gin.H{"gave_up": true})
 }
 
-// reviewBury is the SPA entry point for bury: session + CSRF protected, writes the caller's own card_states.due_at (pushed to the next
-// review day); the scheduling logic still lives in internal/schedule (schedule.Bury), and transport only does parameter validation and transaction boundaries
-// (AGENTS.md §2.3.6: one piece of business logic, two transports). Bury only needs reader — what it writes is the caller's own progress
-// for (card_id, user_id), so a reader of a shared deck can review on their own. The response carries the queue rebuilt over the same scope.
+// reviewBury is the SPA entry point for bury: session + CSRF protected. The business lives in the service's BuryCard (shared
+// with REST and MCP: the caller's own card is postponed to their next review day, reader suffices); the response carries
+// the queue rebuilt over the same scope.
 func (s *Server) reviewBury(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -185,31 +183,13 @@ func (s *Server) reviewBury(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	card, _, scope, ok := s.reviewCard(c, user, req.Deck, req.Tags, req.CardID)
+	_, _, scope, ok := s.reviewCard(c, user, req.Deck, req.Tags, req.CardID)
 	if !ok {
 		return
 	}
-	ctx := c.Request.Context()
-	tx := s.db.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		s.logger.Error("begin spa bury transaction failed", "user_id", user.ID, "error", tx.Error)
-		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
-		return
-	}
-	// The "next review day" must be computed from the user's own timezone and day cutoff: computed in UTC, a card buried in the morning at UTC+8
-	// comes back into the queue at noon that same day.
-	if _, err := schedule.Bury(ctx, tx, schedule.BuryInput{
-		CardID: card.ID, UserID: user.ID, Now: time.Now().UTC(),
-		Timezone: user.Timezone, DayCutoffHour: user.DayCutoffHour,
-	}); err != nil {
-		_ = tx.Rollback().Error
-		s.logger.Error("bury review card failed", "user_id", user.ID, "card_id", card.ID, "error", err)
-		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
-		return
-	}
-	if err := tx.Commit().Error; err != nil {
-		s.logger.Error("commit spa bury failed", "user_id", user.ID, "error", err)
-		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
+	if _, err := s.api.BuryCard(c.Request.Context(), user, req.CardID); err != nil {
+		se := apiError(err)
+		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
 	s.writeQueue(c, user, scope)
