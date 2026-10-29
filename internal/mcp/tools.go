@@ -50,7 +50,7 @@ type bulkDecksIn struct {
 // searchNotesIn is the input of search_notes; deck_id is required.
 type searchNotesIn struct {
 	DeckID  string `json:"deck_id" jsonschema:"the public id of the deck to search in"`
-	Query   string `json:"q,omitempty" jsonschema:"keyword matched against note fields"`
+	Query   string `json:"q,omitempty" jsonschema:"keywords matched case-insensitively against the text of the note fields; every whitespace-separated term must occur"`
 	Tag     string `json:"tag,omitempty" jsonschema:"exact tag filter"`
 	Kind    string `json:"kind,omitempty" jsonschema:"card type filter (e.g. basic, cloze)"`
 	Status  string `json:"status,omitempty" jsonschema:"note status filter"`

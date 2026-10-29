@@ -51,6 +51,7 @@ type NoteListOptions struct {
 	// PerPage 0 falls back to DefaultNotePageSize.
 	PerPage int
 	// Query searches the note's field content (the text of every field, front/back alike), case-insensitively.
+	// Every whitespace-separated term must occur; the terms need not be adjacent.
 	Query string
 	// Tag matches a tag in tags_json exactly (quoted boundaries, so a prefix does not match).
 	Tag string
@@ -95,7 +96,8 @@ func NewNoteStore(db *gorm.DB) *NoteStore {
 	return &NoteStore{db: db, registry: cardtype.Default}
 }
 
-// prepareNoteFields validates the kind's fields, serializes fields into n.FieldsJSON and returns the cards this note should produce.
+// prepareNoteFields validates the kind's fields, serializes fields into n.FieldsJSON, derives n.SearchText from them
+// and returns the cards this note should produce.
 // Validation completes before the write so illegal content never lands in the database; the returned error is readable English naming the field.
 func (s *NoteStore) prepareNoteFields(n *Note, fields map[string]any) ([]cardtype.Card, error) {
 	if n.Kind == "" {
@@ -113,6 +115,7 @@ func (s *NoteStore) prepareNoteFields(n *Note, fields map[string]any) ([]cardtyp
 		return nil, fmt.Errorf("encode note fields: %w", err)
 	}
 	n.FieldsJSON = string(raw)
+	n.SearchText = noteSearchText(fields)
 	return wanted, nil
 }
 
@@ -275,6 +278,7 @@ func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	updates := map[string]any{
 		"kind":        n.Kind,
 		"fields_json": n.FieldsJSON,
+		"search_text": n.SearchText,
 		"tags_json":   n.TagsJSON,
 		"updated_at":  now,
 	}
@@ -321,9 +325,9 @@ func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) err
 
 // List pages through a deck's notes by criteria, returning the rows of this page and the total number of matches.
 //
-// Query conventions: paging is always LIMIT/OFFSET; fuzzy matching uses LOWER(col) LIKE,
-// never PG-only ILIKE or an expression index. Search covers the text of every field in fields_json,
-// so front and back both hit; tags use a LIKE with quoted boundaries to match an array element exactly.
+// Query conventions: paging is always LIMIT/OFFSET; fuzzy matching uses LIKE on a column lowered in Go,
+// never PG-only ILIKE or an expression index. Search runs on search_text, the text of every field
+// (see whereNoteSearch), so front and back both hit; tags use a LIKE with quoted boundaries to match an array element exactly.
 func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int64, error) {
 	opts = NormalizeNoteListOptions(opts)
 	perPage := opts.PerPage
@@ -345,11 +349,7 @@ func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int
 		if v := strings.TrimSpace(opts.Kind); v != "" {
 			q = q.Where("notes.kind = ?", v)
 		}
-		if v := strings.TrimSpace(opts.Query); v != "" {
-			// LOWER and LIKE mean the same thing on both databases; wildcards are escaped so the value matches literally.
-			q = q.Where("LOWER(notes.fields_json) LIKE ? ESCAPE '\\'",
-				"%"+strings.ToLower(escapeLike(v))+"%")
-		}
+		q = whereNoteSearch(q, opts.Query)
 		if v := strings.TrimSpace(opts.Tag); v != "" {
 			q = WhereNoteTagsAny(q, []string{v})
 		}

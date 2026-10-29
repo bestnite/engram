@@ -141,6 +141,10 @@ type Note struct {
 	Kind       string `gorm:"not null" json:"kind"`
 	FieldsJSON string `gorm:"column:fields_json;not null" json:"fields_json"`
 	TagsJSON   string `gorm:"column:tags_json;not null" json:"tags_json"`
+	// SearchText is a derived column that note search matches against: the note's string field values, lowered (see noteSearchText).
+	// The single source of content stays fields_json: every note write recomputes this column, and no payload carries it.
+	// The column is nullable because AutoMigrate adds it to existing tables, and migration 0011 fills in the existing rows.
+	SearchText string `gorm:"column:search_text" json:"-"`
 	// an idempotency key defined by the caller; NULLs do not participate in uniqueness (both databases allow several NULLs).
 	ExternalRef   *string        `gorm:"uniqueIndex:idx_notes_deck_external_ref" json:"external_ref,omitempty"`
 	Source        *string        `json:"source,omitempty"` // manual | api | import

@@ -88,6 +88,46 @@ var BuiltinMigrations = []Migration{
 		Name: "0010_drop_deck_archived_at",
 		Up:   dropDeckArchivedAt,
 	},
+	{
+		// Note search moved from the JSON encoding of the fields to the derived notes.search_text column. AutoMigrate adds the
+		// column empty, and a note written before the upgrade would never match a search, so this fills it for every existing note,
+		// soft-deleted ones included because they can be restored.
+		Name: "0011_backfill_note_search_text",
+		Up:   backfillNoteSearchText,
+	},
+}
+
+// backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).
+// Rows are read in primary-key batches, so memory use is independent of the note count. A note whose fields fail to parse gets an
+// empty search text: it cannot match a search, which is how the rest of the code treats corrupt fields.
+// UpdateColumn leaves updated_at alone: the note's content did not change.
+func backfillNoteSearchText(tx *gorm.DB) error {
+	if !tx.Migrator().HasColumn("notes", "search_text") {
+		return nil
+	}
+	const batchSize = 500
+	var last uint64
+	for {
+		var batch []Note
+		if err := tx.Unscoped().Select("id", "fields_json").Where("id > ?", last).
+			Order("id ASC").Limit(batchSize).Find(&batch).Error; err != nil {
+			return fmt.Errorf("backfill note search text: scan notes after id %d: %w", last, err)
+		}
+		if len(batch) == 0 {
+			return nil
+		}
+		for _, n := range batch {
+			last = n.ID
+			text := ""
+			if fields, err := ParseFields(n.FieldsJSON); err == nil {
+				text = noteSearchText(fields)
+			}
+			if err := tx.Unscoped().Model(&Note{}).Where("id = ?", n.ID).
+				UpdateColumn("search_text", text).Error; err != nil {
+				return fmt.Errorf("backfill note search text: note %d: %w", n.ID, err)
+			}
+		}
+	}
 }
 
 // dropDeckArchivedAt drops the decks.archived_at column.
