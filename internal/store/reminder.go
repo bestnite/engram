@@ -52,13 +52,15 @@ type ReminderCandidate struct {
 //
 // The due definition matches the schedule queue and DueQueueSize: only card_states that are scheduled with due_at <= now,
 // excluding soft-deleted cards/notes, suspended cards and the decks the user paused (a paused deck must not prompt a reminder).
+// A state='new' row is left out even when its due_at has passed: burying a new card writes such a row, and the queue treats it as a
+// new card under new_per_day rather than a due one, so counting it would announce cards the review page does not show as due.
 // One user may have several rows, so GROUP BY merges them and yields the due count along the way.
 func ReminderCandidates(ctx context.Context, db *gorm.DB, now time.Time) ([]ReminderCandidate, error) {
 	var out []ReminderCandidate
 	err := db.WithContext(ctx).Table("users AS u").
 		Select("u.id AS id, u.email AS email, u.locale AS locale, u.timezone AS timezone, "+
 			"u.day_cutoff_hour AS day_cutoff_hour, u.reminder_hour AS reminder_hour, COUNT(cs.card_id) AS due_count").
-		Joins("JOIN card_states AS cs ON cs.user_id = u.id AND cs.due_at IS NOT NULL AND cs.due_at <= ?", now.UTC()).
+		Joins("JOIN card_states AS cs ON cs.user_id = u.id AND cs.state <> ? AND cs.due_at IS NOT NULL AND cs.due_at <= ?", "new", now.UTC()).
 		Joins("JOIN cards AS c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL").
 		Joins("JOIN notes AS n ON n.id = c.note_id AND n.deleted_at IS NULL").
 		Joins("LEFT JOIN deck_pauses AS dp ON dp.deck_id = n.deck_id AND dp.user_id = u.id").

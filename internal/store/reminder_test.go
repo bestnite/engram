@@ -104,7 +104,7 @@ func TestReminderLogIsUniquePerUserDay(t *testing.T) {
 }
 
 // TestReminderCandidatesOnlyReturnsDueActiveUsers verifies the candidates hold only active users with due cards,
-// excluding suspended cards, cards not yet due and disabled accounts. It runs on both drivers: the candidate query's GROUP BY + JOIN is a hotspot for cross-database differences.
+// excluding suspended cards, cards not yet due, buried new cards and disabled accounts. It runs on both drivers: the candidate query's GROUP BY + JOIN is a hotspot for cross-database differences.
 func TestReminderCandidatesOnlyReturnsDueActiveUsers(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -119,6 +119,11 @@ func TestReminderCandidatesOnlyReturnsDueActiveUsers(t *testing.T) {
 			due := seedReminderUser(t, db, "due", "due@example.com", past, false)
 			seedReminderUser(t, db, "suspended", "suspended@example.com", past, true)
 			seedReminderUser(t, db, "future", "future@example.com", future, false)
+			// A buried new card keeps state=new with a due_at that has passed; the queue treats it as a new card, so no reminder.
+			buried := seedReminderUser(t, db, "buried", "buried@example.com", past, false)
+			if err := db.Model(&CardState{}).Where("user_id = ?", buried).Update("state", "new").Error; err != nil {
+				t.Fatalf("mark state new: %v", err)
+			}
 			// A disabled user should not be nudged even with due cards.
 			disabled := seedReminderUser(t, db, "disabled", "disabled@example.com", past, false)
 			if err := db.Model(&User{}).Where("id = ?", disabled).Update("status", StatusDisabled).Error; err != nil {
