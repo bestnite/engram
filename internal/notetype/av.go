@@ -39,24 +39,27 @@ import (
 // [anki:tts ...]...[/anki:tts] directive. A sound tag only sets Name; a TTS tag
 // sets Lang, Voices, Speed, FieldText and possibly ClozeBlank and OtherArgs.
 type AVTag struct {
-	Kind string
+	Kind string `json:"kind"`
+	// Side is the card side the tag was extracted from: "q" for the question and "a" for the answer. The answer
+	// face carries the question's tags as well, because {{FrontSide}} inserts text whose markers still address them.
+	Side string `json:"side"`
 	// Name is the filename inside a sound tag, with HTML entities decoded.
-	Name string
+	Name string `json:"name,omitempty"`
 	// Lang is the TTS language, for example "en_US".
-	Lang string
+	Lang string `json:"lang,omitempty"`
 	// Voices lists the requested TTS voices in the order the option names them.
-	Voices []string
+	Voices []string `json:"voices,omitempty"`
 	// Speed is the requested speech rate. Anki's default, also used for an
 	// option that does not parse as a number, is 1.0.
-	Speed float64
+	Speed float64 `json:"speed"`
 	// OtherArgs holds every TTS option this port does not interpret, as
 	// "key=value", in the order the options appear in the card text.
-	OtherArgs []string
+	OtherArgs []string `json:"other_args,omitempty"`
 	// FieldText is the text to speak: the directive body with HTML removed.
-	FieldText string
+	FieldText string `json:"field_text,omitempty"`
 	// ClozeBlank is the value of the cloze_blank option, or nil when the option
 	// is absent. In a cloze TTS tag it replaces every "[...]" in FieldText.
-	ClozeBlank *string
+	ClozeBlank *string `json:"cloze_blank,omitempty"`
 }
 
 // nodeKind is the kind of one parsed card-text node.
@@ -101,14 +104,16 @@ func ExtractAVTags(html string, side string) (string, []AVTag) {
 			written.WriteString(node.text)
 		case nodeSound:
 			written.WriteString(playMarker(side, len(tags)))
-			tags = append(tags, AVTag{Kind: "sound", Name: decodeEntities(node.text)})
+			tags = append(tags, AVTag{Kind: "sound", Side: side, Name: decodeEntities(node.text)})
 		case nodeDirective:
 			if node.name != "tts" {
 				written.WriteString(node.directiveMarkup())
 				continue
 			}
 			written.WriteString(playMarker(side, len(tags)))
-			tags = append(tags, node.ttsTag())
+			tag := node.ttsTag()
+			tag.Side = side
+			tags = append(tags, tag)
 		}
 	}
 	return written.String(), tags

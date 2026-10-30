@@ -35,7 +35,7 @@ interface FakeUtterance {
   onerror: ((event: { error: string }) => void) | null;
 }
 
-function installSpeech(voices: Array<{ lang: string }> = [{ lang: 'ja-JP' }]) {
+function installSpeech(voices: Array<{ lang: string; name?: string }> = [{ lang: 'ja-JP' }]) {
   const spoken: FakeUtterance[] = [];
   const utteranceConstructor = class implements FakeUtterance {
     text: string;
@@ -56,7 +56,7 @@ function installSpeech(voices: Array<{ lang: string }> = [{ lang: 'ja-JP' }]) {
     getVoices: vi.fn(() =>
       voices.map((voice, index) => ({
         lang: voice.lang,
-        name: `voice-${index}`,
+        name: voice.name ?? `voice-${index}`,
         default: index === 0,
         localService: true,
         voiceURI: `voice-${index}`,
@@ -177,6 +177,32 @@ describe('enhanceShortcodes — speech', () => {
     click(button);
     expect(synth.cancel).toHaveBeenCalled();
     expect(button.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('prefers a requested voice by name and falls back to the language voice', () => {
+    const named = installSpeech([
+      { lang: 'en-US', name: 'English' },
+      { lang: 'ja-JP', name: 'Japanese' },
+    ]);
+    const root = container(ttsHTML('こんにちは', 'data-tts-lang="ja-JP" data-tts-voices="Missing, Japanese"'));
+    enhanceShortcodes([root]);
+
+    click(control(root));
+
+    expect(named.spoken[0]!.voice).toMatchObject({ name: 'Japanese' });
+  });
+
+  it('falls back to the language default when no requested name matches', () => {
+    const named = installSpeech([
+      { lang: 'en-US', name: 'English' },
+      { lang: 'ja-JP', name: 'Japanese' },
+    ]);
+    const root = container(ttsHTML('こんにちは', 'data-tts-lang="ja-JP" data-tts-voices="Missing"'));
+    enhanceShortcodes([root]);
+
+    click(control(root));
+
+    expect(named.spoken[0]!.voice).toMatchObject({ name: 'Japanese' });
   });
 
   it('leaves only the visible text when the speech API is missing', () => {

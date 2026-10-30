@@ -1,13 +1,15 @@
 import { isSupportedLocale, setLocale } from '../lib/i18n';
-import { enhanceShortcodes } from '../lib/shortcodes';
+import { enhanceShortcodes, playShortcodeSequence } from '../lib/shortcodes';
 import { readMathJaxURL, typesetCard } from './mathjax';
+import type { AVTag } from '../lib/api/types';
 import {
   applyBrowserClasses,
   attachAnswerControls,
   bodyClassName,
+  enhanceAVMarkers,
   enhanceSoundTags,
   installReviewerGlobals,
-  playSound,
+  playAVTag,
   type AnswerReader,
   type FrameAnswerValue,
 } from './reviewer';
@@ -39,6 +41,8 @@ export interface ShowMessage {
   side: string;
   mediaBase: string;
   autoplay: boolean;
+  /** The audio and TTS tags the face's play markers address, with the side each was extracted from. */
+  avTags: AVTag[];
   /** The card's zero-based template ordinal; the body class is `card` + ordinal + 1, as Anki writes it. */
   ordinal: number;
 }
@@ -64,6 +68,12 @@ function isString(value: unknown): value is string {
   return typeof value === 'string';
 }
 
+/** One AV tag from the parent. Only the fields the frame reads are checked; the server owns their types. */
+function isAVTag(value: unknown): value is AVTag {
+  if (!isRecord(value)) return false;
+  return (value.kind === 'sound' || value.kind === 'tts') && (value.side === 'q' || value.side === 'a');
+}
+
 function parseShow(data: Record<string, unknown>): ShowMessage | null {
   const { html, css, bodyClass, side, mediaBase, autoplay, ordinal } = data;
   if (
@@ -78,7 +88,9 @@ function parseShow(data: Record<string, unknown>): ShowMessage | null {
   ) {
     return null;
   }
-  return { type: 'show', html, css, bodyClass, side, mediaBase, autoplay, ordinal };
+  // A face from an older server carries no tag list; the literal [sound:] fallback still finds those tags.
+  const avTags = Array.isArray(data.avTags) ? data.avTags.filter(isAVTag) : [];
+  return { type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal };
 }
 
 function containsMath(html: string): boolean {
@@ -110,7 +122,6 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   applyBrowserClasses(doc.documentElement, win.navigator.userAgent);
 
   let dark = false;
-  // Stored for the autoplay phase; this phase deliberately does nothing with it.
   let autoplay = false;
   let lastHeight = -1;
   let observer: ResizeObserver | null = null;
@@ -120,7 +131,8 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   let bodyBase = 'card';
   let cardOrdinal = 0;
   let side = 'question';
-  let sounds: HTMLElement[] = [];
+  /** Every playable element of the current face, in document order. */
+  let sources: HTMLElement[] = [];
 
   function post(message: Record<string, unknown>): void {
     parent?.postMessage(message, '*');
@@ -153,11 +165,10 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     emitAnswer,
     typedAnswer: () => answerReader?.typedAnswer() ?? '',
     play: (requested, index) => {
-      // The frame holds one side of the card. A command for the other side has nothing to play here and is ignored;
-      // the answer frame receives `play:a:N` and the question frame `play:q:N`.
-      const expected = side === 'answer' ? 'a' : 'q';
-      if (requested === expected && Number.isInteger(index) && index >= 0) {
-        playSound(sounds, index);
+      // A command names the side it was written for: the question frame addresses q markers and the answer frame a
+      // markers, while an answer face also holds the question's q markers inside {{FrontSide}}.
+      if ((requested === 'q' || requested === 'a') && Number.isInteger(index) && index >= 0) {
+        playAVTag(sources, requested, index);
       }
     },
   });
@@ -223,9 +234,7 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   }
 
   async function show(message: ShowMessage): Promise<void> {
-    // Stored for the autoplay phase; this phase does nothing with it.
     autoplay = message.autoplay;
-    void autoplay;
 
     side = message.side;
     bodyBase = message.bodyClass;
@@ -246,16 +255,58 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     if (containsMath(message.html)) {
       await typesetCard(win, doc, mathjaxURL, nextRoot);
     }
-    // `[sound:]` tags become audio-control sources before the shortcode enhancer runs, so every tag gets engram's
-    // play/pause, seek, ±5 s and time controls. The order is the tag order Anki's `play:N` commands address.
-    sounds = enhanceSoundTags(doc, nextRoot);
+    // Play markers become the same audio/video/speech elements the shortcodes produce, so one control module drives
+    // every tag. A face that still carries literal [sound:] tags gets the fallback; both lists stay in document order.
+    const sideCode = side === 'answer' ? 'a' : 'q';
+    sources = enhanceAVMarkers(doc, nextRoot, message.avTags);
+    sources.push(...enhanceSoundTags(doc, nextRoot, sideCode));
     // The shortcode controls are part of the face, so they are attached here, after the content and its typesetting: a card
     // face leaving the parent DOM must not lose its audio or TTS controls.
     enhanceShortcodes([nextRoot]);
     if (message.side === 'question') focusAnswer(nextRoot);
     win.onShownHook?.();
+    // Autoplay follows the deck setting and starts only the tags this face adds: on the answer side the question's
+    // tags, carried in by {{FrontSide}}, are already markers with side q and are not replayed.
+    if (autoplay) playSide(sideCode);
 
     if (message.side === 'answer') scrollToAnswer();
+  }
+
+  /** Elements of one marker side, in document order. */
+  function sideSources(markerSide: string): HTMLElement[] {
+    return sources.filter((source) => source.dataset.avSide === markerSide);
+  }
+
+  /** Starts every tag of one side: audio and speech run one after another, videos start at their own place. */
+  function playSide(markerSide: string): void {
+    const elements = sideSources(markerSide);
+    const videos = elements.filter((element) => element.tagName.toLowerCase() === 'video');
+    const controls = elements.filter((element) => element.tagName.toLowerCase() !== 'video');
+    if (controls.length > 0) playShortcodeSequence(controls);
+    for (const video of videos) {
+      const element = video as HTMLVideoElement;
+      try {
+        element.currentTime = 0;
+      } catch {
+        // Metadata may not be loaded yet; the element still plays from its start.
+      }
+      void element.play().catch(() => {});
+    }
+  }
+
+  /** `r` and `F5` replay every tag the face holds, including the question's tags carried into an answer face. */
+  function replayAll(): void {
+    playShortcodeSequence(sources.filter((element) => element.tagName.toLowerCase() !== 'video'));
+    for (const video of sources) {
+      if (video.tagName.toLowerCase() !== 'video') continue;
+      const element = video as HTMLVideoElement;
+      try {
+        element.currentTime = 0;
+      } catch {
+        // A video whose metadata is not loaded cannot seek.
+      }
+      void element.play().catch(() => {});
+    }
   }
 
   /** Puts the caret in the answer input a question face shows, as Anki's reviewer does on a type-in card. */
@@ -287,8 +338,8 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
         if (typeof data.dark === 'boolean') applyTheme(data.dark);
         return;
       case 'replay':
-        // Replay starts the first tag in the face's own order; the tag's own control does the playback.
-        playSound(sounds, 0);
+        // Replay restarts the face's tags in their own order.
+        replayAll();
         return;
       default:
         return;
@@ -324,6 +375,14 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
       }
       const tag = active.tagName.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || active.isContentEditable) return;
+    }
+    // r and F5 replay the face's audio. F5 is the browser's reload key, so it is prevented here; a modifier means the
+    // user is asking the browser for something else (Ctrl+R reloads), and the key then travels on unchanged.
+    const plainKey = !event.ctrlKey && !event.altKey && !event.metaKey;
+    if (plainKey && (event.key === 'F5' || event.key.toLowerCase() === 'r')) {
+      event.preventDefault();
+      replayAll();
+      return;
     }
     postKey(event);
   }

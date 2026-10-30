@@ -20,6 +20,7 @@ func deckSettingsPayload(deck *store.Deck, role, presetPublicID string, budget s
 		DeckDescription: deck.Description,
 		Role:            role,
 		PresetID:        presetPublicID,
+		Autoplay:        deck.AutoplayEnabled(),
 		NewPerDay:       budget.NewPerDay,
 		ReviewsPerDay:   budget.ReviewsPerDay,
 		NewExtra:        budget.NewExtra,
@@ -44,10 +45,12 @@ type deckSettingsResponse struct {
 	// DeckDescription lets the owner pre-fill the "deck info" form on the settings page; sharing members cannot change it, and reading it does no harm.
 	DeckDescription string `json:"deck_description"`
 	// Role is the caller's role on the deck (owner / editor / reader), and the page uses it to decide whether to show owner-only entries.
-	Role          string `json:"role"`
-	PresetID      string `json:"preset_id"`
-	NewPerDay     int    `json:"new_per_day"`
-	ReviewsPerDay int    `json:"reviews_per_day"`
+	Role     string `json:"role"`
+	PresetID string `json:"preset_id"`
+	// Autoplay is the deck-wide setting the review frame reads; only the owner may change it.
+	Autoplay      bool `json:"autoplay"`
+	NewPerDay     int  `json:"new_per_day"`
+	ReviewsPerDay int  `json:"reviews_per_day"`
 	// NewExtra is the extra new-card quota added by today's "one more round"; NewLeft already includes it, NewPerDay does not.
 	NewExtra        int  `json:"new_extra"`
 	NewUsed         int  `json:"new_used"`
@@ -64,6 +67,9 @@ type deckSettingsRequest struct {
 	NewPerDay     *int    `json:"new_per_day"`
 	ReviewsPerDay *int    `json:"reviews_per_day"`
 	PresetID      *string `json:"preset_id"`
+	// Autoplay is optional and deck-wide: omitting it leaves the setting untouched. A sharing member may change their
+	// own quotas but not this column, which belongs to the deck.
+	Autoplay *bool `json:"autoplay"`
 }
 
 // registerDeckSettingsAPIRoutes mounts the SPA's deck study settings read/write API (any deck member; writes go through CSRF).
@@ -139,6 +145,12 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 		shareError(c, http.StatusBadRequest, "invalid_request")
 		return
 	}
+	// Autoplay is a deck-wide presentation setting: a sharing member changes only their own study settings, so a
+	// request that carries it from anyone but the owner is rejected before any write.
+	if req.Autoplay != nil && role != store.RoleOwner {
+		shareError(c, http.StatusForbidden, "forbidden")
+		return
+	}
 	ctx := c.Request.Context()
 	// The preset is optional: a request that only changes quotas does not carry it.
 	var presetID *uint64
@@ -162,6 +174,20 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 		s.logger.Error("set study settings for SPA failed", "deck_id", deck.ID, "error", err)
 		shareError(c, http.StatusInternalServerError, "internal_error")
 		return
+	}
+	if req.Autoplay != nil {
+		if err := s.decks.SetAutoplay(ctx, user.ID, deck.ID, *req.Autoplay); err != nil {
+			s.logger.Error("set deck autoplay for SPA failed", "deck_id", deck.ID, "error", err)
+			shareError(c, http.StatusInternalServerError, "internal_error")
+			return
+		}
+		s.auditor.Record(ctx, store.AuditEntry{
+			UserID:     store.Ptr(user.ID),
+			Action:     store.ActionDeckAutoplay,
+			TargetType: "deck",
+			TargetID:   store.Ptr(deck.ID),
+			Detail:     map[string]any{"autoplay": *req.Autoplay},
+		})
 	}
 	if presetID != nil {
 		s.auditor.Record(ctx, store.AuditEntry{

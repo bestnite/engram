@@ -1,4 +1,5 @@
 import $ from 'jquery';
+import type { AVTag } from '../lib/api/types';
 
 /**
  * The Anki-compatible reviewer environment of the card frame.
@@ -183,25 +184,140 @@ export function attachAnswerControls(root: Element, emit: (value: FrameAnswerVal
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */
-/* [sound:] tags                                                                                                     */
+/* [sound:] and TTS tags                                                                                             */
 /* ---------------------------------------------------------------------------------------------------------------- */
 
 const SOUND_PATTERN = /\[sound:([^[\]]+)\]/g;
+/** The marker ExtractAVTags writes in place of a tag; the tag list describes it by side and position. */
+const PLAY_MARKER_PATTERN = /\[anki:play:([qa]):(\d+)\]/g;
+/** A [sound:] whose file the browser plays as video rather than audio. */
+const VIDEO_EXTENSION = /\.(?:mp4|webm)(?:[?#].*)?$/i;
+
+/** Copies the editor's segment attributes from a wrapping span.engram-sound onto the playable element. */
+function applySegment(wrapper: Element | null, target: HTMLElement): void {
+  if (!wrapper) return;
+  const pairs: Array<[string, string]> = [
+    ['data-start', 'data-audio-start'],
+    ['data-end', 'data-audio-end'],
+    ['data-rate', 'data-audio-rate'],
+  ];
+  for (const [from, to] of pairs) {
+    const value = wrapper.getAttribute(from);
+    if (value !== null && value !== '') target.setAttribute(to, value);
+  }
+  if (wrapper.hasAttribute('data-loop')) target.setAttribute('data-audio-loop', '1');
+}
+
+/** The wrapper an audio tag's segment attributes live on, when the author set any. */
+function soundWrapper(node: Text): Element | null {
+  return node.parentElement?.closest('.engram-sound') ?? null;
+}
+
+/** One play marker's element: an audio source for the shortcode player, a video, or a speech source. */
+function avElement(doc: Document, node: Text, tag: AVTag, side: 'q' | 'a', index: number): HTMLElement {
+  if (tag.kind === 'sound') {
+    const name = tag.name ?? '';
+    if (VIDEO_EXTENSION.test(name)) {
+      const video = doc.createElement('video');
+      video.className = 'engram-video';
+      video.setAttribute('controls', '');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('preload', 'metadata');
+      video.setAttribute('data-av-side', side);
+      video.setAttribute('data-av-index', String(index));
+      video.src = name;
+      return video;
+    }
+    const source = doc.createElement('span');
+    source.className = 'engram-audio engram-sound';
+    source.setAttribute('data-audio-src', name);
+    source.setAttribute('data-av-side', side);
+    source.setAttribute('data-av-index', String(index));
+    applySegment(soundWrapper(node), source);
+    source.textContent = name;
+    return source;
+  }
+
+  const source = doc.createElement('span');
+  source.className = 'engram-tts';
+  source.setAttribute('data-tts-text', tag.field_text ?? '');
+  // Anki removes the spoken body from the card text and leaves only the play control; the shortcode control's hide
+  // flag does the same, while restoring the text if speech is unavailable.
+  source.setAttribute('data-tts-hide', '1');
+  const lang = (tag.lang ?? '').replace(/_/g, '-');
+  if (lang !== '') source.setAttribute('data-tts-lang', lang);
+  if (tag.voices && tag.voices.length > 0) source.setAttribute('data-tts-voices', tag.voices.join(','));
+  if (Number.isFinite(tag.speed)) source.setAttribute('data-tts-rate', String(tag.speed));
+  source.setAttribute('data-av-side', side);
+  source.setAttribute('data-av-index', String(index));
+  source.textContent = tag.field_text ?? '';
+  return source;
+}
 
 /**
- * enhanceSoundTags replaces every literal `[sound:name]` in the face's text nodes with an audio control source. The
- * server leaves the tag in the rendered HTML (it cannot know whether the client can play audio); the frame turns it
- * into the same `data-audio-src` element the audio shortcode produces, so engram's play/pause, seek, ±5 s and time
- * controls attach to every tag. The tag grammar is Anki's `[sound:name]`: the prefix is case-sensitive and the name is
- * non-empty and free of `]`.
+ * enhanceAVMarkers replaces every [anki:play:<side>:<n>] marker with the control source the tag list describes.
  *
- * The elements are returned in document order, which is the order `play:q:N` / `play:a:N` addresses.
+ * The server extracts the tags before the frame sees the face, so a marker's side and index identify its entry in
+ * `tags`. A sound tag becomes the same `data-audio-src` element the audio shortcode produces, carrying the segment
+ * attributes of its wrapping span.engram-sound; an mp4 or webm becomes an inline video; a TTS tag becomes the same
+ * `data-tts-*` element the speech shortcode produces. The elements are returned in document order.
  */
-export function enhanceSoundTags(doc: Document, root: Element): HTMLElement[] {
+export function enhanceAVMarkers(doc: Document, root: Element, tags: AVTag[]): HTMLElement[] {
+  if (tags.length === 0) return [];
+  const byMarker = new Map<string, AVTag>();
+  const counters = new Map<string, number>();
+  for (const tag of tags) {
+    // The server lists the question tags first on the answer face; within one side the order it returns is the
+    // marker order, so the running index per side is the marker index.
+    const index = counters.get(tag.side) ?? 0;
+    byMarker.set(`${tag.side}:${index}`, tag);
+    counters.set(tag.side, index + 1);
+  }
+
   const walker = doc.createTreeWalker(root, 0x4 /* NodeFilter.SHOW_TEXT */);
   const textNodes: Text[] = [];
   for (let node = walker.nextNode(); node; node = walker.nextNode()) textNodes.push(node as Text);
 
+  for (const node of textNodes) {
+    const text = node.data;
+    const matches = [...text.matchAll(PLAY_MARKER_PATTERN)];
+    if (matches.length === 0) continue;
+    const fragment = doc.createDocumentFragment();
+    let cursor = 0;
+    for (const match of matches) {
+      const index = match.index ?? 0;
+      if (index > cursor) fragment.appendChild(doc.createTextNode(text.slice(cursor, index)));
+      const side = match[1] === 'a' ? 'a' : 'q';
+      const ordinal = Number(match[2] ?? -1);
+      const tag = byMarker.get(`${side}:${ordinal}`);
+      if (tag) {
+        fragment.appendChild(avElement(doc, node, tag, side, ordinal));
+      } else {
+        // A marker with no tag in the list stays text: inventing a control for it would play the wrong sound.
+        fragment.appendChild(doc.createTextNode(match[0]));
+      }
+      cursor = index + match[0].length;
+    }
+    if (cursor < text.length) fragment.appendChild(doc.createTextNode(text.slice(cursor)));
+    node.replaceWith(fragment);
+  }
+
+  return Array.from(root.querySelectorAll<HTMLElement>('[data-av-side]'));
+}
+
+/**
+ * enhanceSoundTags is the fallback for a face that still carries literal [sound:name] tags rather than extracted
+ * markers (an older response, or a caller that assembled the HTML itself). The tag grammar is Anki's `[sound:name]`:
+ * the prefix is case-sensitive and the name is non-empty and free of `]`.
+ *
+ * The elements are returned in document order, which is the order `play:q:N` / `play:a:N` addresses.
+ */
+export function enhanceSoundTags(doc: Document, root: Element, side: 'q' | 'a'): HTMLElement[] {
+  const walker = doc.createTreeWalker(root, 0x4 /* NodeFilter.SHOW_TEXT */);
+  const textNodes: Text[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) textNodes.push(node as Text);
+
+  const created: HTMLElement[] = [];
   for (const node of textNodes) {
     const text = node.data;
     const matches = [...text.matchAll(SOUND_PATTERN)];
@@ -211,25 +327,42 @@ export function enhanceSoundTags(doc: Document, root: Element): HTMLElement[] {
     for (const match of matches) {
       const index = match.index ?? 0;
       if (index > cursor) fragment.appendChild(doc.createTextNode(text.slice(cursor, index)));
+      const name = match[1] ?? '';
+      const marker = created.length;
       const source = doc.createElement('span');
       source.className = 'engram-audio engram-sound';
-      source.setAttribute('data-audio-src', match[1] ?? '');
-      source.textContent = match[0];
+      source.setAttribute('data-audio-src', name);
+      source.setAttribute('data-av-side', side);
+      source.setAttribute('data-av-index', String(marker));
+      applySegment(soundWrapper(node), source);
+      source.textContent = name;
       fragment.appendChild(source);
+      created.push(source);
       cursor = index + match[0].length;
     }
     if (cursor < text.length) fragment.appendChild(doc.createTextNode(text.slice(cursor)));
     node.replaceWith(fragment);
   }
-
-  return Array.from(root.querySelectorAll<HTMLElement>('span.engram-sound'));
+  return created;
 }
 
-/** Clicks the audio control of one tag; the playback itself belongs to the shortcode control that owns the element. */
-export function playSound(sounds: HTMLElement[], index: number): void {
-  const source = sounds[index];
-  const button = source?.querySelector<HTMLButtonElement>('button[data-shortcode-control="audio"]');
-  button?.click();
+/** Plays the tag at `side:index`: clicks its shortcode control, or starts a video element. */
+export function playAVTag(sources: HTMLElement[], side: string, index: number): void {
+  const source = sources.find(
+    (element) => element.dataset.avSide === side && element.dataset.avIndex === String(index),
+  );
+  if (!source) return;
+  if (source.tagName.toLowerCase() === 'video') {
+    const video = source as HTMLVideoElement;
+    try {
+      video.currentTime = 0;
+    } catch {
+      // A video whose metadata is not loaded cannot seek; it still plays from its start.
+    }
+    void video.play().catch(() => {});
+    return;
+  }
+  source.querySelector<HTMLButtonElement>('button[data-shortcode-control]')?.click();
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */

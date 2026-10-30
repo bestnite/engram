@@ -197,6 +197,8 @@ interface ControlState {
    * the pause's own doing rather than a load failure.
    */
   playToken: number;
+  /** Set by playShortcodeSequence: runs when this control finishes naturally or fails, before the next tag starts. */
+  onEnd: (() => void) | null;
 }
 
 interface ActiveSpeech {
@@ -417,6 +419,9 @@ function markUnavailable(state: ControlState): void {
   status.setAttribute('role', 'status');
   status.textContent = message;
   state.source.appendChild(status);
+  const onEnd = state.onEnd;
+  state.onEnd = null;
+  onEnd?.();
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */
@@ -439,16 +444,30 @@ function voicesOf(synth: SpeechSynthesis): SpeechSynthesisVoice[] {
 }
 
 /**
- * The voice for a BCP-47 tag: an exact match first, then the same primary subtag (so `ja-JP` accepts a `ja` voice).
- * Voices load asynchronously in some browsers; an empty list means "not known yet", which the click path re-checks.
+ * The voice for a BCP-47 tag, after the tag's own `voices` option: a voice whose name matches one of the requested
+ * names, then a voice whose language is the requested language (Anki's language default: exact tag first, then the same
+ * primary subtag, so `ja-JP` accepts a `ja` voice). Voices load asynchronously in some browsers; an empty list means
+ * "not known yet", which the click path re-checks.
  */
-function voiceFor(synth: SpeechSynthesis, lang: string): SpeechSynthesisVoice | null {
-  const wanted = lang.toLowerCase();
+function voiceFor(synth: SpeechSynthesis, lang: string, names: string[] = []): SpeechSynthesisVoice | null {
   const voices = voicesOf(synth);
+  for (const name of names) {
+    const named = voices.find((voice) => voice.name === name);
+    if (named) return named;
+  }
+  const wanted = lang.toLowerCase();
   const exact = voices.find((voice) => voice.lang.toLowerCase() === wanted);
   if (exact) return exact;
   const primary = wanted.split('-')[0] ?? wanted;
   return voices.find((voice) => (voice.lang.toLowerCase().split('-')[0] ?? '') === primary) ?? null;
+}
+
+/** The comma-separated `data-tts-voices` names, trimmed; an empty or absent attribute requests no name. */
+function voiceNames(source: Element): string[] {
+  return (source.getAttribute('data-tts-voices') ?? '')
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name !== '');
 }
 
 /**
@@ -462,7 +481,7 @@ function speechUsable(source: Element): boolean {
   const lang = source.getAttribute('data-tts-lang');
   if (!lang) return true;
   const voices = voicesOf(synth);
-  return voices.length === 0 || voiceFor(synth, lang) !== null;
+  return voices.length === 0 || voiceFor(synth, lang, voiceNames(source)) !== null;
 }
 
 function stopSpeech(): void {
@@ -486,13 +505,13 @@ function finishSpeech(state: ControlState): void {
     activeSpeech = null;
   }
   resetPhase(state);
+  const onEnd = state.onEnd;
+  state.onEnd = null;
+  onEnd?.();
 }
 
-function toggleSpeech(state: ControlState): void {
-  if (state.phase === 'playing') {
-    stopSpeech();
-    return;
-  }
+/** Starts one utterance from the beginning; a caller that wants stop-or-start uses toggleSpeech. */
+function startSpeech(state: ControlState): void {
   const synth = synthesis();
   if (!synth) {
     markUnavailable(state);
@@ -504,7 +523,7 @@ function toggleSpeech(state: ControlState): void {
     return;
   }
   const lang = state.source.getAttribute('data-tts-lang') || document.documentElement.lang || '';
-  const voice = lang ? voiceFor(synth, lang) : null;
+  const voice = lang ? voiceFor(synth, lang, voiceNames(state.source)) : null;
   if (lang && voicesOf(synth).length > 0 && !voice) {
     markUnavailable(state);
     return;
@@ -539,6 +558,14 @@ function toggleSpeech(state: ControlState): void {
   } catch {
     markUnavailable(state);
   }
+}
+
+function toggleSpeech(state: ControlState): void {
+  if (state.phase === 'playing') {
+    stopSpeech();
+    return;
+  }
+  startSpeech(state);
 }
 
 /* ---------------------------------------------------------------------------------------------------------------- */
@@ -755,6 +782,9 @@ function stopAudio(state: ControlState): void {
   if (activeAudio === state) activeAudio = null;
   resetPhase(state);
   resetProgress(state);
+  const onEnd = state.onEnd;
+  state.onEnd = null;
+  onEnd?.();
 }
 
 /**
@@ -939,6 +969,7 @@ function createControl(source: HTMLElement, kind: ControlKind): void {
     ready: false,
     pendingSeek: null,
     playToken: 0,
+    onEnd: null,
   };
   if (kind === 'audio') {
     state.fallback = hideIntoWrapper(source, FALLBACK_MARKER);
@@ -994,6 +1025,55 @@ function reconcilePlayback(): void {
   if (activeAudio && !activeAudio.source.isConnected) stopAudio(activeAudio);
 }
 
+/** The running autoplay/replay sequence, or null. A user click or a new sequence cancels the old one. */
+let activeSequence: { id: number } | null = null;
+let sequenceNumber = 0;
+
+/** Stops a running sequence without stopping the playback it already started. */
+function cancelSequence(): void {
+  activeSequence = null;
+}
+
+/**
+ * Plays the given audio and speech sources one after another, in the order given. A tag that cannot start is
+ * skipped; a user click cancels the rest. Videos are started by the caller, which owns their segment-free playback.
+ */
+export function playShortcodeSequence(sources: HTMLElement[]): void {
+  const sequence = { id: ++sequenceNumber };
+  activeSequence = sequence;
+  let index = 0;
+  const step = (): void => {
+    if (activeSequence !== sequence) return;
+    const source = sources[index++];
+    if (!source) {
+      activeSequence = null;
+      return;
+    }
+    const button = source.querySelector<HTMLButtonElement>(`button[${BUTTON_MARKER}]`);
+    const state = button ? controls.get(button) : null;
+    if (!state) {
+      step();
+      return;
+    }
+    state.onEnd = step;
+    if (state.kind === 'audio') {
+      startAudio(state);
+      // A source that could not start leaves the control idle and never calls onEnd; the next tag must still run.
+      if (state.phase === 'idle' && state.onEnd === step) {
+        state.onEnd = null;
+        step();
+      }
+      return;
+    }
+    startSpeech(state);
+    if (state.phase !== 'playing' && state.onEnd === step) {
+      state.onEnd = null;
+      step();
+    }
+  };
+  step();
+}
+
 /** The delegated handler: every container gets exactly one of these, and buttons carry no listener of their own. */
 function handleClick(event: Event): void {
   const target = event.target;
@@ -1015,6 +1095,8 @@ function handleClick(event: Event): void {
   if (!state) return;
   event.preventDefault();
   event.stopPropagation();
+  // A click is the user taking over: the rest of an autoplay/replay sequence must not keep playing behind it.
+  cancelSequence();
   if (state.kind === 'tts') toggleSpeech(state);
   else toggleAudio(state);
 }
@@ -1109,6 +1191,7 @@ export function enhanceShortcodes(nodes: Array<Element | null | undefined>): voi
 
 /** Stops any playback this module started; views call it when they unmount so speech does not outlive the page. */
 export function stopShortcodePlayback(): void {
+  cancelSequence();
   stopSpeech();
   if (activeAudio) stopAudio(activeAudio);
 }

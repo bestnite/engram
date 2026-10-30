@@ -233,6 +233,11 @@ func (s *DeckStore) SetCaps(ctx context.Context, actorUserID, deckID uint64, cap
 	})
 }
 
+// SetAutoplay writes the deck's autoplay setting; only the owner may.
+func (s *DeckStore) SetAutoplay(ctx context.Context, actorUserID, deckID uint64, enabled bool) error {
+	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"autoplay": enabled})
+}
+
 // mutateOwned is the column update channel with the owner check that SetCaps writes through.
 func (s *DeckStore) mutateOwned(ctx context.Context, actorUserID, deckID uint64, updates map[string]any) error {
 	existing, err := s.ByID(ctx, deckID)

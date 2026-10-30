@@ -8,6 +8,11 @@ export interface Deck {
   new_per_day: number;
   reviews_per_day: number;
   preset_id: string;
+  /**
+   * Deck-wide autoplay setting (Go: DeckResponse.Autoplay): whether a card face starts its audio tags without a click.
+   * A response from an older server omits it; the deck default is on.
+   */
+  autoplay?: boolean;
   created_at: string;
   /**
    * The caller's explicit relation to this deck (Go: DeckResponse.Role).
@@ -106,6 +111,8 @@ export interface DeckSettings {
   /** The caller's role on the deck: settings belong to the caller, so the owner and each shared member have their own copy. */
   role: 'owner' | 'editor' | 'reader';
   preset_id: string;
+  /** Deck-wide autoplay setting; only the owner can change it (Go: deckSettingsResponse.Autoplay). */
+  autoplay?: boolean;
   new_per_day: number;
   reviews_per_day: number;
   /** New-card quota added by today's "one more round"; new_left already counts it, new_per_day does not. */
@@ -126,6 +133,8 @@ export interface UpdateDeckSettingsRequest {
   new_per_day: number;
   reviews_per_day: number;
   preset_id?: string;
+  /** Optional deck-wide setting; the owner only. Omitting it leaves the value untouched. */
+  autoplay?: boolean;
 }
 
 /** POST /api/v1/decks request and response body. An empty preset_id uses the server's default preset. */
@@ -175,11 +184,29 @@ export interface UpdateNoteRequest {
 }
 
 /**
+ * One audio or text-to-speech tag a card face references as `[anki:play:<side>:<n>]` (Go: internal/notetype.AVTag).
+ * side is 'q' for the question and 'a' for the answer; the answer face carries the question's tags as well, because
+ * {{FrontSide}} keeps the question markers in its HTML.
+ */
+export interface AVTag {
+  kind: 'sound' | 'tts';
+  side: 'q' | 'a';
+  name?: string;
+  lang?: string;
+  voices?: string[];
+  speed: number;
+  other_args?: string[];
+  field_text?: string;
+  cloze_blank?: string | null;
+}
+
+/**
  * One rendered side of a card (Go: internal/web/review.go:CardFace).
  *
  * html is already sanitized by the server; css is the note type's own stylesheet, which the frame appends after its engram
  * face typography so a note type rule wins; body_class is the class list the frame writes on its `<body>`; media_base is the
- * `<base href>` the face's relative media names resolve against.
+ * `<base href>` the face's relative media names resolve against. av_tags describes every play marker in html, and autoplay
+ * is the deck's setting for starting those tags without a click.
  */
 export interface CardFace {
   html: string;
@@ -188,6 +215,8 @@ export interface CardFace {
   /** The server's own side name, `front` or `back`. The frame's side prop is `question` or `answer` and is not read from here. */
   side: string;
   media_base: string;
+  av_tags?: AVTag[];
+  autoplay?: boolean;
 }
 
 /** One preview card: the two faces the review frame would show. */
@@ -786,6 +815,8 @@ export interface GradedFeedback {
   score: number;
   rating: number;
   answer_html: string;
+  /** The answer face the frame renders; carries av_tags and autoplay next to answer_html. */
+  back?: CardFace;
   /** `<base href>` prefix for the media names in `answer_html`; see ReviewRenderResponse.media_base. */
   media_base?: string;
   given: string;
@@ -817,6 +848,8 @@ export interface RevealAnswerResponse {
   revealed: boolean;
   card_id: string;
   answer_html: string;
+  /** The answer face the frame renders; carries av_tags and autoplay next to answer_html. */
+  back?: CardFace;
   /** `<base href>` prefix for the media names in `answer_html`; see ReviewRenderResponse.media_base. */
   media_base?: string;
 }

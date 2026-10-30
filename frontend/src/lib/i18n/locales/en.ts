@@ -1574,4 +1574,24 @@ export const en: LocaleCatalog = {
   'notetype.stock.engram.true_false': 'True/False',
   'notetype.stock.engram.list': 'List',
   'notetype.stock.engram.short_answer': 'Short answer',
+  // ---- Deck settings: autoplay ----
+  'deck.autoplay.heading': 'Playback',
+  'deck.autoplay.hint': 'When on, a card face starts its own audio and TTS tags. Only the deck owner can change this.',
+  'deck.autoplay.label': 'Autoplay audio',
+  'deck.autoplay.owner_only': 'Only the deck owner can change this setting.',
+
+  // ---- Note editor: insert-audio dialog ----
+  'editor.audio.open': 'Insert audio into “{field}”',
+  'editor.audio.file': 'Audio file',
+  'editor.audio.choose': 'Choose a file',
+  'editor.audio.none': 'No file chosen',
+  'editor.audio.hint': 'The segment attributes are optional; leave them empty to play the whole file.',
+  'editor.audio.start': 'Start (s)',
+  'editor.audio.end': 'End (s)',
+  'editor.audio.rate': 'Playback speed',
+  'editor.audio.loop': 'Loop the segment',
+  'editor.audio.bad_number': 'Use a non-negative number, or leave the field empty.',
+  'editor.audio.bad_range': 'The end must be later than the start.',
+  'editor.audio.insert': 'Insert',
+  'editor.audio.cancel': 'Cancel',
 };

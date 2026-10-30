@@ -78,6 +78,7 @@ describe('CardFrame outbound messages', () => {
       side: 'question',
       mediaBase: '/fm/token/',
       autoplay: false,
+      avTags: [],
       ordinal: 0,
     });
 

@@ -434,3 +434,47 @@ func TestReplayButtonMatchesMarker(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderAnswerExcludesFrontSideAudio pins the answer side's tag list: {{FrontSide}} is inserted with the question's
+// extracted markers, so the answer's own extraction sees only the tags the answer template adds. The front markers stay
+// in the HTML as q markers, which is what lets the client render the question's replay controls without replaying them
+// on the answer side.
+func TestRenderAnswerExcludesFrontSideAudio(t *testing.T) {
+	cfg := Config{
+		Kind: KindNormal,
+		Fields: []Field{
+			{ID: "front", Name: "front"},
+			{ID: "back", Name: "back"},
+		},
+		Templates: []Template{{
+			ID: "t1", Name: "Card 1",
+			QFormat: "{{front}}",
+			AFormat: "{{FrontSide}}<hr id=answer>{{back}}",
+		}},
+	}
+	data := RenderData{Fields: map[string]string{
+		"front": "[sound:front.mp3]",
+		"back":  "[sound:back.mp3]",
+	}}
+
+	frontRaw, err := Render(cfg, cfg.Templates[0], SideFront, data)
+	if err != nil {
+		t.Fatalf("Render front: %v", err)
+	}
+	frontHTML, frontTags := ExtractAVTags(frontRaw, "q")
+	if len(frontTags) != 1 || frontTags[0].Name != "front.mp3" {
+		t.Fatalf("front tags = %+v, want the front sound", frontTags)
+	}
+
+	answered, err := RenderAnswer(cfg, cfg.Templates[0], data, frontHTML)
+	if err != nil {
+		t.Fatalf("RenderAnswer: %v", err)
+	}
+	html, answerTags := ExtractAVTags(answered, "a")
+	if !strings.Contains(html, "[anki:play:q:0]") || !strings.Contains(html, "[anki:play:a:0]") {
+		t.Errorf("answer html = %q, want the FrontSide q marker and the answer a marker", html)
+	}
+	if len(answerTags) != 1 || answerTags[0].Side != "a" || answerTags[0].Name != "back.mp3" {
+		t.Errorf("answer tags = %+v, want only the answer's own sound", answerTags)
+	}
+}

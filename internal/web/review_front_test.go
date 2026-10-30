@@ -14,7 +14,7 @@ import (
 // marker because the transitional SPA draws its own control.
 func TestFrontFaceHTMLFrameRequestChecksTheControl(t *testing.T) {
 	item := &cardFace{
-		front: `<p>pick one</p>[[type:answer]]`,
+		frontRaw: `<p>pick one</p>[[type:answer]]`,
 		spec: &notetype.AnswerSpec{
 			Control:  "choice_single",
 			Bindings: map[string]string{"options": "options", "answer": "answer"},
@@ -22,7 +22,7 @@ func TestFrontFaceHTMLFrameRequestChecksTheControl(t *testing.T) {
 		values: map[string]string{"options": "ALPHA<br>BETA", "answer": "1"},
 	}
 
-	frame := frontFaceHTML(item, []int{1, 0}, true)
+	frame := frontFaceHTML(item, item.frontRaw, []int{1, 0}, true)
 	if strings.Contains(frame, "[[type:answer]]") {
 		t.Errorf("frame front kept the type marker: %s", frame)
 	}
@@ -37,7 +37,7 @@ func TestFrontFaceHTMLFrameRequestChecksTheControl(t *testing.T) {
 		t.Errorf("frame front lost the stored option values: %s", frame)
 	}
 
-	plain := frontFaceHTML(item, []int{1, 0}, false)
+	plain := frontFaceHTML(item, item.frontRaw, []int{1, 0}, false)
 	if strings.Contains(plain, "[[type:answer]]") || strings.Contains(plain, "data-control") {
 		t.Errorf("non-frame front = %q, want the marker stripped and no control markup", plain)
 	}
@@ -58,11 +58,11 @@ func TestFrontFaceHTMLChoiceKeepsOptionMarkup(t *testing.T) {
 				bindings["answers"] = "answers"
 			}
 			item := &cardFace{
-				front:  `<p>pick one</p>[[type:options]]`,
-				spec:   &notetype.AnswerSpec{Control: control, Bindings: bindings},
-				values: fields,
+				frontRaw: `<p>pick one</p>[[type:options]]`,
+				spec:     &notetype.AnswerSpec{Control: control, Bindings: bindings},
+				values:   fields,
 			}
-			frame := frontFaceHTML(item, nil, true)
+			frame := frontFaceHTML(item, item.frontRaw, nil, true)
 			for _, want := range []string{`<b>bold</b>`, `\(x^2\) &amp; more`, `<img src="option.png"> picture`} {
 				if !strings.Contains(frame, want) {
 					t.Errorf("%s front = %q, want the raw option markup %q", control, frame, want)

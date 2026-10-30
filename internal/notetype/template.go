@@ -187,6 +187,23 @@ func Render(cfg Config, tmpl Template, side Side, data RenderData) (string, erro
 	return renderFormat(tmpl, format, side, ctx)
 }
 
+// RenderAnswer renders the answer side with frontSide standing in for {{FrontSide}}.
+//
+// The caller passes the question text it already holds, so the answer text can contain a form of the question that
+// differs from a fresh render — the review path inserts question text whose audio tags are already extracted markers.
+// A template may use {{FrontSide}} on the front; RenderAnswer renders the answer only, so that case has no meaning here.
+func RenderAnswer(cfg Config, tmpl Template, data RenderData, frontSide string) (string, error) {
+	values, ordinal := renderFieldValues(cfg, tmpl, data)
+	ctx := &renderContext{
+		fields:      values,
+		nonEmpty:    nonEmptyFieldNames(values),
+		cardOrdinal: ordinal,
+		frontSide:   frontSide,
+		onFront:     false,
+	}
+	return renderFormat(tmpl, tmpl.AFormat, SideBack, ctx)
+}
+
 // FrontProblem reports why a front side cannot be shown, or nil when it can.
 // Both conditions Anki draws a message for are reported here so that the
 // caller can localise the matching message: a cloze card whose cloze number

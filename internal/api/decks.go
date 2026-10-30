@@ -13,13 +13,16 @@ import (
 
 // DeckResponse is the external shape of a deck; REST and MCP share the same shape.
 type DeckResponse struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Description   string    `json:"description"`
-	NewPerDay     int       `json:"new_per_day"`
-	ReviewsPerDay int       `json:"reviews_per_day"`
-	PresetID      string    `json:"preset_id"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	NewPerDay     int    `json:"new_per_day"`
+	ReviewsPerDay int    `json:"reviews_per_day"`
+	PresetID      string `json:"preset_id"`
+	// Autoplay is the deck-wide presentation setting the review frame reads: whether a face starts its audio tags
+	// without a click.
+	Autoplay  bool      `json:"autoplay"`
+	CreatedAt time.Time `json:"created_at"`
 	// Role is the caller's explicit relation to this deck: owner (their own) or a granted role of editor/reader.
 	// Every deck in the list is necessarily one of the two - there is no third source of "visible only by visibility".
 	// Clients use it to decide whether to show "delete" or "leave share".
@@ -42,6 +45,7 @@ func (a *API) ToDeckResponse(ctx context.Context, userID uint64, d store.Deck, r
 		Description: d.Description,
 		CreatedAt:   d.CreatedAt,
 		Role:        role,
+		Autoplay:    d.AutoplayEnabled(),
 	}
 	paused, err := a.decks.IsPaused(ctx, userID, d.ID)
 	if err != nil {

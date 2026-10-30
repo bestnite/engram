@@ -79,6 +79,9 @@ const (
 	// Deck daily quota change (new_per_day / reviews_per_day). What changes is 'how many cards this deck
 	// still releases today', which must be recorded like any other deck change.
 	ActionDeckCaps = "deck.caps_change"
+	// ActionDeckAutoplay records the owner switching the deck's autoplay setting, which changes how every
+	// face of the deck is presented.
+	ActionDeckAutoplay = "deck.autoplay_change"
 	// 'one more round': append new-card quota for this deck today, for the caller only, recorded at the same tier as daily quota changes.
 	ActionDeckExtraNew = "deck.extra_new"
 	// Pausing and resuming a deck for the caller only: it changes which decks the default queue and the reminder mail cover.

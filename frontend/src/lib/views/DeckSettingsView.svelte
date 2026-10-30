@@ -8,6 +8,7 @@
   import Select from '../components/ui/Select.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
+  import Checkbox from '../components/ui/Checkbox.svelte';
   import { toast } from '../components/ui/toast';
   import Page from '../components/ui/Page.svelte';
   import SettingsSection from '../components/ui/SettingsSection.svelte';
@@ -38,6 +39,8 @@
   let newPerDay = $state(initialSettings ? String(initialSettings.new_per_day) : '');
   // svelte-ignore state_referenced_locally
   let reviewsPerDay = $state(initialSettings ? String(initialSettings.reviews_per_day) : '');
+  // svelte-ignore state_referenced_locally
+  let autoplay = $state(initialSettings ? (initialSettings.autoplay ?? true) : true);
   // Preset list: it decides which FSRS parameter set the deck schedules with, so it sits in the same form alongside the daily cap.
   let presets = $state<Array<{ value: string; label: string }>>([]);
   // svelte-ignore state_referenced_locally
@@ -75,6 +78,7 @@
       settings = data;
       newPerDay = String(data.new_per_day);
       reviewsPerDay = String(data.reviews_per_day);
+      autoplay = data.autoplay ?? true;
       presetId = String(data.preset_id);
     } catch (err) {
       loadError = err instanceof Error ? err : new Error(String(err));
@@ -104,10 +108,13 @@
         new_per_day: n,
         reviews_per_day: r,
         ...(presetId ? { preset_id: presetId } : {}),
+        // The setting is deck-wide; the server rejects the field from anyone but the owner, so a member never sends it.
+        ...(settings?.role === 'owner' ? { autoplay } : {}),
       });
       settings = data;
       newPerDay = String(data.new_per_day);
       reviewsPerDay = String(data.reviews_per_day);
+      autoplay = data.autoplay ?? true;
       toast.success($t('deck.settings.saved'));
     } catch (err) {
       toast.error($t(err instanceof ApiClientError && err.isForbidden ? 'deck.settings.error.forbidden' : 'deck.settings.error.failed'));
@@ -191,6 +198,24 @@
         {#if presetsError}
           <p class="mt-1.5 text-xs text-destructive-foreground">{$t('deck.settings.preset_load_failed')}</p>
         {/if}
+      </SettingsSection>
+
+      <SettingsSection title={$t('deck.autoplay.heading')} description={$t('deck.autoplay.hint')}>
+        <div class="flex items-start gap-2.5" data-testid="deck-autoplay-row">
+          <Checkbox
+            testId="deck-settings-autoplay"
+            checked={autoplay}
+            disabled={settings.role !== 'owner'}
+            label={$t('deck.autoplay.label')}
+            onCheckedChange={(checked) => (autoplay = checked)}
+          />
+          <div>
+            <p class="text-sm font-medium text-foreground">{$t('deck.autoplay.label')}</p>
+            {#if settings.role !== 'owner'}
+              <p class="mt-1.5 text-xs text-muted-foreground" data-testid="deck-autoplay-owner-only">{$t('deck.autoplay.owner_only')}</p>
+            {/if}
+          </div>
+        </div>
       </SettingsSection>
 
       <SettingsSection title={$t('deck.settings.heading')} description="{$t('deck.settings.personal_hint')} {$t('deck.settings.unlimited_hint')}">

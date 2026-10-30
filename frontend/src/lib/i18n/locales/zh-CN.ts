@@ -1573,4 +1573,24 @@ export const zhCN: LocaleCatalog = {
   'notetype.stock.engram.true_false': '判断',
   'notetype.stock.engram.list': '列表',
   'notetype.stock.engram.short_answer': '简答',
+  // ---- 卡组设置：自动播放 ----
+  'deck.autoplay.heading': '播放',
+  'deck.autoplay.hint': '开启后，卡片正面会自动播放自身的音频与语音标签。只有卡组所有者可以修改。',
+  'deck.autoplay.label': '自动播放音频',
+  'deck.autoplay.owner_only': '只有卡组所有者可以修改此设置。',
+
+  // ---- 笔记编辑器：插入音频对话框 ----
+  'editor.audio.open': '向「{field}」插入音频',
+  'editor.audio.file': '音频文件',
+  'editor.audio.choose': '选择文件',
+  'editor.audio.none': '尚未选择文件',
+  'editor.audio.hint': '片段属性是可选的；留空则播放整个文件。',
+  'editor.audio.start': '起点（秒）',
+  'editor.audio.end': '终点（秒）',
+  'editor.audio.rate': '播放速度',
+  'editor.audio.loop': '循环片段',
+  'editor.audio.bad_number': '请填入非负数字，或留空。',
+  'editor.audio.bad_range': '终点必须晚于起点。',
+  'editor.audio.insert': '插入',
+  'editor.audio.cancel': '取消',
 };

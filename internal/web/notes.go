@@ -208,23 +208,38 @@ func buildPreview(nt *store.NoteType, cfg notetype.Config, deck *store.Deck, fie
 		}
 		data.ClozeOrdinal = clozeOrdinal
 		data.CardName = tmpl.Name
-		front, err := notetype.Render(cfg, tmpl, notetype.SideFront, data)
+		frontRaw, err := notetype.Render(cfg, tmpl, notetype.SideFront, data)
 		if err != nil {
 			return nil, false
 		}
-		back, err := notetype.Render(cfg, tmpl, notetype.SideBack, data)
+		frontHTML, frontAV := notetype.ExtractAVTags(frontRaw, "q")
+		backRaw, err := notetype.RenderAnswer(cfg, tmpl, data, frontRaw)
 		if err != nil {
 			return nil, false
+		}
+		answeredRaw, err := notetype.RenderAnswer(cfg, tmpl, data, frontHTML)
+		if err != nil {
+			return nil, false
+		}
+		backHTML, answerAV := notetype.ExtractAVTags(answeredRaw, "a")
+		backAV := answerAV
+		if strings.Contains(answeredRaw, "[anki:play:q:") {
+			backAV = append(append([]notetype.AVTag{}, frontAV...), answerAV...)
 		}
 		faces.template = tmpl
 		faces.spec = tmpl.Answer
 		faces.ordinal = clozeOrdinal
-		faces.front = front
-		faces.back = back
+		faces.frontRaw = frontRaw
+		faces.backRaw = backRaw
+		faces.frontHTML = frontHTML
+		faces.backHTML = backHTML
+		faces.frontAV = frontAV
+		faces.backAV = backAV
+		autoplay := deck.AutoplayEnabled()
 		out = append(out, previewCard{
-			Front:     CardFace{HTML: typeMarkerPattern.ReplaceAllString(front, ""), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideFront.String()},
-			Back:      CardFace{HTML: faces.staticBackHTML(), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideBack.String()},
-			FrontHTML: typeMarkerPattern.ReplaceAllString(front, ""),
+			Front:     CardFace{HTML: typeMarkerPattern.ReplaceAllString(frontHTML, ""), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideFront.String(), AVTags: frontAV, Autoplay: autoplay},
+			Back:      CardFace{HTML: faces.staticBackHTML(), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideBack.String(), AVTags: faces.backAV, Autoplay: autoplay},
+			FrontHTML: typeMarkerPattern.ReplaceAllString(frontHTML, ""),
 			BackHTML:  faces.staticBackHTML(),
 		})
 	}
@@ -234,5 +249,5 @@ func buildPreview(nt *store.NoteType, cfg notetype.Config, deck *store.Deck, fie
 // staticBackHTML replaces the back side's type marker with the answer control's breakdown, and strips the marker when
 // there is no control. It is the no-answer form used by the preview.
 func (f *cardFace) staticBackHTML() string {
-	return backFaceHTML(f, nil, nil, nil)
+	return backFaceHTML(f, f.backHTML, nil, nil, nil)
 }

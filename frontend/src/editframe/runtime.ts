@@ -65,6 +65,11 @@ export interface CommandMessage {
   value?: string;
   delta?: number;
   media?: MediaReference;
+  /** Segment of an inserted [sound:] tag: start, end, rate in seconds, and whether to loop it. */
+  start?: string;
+  end?: string;
+  rate?: string;
+  loop?: boolean;
 }
 
 /** The media a command inserts: a same-origin URL, the deck media name and the detected mime type. */
@@ -139,6 +144,10 @@ function parseCommand(data: Record<string, unknown>): CommandMessage | null {
     value: isString(data.value) ? data.value : undefined,
     delta: typeof data.delta === 'number' && Number.isFinite(data.delta) ? data.delta : undefined,
     media,
+    start: isString(data.start) && data.start !== '' ? data.start : undefined,
+    end: isString(data.end) && data.end !== '' ? data.end : undefined,
+    rate: isString(data.rate) && data.rate !== '' ? data.rate : undefined,
+    loop: data.loop === true,
   };
 }
 
@@ -313,10 +322,24 @@ export function createRuntime(options: EditFrameOptions = {}): EditFrameRuntime 
       return;
     }
     if (mime.startsWith('audio/') || mime.startsWith('video/')) {
-      insertHtml(ctx, `[sound:${escapeHtml(name)}]`, savedRange);
+      insertHtml(ctx, soundMarkup(name), savedRange);
       return;
     }
     insertHtml(ctx, `<a href="${escapeAttribute(url)}">${escapeHtml(name)}</a>`, savedRange);
+  }
+
+  /**
+   * The markup for one sound: Anki's [sound:name] tag, wrapped in span.engram-sound when the author set a segment,
+   * a playback rate or a loop. The four data attributes are what the review frame reads back.
+   */
+  function soundMarkup(name: string, segment: { start?: string; end?: string; rate?: string; loop?: boolean } = {}): string {
+    const attrs: string[] = [];
+    if (segment.start) attrs.push(` data-start="${escapeAttribute(segment.start)}"`);
+    if (segment.end) attrs.push(` data-end="${escapeAttribute(segment.end)}"`);
+    if (segment.rate) attrs.push(` data-rate="${escapeAttribute(segment.rate)}"`);
+    if (segment.loop) attrs.push(' data-loop="1"');
+    const tag = `[sound:${escapeHtml(name)}]`;
+    return attrs.length === 0 ? tag : `<span class="engram-sound"${attrs.join('')}>${tag}</span>`;
   }
 
   function uploadFile(file: File): void {
@@ -385,6 +408,20 @@ export function createRuntime(options: EditFrameOptions = {}): EditFrameRuntime 
         break;
       case 'insertMedia':
         if (message.media) insertMedia(message.media.url, message.media.name, message.media.mime);
+        break;
+      case 'insertAudio':
+        if (message.media) {
+          insertHtml(
+            ctx,
+            soundMarkup(message.media.name, {
+              start: message.start,
+              end: message.end,
+              rate: message.rate,
+              loop: message.loop,
+            }),
+            savedRange,
+          );
+        }
         break;
       default:
         return;

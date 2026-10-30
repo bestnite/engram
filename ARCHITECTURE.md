@@ -133,15 +133,19 @@ change.
   stable `/static/mathjax/` path because a font request cannot carry the script's hash; that tree is
   public and sends `Access-Control-Allow-Origin: *`, because the sandboxed frame has an opaque
   origin.
-- **Card view.** A card-face response carries one `{html, css, body_class, side, media_base}`
+- **Card view.** A card-face response carries one `{html, css, body_class, side, media_base, av_tags, autoplay}`
   object per side (`front` and `back`), plus the card's template `ordinal`. The HTML is the note
   type's template rendered against the note's field values. The back side substitutes the answer
   control's breakdown for the `[[type:...]]` marker once a graded answer result exists. A
   frame-output request (`X-Engram-Frame: 1`) substitutes the control's `RenderFront` input markup
   for the same marker on the front, so the frame draws the control and posts its value; every
-  other request strips the marker. Until the SPA reads the two objects, `front_html`/`back_html`
-  repeat their HTML and `options_html`, `option_order` and `blanks` remain in the payload, though
-  the review page no longer renders controls from them. A due card also carries `answer_control`
+  other request strips the marker. The frame-output HTML replaces every `[sound:]` and
+  `[anki:tts]` tag with an `[anki:play:<side>:<n>]` marker and carries the tag list in `av_tags`;
+  the answer face is rendered with the already-extracted question in place of `{{FrontSide}}`, so
+  its tag list separates the question's tags from the tags the answer adds. `autoplay` is the
+  deck's setting, read by the frame to start a face's own tags. Until the SPA reads the two
+  objects, `front_html`/`back_html` repeat their HTML and `options_html`, `option_order` and
+  `blanks` remain in the payload, though the review page no longer renders controls from them. A due card also carries `answer_control`
   (the template's answer control name, null when the template has none), `machine_graded` (the rule
   the submit path applies) and `field_order` (the note type's field ids in config order). The
   review page chooses the self-rated, essay or machine-graded flow from the first two, so a note
@@ -306,7 +310,9 @@ change.
   It also supplies the Anki reviewer environment a shared template expects: the body classes
   `card cardN` and `nightMode night_mode`, the browser and platform classes ported from Anki's
   `browser_selector.ts`, the `$`, `jQuery`, `getTypedAnswer`, `pycmd` and `bridgeCommand` globals, the
-  answer controls' posted values, and engram's audio controls on every `[sound:]` tag.
+  answer controls' posted values, and engram's audio controls on every play marker. The frame
+  turns each marker into the same audio, video or speech source the shortcodes produce, autoplays
+  only the face's own tags when the deck allows it, and replays the face on `r` or `F5`.
 - `frontend/src/editframe/` is the editing frame runtime. It parses the field HTML only inside the
   sandboxed document, applies the toolbar's range commands (`commands.ts`), handles paste and drop,
   switches between the rich surface, the plain-text textarea and the HTML source textarea, and posts

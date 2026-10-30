@@ -600,6 +600,8 @@
                           bodyClass={card.front.body_class}
                           side="question"
                           mediaBase={card.front.media_base}
+                          autoplay={card.front.autoplay ?? false}
+                          avTags={card.front.av_tags ?? []}
                           title={$t('note_preview.front')}
                         />
                       </div>
@@ -612,6 +614,8 @@
                           bodyClass={card.back.body_class}
                           side="answer"
                           mediaBase={card.back.media_base}
+                          autoplay={card.back.autoplay ?? false}
+                          avTags={card.back.av_tags ?? []}
                           title={$t('note_preview.back')}
                         />
                       </div>

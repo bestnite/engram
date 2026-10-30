@@ -15,6 +15,9 @@
   import { t } from '../i18n';
   import { uploadErrorKeyFor } from '../media-upload';
   import { toast } from './ui/toast';
+  import Dialog from './ui/Dialog.svelte';
+  import Button from './ui/Button.svelte';
+  import Checkbox from './ui/Checkbox.svelte';
   import type { MediaReference } from '../../editframe/runtime';
   import {
     TextAlignCenter as AlignCenter,
@@ -32,6 +35,7 @@
     ListIndentDecrease,
     ListIndentIncrease,
     ListOrdered,
+    Music,
     Palette,
     RemoveFormatting,
     Sigma,
@@ -83,6 +87,14 @@
   // svelte-ignore state_referenced_locally
   let expanded = $state(!(options.collapsed ?? false));
   let fileInput = $state<HTMLInputElement | null>(null);
+  let audioInput = $state<HTMLInputElement | null>(null);
+  let audioOpen = $state(false);
+  let audioFile = $state<File | null>(null);
+  let audioStart = $state('');
+  let audioEnd = $state('');
+  let audioRate = $state('');
+  let audioLoop = $state(false);
+  let audioBusy = $state(false);
   let disposed = false;
 
   // The value the frame last reported. A `value` prop equal to it came from this field, so echoing it
@@ -213,6 +225,65 @@
     const file = input.files?.[0];
     input.value = '';
     if (file) void uploadFile(file);
+  }
+
+  /** A non-negative decimal, or empty for "not set". */
+  function segmentNumber(raw: string): boolean {
+    const value = raw.trim();
+    return value === '' || /^\d+(\.\d+)?$/.test(value);
+  }
+
+  const audioNumberInvalid = $derived(!segmentNumber(audioStart) || !segmentNumber(audioEnd) || !segmentNumber(audioRate));
+  const audioRangeInvalid = $derived(
+    audioStart.trim() !== '' && audioEnd.trim() !== '' && Number(audioEnd) <= Number(audioStart),
+  );
+  const audioCanInsert = $derived(audioFile !== null && !audioBusy && !audioNumberInvalid && !audioRangeInvalid);
+
+  function openAudio(): void {
+    audioFile = null;
+    audioStart = '';
+    audioEnd = '';
+    audioRate = '';
+    audioLoop = false;
+    audioOpen = true;
+  }
+
+  function pickAudio(): void {
+    audioInput?.click();
+  }
+
+  function onAudioChosen(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    audioFile = input.files?.[0] ?? null;
+    input.value = '';
+  }
+
+  /**
+   * Uploads the chosen sound and inserts Anki's [sound:] tag with the segment attributes the dialog collected.
+   * The upload has to finish inside the frame's saved caret, so the command carries the finished media reference.
+   */
+  async function insertAudio(): Promise<void> {
+    const file = audioFile;
+    const uploader = upload;
+    if (!file || !uploader || !audioCanInsert) return;
+    audioBusy = true;
+    try {
+      const media = await uploader(file);
+      if (disposed) return;
+      command('insertAudio', {
+        media,
+        start: audioStart.trim(),
+        end: audioEnd.trim(),
+        rate: audioRate.trim(),
+        loop: audioLoop,
+      });
+      audioOpen = false;
+    } catch (err) {
+      if (disposed) return;
+      toast.error($t(uploadErrorKeyFor(err)));
+    } finally {
+      audioBusy = false;
+    }
   }
 
   /**
@@ -425,6 +496,17 @@
         >
           <ImagePlus class="size-4" aria-hidden="true" />
         </button>
+        <button
+          type="button"
+          class={toolbarButton}
+          data-testid="{testId}-insert-audio"
+          aria-label={$t('editor.audio.open', { field: label })}
+          title={$t('editor.audio.open', { field: label })}
+          onmousedown={(event) => event.preventDefault()}
+          onclick={openAudio}
+        >
+          <Music class="size-4" aria-hidden="true" />
+        </button>
         {#each insertActions as action (action.id)}
           <button
             type="button"
@@ -497,3 +579,96 @@
   data-testid="{testId}-file-input"
   onchange={onFileChosen}
 />
+
+<input
+  bind:this={audioInput}
+  type="file"
+  accept="audio/*"
+  class="hidden"
+  tabindex="-1"
+  aria-hidden="true"
+  data-testid="{testId}-audio-input"
+  onchange={onAudioChosen}
+/>
+
+<Dialog
+  bind:open={audioOpen}
+  title={$t('editor.audio.open', { field: label })}
+  description={$t('editor.audio.hint')}
+  testId="{testId}-audio-dialog"
+>
+  <form class="space-y-4" onsubmit={(event) => { event.preventDefault(); void insertAudio(); }}>
+    <div>
+      <span class="block text-sm font-medium text-foreground">{$t('editor.audio.file')}</span>
+      <div class="mt-1.5 flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" testId="{testId}-audio-choose" onclick={pickAudio}>
+          {$t('editor.audio.choose')}
+        </Button>
+        <span class="min-w-0 truncate text-sm text-muted-foreground" data-testid="{testId}-audio-name">
+          {audioFile?.name ?? $t('editor.audio.none')}
+        </span>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <label class="block text-sm font-medium text-foreground">
+        <span>{$t('editor.audio.start')}</span>
+        <input
+          class="field-input mt-1.5 block w-full text-sm"
+          data-testid="{testId}-audio-start"
+          inputmode="decimal"
+          spellcheck="false"
+          aria-invalid={!segmentNumber(audioStart)}
+          bind:value={audioStart}
+        />
+      </label>
+      <label class="block text-sm font-medium text-foreground">
+        <span>{$t('editor.audio.end')}</span>
+        <input
+          class="field-input mt-1.5 block w-full text-sm"
+          data-testid="{testId}-audio-end"
+          inputmode="decimal"
+          spellcheck="false"
+          aria-invalid={!segmentNumber(audioEnd) || audioRangeInvalid}
+          bind:value={audioEnd}
+        />
+      </label>
+      <label class="block text-sm font-medium text-foreground">
+        <span>{$t('editor.audio.rate')}</span>
+        <input
+          class="field-input mt-1.5 block w-full text-sm"
+          data-testid="{testId}-audio-rate"
+          inputmode="decimal"
+          spellcheck="false"
+          aria-invalid={!segmentNumber(audioRate)}
+          bind:value={audioRate}
+        />
+      </label>
+    </div>
+    {#if audioNumberInvalid}
+      <p role="alert" class="text-sm text-destructive-foreground" data-testid="{testId}-audio-number-error">
+        {$t('editor.audio.bad_number')}
+      </p>
+    {:else if audioRangeInvalid}
+      <p role="alert" class="text-sm text-destructive-foreground" data-testid="{testId}-audio-range-error">
+        {$t('editor.audio.bad_range')}
+      </p>
+    {/if}
+    <div class="flex items-center gap-2">
+      <Checkbox
+        testId="{testId}-audio-loop"
+        checked={audioLoop}
+        onCheckedChange={(checked) => (audioLoop = checked)}
+        label={$t('editor.audio.loop')}
+      />
+      <span class="text-sm text-foreground/80">{$t('editor.audio.loop')}</span>
+    </div>
+    <div class="flex items-center justify-end gap-2">
+      <Button type="button" variant="ghost" size="sm" testId="{testId}-audio-cancel" onclick={() => (audioOpen = false)}>
+        {$t('editor.audio.cancel')}
+      </Button>
+      <Button type="submit" variant="primary" size="sm" testId="{testId}-audio-submit" disabled={!audioCanInsert} loading={audioBusy}>
+        {$t('editor.audio.insert')}
+      </Button>
+    </div>
+  </form>
+</Dialog>

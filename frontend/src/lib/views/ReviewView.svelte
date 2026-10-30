@@ -4,7 +4,7 @@
   import { t } from '../i18n';
   import { fieldText } from '../format';
   import { apiClient, ApiClientError } from '../api';
-  import type { ApiClient, CardFace, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
+  import type { ApiClient, AVTag, CardFace, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
   import { toast } from '../components/ui/toast';
   import { typeset } from '../mathjax';
   import { enhanceShortcodes, stopShortcodePlayback } from '../shortcodes';
@@ -100,6 +100,7 @@
   let lastUndo = $state<{ cardId: string; version: number; rating: number } | null>(initialLastUndo);
   // svelte-ignore state_referenced_locally
   let revealedAnswerHTML = $state(initialRevealedAnswerHTML);
+  let revealedAVTags = $state<AVTag[]>([]);
   // svelte-ignore state_referenced_locally
   let gradedRevealed = $state(initialRevealedAnswerHTML !== '');
   let needAnswer = $state(false);
@@ -413,6 +414,7 @@
         { frame: true },
       );
       revealedAnswerHTML = response.answer_html;
+      revealedAVTags = response.back?.av_tags ?? [];
       revealedMediaBase = response.media_base ?? backFace?.media_base ?? '';
       gradedRevealed = true;
     } catch (cause) {
@@ -908,6 +910,8 @@
                 bodyClass={frontFace.body_class}
                 side="question"
                 mediaBase={frontFace.media_base}
+                autoplay={frontFace.autoplay ?? false}
+                avTags={frontFace.av_tags ?? []}
                 ordinal={cardOrdinal}
                 title={$t('note_preview.front')}
                 onkey={onFrameKey}
@@ -938,6 +942,8 @@
                     ordinal={cardOrdinal}
                     side="answer"
                     mediaBase={backFace.media_base}
+                    autoplay={backFace.autoplay ?? false}
+                    avTags={backFace.av_tags ?? []}
                     title={$t('note_preview.back')}
                     onkey={onFrameKey}
                   />
@@ -959,6 +965,8 @@
                     ordinal={cardOrdinal}
                     side="answer"
                     mediaBase={backFace.media_base}
+                    autoplay={backFace.autoplay ?? false}
+                    avTags={backFace.av_tags ?? []}
                     title={$t('note_preview.back')}
                     onkey={onFrameKey}
                   />
@@ -1011,6 +1019,8 @@
                   ordinal={cardOrdinal}
                   side="question"
                   mediaBase={frontFace.media_base}
+                  autoplay={frontFace.autoplay ?? false}
+                  avTags={frontFace.av_tags ?? []}
                   title={$t('note_preview.front')}
                   onkey={onFrameKey}
                   onanswer={onFrameAnswer}
@@ -1059,12 +1069,14 @@
                       <!-- The grade response carries the answer HTML but no face object: the note type is the card's own, so its
                            back face supplies the CSS and body class the frame needs. -->
                       <CardFrame
-                        html={feedback.answer_html}
-                        css={faceStyle(REVIEW_ANSWER_CSS, backFace?.css)}
-                        bodyClass={backFace?.body_class ?? 'card'}
+                        html={feedback.back?.html ?? feedback.answer_html}
+                        css={faceStyle(REVIEW_ANSWER_CSS, feedback.back?.css ?? backFace?.css)}
+                        bodyClass={feedback.back?.body_class ?? backFace?.body_class ?? 'card'}
                         ordinal={cardOrdinal}
                         side="answer"
                         mediaBase={feedbackMediaBase}
+                        autoplay={feedback.back?.autoplay ?? backFace?.autoplay ?? false}
+                        avTags={feedback.back?.av_tags ?? []}
                         title={$t('note_preview.back')}
                         onkey={onFrameKey}
                       />
@@ -1097,6 +1109,8 @@
                       ordinal={cardOrdinal}
                       side="answer"
                       mediaBase={revealedMediaBase}
+                      autoplay={backFace?.autoplay ?? false}
+                      avTags={revealedAVTags}
                       title={$t('note_preview.back')}
                       onkey={onFrameKey}
                     />

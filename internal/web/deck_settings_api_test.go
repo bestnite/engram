@@ -397,3 +397,46 @@ func TestDeckSettingsMemberEditsOwnSettings(t *testing.T) {
 		t.Errorf("owner preset changed to %d by the member", reloaded.PresetID)
 	}
 }
+
+// TestDeckSettingsAutoplayOwnerOnly pins the deck-wide autoplay setting: the owner round-trips it through the settings
+// PATCH and the audit log, while a sharing member is refused before any write because the column belongs to the deck.
+func TestDeckSettingsAutoplayOwnerOnly(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "SPA autoplay deck")
+
+	rec := jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
+		`{"new_per_day":20,"reviews_per_day":200,"autoplay":false}`, ownerCookies, ownerCSRF)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("owner PATCH = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if body := decodeDeckSettings(t, rec.Body.Bytes()); body.Autoplay {
+		t.Errorf("PATCH response autoplay = true, want false")
+	}
+	stored, err := store.NewDeckStore(db).ByID(context.Background(), deck.ID)
+	if err != nil {
+		t.Fatalf("reload deck: %v", err)
+	}
+	if stored.AutoplayEnabled() {
+		t.Errorf("stored autoplay = true, want false")
+	}
+	if n, err := store.NewAuditStore(db).CountByAction(context.Background(), store.ActionDeckAutoplay); err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	} else if n != 1 {
+		t.Errorf("audit rows for %s = %d, want 1", store.ActionDeckAutoplay, n)
+	}
+
+	memberID, memberCookies, memberCSRF := createUserAndLogin(t, srv, db, "autoplay_member")
+	grantRole(t, srv, deck.ID, memberID, store.RoleReader, ownerCookies, ownerCSRF)
+	rec = jsonRequest(t, srv, http.MethodPatch, deckSettingsPath(deck.PublicID),
+		`{"new_per_day":20,"reviews_per_day":200,"autoplay":true}`, memberCookies, memberCSRF)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("member PATCH autoplay = %d, want 403 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	stored, err = store.NewDeckStore(db).ByID(context.Background(), deck.ID)
+	if err != nil {
+		t.Fatalf("reload deck: %v", err)
+	}
+	if stored.AutoplayEnabled() {
+		t.Errorf("member changed the deck-wide autoplay setting")
+	}
+}

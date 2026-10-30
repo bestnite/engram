@@ -1,5 +1,6 @@
 <script module lang="ts">
   import type { FrameAnswerValue } from '../../cardframe/reviewer';
+  import type { AVTag } from '../api/types';
 
   /**
    * One key press reported by the frame. The frame suppresses keys typed into an input, a textarea or a contenteditable
@@ -40,6 +41,8 @@
     /** `<base href>` prefix that relative media names resolve against, `/fm/<token>/`. */
     mediaBase: string;
     autoplay?: boolean;
+    /** The audio and TTS tags the face's play markers address (Go: CardFace.av_tags). */
+    avTags?: AVTag[];
     /** The card's zero-based template ordinal; the frame writes `card` + ordinal + 1 on its body, as Anki does. */
     ordinal?: number;
     /** Receives every key press the frame reports; the view maps it onto its own shortcuts. */
@@ -57,6 +60,7 @@
     side,
     mediaBase,
     autoplay = false,
+    avTags = [],
     ordinal = 0,
     onkey,
     onanswer,
@@ -74,7 +78,7 @@
   function sendShow(): void {
     const win = iframe?.contentWindow;
     if (!win || !ready) return;
-    win.postMessage({ type: 'show', html, css, bodyClass, side, mediaBase, autoplay, ordinal }, '*');
+    win.postMessage({ type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal }, '*');
   }
 
   /** Sends the current theme; the frame owns its own `<html>` element, so it cannot inherit the parent's class. */
@@ -87,7 +91,7 @@
   // One show per face: the first after `ready`, and one after every prop change. The effect reads every prop that `show`
   // carries, so a change to any of them resends the face instead of leaving the frame with a stale one.
   $effect(() => {
-    void [html, css, bodyClass, side, mediaBase, autoplay, ordinal, ready, iframe];
+    void [html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal, ready, iframe];
     sendShow();
   });
 

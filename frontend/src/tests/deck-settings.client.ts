@@ -24,6 +24,7 @@ describe('DeckSettingsView cap saving', () => {
     deck_description: '',
     role: 'owner',
     preset_id: '3',
+    autoplay: true,
     new_per_day: 10,
     reviews_per_day: 10,
     new_used: 2,
@@ -89,6 +90,7 @@ describe('DeckSettingsView cap saving', () => {
       new_per_day: 15,
       reviews_per_day: 10,
       preset_id: '3',
+      autoplay: true,
     });
     expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'deck.settings.saved'));
   });
@@ -102,6 +104,7 @@ describe('DeckSettingsView cap saving', () => {
       new_per_day: 0,
       reviews_per_day: 0,
       preset_id: '3',
+      autoplay: true,
     });
   });
 

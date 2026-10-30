@@ -101,7 +101,8 @@ func (s *Server) parseDeckScope(c *gin.Context, user *store.User) (reviewScope, 
 }
 
 // CardFace is one rendered side of a card: the HTML to write into the frame, the note type's CSS, the body class,
-// which side it is, and the media base its relative media names resolve against.
+// which side it is, the media base its relative media names resolve against, and the audio/TTS tags that HTML
+// references as [anki:play:<side>:<n>] markers.
 //
 // This object is the card-view contract. The transitional front_html/back_html fields travel next to it until the frame
 // runtime reads this object directly.
@@ -111,6 +112,12 @@ type CardFace struct {
 	BodyClass string `json:"body_class"`
 	Side      string `json:"side"`
 	MediaBase string `json:"media_base"`
+	// AVTags describes every play marker in HTML. The front face carries its question tags; the answer face carries
+	// the question tags inserted by {{FrontSide}} plus the tags the answer itself adds, each with the side it was
+	// extracted from, so the client can play the answer's own tags without replaying the question's.
+	AVTags []notetype.AVTag `json:"av_tags"`
+	// Autoplay is the deck's setting for this face: start its tags without a click.
+	Autoplay bool `json:"autoplay"`
 }
 
 // ReviewCardView is the rendered two sides of the current card plus its identity.
@@ -163,8 +170,17 @@ type cardFace struct {
 	spec     *notetype.AnswerSpec
 	ordinal  int
 	values   map[string]string
-	front    string
-	back     string
+	// frontRaw and backRaw are the template output before audio/TTS extraction. They keep the literal [sound:] and
+	// [anki:tts] tags for non-frame consumers.
+	frontRaw string
+	backRaw  string
+	// frontHTML and backHTML replace every audio/TTS tag with its play marker; frontAV and backAV describe those
+	// markers. The answer text was rendered with the already-extracted question in place of {{FrontSide}}, so backAV
+	// holds the answer's own tags and the question's, while backHTML's question part still carries question markers.
+	frontHTML string
+	backHTML  string
+	frontAV   []notetype.AVTag
+	backAV    []notetype.AVTag
 }
 
 // renderCard loads the card's note, note type and template and renders both sides with the card's current data.
@@ -201,17 +217,33 @@ func (s *Server) renderCard(ctx context.Context, card *store.Card, submitted jso
 		CardID:       card.PublicID,
 		ClozeOrdinal: clozeOrdinal,
 	}
-	front, err := notetype.Render(cfg, tmpl, notetype.SideFront, data)
+	frontRaw, err := notetype.Render(cfg, tmpl, notetype.SideFront, data)
 	if err != nil {
 		return nil, err
 	}
-	back, err := notetype.Render(cfg, tmpl, notetype.SideBack, data)
+	frontHTML, frontAV := notetype.ExtractAVTags(frontRaw, "q")
+	// The raw back keeps the question's literal tags for non-frame consumers; the extracted back uses the extracted
+	// question for {{FrontSide}}, which is what keeps the question's audio out of the answer's own tag list.
+	backRaw, err := notetype.RenderAnswer(cfg, tmpl, data, frontRaw)
 	if err != nil {
 		return nil, err
+	}
+	answeredRaw, err := notetype.RenderAnswer(cfg, tmpl, data, frontHTML)
+	if err != nil {
+		return nil, err
+	}
+	backHTML, answerAV := notetype.ExtractAVTags(answeredRaw, "a")
+	// The question's tags belong to the answer face only when {{FrontSide}} actually inserted their markers; a template
+	// that answers without FrontSide then carries no unreferenced q tag.
+	backAV := answerAV
+	if strings.Contains(answeredRaw, "[anki:play:q:") {
+		backAV = append(append([]notetype.AVTag{}, frontAV...), answerAV...)
 	}
 	return &cardFace{
 		card: card, note: note, deck: deck, noteType: nt, config: cfg, template: tmpl,
-		spec: tmpl.Answer, ordinal: clozeOrdinal, values: values, front: front, back: back,
+		spec: tmpl.Answer, ordinal: clozeOrdinal, values: values,
+		frontRaw: frontRaw, backRaw: backRaw, frontHTML: frontHTML, backHTML: backHTML,
+		frontAV: frontAV, backAV: backAV,
 	}, nil
 }
 
@@ -241,42 +273,53 @@ func deckFieldNames(deckName string, deckPath *string) (deck, subdeck string) {
 // correct answer is visible with or without a submitted answer.
 func (s *Server) faces(ctx context.Context, user *store.User, item *cardFace, submitted json.RawMessage, result *answer.GradeResult, forFrame bool, optionOrder []int) (CardFace, CardFace) {
 	mediaBase := s.frameMediaBase(ctx, user.ID, item.note.DeckID)
-	frontHTML := frontFaceHTML(item, optionOrder, forFrame)
-	backHTML := backFaceHTML(item, submitted, result, optionOrder)
+	frontHTML, backHTML := item.frontRaw, item.backRaw
+	frontAV, backAV := []notetype.AVTag{}, []notetype.AVTag{}
+	if forFrame {
+		frontHTML, backHTML = item.frontHTML, item.backHTML
+		frontAV, backAV = item.frontAV, item.backAV
+	}
+	frontHTML = frontFaceHTML(item, frontHTML, optionOrder, forFrame)
+	backHTML = backFaceHTML(item, backHTML, submitted, result, optionOrder)
 	if !forFrame || mediaBase == "" {
 		frontHTML = absoluteMediaRefs(frontHTML)
 		backHTML = absoluteMediaRefs(backHTML)
 	}
 	bodyClass := "card"
+	autoplay := item.deck != nil && item.deck.AutoplayEnabled()
 	return CardFace{
 		HTML:      frontHTML,
 		CSS:       item.config.CSS,
 		BodyClass: bodyClass,
 		Side:      notetype.SideFront.String(),
 		MediaBase: mediaBase,
+		AVTags:    frontAV,
+		Autoplay:  autoplay,
 	}, CardFace{
 		HTML:      backHTML,
 		CSS:       item.config.CSS,
 		BodyClass: bodyClass,
 		Side:      notetype.SideBack.String(),
 		MediaBase: mediaBase,
+		AVTags:    backAV,
+		Autoplay:  autoplay,
 	}
 }
 
 // frontFaceHTML renders the front side. A frame request replaces the type marker with the answer control's input
 // markup; every other request strips the marker, because the transitional SPA draws its own control.
-func frontFaceHTML(item *cardFace, optionOrder []int, forFrame bool) string {
-	marker := typeMarkerPattern.FindString(item.front)
+func frontFaceHTML(item *cardFace, source string, optionOrder []int, forFrame bool) string {
+	marker := typeMarkerPattern.FindString(source)
 	if !forFrame || item.spec == nil || marker == "" {
-		return typeMarkerPattern.ReplaceAllString(item.front, "")
+		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	control, ok := answer.Lookup(item.spec.Control)
 	if !ok {
-		return typeMarkerPattern.ReplaceAllString(item.front, "")
+		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	bindings, err := answer.ResolveBindings(*item.spec, item.values)
 	if err != nil {
-		return typeMarkerPattern.ReplaceAllString(item.front, "")
+		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	rendered, err := answer.RenderSide(control, answer.RenderContext{
 		Marker:       marker,
@@ -284,27 +327,27 @@ func frontFaceHTML(item *cardFace, optionOrder []int, forFrame bool) string {
 		Bindings:     bindings,
 		ClozeOrdinal: item.ordinal,
 		OptionOrder:  optionOrder,
-	}, item.front)
+	}, source)
 	if err != nil {
-		return typeMarkerPattern.ReplaceAllString(item.front, "")
+		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	return rendered
 }
 
 // backFaceHTML replaces the back side's type marker with the answer control's breakdown when a control exists, and
 // strips the marker otherwise.
-func backFaceHTML(item *cardFace, submitted json.RawMessage, result *answer.GradeResult, optionOrder []int) string {
-	marker := typeMarkerPattern.FindString(item.back)
+func backFaceHTML(item *cardFace, source string, submitted json.RawMessage, result *answer.GradeResult, optionOrder []int) string {
+	marker := typeMarkerPattern.FindString(source)
 	if item.spec == nil || marker == "" {
-		return typeMarkerPattern.ReplaceAllString(item.back, "")
+		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	control, ok := answer.Lookup(item.spec.Control)
 	if !ok {
-		return typeMarkerPattern.ReplaceAllString(item.back, "")
+		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	bindings, err := answer.ResolveBindings(*item.spec, item.values)
 	if err != nil {
-		return typeMarkerPattern.ReplaceAllString(item.back, "")
+		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	rendered, err := answer.RenderSide(control, answer.RenderContext{
 		Marker:       marker,
@@ -314,9 +357,9 @@ func backFaceHTML(item *cardFace, submitted json.RawMessage, result *answer.Grad
 		OptionOrder:  optionOrder,
 		Answer:       submitted,
 		Result:       result,
-	}, item.back)
+	}, source)
 	if err != nil {
-		return typeMarkerPattern.ReplaceAllString(item.back, "")
+		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	return rendered
 }
