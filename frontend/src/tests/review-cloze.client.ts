@@ -3,7 +3,6 @@ import { mount, unmount, flushSync } from 'svelte';
 import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 import { faces } from './card-face-fixture';
 import { shownHtmlOnSide, postAnswerFromFrame } from './card-frame-fixture';
 
@@ -19,7 +18,6 @@ describe('ReviewView cloze blanks', () => {
     if (instance) unmount(instance);
     instance = null;
     document.body.innerHTML = '';
-    clearCardTypes();
     vi.restoreAllMocks();
   });
 
@@ -40,11 +38,13 @@ describe('ReviewView cloze blanks', () => {
     tags: [],
     template: 'cloze:1',
     version: 0,
+    answer_control: 'cloze_blanks',
+    machine_graded: true,
+    field_order: ['text'],
   };
 
   async function setup() {
     setLocale('zh-CN');
-    seedCardTypes();
     const submitGradedReview = vi.fn().mockResolvedValue({
       card_id: 'c1',
       state: 'learning',

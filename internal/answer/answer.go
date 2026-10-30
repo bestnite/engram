@@ -133,6 +133,19 @@ func Register(name string, factory Factory) error { return Default.Register(name
 // Lookup builds a control from Default.
 func Lookup(name string) (Control, bool) { return Default.Lookup(name) }
 
+// IsMachineGraded reports whether an answer spec names a control whose answer the server grades.
+//
+// A nil spec names no control, so nothing is graded. The short answer control carries a spec because it records the
+// written answer, but its rating stays a self-assessment: it returns no score, so it is not machine graded. Every other
+// registered control grades the submitted answer against the field values its roles bind.
+func IsMachineGraded(spec *notetype.AnswerSpec) bool {
+	if spec == nil || spec.Control == "short_answer" {
+		return false
+	}
+	_, ok := Lookup(spec.Control)
+	return ok
+}
+
 // Names returns the control names registered in Default.
 func Names() []string { return Default.Names() }
 

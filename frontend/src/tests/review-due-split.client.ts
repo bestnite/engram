@@ -3,7 +3,6 @@ import { mount, unmount, flushSync } from 'svelte';
 import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 import { faces } from './card-face-fixture';
 
 /**
@@ -19,7 +18,6 @@ describe('ReviewView due counter split', () => {
     if (instance) unmount(instance);
     instance = null;
     document.body.innerHTML = '';
-    clearCardTypes();
     vi.restoreAllMocks();
   });
 
@@ -41,6 +39,9 @@ describe('ReviewView due counter split', () => {
       tags: [],
       template: 'forward',
       version: 0,
+      answer_control: null,
+      machine_graded: false,
+      field_order: ['front', 'back'],
     };
   }
 
@@ -60,7 +61,6 @@ describe('ReviewView due counter split', () => {
 
   it('splits five queued cards into two new and three review at the first render', async () => {
     setLocale('zh-CN');
-    seedCardTypes();
     const initialCards = [
       dueCard('c1', 'new'),
       dueCard('c2', 'new'),
@@ -81,7 +81,6 @@ describe('ReviewView due counter split', () => {
 
   it('hides the new counter when the queue holds no new cards', async () => {
     setLocale('zh-CN');
-    seedCardTypes();
     const initialCards = [dueCard('c1', 'learning'), dueCard('c2', 'review'), dueCard('c3', 'relearning')];
     const client = {
       getDueCards: vi.fn().mockReturnValue(new Promise(() => {})),
@@ -95,7 +94,6 @@ describe('ReviewView due counter split', () => {
 
   it('refreshes both counters from the queue returned by a rating', async () => {
     setLocale('zh-CN');
-    seedCardTypes();
     const queue = [
       dueCard('c1', 'new'),
       dueCard('c2', 'new'),

@@ -468,20 +468,7 @@ func (s *Server) cardIsMachineGraded(ctx context.Context, card *store.Card) (boo
 	if err != nil {
 		return false, err
 	}
-	if tmpl.Answer == nil {
-		return false, nil
-	}
-	return isMachineGradedSpec(tmpl.Answer), nil
-}
-
-// isMachineGradedSpec reports whether an answer spec names a control that grades a machine answer. The short answer
-// control carries a spec so it can record the written answer, but grading stays self-assessed.
-func isMachineGradedSpec(spec *notetype.AnswerSpec) bool {
-	if spec == nil || spec.Control == "short_answer" {
-		return false
-	}
-	_, ok := answer.Lookup(spec.Control)
-	return ok
+	return answer.IsMachineGraded(tmpl.Answer), nil
 }
 
 // numberText prints a number (a parsed answer) in its simplest form, so 50 does not show up as 50.000000.

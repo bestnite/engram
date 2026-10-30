@@ -3,7 +3,6 @@ import { mount, unmount, flushSync } from 'svelte';
 import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 import { faces } from './card-face-fixture';
 import { shownHtmlOnSide, postAnswerFromFrame } from './card-frame-fixture';
 
@@ -19,7 +18,6 @@ describe('ReviewView short answer', () => {
     if (instance) unmount(instance);
     instance = null;
     document.body.innerHTML = '';
-    clearCardTypes();
     vi.restoreAllMocks();
   });
 
@@ -40,11 +38,13 @@ describe('ReviewView short answer', () => {
     tags: [],
     template: 'forward',
     version: 0,
+    answer_control: 'short_answer',
+    machine_graded: false,
+    field_order: ['prompt', 'reference'],
   };
 
   async function setup(backHTML: string) {
     setLocale('zh-CN');
-    seedCardTypes();
     const submitSelfReview = vi.fn().mockResolvedValue({ card_id: 's1', state: 'learning', version: 1, remaining: 0, cards: [] });
     const client = {
       getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),

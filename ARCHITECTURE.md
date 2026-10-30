@@ -141,7 +141,12 @@ change.
   for the same marker on the front, so the frame draws the control and posts its value; every
   other request strips the marker. Until the SPA reads the two objects, `front_html`/`back_html`
   repeat their HTML and `options_html`, `option_order` and `blanks` remain in the payload, though
-  the review page no longer renders controls from them. Those flat fields, and the card-kind
+  the review page no longer renders controls from them. A due card also carries `answer_control`
+  (the template's answer control name, null when the template has none), `machine_graded` (the rule
+  the submit path applies) and `field_order` (the note type's field ids in config order). The
+  review page chooses the self-rated, essay or machine-graded flow from the first two, so a note
+  type that matches no stock kind answers like any other, and its plain-text fallback lists the
+  field values in `field_order` when a face fails to load. Those flat fields, and the card-kind
   vocabulary the note response still carries (`kind` as a transitional alias, the description
   catalog in `internal/api/card_catalog.go`), stay while the SPA note form still reads that
   catalog; removing them requires the form to read note types instead of card kinds. A note write

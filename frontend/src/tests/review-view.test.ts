@@ -3,8 +3,18 @@ import { render } from 'svelte/server';
 import ReviewView from '../lib/views/ReviewView.svelte';
 import type { DueCard, GradedFeedback } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 import { face } from './card-face-fixture';
+
+/** How the server answers one stock kind: the template's answer control, whether the submit path grades it, and the field order. */
+const flows: Record<string, Pick<DueCard, 'answer_control' | 'machine_graded' | 'field_order'>> = {
+  basic: { answer_control: null, machine_graded: false, field_order: ['front', 'back'] },
+  typed: { answer_control: 'text', machine_graded: true, field_order: ['prompt', 'answer', 'accept'] },
+  choice_single: { answer_control: 'single', machine_graded: true, field_order: ['question', 'options', 'answer'] },
+  choice_multi: { answer_control: 'multi', machine_graded: true, field_order: ['question', 'options', 'answers'] },
+  true_false: { answer_control: 'bool', machine_graded: true, field_order: ['statement', 'answer'] },
+  short_answer: { answer_control: 'short_answer', machine_graded: false, field_order: ['prompt', 'reference'] },
+  numeric: { answer_control: 'number', machine_graded: true, field_order: ['prompt', 'value', 'unit'] },
+};
 
 /** Build a due answering-type card (field shape matching GET /api/v1/review/due, including the raw answer text). */
 function gradedCard(kind: string, fields: Record<string, unknown>): DueCard {
@@ -20,13 +30,9 @@ function gradedCard(kind: string, fields: Record<string, unknown>): DueCard {
     tags: [],
     template: 'forward',
     version: 0,
+    ...flows[kind] ?? { answer_control: null, machine_graded: false, field_order: [] },
   };
 }
-
-// The review page's card-type branches come from server metadata: inject a sample catalogue before rendering, otherwise only the loading state is visible.
-beforeEach(() => {
-  seedCardTypes();
-});
 
 describe('ReviewView graded answering', () => {
   beforeEach(() => {
@@ -296,14 +302,14 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
   });
 });
 
-describe('ReviewView card sides and controls come from the server metadata', () => {
+describe('ReviewView card sides and controls come from the due-card payload', () => {
   beforeEach(() => {
     setLocale('zh-CN');
   });
 
   it('renders the short_answer front from prompt and the back from reference', () => {
-    // Regression: cardSide() used to expand a ternary chain over kind and missed short_answer, falling through to else and taking front/back,
-    // while that type's real fields are prompt/reference — so the front rendered empty. Now that field names come from metadata it should be right.
+    // The short answer note type's fields are prompt/reference. The plain-text fallback shows the first field as the
+    // question and the rest as the answer, so the reference stays hidden until the reveal.
     const card = gradedCard('short_answer', {
       prompt: '解释一下 CAP 定理',
       reference: '一致性、可用性、分区容忍',
@@ -339,16 +345,34 @@ describe('ReviewView card sides and controls come from the server metadata', () 
     expect(html).not.toContain('299792458');
   });
 
-  it('renders a loading state instead of guessing fields when metadata is not ready', () => {
-    clearCardTypes();
-    const card = gradedCard('basic', { front: 'Q', back: 'A' });
+  it('renders a note type that matches no stock kind without loading any catalog', () => {
+    // A note type created through the API has opaque field ids and a kind the catalog never described. The due-card
+    // payload carries the answer flow and the field order, so the page renders it exactly like a stock type.
+    const card: DueCard = {
+      card_id: '31',
+      note_id: '41',
+      deck_id: '5',
+      state: 'new',
+      due_at: '2026-10-06T00:00:00Z',
+      retrievability: 0,
+      kind: '',
+      fields: { 'f-front': '自定义问题', 'f-back': '自定义答案' },
+      tags: [],
+      template: 'card-1',
+      version: 0,
+      answer_control: null,
+      machine_graded: false,
+      field_order: ['f-front', 'f-back'],
+    };
     const { html } = render(ReviewView, {
       props: { initialLoading: false, initialCards: [card] },
     });
-    expect(html).toContain('data-testid="review-meta-loading"');
-    expect(html).not.toContain('data-testid="review-front"');
-    expect(html).not.toContain('data-testid="review-graded-prompt"');
-    // Never print a bare language-pack key or a machine word as user-facing copy.
+    expect(html).toContain('data-testid="review-front"');
+    expect(html).toContain('自定义问题');
+    // The answer stays hidden until the reveal.
+    expect(html).not.toContain('自定义答案');
+    expect(html).toContain('显示答案');
+    // Never print a bare language-pack key or machine vocabulary as user-facing copy.
     expect(html).not.toContain('notes.kind.');
   });
 });

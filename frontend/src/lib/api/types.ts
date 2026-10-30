@@ -531,6 +531,15 @@ export interface DueCard {
   template?: string;
   version: number;
   /**
+   * Control name of the card template's answer spec, or null when the template has none. Together with
+   * `machine_graded` it decides the review page's flow; the page never reads the card kind for that.
+   */
+  answer_control: string | null;
+  /** Whether the server grades this card's answer, by the same rule the submit path applies. */
+  machine_graded: boolean;
+  /** The note type's field ids in config order; `fields` is keyed by field id and keeps no order of its own. */
+  field_order: string[];
+  /**
    * Display order of a choice card's options: display slot -> stored option index. `option_order[b] = s` means screen row `b`
    * shows the option stored at index `s`; it is a permutation of `0..n-1` for choice_single / choice_multi and null for every
    * other kind. The card's `fields.options` stay in stored order, and a submitted answer is a stored index (or an array of

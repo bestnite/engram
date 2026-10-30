@@ -66,6 +66,18 @@ func transitionalFields(kind string, values map[string]string) map[string]any {
 	return store.LegacyNoteFields(kind, values)
 }
 
+// fieldOrder returns the note type's field ids in config order; the field value map keeps no order of its own.
+func fieldOrder(cfg notetype.Config) []string {
+	if len(cfg.Fields) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(cfg.Fields))
+	for _, field := range cfg.Fields {
+		out = append(out, field.ID)
+	}
+	return out
+}
+
 // templateAnswer returns the answer spec of the template a card uses, or nil for a self-graded card.
 func templateAnswer(cfg notetype.Config, cardTemplate string) (*notetype.AnswerSpec, int, error) {
 	tmpl, clozeOrdinal, err := notetype.CardTemplate(cfg, cardTemplate)
@@ -73,19 +85,6 @@ func templateAnswer(cfg notetype.Config, cardTemplate string) (*notetype.AnswerS
 		return nil, 0, err
 	}
 	return tmpl.Answer, clozeOrdinal, nil
-}
-
-// isMachineGraded reports whether an answer spec names a control that grades a machine answer. The short answer control
-// carries a spec — it records the written answer — but grading stays self-assessed.
-func isMachineGraded(spec *notetype.AnswerSpec) bool {
-	if spec == nil {
-		return false
-	}
-	if spec.Control == "short_answer" {
-		return false
-	}
-	_, ok := answer.Lookup(spec.Control)
-	return ok
 }
 
 // optionCount returns the number of options the answer spec's options role holds, and whether the control has one.

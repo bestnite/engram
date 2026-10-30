@@ -1030,6 +1030,9 @@ describe('Centralized typed same-origin REST API client', () => {
             tags: ['biology'],
             template: 'forward',
             version: 0,
+            answer_control: null,
+            machine_graded: false,
+            field_order: ['front', 'back'],
           },
           {
             card_id: '102',
@@ -1042,6 +1045,9 @@ describe('Centralized typed same-origin REST API client', () => {
             fields: { front: 'question 2', back: 'answer 2' },
             tags: ['chemistry'],
             version: 0,
+            answer_control: null,
+            machine_graded: false,
+            field_order: ['front', 'back'],
           },
         ],
       };

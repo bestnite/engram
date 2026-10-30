@@ -17,8 +17,6 @@
   import Badge from '../components/ui/Badge.svelte';
   import HelpTip from '../components/ui/HelpTip.svelte';
   import { ArrowLeft, Check, CircleAlert, CircleCheckBig, CircleX, Eye, EyeOff, PartyPopper, Pause, Pencil, Plus, RefreshCw, Undo2, X } from '@lucide/svelte';
-  import { noteKindLabel as kindLabel } from '../labels';
-  import { cardTypes, descriptionOf, loadCardTypes, type CardTypeCatalog } from '../card-types';
   import { withReturn } from '../return-to';
   import { navigate } from '../router';
   interface Props {
@@ -54,8 +52,12 @@
     initialLastUndo = null,
   }: Props = $props();
 
-  // Self-graded card types render four rating buttons; answer-type card types render an input control and are graded by the server.
-  // Which card type belongs to which class is decided by the server's self-description (graded / answer_control); the frontend no longer maintains a list.
+  // The server decides how a card is answered: `machine_graded` is the rule the submit path applies, and `answer_control`
+  // names the template's answer control (null when it has none). The page switches between the four self-ratings, the
+  // essay flow and the machine-graded flow on those two fields only, so a note type that matches no stock kind answers
+  // like any other.
+  /** The short answer control records the written answer and keeps the rating self-assessed. */
+  const SHORT_ANSWER_CONTROL = 'short_answer';
 
   /** Counts the queued cards that have never been studied; every other state (learning, review, relearning) counts as a review card. */
   function countNew(queue: DueCard[]): number {
@@ -138,43 +140,23 @@
     extraStatus ? Math.min(extraStatus.max_count, Math.max(extraStatus.new_available - extraStatus.new_left, 0)) : 0,
   );
   const showExtra = $derived(extraStatus !== null && !extraStatus.new_unlimited && extraStatus.suggested_count > 0);
-  // The current card's card type self-description; null when the metadata is not ready or the card type is unknown, and the view renders the loading state instead of guessing fields.
-  const desc = $derived(descriptionOf($cardTypes, current?.kind));
-  const selfAssessable = $derived(desc !== null && !desc.graded);
-  const gradedKind = $derived(desc !== null && desc.graded);
-  const answerControl = $derived(desc?.answer_control ?? 'none');
-  const front = $derived(current && $cardTypes ? cardSide($cardTypes, current, false) : []);
-  const answer = $derived(current && $cardTypes ? cardSide($cardTypes, current, true) : []);
+  // The current card's answer flow, read off the due-card payload. The plain-text fallback takes the first field in
+  // config order as the question side and the rest as the answer side, so the answer stays out of it before the reveal.
+  const machineGraded = $derived(current?.machine_graded ?? false);
+  const answerControl = $derived(current?.answer_control ?? null);
+  const essay = $derived(answerControl === SHORT_ANSWER_CONTROL);
+  const frontFallback = $derived(current ? fieldValues(current).slice(0, 1) : []);
+  const answerFallback = $derived(current ? fieldValues(current).slice(1) : []);
   // Edit entry: prefer the edit_href returned by the server's render; when it has not been fetched, join it per the canonical path.
   const fallbackEditHref = $derived(current ? `/decks/${current.deck_id}/notes/${current.note_id}` : '');
 
-  /**
-   * The card face's front/back fields: the front and back field names come from the metadata (front_field / back_field).
-   * Template-level reversal (basic_both's reverse) swaps front and back here — the metadata describes the forward
-   * mapping and does not encode template-level reversal.
-   */
-  function cardSide(
-    catalog: CardTypeCatalog,
-    card: DueCard,
-    back: boolean
-  ): [string, string][] {
-    const description = descriptionOf(catalog, card.kind);
-    if (!description) return [];
+  /** The note's field values in the note type's field order, for the plain-text fallback when the face HTML is missing. */
+  function fieldValues(card: DueCard): string[] {
     const fields = card.fields || {};
-    const reverse = card.template === 'reverse';
-    const frontKey = reverse ? description.back_field : description.front_field;
-    const answerKey = reverse ? description.front_field : description.back_field;
-    const key = back ? answerKey : frontKey;
-    const value = fields[key];
-    return value === undefined ? [] : [[key, fieldText(value)]];
-  }
-
-  /** The prompt text of an answer-type card type: the field name comes from the metadata's prompt_field. */
-  function gradedPrompt(catalog: CardTypeCatalog | null, card: DueCard): string {
-    const description = descriptionOf(catalog, card.kind);
-    if (!description || !description.prompt_field) return '';
-    const value = (card.fields || {})[description.prompt_field];
-    return value === undefined || value === null ? '' : String(value);
+    return card.field_order.flatMap((id) => {
+      const value = fields[id];
+      return value === undefined ? [] : [fieldText(value)];
+    });
   }
 
   function resetAnswerState(): void {
@@ -197,7 +179,7 @@
    * reveal and the self-grade; every other control's value is what submission sends.
    */
   function onFrameAnswer(value: GradedAnswer): void {
-    if (answerControl === 'essay') {
+    if (essay) {
       essayText = typeof value === 'string' ? value : '';
       return;
     }
@@ -343,7 +325,7 @@
     try {
       const elapsed = Math.max(0, Date.now() - startedAt);
       const ratedCardId = current.card_id;
-      const written = answerControl === 'essay' && essayText.trim() !== '' ? essayText : undefined;
+      const written = essay && essayText.trim() !== '' ? essayText : undefined;
       const response = await client.submitSelfReview({
         card_id: ratedCardId,
         rating,
@@ -628,7 +610,7 @@
 
   /** The action shared by space/enter and swipe: a graded card requests the answer reveal, a self-graded card flips. */
   function applyReveal(): void {
-    if (gradedKind) {
+    if (machineGraded) {
       if (!gradedRevealed) void revealGraded();
       return;
     }
@@ -649,7 +631,7 @@
     const action = reviewShortcut(key, modifiers, {
       ...focus,
       feedback: feedback !== null,
-      gradedKind,
+      machineGraded,
       gradedRevealed,
       revealed,
       canUndo: lastUndo !== null,
@@ -750,7 +732,7 @@
     tracking = false;
     const action = reviewSwipe(touch.clientX - touchStartX, touch.clientY - touchStartY, {
       feedback: feedback !== null,
-      gradedKind,
+      machineGraded,
       gradedRevealed,
       revealed,
     });
@@ -770,8 +752,6 @@
 
   onMount(() => {
     void loadQueue();
-    // Metadata is loaded only once (idempotent within the module); on failure it silently degrades to the loading/empty state without interrupting the review flow.
-    void loadCardTypes(client).catch(() => {});
     window.addEventListener('keydown', onKeydown);
     return () => {
       window.removeEventListener('keydown', onKeydown);
@@ -907,8 +887,7 @@
       </div>
     {:else}
       <article data-testid="review-card" data-card-id={current.card_id} class="space-y-6">
-        <div class="flex items-center justify-between pb-3 border-b border-border">
-          <Badge class="px-2.5 font-semibold">{kindLabel(current.kind, $cardTypes, $t)}</Badge>
+        <div class="flex items-center justify-end pb-3 border-b border-border">
           <button
             type="button"
             onclick={gotoEdit}
@@ -920,10 +899,7 @@
           </button>
         </div>
 
-        {#if !desc}
-          <!-- Metadata not ready (still loading or the fetch failed): render the loading state, do not guess fields and do not print machine vocabulary. -->
-          <Skeleton testId="review-meta-loading" label={$t('common.loading')} lines={3} />
-        {:else if selfAssessable}
+        {#if !machineGraded}
           <div class="min-h-28" data-testid="review-front">
             {#if frontFace && frontFace.html}
               <CardFrame
@@ -939,12 +915,12 @@
               />
             {:else}
               <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">
-                {#each front as [label, value] (label)}<div><span class="sr-only">{label}</span>{value}</div>{/each}
+                {#each frontFallback as value, index (index)}<div>{value}</div>{/each}
               </div>
             {/if}
           </div>
           {#if revealed}
-            {#if answerControl === 'essay'}
+            {#if essay}
               <!-- Short-answer card: first show the answer the learner wrote (plain text, not into the HTML sink), then the reference answer for comparison. -->
               {#if essayText.trim() !== ''}
                 <div class="border-t border-input pt-5" data-testid="review-essay-given">
@@ -965,9 +941,9 @@
                     title={$t('note_preview.back')}
                     onkey={onFrameKey}
                   />
-                {:else if answer.length}
+                {:else if answerFallback.length}
                   <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">
-                    {#each answer as [label, value] (label)}<div>{value}</div>{/each}
+                    {#each answerFallback as value, index (index)}<div>{value}</div>{/each}
                   </div>
                 {:else}
                   <p class="text-sm text-muted-foreground" data-testid="review-essay-no-reference">{$t('review.essay.no_reference')}</p>
@@ -988,7 +964,7 @@
                   />
                 {:else}
                   <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">
-                    {#each answer as [label, value] (label)}<div><span class="text-xs text-zinc-500 block">{label}</span>{value}</div>{/each}
+                    {#each answerFallback as value, index (index)}<div>{value}</div>{/each}
                   </div>
                 {/if}
               </div>
@@ -1022,7 +998,7 @@
               <span>{$t('review.show_answer')}</span>
             </button>
           {/if}
-        {:else if gradedKind}
+        {:else}
           <!-- The answer card's prompt stays on top in all three states — answering, answer revealed, grading result — with the answer below
                behind a divider, so the learner does not have to recall the original question while reading the answer. -->
           <div class="space-y-5">
@@ -1040,7 +1016,9 @@
                   onanswer={onFrameAnswer}
                 />
               {:else}
-                <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">{gradedPrompt($cardTypes, current)}</div>
+                <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">
+                  {#each frontFallback as value, index (index)}<div>{value}</div>{/each}
+                </div>
               {/if}
             </div>
             {#if feedback}
@@ -1162,6 +1140,6 @@
     {/if}
   </div>
   <p class="mt-4 text-center text-xs text-muted-foreground">
-    {feedback ? $t('review.shortcuts_result') : gradedKind ? (gradedRevealed ? $t('review.shortcuts_give_up') : $t('review.shortcuts_graded')) : revealed ? $t('review.shortcuts') : $t('review.shortcuts_reveal')}{lastUndo ? ` · ${$t('review.shortcuts_undo')}` : ''}
+    {feedback ? $t('review.shortcuts_result') : machineGraded ? (gradedRevealed ? $t('review.shortcuts_give_up') : $t('review.shortcuts_graded')) : revealed ? $t('review.shortcuts') : $t('review.shortcuts_reveal')}{lastUndo ? ` · ${$t('review.shortcuts_undo')}` : ''}
   </p>
 </Page>

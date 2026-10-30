@@ -35,8 +35,8 @@ export interface ReviewShortcutState {
   repeat: boolean;
   /** Whether the result panel is showing, i.e. answered with only "continue" left. */
   feedback: boolean;
-  /** Whether the current card is a graded kind. */
-  gradedKind: boolean;
+  /** Whether the server grades this card's answer (the due-card payload's machine_graded flag). */
+  machineGraded: boolean;
   /** Whether the graded card's answer has been revealed. */
   gradedRevealed: boolean;
   /** Whether the self-graded card has been flipped. */
@@ -58,7 +58,7 @@ export function reviewShortcut(
   if (modifiers.alt || modifiers.ctrl || modifiers.meta || state.composing || state.repeat) return { kind: 'ignore' };
 
   // Graded card awaiting an answer: Enter submits, whether focus is in the input, on the options or on the page - the usual form convention.
-  const answering = state.gradedKind && !state.gradedRevealed && !state.feedback;
+  const answering = state.machineGraded && !state.gradedRevealed && !state.feedback;
   if (answering && key === 'Enter') return { kind: 'submit' };
 
   if (state.typing) return { kind: 'ignore' };
@@ -73,7 +73,7 @@ export function reviewShortcut(
 
   if (key === ' ' || key === 'Enter') {
     // Once the graded card's answer is revealed, the only way out is "record as Again and continue", which Enter/Space take directly.
-    if (state.gradedKind && state.gradedRevealed) return { kind: 'give_up' };
+    if (state.machineGraded && state.gradedRevealed) return { kind: 'give_up' };
     // When focus is on the options, Space is left to the options themselves to select.
     if (state.choosing) return { kind: 'ignore' };
     // Otherwise prevent the default: reveal the answer on a graded card, flip a self-graded card.
@@ -82,7 +82,7 @@ export function reviewShortcut(
 
   // While a graded card awaits an answer, 1–4 do nothing at all (no grading, no reveal).
   if (/^[1-4]$/.test(key)) {
-    if (state.gradedKind) return { kind: 'swallow' };
+    if (state.machineGraded) return { kind: 'swallow' };
     if (state.revealed) return { kind: 'rate', rating: Number(key) };
     return { kind: 'ignore' };
   }
@@ -104,7 +104,7 @@ export type ReviewSwipe =
 /** Review state the swipe decisions depend on. */
 export interface ReviewSwipeState {
   feedback: boolean;
-  gradedKind: boolean;
+  machineGraded: boolean;
   gradedRevealed: boolean;
   revealed: boolean;
 }
@@ -119,7 +119,7 @@ export const SWIPE_THRESHOLD = 45;
 export function reviewSwipe(dx: number, dy: number, state: ReviewSwipeState): ReviewSwipe {
   if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy)) return { kind: 'ignore' };
   if (state.feedback) return { kind: 'ignore' };
-  if (state.gradedKind) return state.gradedRevealed ? { kind: 'ignore' } : { kind: 'reveal' };
+  if (state.machineGraded) return state.gradedRevealed ? { kind: 'ignore' } : { kind: 'reveal' };
   if (!state.revealed) return { kind: 'reveal' };
   return { kind: 'rate', rating: dx < 0 ? 1 : 3 };
 }

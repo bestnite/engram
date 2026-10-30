@@ -1135,6 +1135,14 @@ type DueCard struct {
 	Tags           []string       `json:"tags"`
 	Template       string         `json:"template,omitempty"`
 	Version        int            `json:"version"`
+	// AnswerControl is the control name of the card template's answer spec, or null when the template has none.
+	// The review page picks the self-rated, essay or machine-graded flow from it and MachineGraded, never from the kind.
+	AnswerControl *string `json:"answer_control"`
+	// MachineGraded reports whether the server grades this card's answer, by the same rule the submit path applies.
+	MachineGraded bool `json:"machine_graded"`
+	// FieldOrder lists the note type's field ids in config order, the order the plain-text fallback shows the values in.
+	// The fields map is keyed by field id but keeps no order, so the client cannot recover this order on its own.
+	FieldOrder []string `json:"field_order"`
 	// OptionOrder is the display order of a choice card's options: slot b shows stored option index OptionOrder[b].
 	// It is null for card kinds without option controls, and the submitted answer stays a stored option index.
 	OptionOrder []int `json:"option_order"`
@@ -1283,6 +1291,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 			Kind:           view.kind,
 			Fields:         transitionalFields(view.kind, values),
 			Tags:           store.TagsOrEmpty(note.TagsJSON),
+			FieldOrder:     fieldOrder(view.config),
 		}
 		// Missing card_states / card / deck stay zero-valued, consistent with the result of a failed per-card read.
 		if state, ok := statesByCard[it.CardID]; ok {
@@ -1295,8 +1304,14 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		if d, ok := decksByID[note.DeckID]; ok {
 			entry.DeckID = d.PublicID
 		}
-		// Only an answer control that reads options has a display order to shuffle; every other card stays null.
+		// The template's answer spec decides how the review page answers this card. The same spec drives the option
+		// shuffle: only a control that reads options has a display order.
 		if spec, _, err := templateAnswer(view.config, entry.Template); err == nil {
+			if spec != nil {
+				control := spec.Control
+				entry.AnswerControl = &control
+			}
+			entry.MachineGraded = answer.IsMachineGraded(spec)
 			if count := optionCount(spec, values); count > 0 {
 				entry.OptionOrder = OptionOrder(count, u.ID, it.CardID, entry.Version)
 			}
@@ -1490,7 +1505,7 @@ func (a *API) resolveRating(ctx context.Context, card *store.Card, note *store.N
 	}
 	hasAnswer := len(bytes.TrimSpace(in.Answer)) > 0
 
-	if !isMachineGraded(spec) {
+	if !answer.IsMachineGraded(spec) {
 		if in.GiveUp {
 			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "give_up applies only to templates graded by the server")
 		}

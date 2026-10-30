@@ -3,7 +3,6 @@ import { mount, unmount, flushSync } from 'svelte';
 import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 import { faces } from './card-face-fixture';
 import { shownFaces, postAnswerFromFrame, frameDocument } from './card-frame-fixture';
 import { REVIEW_BACK_CSS, REVIEW_FRONT_CSS } from '../lib/card-frame';
@@ -21,7 +20,6 @@ describe('ReviewView card faces in the frame', () => {
     if (instance) unmount(instance);
     instance = null;
     document.body.innerHTML = '';
-    clearCardTypes();
     vi.restoreAllMocks();
   });
 
@@ -32,7 +30,6 @@ describe('ReviewView card faces in the frame', () => {
 
   async function mountView(card: DueCard, client: Partial<ApiClient>): Promise<HTMLElement> {
     setLocale('zh-CN');
-    seedCardTypes();
     const target = document.createElement('div');
     document.body.appendChild(target);
     instance = mount(ReviewView, {
@@ -56,6 +53,9 @@ describe('ReviewView card faces in the frame', () => {
       tags: [],
       template: 'forward',
       version: 0,
+      answer_control: null,
+      machine_graded: false,
+      field_order: ['front', 'back'],
     };
     const renderReviewCard = vi.fn().mockResolvedValue({
       card_id: 'b1',
@@ -98,6 +98,9 @@ describe('ReviewView card faces in the frame', () => {
       tags: [],
       template: 'forward',
       version: 0,
+      answer_control: 'text',
+      machine_graded: true,
+      field_order: ['prompt', 'answer'],
     };
     const submitGradedReview = vi.fn().mockResolvedValue({
       card_id: 'g1',
@@ -156,6 +159,9 @@ describe('ReviewView card faces in the frame', () => {
       tags: [],
       template: 'forward',
       version: 0,
+      answer_control: null,
+      machine_graded: false,
+      field_order: ['front', 'back'],
     };
     // A note type that styles the card body itself: the front and the back carry different rules and class lists, so the
     // case proves each frame takes its own side's object instead of sharing one.

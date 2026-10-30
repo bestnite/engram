@@ -19,7 +19,7 @@ function keyState(over: Partial<ReviewShortcutState> = {}): ReviewShortcutState 
     composing: false,
     repeat: false,
     feedback: false,
-    gradedKind: false,
+    machineGraded: false,
     gradedRevealed: false,
     revealed: false,
     canUndo: false,
@@ -47,13 +47,13 @@ describe('reviewShortcut keyboard mapping', () => {
   it('maps space/enter to reveal on self-assessed cards and space to reveal on graded cards', () => {
     expect(reviewShortcut(' ', noMods, keyState())).toEqual({ kind: 'reveal' });
     expect(reviewShortcut('Enter', noMods, keyState())).toEqual({ kind: 'reveal' });
-    expect(reviewShortcut(' ', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'reveal' });
+    expect(reviewShortcut(' ', noMods, keyState({ machineGraded: true }))).toEqual({ kind: 'reveal' });
     // Already flipped/revealed still returns reveal; the view decides it is a no-op (preserving SSR's preventDefault semantics).
     expect(reviewShortcut('Enter', noMods, keyState({ revealed: true }))).toEqual({ kind: 'reveal' });
   });
 
   it('submits a graded answer with enter from the input, an option or the page', () => {
-    const answering = keyState({ gradedKind: true });
+    const answering = keyState({ machineGraded: true });
     expect(reviewShortcut('Enter', noMods, { ...answering, typing: true })).toEqual({ kind: 'submit' });
     expect(reviewShortcut('Enter', noMods, { ...answering, choosing: true })).toEqual({ kind: 'submit' });
     expect(reviewShortcut('Enter', noMods, answering)).toEqual({ kind: 'submit' });
@@ -64,23 +64,23 @@ describe('reviewShortcut keyboard mapping', () => {
   });
 
   it('never submits while an IME is composing, on auto-repeat, or with a modifier', () => {
-    const answering = keyState({ gradedKind: true, typing: true });
+    const answering = keyState({ machineGraded: true, typing: true });
     expect(reviewShortcut('Enter', noMods, { ...answering, composing: true })).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('Enter', noMods, { ...answering, repeat: true })).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('Enter', { alt: false, ctrl: true, meta: false }, answering)).toEqual({ kind: 'ignore' });
     // Holding Enter down: auto-repeat must not carry the result panel past "submit" into "continue".
-    const result = keyState({ feedback: true, gradedKind: true, gradedRevealed: true });
+    const result = keyState({ feedback: true, machineGraded: true, gradedRevealed: true });
     expect(reviewShortcut('Enter', noMods, { ...result, repeat: true })).toEqual({ kind: 'ignore' });
   });
 
   it('leaves space to a focused choice option instead of revealing the answer', () => {
-    expect(reviewShortcut(' ', noMods, keyState({ gradedKind: true, choosing: true }))).toEqual({ kind: 'ignore' });
+    expect(reviewShortcut(' ', noMods, keyState({ machineGraded: true, choosing: true }))).toEqual({ kind: 'ignore' });
     // With focus not on an option, space is still "show answer".
-    expect(reviewShortcut(' ', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'reveal' });
+    expect(reviewShortcut(' ', noMods, keyState({ machineGraded: true }))).toEqual({ kind: 'reveal' });
   });
 
   it('gives up with enter or space once a graded answer is revealed', () => {
-    const revealed = keyState({ gradedKind: true, gradedRevealed: true });
+    const revealed = keyState({ machineGraded: true, gradedRevealed: true });
     expect(reviewShortcut('Enter', noMods, revealed)).toEqual({ kind: 'give_up' });
     expect(reviewShortcut(' ', noMods, revealed)).toEqual({ kind: 'give_up' });
     expect(reviewShortcut('3', noMods, revealed)).toEqual({ kind: 'swallow' });
@@ -97,7 +97,7 @@ describe('reviewShortcut keyboard mapping', () => {
       });
     }
     // Graded card awaiting an answer: 1–4 are swallowed (default prevented) and never rate.
-    expect(reviewShortcut('2', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'swallow' });
+    expect(reviewShortcut('2', noMods, keyState({ machineGraded: true }))).toEqual({ kind: 'swallow' });
   });
 
   it('maps b to bury and e to edit on an active card', () => {
@@ -106,18 +106,18 @@ describe('reviewShortcut keyboard mapping', () => {
     expect(reviewShortcut('e', noMods, keyState())).toEqual({ kind: 'edit' });
     expect(reviewShortcut('E', noMods, keyState())).toEqual({ kind: 'edit' });
     // While a graded card awaits an answer it can likewise be buried/edited (in the production path the buttons are visible on every unanswered card).
-    expect(reviewShortcut('b', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'bury' });
+    expect(reviewShortcut('b', noMods, keyState({ machineGraded: true }))).toEqual({ kind: 'bury' });
   });
 
   it('maps s to suspend on an active card, but not on the result panel', () => {
     expect(reviewShortcut('s', noMods, keyState())).toEqual({ kind: 'suspend' });
-    expect(reviewShortcut('S', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'suspend' });
+    expect(reviewShortcut('S', noMods, keyState({ machineGraded: true }))).toEqual({ kind: 'suspend' });
     expect(reviewShortcut('s', noMods, keyState({ feedback: true }))).toEqual({ kind: 'ignore' });
     expect(reviewShortcut('s', noMods, keyState({ typing: true }))).toEqual({ kind: 'ignore' });
   });
 
   it('treats the result panel as continue-only plus edit', () => {
-    const result = keyState({ feedback: true, gradedKind: true, gradedRevealed: true });
+    const result = keyState({ feedback: true, machineGraded: true, gradedRevealed: true });
     for (const key of [' ', 'Enter', '1', '2', '3', '4']) {
       expect(reviewShortcut(key, noMods, result)).toEqual({ kind: 'continue' });
     }
@@ -130,11 +130,11 @@ describe('reviewShortcut keyboard mapping', () => {
   it('maps u to undo only when there is a submission to undo', () => {
     // With nothing undoable, u does not swallow the key (it goes to the browser).
     expect(reviewShortcut('u', noMods, keyState())).toEqual({ kind: 'ignore' });
-    expect(reviewShortcut('U', noMods, keyState({ gradedKind: true }))).toEqual({ kind: 'ignore' });
+    expect(reviewShortcut('U', noMods, keyState({ machineGraded: true }))).toEqual({ kind: 'ignore' });
     // With a submit available: undo works after flipping a self-rated card and on a graded result panel (self-rated questions included — they have no result panel).
     expect(reviewShortcut('u', noMods, keyState({ revealed: true, canUndo: true }))).toEqual({ kind: 'undo' });
-    expect(reviewShortcut('U', noMods, keyState({ gradedKind: true, canUndo: true }))).toEqual({ kind: 'undo' });
-    const result = keyState({ feedback: true, gradedKind: true, gradedRevealed: true, canUndo: true });
+    expect(reviewShortcut('U', noMods, keyState({ machineGraded: true, canUndo: true }))).toEqual({ kind: 'undo' });
+    const result = keyState({ feedback: true, machineGraded: true, gradedRevealed: true, canUndo: true });
     expect(reviewShortcut('u', noMods, result)).toEqual({ kind: 'undo' });
     expect(reviewShortcut('U', noMods, result)).toEqual({ kind: 'undo' });
     // Still ignored while an input has focus.
@@ -144,7 +144,7 @@ describe('reviewShortcut keyboard mapping', () => {
 
 describe('reviewSwipe mapping', () => {
   function swipeState(over: Partial<ReviewSwipeState> = {}): ReviewSwipeState {
-    return { feedback: false, gradedKind: false, gradedRevealed: false, revealed: false, ...over };
+    return { feedback: false, machineGraded: false, gradedRevealed: false, revealed: false, ...over };
   }
 
   it('requires a horizontal displacement past the threshold', () => {
@@ -167,10 +167,10 @@ describe('reviewSwipe mapping', () => {
 
   it('never swipes the result panel or an already-revealed graded card', () => {
     expect(reviewSwipe(-120, 0, swipeState({ feedback: true }))).toEqual({ kind: 'ignore' });
-    expect(reviewSwipe(-120, 0, swipeState({ gradedKind: true, gradedRevealed: true }))).toEqual({
+    expect(reviewSwipe(-120, 0, swipeState({ machineGraded: true, gradedRevealed: true }))).toEqual({
       kind: 'ignore',
     });
     // Graded card not yet revealed: a swipe requests revealing the answer.
-    expect(reviewSwipe(-120, 0, swipeState({ gradedKind: true }))).toEqual({ kind: 'reveal' });
+    expect(reviewSwipe(-120, 0, swipeState({ machineGraded: true }))).toEqual({ kind: 'reveal' });
   });
 });

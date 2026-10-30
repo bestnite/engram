@@ -3,7 +3,6 @@ import { mount, unmount, flushSync } from 'svelte';
 import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-import { clearCardTypes, seedCardTypes } from './card-type-fixture';
 import { faces } from './card-face-fixture';
 
 /**
@@ -18,7 +17,6 @@ describe('ReviewView empty-state icon', () => {
     if (instance) unmount(instance);
     instance = null;
     document.body.innerHTML = '';
-    clearCardTypes();
     vi.restoreAllMocks();
   });
 
@@ -39,11 +37,13 @@ describe('ReviewView empty-state icon', () => {
     tags: [],
     template: 'forward',
     version: 0,
+    answer_control: null,
+    machine_graded: false,
+    field_order: ['front', 'back'],
   };
 
   function mountReview(client: ApiClient): HTMLElement {
     setLocale('zh-CN');
-    seedCardTypes();
     const target = document.createElement('div');
     document.body.appendChild(target);
     instance = mount(ReviewView, { target, props: { client } });
