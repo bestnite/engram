@@ -17,8 +17,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // Deck package (.edeck) export/import.
@@ -608,104 +606,6 @@ func CanonicalFieldsJSON(fieldsJSON string) string {
 		return strings.TrimSpace(fieldsJSON)
 	}
 	return string(raw)
-}
-
-// NewMediaStore builds the media metadata store (only row lookup by sha256 is used, for deck package export/import).
-func NewMediaStore(db *gorm.DB) *MediaStore { return &MediaStore{db: db} }
-
-// MediaStore wraps metadata access to the media table; the bytes stay on the local filesystem.
-type MediaStore struct{ db *gorm.DB }
-
-// BySha256 fetches media metadata by content address; absent returns (nil, nil).
-func (s *MediaStore) BySha256(ctx context.Context, sha string) (*Media, error) {
-	var m Media
-	err := s.db.WithContext(ctx).Where("sha256 = ?", sha).First(&m).Error
-	if err == nil {
-		return &m, nil
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	return nil, err
-}
-
-// SaveBytes writes one piece of media to disk content-addressed and records its metadata; when it already exists (same sha256) it returns the existing row idempotently.
-func (s *MediaStore) SaveBytes(ctx context.Context, root, mime string, raw []byte, createdBy *uint64) (*Media, error) {
-	m, _, err := s.SaveBytesTracked(ctx, root, mime, raw, createdBy)
-	return m, err
-}
-
-// SaveBytesTracked is the same as SaveBytes but additionally returns the absolute path of the file **actually newly written** by this call;
-// it returns an empty string when it hits existing metadata (de-duplication) or nothing was written.
-//
-// Package import uses it to register "which files this run wrote" so a later failed transaction can clean them up -- otherwise the metadata row
-// rolls back while the bytes stay on disk, leaving an orphan file nobody references.
-func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, raw []byte, createdBy *uint64) (*Media, string, error) {
-	sum := sha256.Sum256(raw)
-	sha := hex.EncodeToString(sum[:])
-	if existing, err := s.BySha256(ctx, sha); err != nil {
-		return nil, "", err
-	} else if existing != nil {
-		// De-duplication hit: the bytes are already stored, but the "provider this time" still needs its ownership recorded (otherwise, when B uploads the same bytes as C,
-		// B gets no media_uploaders record, and B cannot read the file it provided once A revokes sharing).
-		if createdBy != nil {
-			if err := RecordMediaUploader(ctx, s.db, sha, *createdBy); err != nil {
-				return nil, "", err
-			}
-		}
-		return existing, "", nil
-	}
-	ext := mimeExt(mime)
-	rel := filepath.Join(sha[:2], sha+"."+ext)
-	abs := filepath.Join(root, rel)
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		return nil, "", fmt.Errorf("media: create shard dir: %w", err)
-	}
-	if err := os.WriteFile(abs, raw, 0o644); err != nil {
-		return nil, "", fmt.Errorf("media: write file: %w", err)
-	}
-	row := &Media{Sha256: sha, RelPath: rel, Mime: mime, Bytes: int64(len(raw)), CreatedBy: createdBy, CreatedAt: time.Now().UTC()}
-	if err := s.db.WithContext(ctx).Create(row).Error; err != nil {
-		if existing, rerr := s.BySha256(ctx, sha); rerr == nil && existing != nil {
-			// Under concurrency another request already committed the same sha: the file is referenced by it and does not count as newly written here. Ownership is still recorded.
-			if createdBy != nil {
-				if rerr2 := RecordMediaUploader(ctx, s.db, sha, *createdBy); rerr2 != nil {
-					return nil, "", rerr2
-				}
-			}
-			return existing, "", nil
-		}
-		// Metadata write failed: no row references the file written by this call, so the path goes to the caller to clean up on the failure path.
-		return nil, abs, fmt.Errorf("media: record metadata: %w", err)
-	}
-	if createdBy != nil {
-		if err := RecordMediaUploader(ctx, s.db, sha, *createdBy); err != nil {
-			return nil, abs, err
-		}
-	}
-	return row, abs, nil
-}
-
-// mimeExt maps an allowlisted mime to a file extension; unknown types fall back to bin.
-func mimeExt(mime string) string {
-	switch strings.ToLower(strings.TrimSpace(mime)) {
-	case "image/png":
-		return "png"
-	case "image/jpeg":
-		return "jpg"
-	case "image/webp":
-		return "webp"
-	case "image/gif":
-		return "gif"
-	case "audio/mpeg":
-		return "mp3"
-	case "audio/ogg":
-		return "ogg"
-	case "audio/mp4":
-		return "m4a"
-	default:
-		return "bin"
-	}
 }
 
 // readZipEntry reads the content of a zip entry (with a size cap, see package_import.go).

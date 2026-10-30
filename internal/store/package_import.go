@@ -697,7 +697,8 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		}
 	}
 
-	// Media: written to disk by sha256 (skipped when already present); dry_run only counts.
+	// Media: written to disk by sha256; bytes already stored are not rewritten but still get the dedup-hit rules of
+	// MediaStore.Put (uploader record, orphan mark cleared). dry_run only counts.
 	//
 	// It must go through the transaction handle tx, not s.db: s.db is a different connection and on SQLite the outer write transaction's
 	// file lock shuts it out (SQLITE_BUSY: database is locked) -- this is exactly why package import with media always failed on SQLite
@@ -713,6 +714,12 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 			return fmt.Errorf("import package: check media %s: %w", sha, err)
 		}
 		if existing != nil {
+			if opts.DryRun {
+				continue
+			}
+			if _, _, err := mstore.reuse(ctx, existing, Ptr(actorUserID)); err != nil {
+				return err
+			}
 			continue
 		}
 		report.MediaNew++

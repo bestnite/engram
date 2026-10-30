@@ -51,7 +51,7 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | Package | Responsibility |
 |---|---|
 | `internal/config` | Startup configuration. Precedence is environment variable, then the `settings` table, then the built-in default; every accessor can report which source won. |
-| `internal/store` | GORM models (`AllModels` in `models.go`) and the concrete stores that wrap database access, including deck package import and export. |
+| `internal/store` | GORM models (`AllModels` in `models.go`) and the concrete stores that wrap database access, including deck package import and export. `MediaStore.Put` is the single content-addressed media write (`<sha256[:2]>/<sha256>.<ext>`, temp file + rename, dedup-hit rules) used by both upload and import. |
 | `internal/cardtype` | The card type registry and one file per card type. Field names match `schema/note-import.schema.json`. |
 | `internal/reviewday` | Leaf package with the single definition of a user's review day: timezone resolution (unknown names fall back to UTC), the day cutoff hour, the review-day boundaries, and the `YYYY-MM-DD` day string written to `reviews.review_day`. Grading, burying, budgets, statistics, reminders and digests all read it. |
 | `internal/schedule` | The go-fsrs wrapper: card state machine, queue builder, daily budgets, review submission, and undo. |
@@ -59,8 +59,8 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/api` | `/api/v1` REST handlers, their authentication and rate-limit middleware, and the service layer (`service.go` and the methods on `API`) that REST and MCP share. |
 | `internal/mcp` | The built-in MCP server at `/mcp` (streamable HTTP). It accepts API keys only, and every tool calls an `internal/api` service method. |
 | `internal/web` | The gin router: security headers, session and locale middleware, the session-and-CSRF JSON endpoints the SPA uses, the admin API, media proxying, the SPA shell, and the not-found fallback. It mounts `internal/api` and `internal/mcp`. |
-| `internal/media` | Content-addressed local file storage (`<sha256[:2]>/<sha256>.<ext>`) and media metadata. |
-| `internal/mediatype` | Leaf package with the media type detection and allowlist shared by `internal/media` and `internal/store`. |
+| `internal/media` | Local media storage around `store.MediaStore.Put`: streaming and validating uploads, serving files, and reclaiming orphans. |
+| `internal/mediatype` | Leaf package with the media type detection, the mime-to-extension table and the allowlist shared by `internal/media` and `internal/store`. |
 | `internal/render` | Markdown to HTML (goldmark), including the `{{name:body|key=value}}` shortcode form, followed by allowlist sanitising (bluemonday). Card content and mail bodies share the pipeline; the mail allowlist additionally permits headings, and the mail renderer turns a shortcode into plain text instead of an element. |
 | `internal/texmath` | The single rule for locating TeX math, shared by `internal/render` and `internal/cardtype`. |
 | `internal/i18n` | Server-side translation catalogs (`internal/i18n/locales/*.yaml`), request language resolution, and the localiser placed in the request context. |

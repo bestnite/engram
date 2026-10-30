@@ -1,8 +1,8 @@
 // Package media implements media storage on the local filesystem.
 //
-// Content addressing: files are stored as <sha256[:2]>/<sha256>.<ext>, so identical bytes are naturally stored once;
-// writes go through a temporary file + rename so readers never see a half-written file; no object storage is involved and no
-// server-side compression is done. This package only owns bytes and media metadata; the HTTP proxy and upload endpoints belong to internal/web.
+// Content addressing, the temporary-file + rename write and the dedup rules live in store.MediaStore.Put, shared with deck
+// package import; this package streams and validates uploads, serves files and reclaims orphans. No object storage is
+// involved and no server-side compression is done. This package only owns bytes and media metadata; the HTTP proxy and upload endpoints belong to internal/web.
 package media
 
 import (
@@ -143,7 +143,7 @@ func New(root string, db *gorm.DB) (*Store, error) {
 // Root returns the storage root directory.
 func (s *Store) Root() string { return s.root }
 
-func (s *Store) tempDir() string { return filepath.Join(s.root, "tmp") }
+func (s *Store) tempDir() string { return store.MediaTempDir(s.root) }
 
 // absPath joins a relative path into an absolute one and blocks paths escaping the root directory (defensive).
 func (s *Store) absPath(rel string) (string, error) {
@@ -166,9 +166,13 @@ type SaveOptions struct {
 	CreatedBy *uint64
 }
 
-// Save writes one piece of media: reads into a temporary file up to the limit, validates the magic bytes, dedups by sha256,
-// renames into place, and writes metadata. On a dedup hit the returned Media is the row that already existed.
+// Save writes one piece of media: reads into a temporary file up to the limit, validates the magic bytes, then stores it
+// through store.MediaStore.Put, which owns dedup, placement and metadata. On a dedup hit the returned Media is the row
+// that already existed.
 func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store.Media, error) {
+	if s.db == nil {
+		return nil, errors.New("media: save requires a database")
+	}
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = defaultMaxBytes
@@ -183,13 +187,10 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 		return nil, fmt.Errorf("media: create temp file: %w", err)
 	}
 	tmpName := tmp.Name()
-	// Every early return must remove the temporary file to avoid leaking it.
-	committed := false
+	// Put renames the temporary file into place on a fresh write; every other outcome leaves it here to be removed.
 	defer func() {
-		if !committed {
-			_ = tmp.Close()
-			_ = os.Remove(tmpName)
-		}
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
 	}()
 
 	hasher := sha256.New()
@@ -217,7 +218,7 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("media: read temp head: %w", err)
 	}
-	detected, ext, ok := mediatype.Detect(head[:n])
+	detected, _, ok := mediatype.Detect(head[:n])
 	if !ok {
 		return nil, ErrMagicMismatch
 	}
@@ -228,82 +229,18 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	if declared := mediatype.Normalize(opts.DeclaredMime); declared != "" && declared != detected {
 		return nil, ErrMagicMismatch
 	}
-
-	sum := hex.EncodeToString(hasher.Sum(nil))
-	relPath := filepath.Join(sum[:2], sum+"."+ext)
-
-	// Dedup: if the database already has the same sha256, return it directly (the file exists too).
-	if existing, err := s.bySha256(ctx, sum); err != nil {
-		return nil, err
-	} else if existing != nil {
-		// A dedup hit also records ownership: otherwise, when "B uploads the same bytes as C", B gets no
-		// media_uploaders row and cannot read the file it contributed after sharing is revoked.
-		if err := s.recordUploader(ctx, sum, opts.CreatedBy); err != nil {
-			return nil, err
-		}
-		// Re-uploading bytes that are pending reclamation shows they are about to be used again: clear the orphan flag,
-		// and the grace period restarts from the next reclamation round, otherwise it could be deleted before the user inserts it into a card.
-		if existing.OrphanedAt != nil && s.db != nil {
-			if err := s.db.WithContext(ctx).Model(&store.Media{}).Where("sha256 = ?", sum).
-				Update("orphaned_at", nil).Error; err != nil {
-				return nil, fmt.Errorf("media: clear orphan mark: %w", err)
-			}
-		}
-		return existing, nil
-	}
-
-	finalPath, err := s.absPath(relPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(filepath.Dir(finalPath), 0o755); err != nil {
-		return nil, fmt.Errorf("media: create shard dir: %w", err)
-	}
 	if err := tmp.Close(); err != nil {
 		return nil, fmt.Errorf("media: close temp file: %w", err)
 	}
-	// Same-directory rename replaces atomically; if the file already exists, a concurrent request already wrote it, so reuse it.
-	if err := os.Rename(tmpName, finalPath); err != nil {
-		if _, statErr := os.Stat(finalPath); statErr != nil {
-			return nil, fmt.Errorf("media: commit file: %w", err)
-		}
-	}
-	committed = true
 
-	row := &store.Media{
-		Sha256:    sum,
-		RelPath:   relPath,
+	row, _, err := store.NewMediaStore(s.db).Put(ctx, s.root, store.MediaPut{
+		Sha256:    hex.EncodeToString(hasher.Sum(nil)),
 		Mime:      detected,
 		Bytes:     written,
+		TempPath:  tmpName,
 		CreatedBy: opts.CreatedBy,
-		CreatedAt: time.Now().UTC(),
-	}
-	if s.db != nil {
-		if err := s.db.WithContext(ctx).Create(row).Error; err != nil {
-			// Under concurrency the unique index may be hit: read the existing row back and treat it as a successful dedup.
-			if existing, rerr := s.bySha256(ctx, sum); rerr == nil && existing != nil {
-				if uerr := s.recordUploader(ctx, sum, opts.CreatedBy); uerr != nil {
-					return nil, uerr
-				}
-				return existing, nil
-			}
-			return nil, fmt.Errorf("media: record metadata: %w", err)
-		}
-		if err := s.recordUploader(ctx, sum, opts.CreatedBy); err != nil {
-			return nil, err
-		}
-	}
-	return row, nil
-}
-
-// recordUploader registers this uploader in media_uploaders (idempotent; see store.RecordMediaUploader).
-// It is a no-op when no database is configured or there is no named uploader. Failures propagate: uploader ownership is the
-// only basis for "still readable after sharing is revoked", and losing it silently would become a user-visible permission regression.
-func (s *Store) recordUploader(ctx context.Context, sha string, createdBy *uint64) error {
-	if s.db == nil || createdBy == nil {
-		return nil
-	}
-	return store.RecordMediaUploader(ctx, s.db, sha, *createdBy)
+	})
+	return row, err
 }
 
 // Open fetches the metadata by sha256 and opens the file; returns ErrNotFound when it does not exist.

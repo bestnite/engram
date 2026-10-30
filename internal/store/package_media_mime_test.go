@@ -181,7 +181,7 @@ func sanitizeName(s string) string {
 	return string(out)
 }
 
-// mediaAbsPath joins a media row's relative path into an absolute disk path (built the same way as SaveBytesTracked builds it).
+// mediaAbsPath joins a media row's relative path into an absolute disk path (the layout MediaStore.Put writes).
 func mediaAbsPath(root, rel string) string {
 	return filepath.Join(root, filepath.FromSlash(rel))
 }

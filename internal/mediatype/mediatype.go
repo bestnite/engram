@@ -24,29 +24,60 @@ func DefaultAllowedMimes() []string {
 }
 
 // Detect determines the media type from magic bytes, returning the mime, the extension and whether detection succeeded.
-// It only recognizes the types covered by the allowlist; the extension is produced here and is never taken from the filename.
+// It only recognizes the types covered by the allowlist; the extension comes from Ext and is never taken from the filename.
 func Detect(head []byte) (mime, ext string, ok bool) {
+	mime = detectMime(head)
+	if mime == "" {
+		return "", "", false
+	}
+	return mime, Ext(mime), true
+}
+
+func detectMime(head []byte) string {
 	switch {
 	case len(head) >= 8 && bytes.Equal(head[:8], []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}):
-		return "image/png", "png", true
+		return "image/png"
 	case len(head) >= 3 && head[0] == 0xFF && head[1] == 0xD8 && head[2] == 0xFF:
-		return "image/jpeg", "jpg", true
+		return "image/jpeg"
 	case len(head) >= 6 && (bytes.Equal(head[:6], []byte("GIF87a")) || bytes.Equal(head[:6], []byte("GIF89a"))):
-		return "image/gif", "gif", true
+		return "image/gif"
 	case len(head) >= 12 && bytes.Equal(head[:4], []byte("RIFF")) && bytes.Equal(head[8:12], []byte("WEBP")):
-		return "image/webp", "webp", true
+		return "image/webp"
 	case len(head) >= 4 && bytes.Equal(head[:4], []byte("OggS")):
-		return "audio/ogg", "ogg", true
+		return "audio/ogg"
 	case len(head) >= 3 && bytes.Equal(head[:3], []byte("ID3")):
-		return "audio/mpeg", "mp3", true
+		return "audio/mpeg"
 	case len(head) >= 2 && head[0] == 0xFF && head[1]&0xE0 == 0xE0:
 		// MPEG audio frame sync (mp3 without an ID3 tag).
-		return "audio/mpeg", "mp3", true
+		return "audio/mpeg"
 	case isISOBaseMedia(head):
 		// m4a belongs to ISO BMFF: offset 4 onward is "ftyp".
-		return "audio/mp4", "m4a", true
+		return "audio/mp4"
 	}
-	return "", "", false
+	return ""
+}
+
+// Ext maps a mime to the file extension used in the content-addressed path; unknown types fall back to bin.
+// It is the only mime-to-extension table, so an upload and a package import of the same bytes land on the same path.
+func Ext(mime string) string {
+	switch Normalize(mime) {
+	case "image/png":
+		return "png"
+	case "image/jpeg":
+		return "jpg"
+	case "image/webp":
+		return "webp"
+	case "image/gif":
+		return "gif"
+	case "audio/mpeg":
+		return "mp3"
+	case "audio/ogg":
+		return "ogg"
+	case "audio/mp4":
+		return "m4a"
+	default:
+		return "bin"
+	}
 }
 
 // isISOBaseMedia checks the ISO BMFF header (ftyp box); m4a/mp4 share it.
