@@ -187,6 +187,73 @@ func TestCheckNotesMigrationReportsBlockersAndWarnings(t *testing.T) {
 	}
 }
 
+// legacyDeckWithoutPublicID is the decks table shape before decks carried a
+// public id. The pre-flight check must read that schema, so the test builds it
+// directly instead of running AutoMigrate over the current model, which would
+// add the missing column and hide the bug.
+type legacyDeckWithoutPublicID struct {
+	ID          uint64 `gorm:"primaryKey"`
+	OwnerUserID uint64 `gorm:"column:owner_user_id"`
+	Name        string `gorm:"column:name"`
+}
+
+func (legacyDeckWithoutPublicID) TableName() string { return "decks" }
+
+// legacyNoteWithKind is the notes table shape the pre-flight check reads: the
+// old kind column plus the fields the report needs, without the rest of the
+// current model.
+type legacyNoteWithKind struct {
+	ID         uint64 `gorm:"primaryKey"`
+	PublicID   string `gorm:"column:public_id"`
+	DeckID     uint64 `gorm:"column:deck_id"`
+	Kind       string `gorm:"column:kind"`
+	FieldsJSON string `gorm:"column:fields_json"`
+}
+
+func (legacyNoteWithKind) TableName() string { return "notes" }
+
+// TestCheckNotesMigrationWithoutDeckPublicID covers a database older than the
+// deck public id: the check must report the note issues by numeric deck id
+// instead of failing on the missing column.
+func TestCheckNotesMigrationWithoutDeckPublicID(t *testing.T) {
+	for driver, db := range migrationDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(&legacyDeckWithoutPublicID{}, &legacyNoteWithKind{}); err != nil {
+				t.Fatalf("auto migrate pre-public-id schema: %v", err)
+			}
+			if db.Migrator().HasColumn("decks", "public_id") {
+				t.Fatal("decks.public_id exists, want the schema before it was added")
+			}
+			deck := legacyDeckWithoutPublicID{OwnerUserID: 1, Name: "Legacy deck"}
+			if err := db.Create(&deck).Error; err != nil {
+				t.Fatalf("create legacy deck: %v", err)
+			}
+			note := legacyNoteWithKind{
+				PublicID: NewPublicID(), DeckID: deck.ID, Kind: "list",
+				FieldsJSON: `{"prompt":"Name them","items":["one\ntwo"]}`,
+			}
+			if err := db.Create(&note).Error; err != nil {
+				t.Fatalf("create legacy note: %v", err)
+			}
+
+			report, err := CheckNotesMigration(context.Background(), db)
+			if err != nil {
+				t.Fatalf("CheckNotesMigration() error = %v, want a report", err)
+			}
+			if len(report.Blocking) != 1 {
+				t.Fatalf("blocking issues = %d, want 1: %+v", len(report.Blocking), report.Blocking)
+			}
+			issue := report.Blocking[0]
+			if want := strconv.FormatUint(deck.ID, 10); issue.DeckID != want {
+				t.Errorf("issue deck id = %q, want the numeric id %q", issue.DeckID, want)
+			}
+			if issue.NoteID != note.PublicID {
+				t.Errorf("issue note id = %q, want %q", issue.NoteID, note.PublicID)
+			}
+		})
+	}
+}
+
 // TestMigrationConvertsNotesToNoteTypes is the main migration case: one note of every kind, including audio, TTS,
 // formulas and media, is converted; note types are created per deck and kind; cards, card states and reviews are
 // untouched.

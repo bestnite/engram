@@ -133,8 +133,14 @@ func notesMigrationReport(db *gorm.DB) (MigrationReport, error) {
 	return report, nil
 }
 
-// deckPublicIDs maps a deck's numeric id to its public id.
+// deckPublicIDs maps a deck's numeric id to its public id. A database created
+// before decks carried a public id has no such column, and selecting it would
+// fail the whole pre-flight check: the map is empty there, so the report names
+// each deck by its numeric id.
 func deckPublicIDs(db *gorm.DB) (map[uint64]string, error) {
+	if !db.Migrator().HasColumn("decks", "public_id") {
+		return map[uint64]string{}, nil
+	}
 	var rows []struct {
 		ID       uint64
 		PublicID string `gorm:"column:public_id"`
