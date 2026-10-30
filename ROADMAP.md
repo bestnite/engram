@@ -193,59 +193,6 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   - The test runs once with `TEST_PG_DSN`.
 
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-- [ ] **M17-42 The editing frame runs no inline script** — a field value cannot execute code in the
-  editor.
-  *Files:* `internal/web/edit_frame.go`; `internal/web/card_frame.go`; `internal/web/*_test.go`;
-  `frontend/e2e/browser-isolation.spec.ts`; `ARCHITECTURE.md` (the editing-frame paragraph says that
-  the frame carries the card frame's exact isolation).
-  *Problem:* the editing frame uses the card frame's CSP, including `script-src 'unsafe-inline'
-  'unsafe-eval'`. The runtime writes the field value with `innerHTML`, so an event handler attribute in
-  a shared deck's field (for example `<img src=x onerror=…>`) runs inside the editing frame. That code
-  can post `upload` messages, and the parent page uploads the posted files under the editing user's
-  session. The editing frame needs neither keyword: its runtime is a same-origin module and it only
-  inserts MathJax delimiters, it does not typeset them.
-  *Work:* the editing frame sends the card frame's CSP with `script-src <origin>` only. Every other
-  directive stays identical to the card frame's.
-  *Acceptance:*
-  - A handler test asserts the exact editing-frame CSP.
-  - A browser-isolation case: an `onerror` handler in a loaded field value does not run.
-  - The editor's client tests still pass.
-
-  *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run test:client && npm --prefix frontend run test:e2e`.
-- [ ] **M17-59 Purge deleted notes when their note type is deleted** — a note type whose notes were
-  all deleted can still be deleted, after a confirmation.
-  *Files:* `internal/store/notetype.go` (`NoteTypeStore.Delete`); `internal/store/deck.go`
-  (`deleteDeckTx`); `internal/api/note_types.go`; `internal/api/errors.go`;
-  `frontend/src/lib/views/NoteTypesView.svelte` (single-writer hotspot); `frontend/src/lib/api/`; the
-  frontend locale catalogs (append a block with the prefix `notetype.purge.`); the tests beside them.
-  *Problem:* every note deletion is a soft delete, and no page restores a deleted note: only a
-  re-import with the same guid brings one back. Since M17-43, a soft-deleted note blocks the deletion of
-  its note type. A note type whose notes were all deleted therefore can never be deleted.
-  *Work:*
-  - A note type that at least one live note uses is refused as today, with 409 `note_type_in_use`.
-  - A note type that only soft-deleted notes use is deleted only when the request carries the query
-    parameter `confirm_purge=true`. Without it, the delete writes nothing and returns 409 with the new
-    code `note_type_purge_unconfirmed` and the counts `deleted_notes`, `cards` and `reviews` of those
-    notes.
-  - A confirmed delete hard-deletes, in one transaction: the `media_notes`, `card_states` and `cards`
-    rows of those notes, the notes themselves, the note type and its `media_note_types` rows. The
-    `reviews` rows stay, as they do when a deck is deleted.
-  - The note cascade has one implementation: `deleteDeckTx` and this delete call the same helper,
-    which deletes a given set of notes and their dependent rows.
-  - The audit row of the delete records the three counts.
-  - The note type view shows the three counts in a confirmation dialog and repeats the delete with
-    `confirm_purge=true` after the user confirms.
-
-  *Acceptance:*
-  - Store tests: a note type used only by soft-deleted notes is deleted after confirmation; its notes,
-    cards and `card_states` rows are gone; its `reviews` rows remain. Without confirmation nothing
-    changes. A note type with one live note is still refused.
-  - Handler tests: the 409 response carries `note_type_purge_unconfirmed` and the three counts; a
-    reader is refused.
-  - The existing deck deletion tests pass unchanged.
-  - The two frontend locale catalogs keep identical key sets.
-
-  *Verify:* `go test ./internal/store/... ./internal/api/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
 
 **Phase 5 follow-up — defects found in the review of M17-22 to M17-24, M17-35 and M17-40 (on `main`)**
 
@@ -301,23 +248,6 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
   - The existing import tests and goldens pass.
 
   *Verify:* `go test ./internal/anki/... ./internal/store/... ./internal/api/... ./internal/media/... ./internal/urlfetch/...`.
-- [ ] **M17-54 Import the note types Anki imports** — no empty note type is added for a package's
-  unused note types.
-  *Files:* `internal/store/anki_import.go` (`resolveAnkiNoteTypes`); `tools/anki-oracle/` if the
-  oracle must record the result; `internal/store/anki_import_test.go`.
-  *Problem:* every note type in the package is created in the deck. Importing Ultimate Geography adds a
-  `Basic` note type that no note uses.
-  *Work:*
-  - First, extend the oracle with a fixture package that contains one note type no note uses. The
-    oracle records which note types Anki `26.09.3` adds when it imports that package into an empty
-    collection.
-  - The import then creates exactly the note types Anki adds.
-  - If Anki also adds the unused note type, the task closes with the committed fixture, the golden and
-    the test, and with no change to the import code.
-
-  *Acceptance:* the fixture and its golden are committed under `internal/notetype/testdata/anki/`. An
-  import test asserts that engram's imported note type names equal the golden.
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 
 **Phase 6–9 — remaining capabilities**
 
@@ -465,3 +395,6 @@ bluemonday-sanitised `internal/render` are gone.
 | Server-rendered note type preview (M17-56) | The note type editor previews an unsaved config through `POST /api/v1/decks/:id/note-types/preview` (session and CSRF, editor role): the server validates the config with the rule every note type write applies, renders the selected template for both sides and returns the front and back card-face objects with the config's CSS. The second frontend template renderer (`renderPreview`, `resolveConditionals`) is deleted. | No — one route is added |
 | Dead shortcode inserter and stale sanitising comments (M17-39) | The shortcode inserter, its source builder, the media picker it alone used and the catalog keys that only they read are deleted. Comments that claimed the server, goldmark or bluemonday sanitise card-face HTML now state that the sandboxed frame and its CSP are the only boundary, and the note type's card ordinal comment states that a cloze card's ordinal is its cloze number minus one. The live audio and speech control layer stays and is no longer described as a shortcode renderer. | No |
 | Note type deletion counts soft-deleted notes (M17-43) | A note type used by any note, soft-deleted ones included, is refused with `ErrNoteTypeInUse`, because a soft-deleted note is restorable content and would lose the field and template definitions it relies on. M17-59 adds the confirmed purge path that removes the dead end. | No — a delete that used to succeed is now refused |
+| Editing frame without inline script (M17-42) | Both frame documents share one CSP builder. The editing frame's `script-src` names only the origin, because its runtime is a same-origin module and it never typesets MathJax; an inline event handler in a shared deck's field therefore stays inert and cannot post `upload` messages the parent would upload under the editing user's session. The card frame keeps its inline and eval policy for authored scripts and MathJax. | No |
+| Only the note types Anki imports (M17-54) | The import drops package note types that no note uses, because Anki 26.09.3's importer creates only the types its notes reference. The oracle gained a fixture that carries an unused type together with the golden names Anki adds for it, and an import test pins that result, so importing a deck no longer leaves an empty `Basic` note type behind. | No — the set of created note types changes; no payload shape changes |
+| Purge deleted notes with their note type (M17-59) | A note type used by a live note is still refused with `note_type_in_use`. A type whose notes are all soft-deleted is refused with 409 `note_type_purge_unconfirmed` and the counts `deleted_notes`, `cards` and `reviews`, and `DELETE …?confirm_purge=true` hard-deletes those notes, their cards, `card_states` and `media_notes` rows through the same cascade deck deletion uses, keeping `reviews`. The note type view shows the counts before confirming. | No — a delete that was refused now succeeds after a confirmation; one new 409 code |
