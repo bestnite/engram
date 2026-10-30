@@ -165,22 +165,6 @@ it.
   `6865a54`.
 **Phase 2 — `internal/notetype`, the Anki engine (on `main`; not wired into any request path)**
 
-- [ ] **M17-10 Audio, TTS and LaTeX markup; `PlainText`** — port the relevant parts of
-  `rslib/src/card_rendering/` and `rslib/src/latex.rs`.
-  *Depends on:* M17-7.
-  *Files:* `internal/notetype/av.go`, `latex.go` and `plaintext.go`, with their tests.
-  *Work:*
-  - Parse `[sound:<name>]` and `[anki:tts …]…[/anki:tts]`. Unknown TTS options are kept.
-  - Replace each tag with Anki's replay-button markup, and return the ordered tag list per side.
-  - Replace `[latex]`, `[$]` and `[$$]` with `<img class=latex src="latex-<sha1>.<png|svg>">`, using
-    Anki's file-name rule.
-  - `PlainText(html)` strips HTML and audio/TTS tags as Anki's `html_to_text_line` does.
-
-  *Acceptance:*
-  - Tag lists and rendered HTML equal the golden output.
-  - `PlainText` has table-driven cases for entities, `<br>`, block elements and tags.
-
-  *Verify:* `go test ./internal/notetype/...`.
 - [ ] **M17-11 Type-in comparison** — port `rslib/src/typeanswer.rs`.
   *Depends on:* M17-10.
   *Files:* `internal/notetype/typeanswer.go` and its tests.
