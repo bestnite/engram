@@ -177,7 +177,7 @@ func TestAdminMailTemplatesReadSaveDelete(t *testing.T) {
 
 	// Valid save: 200, persisted, audit row written.
 	ok := jsonRequest(t, srv, http.MethodPut, "/api/v1/admin/mail-templates/password_reset/en",
-		`{"subject":"Reset for {{site}}","body_md":"**Hi** {{url}} ({{expires}})"}`, cookies, csrf)
+		`{"subject":"Reset for {{site}}","body_md":"<p><strong>Hi</strong> {{url}} ({{expires}})</p>"}`, cookies, csrf)
 	if ok.Code != http.StatusOK {
 		t.Fatalf("PUT = %d, want 200 (body %s)", ok.Code, snippet(ok.Body.String()))
 	}
@@ -214,7 +214,7 @@ func TestAdminMailTemplatesReadSaveDelete(t *testing.T) {
 func TestAdminMailTemplatePreviewRendersAndWritesNothing(t *testing.T) {
 	srv, db, _, cookies, csrf := newNotesServer(t)
 	rec := jsonRequest(t, srv, http.MethodPost, "/api/v1/admin/mail-templates/preview",
-		`{"type":"password_reset","locale":"en","subject":"Reset for {{site}}","body_md":"**Hi** {{url}}"}`, cookies, csrf)
+		`{"type":"password_reset","locale":"en","subject":"Reset for {{site}}","body_md":"<p><strong>Hi</strong> {{url}}</p>"}`, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("preview = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}

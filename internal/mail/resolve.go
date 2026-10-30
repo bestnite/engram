@@ -3,6 +3,8 @@ package mail
 import (
 	"log/slog"
 	"strings"
+
+	"git.nite07.com/nite/engram/internal/notetype"
 )
 
 // This file implements the template **fallback chain** and the "fall back to the built-in body when
@@ -51,8 +53,7 @@ func Resolve(lookup LookupFunc, t Type, locale, siteDefault string) ResolvedTemp
 // an admin writes content into the template that fails to validate (or a sender forgets a required
 // variable), the whole custom template -- subject and body -- is dropped and the built-in body is
 // rendered instead, so the recipient still gets a proper mail rather than an empty one or a 500. If
-// even that render fails, the built-in Markdown source with its variables substituted is sent as
-// plain text. Failures are always logged -- a silent downgrade would mean template problems are never
+// even that render fails, the built-in body with its variables substituted is sent as plain text. Failures are always logged -- a silent downgrade would mean template problems are never
 // noticed.
 func RenderOrFallback(in RenderInput) Rendered {
 	// The template content is validated before rendering: a row may have been written straight into the
@@ -60,7 +61,7 @@ func RenderOrFallback(in RenderInput) Rendered {
 	// must fall back to the built-in mail, not send a useless one. A template is one unit, so its
 	// subject goes with its body: keeping a custom subject over a built-in body announces a mail the
 	// recipient does not get. The validation lives at this layer rather than in Render: Render is pure
-	// rendering (it only answers "what does this Markdown render into"), and policy belongs to the
+	// rendering (it only answers "what does this template render into"), and policy belongs to the
 	// layer that sends the mail.
 	if strings.TrimSpace(in.BodyMD) != "" {
 		if err := Validate(in.Type, in.Subject, in.BodyMD); err != nil {
@@ -74,7 +75,7 @@ func RenderOrFallback(in RenderInput) Rendered {
 	if err == nil {
 		return out
 	}
-	slog.Error("mail template render failed, falling back to the substituted Markdown source",
+	slog.Error("mail template render failed, falling back to the substituted built-in body",
 		"mail_type", string(in.Type), "error", err)
-	return Rendered{Subject: in.FallbackSubject, Text: substituteRaw(in.FallbackBodyMD, in.Vars)}
+	return Rendered{Subject: in.FallbackSubject, Text: notetype.PlainText(substituteRaw(in.FallbackBodyMD, in.Vars))}
 }

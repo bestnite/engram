@@ -110,6 +110,13 @@ var BuiltinMigrations = []Migration{
 		Name: "0013_notes_note_type_not_null",
 		Up:   notesNoteTypeNotNull,
 	},
+	{
+		// Mail templates are administrator-written HTML now, not Markdown. Every stored custom template is converted with the
+		// same renderer and inline styles the built-in bodies carry, so a saved template keeps delivering the mail it
+		// delivered before the change. The column keeps its name (body_md) to leave the HTTP API and the stored shape alone.
+		Name: "0014_convert_mail_templates",
+		Up:   convertMailTemplatesToHTML,
+	},
 }
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).

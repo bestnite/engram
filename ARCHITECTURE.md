@@ -63,9 +63,10 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/web` | The gin router: security headers, session and locale middleware, the session-and-CSRF JSON endpoints the SPA uses, the admin API, media proxying, the SPA shell, and the not-found fallback. It mounts `internal/api` and `internal/mcp`. |
 | `internal/media` | Local media storage around `store.MediaStore.Put`: streaming and validating uploads, serving files, and reclaiming orphans. |
 | `internal/mediatype` | Leaf package with the media type detection, the mime-to-extension table and the allowlist shared by `internal/media` and `internal/store`. |
-| `internal/texmath` | The single rule for locating TeX math, shared by `internal/mail` and the store's migration Markdown step. |
+| `internal/texmath` | The single rule for locating TeX math, shared by `internal/mailstyle` and the store's migration Markdown step. |
 | `internal/i18n` | Server-side translation catalogs (`internal/i18n/locales/*.yaml`), request language resolution, and the localiser placed in the request context. |
-| `internal/mail` | Mail templates (built-in defaults and admin overrides share one renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. `Mailer` is the single send path: it checks SMTP and the recipient's preference, resolves the site name and template, adds the footer and the unsubscribe link, and enqueues. The web layer builds the process's one `Mailer` and the reminder and digest workers receive it from `cmd/engram`. Its Markdown step (`markdown.go`) is a private, temporary copy of the old shared pipeline: no sanitising, and a shortcode degrades to its visible text. It is replaced when administrators write mail templates as HTML. |
+| `internal/mail` | Mail templates (built-in HTML defaults and admin overrides share one renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. `Mailer` is the single send path: it checks SMTP and the recipient's preference, resolves the site name and template, adds the footer and the unsubscribe link, and enqueues. The web layer builds the process's one `Mailer` and the reminder and digest workers receive it from `cmd/engram`. Rendering is four steps: placeholders become salted tokens, tokens become HTML-escaped values, the plain-text part comes from `notetype.PlainText`, and the fixed shell is applied. Nothing is sanitised and no Markdown is parsed at send time: administrators write HTML/CSS, and the built-in bodies carry the inline styles. |
+| `internal/mailstyle` | Leaf package holding the inline style map of a mail body and the one Markdown-to-HTML conversion used by the store's template migration. The built-in bodies and the migration read the same styles, so a converted custom template keeps the delivered look. |
 | `internal/reminder` | Worker that emails users who have due cards. |
 | `internal/digest` | Worker that sends the weekly digest email. |
 | `internal/retention` | Worker that deletes expired sessions, used or expired action tokens, expired invites, and old login fingerprints. |
@@ -86,11 +87,11 @@ api        → auth, media, notetype, reviewday, schedule, store, urlfetch
 digest     → i18n, mail, reminder, reviewday, schedule, store, worker
 reminder   → i18n, mail, reviewday, schedule, store, worker
 jobs       → schedule, store
-mail       → config, store, texmath, worker
+mail       → config, mailstyle, notetype, store, worker
 schedule   → reviewday, store
 auth       → store
 media      → mediatype, store
-store      → answer, mediatype, notetype, reviewday, texmath
+store      → answer, mailstyle, mediatype, notetype, reviewday, texmath
 answer     → notetype
 retention  → worker
 config, i18n, mediatype, notetype, reviewday, texmath, urlfetch, worker, pgtest → (no internal imports)
@@ -298,8 +299,11 @@ change.
   forwards the frame's key presses and `answer {value}` messages to the view.
   `frontend/src/lib/components/RichTextField.svelte` is the only way a note field is edited: it owns
   the editing iframe and the toolbar, sends `load` and `command`, and writes the frame's `change`
-  back into the form. Card-face and field HTML therefore never enter the parent DOM. The SPA's
-  remaining HTML sinks are the per-item grading breakdown and the admin mail preview, and
+  back into the form. Card-face and field HTML therefore never enter the parent DOM.
+  `frontend/src/lib/components/MailPreviewFrame.svelte` is the admin mail-template preview: it puts
+  the complete server-rendered mail document into a sandboxed iframe with no script permission, so
+  administrator-written HTML and CSS are only ever rendered inside a sandbox. The SPA's remaining
+  HTML sinks are the per-item grading breakdown and the option labels `RadioGroup` renders, and
   `frontend/src/tests/html-sink-allowlist.test.ts` lists each of them with its reason.
 - `frontend/src/lib/format.ts` is the only place numbers, percentages, byte counts, dates and raw field
   values become text; components pass the current locale.

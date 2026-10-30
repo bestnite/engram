@@ -1,6 +1,12 @@
 package mail
 
-import "strings"
+import (
+	"html"
+	"regexp"
+	"strings"
+
+	"git.nite07.com/nite/engram/internal/mailstyle"
+)
 
 // This file is the single definition of the "built-in body".
 //
@@ -14,9 +20,9 @@ import "strings"
 // Two implementations would inevitably drift, and the drift shows up in the hardest-to-spot way: the
 // "default" the admin page shows and the body actually sent are not the same thing, and the admin
 // thinks they are editing the default while they are editing something else. So the same piece of code
-// here has **two uses**, and both return the same Markdown: the body is always in template form
+// here has **two uses**, and both return the same HTML: the body is always in template form
 // (`{{name}}` placeholders), whether the caller passes real values or PlaceholderVars. Real values
-// only decide which optional sections exist and fill the subject, which is not Markdown. Both uses go
+// only decide which optional sections exist and fill the subject, which is plain text. Both uses go
 // through the same renderer, so "save the default unchanged" and "save nothing" produce the same mail.
 //
 // Why not the "write the defaults into the database" approach: the default copy would then freeze in
@@ -38,11 +44,12 @@ const (
 	VariantEmailChange = "change"
 )
 
-// defaultSpec is the built-in body of one mail type, as Markdown.
+// defaultSpec is the built-in body of one mail type, as HTML template text.
 type defaultSpec struct {
 	subjectID string
-	// body builds the Markdown body from {{placeholder}} variables only. Real values are substituted
-	// after the Markdown has been rendered and sanitised, so a value can never turn into markup.
+	// body builds the HTML body from {{placeholder}} variables only. Real values are substituted
+	// after template rendering, where HTML-escaping is the only thing left to do, so a value can never
+	// turn into markup.
 	// has reports whether a variable carries a value in this call; it is used only to decide whether
 	// an optional section exists.
 	body func(tf TfFunc, ph Vars, has func(string) bool) string
@@ -60,41 +67,40 @@ type defaultVariant struct {
 //
 // Security rule for every body function: it interpolates copy with ph (the value is the literal
 // `{{name}}`) and never with a real value. Variable values carry user-controlled content (deck names,
-// usernames, failure reasons); splicing one into the Markdown source would hand it to the Markdown
-// parser and the allowlist as markup. Real values are substituted by Render after rendering and
-// sanitising, where escaping is the only thing left to do. has exists only to decide whether an
-// optional section is present.
+// usernames, failure reasons); splicing one into the markup would let it become HTML. Real values are
+// substituted by Render after template rendering, where escaping is the only thing left to do. has
+// exists only to decide whether an optional section is present.
 var defaultSpecs = map[Type]defaultSpec{
 	TypePasswordReset: {
 		subjectID: "mail.reset.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.reset.title"),
-				mdPara(tf, "mail.reset.body", anyMap(ph)),
-				mdCTA(tf, "mail.reset.link_label", "url"),
-				mdNote(tf, "mail.reset.note", anyMap(ph)),
+			return htmlJoin(
+				htmlHeading(tf, "mail.reset.title"),
+				htmlPara(tf, "mail.reset.body", anyMap(ph)),
+				htmlCTA(tf, "mail.reset.link_label", "url"),
+				htmlNote(tf, "mail.reset.note", anyMap(ph)),
 			)
 		},
 	},
 	TypeEmailVerification: {
 		subjectID: "mail.verify.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.verify.title"),
-				mdPara(tf, "mail.verify.body", anyMap(ph)),
-				mdCTA(tf, "mail.verify.link_label", "url"),
-				mdNote(tf, "mail.verify.note", anyMap(ph)),
+			return htmlJoin(
+				htmlHeading(tf, "mail.verify.title"),
+				htmlPara(tf, "mail.verify.body", anyMap(ph)),
+				htmlCTA(tf, "mail.verify.link_label", "url"),
+				htmlNote(tf, "mail.verify.note", anyMap(ph)),
 			)
 		},
 		variants: map[string]defaultVariant{
 			VariantEmailChange: {
 				subjectID: "mail.verify.change_subject",
 				body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-					return mdJoin(
-						mdHeading(tf, "mail.verify.change_title"),
-						mdPara(tf, "mail.verify.change_body", anyMap(ph)),
-						mdCTA(tf, "mail.verify.change_link_label", "url"),
-						mdNote(tf, "mail.verify.change_note", anyMap(ph)),
+					return htmlJoin(
+						htmlHeading(tf, "mail.verify.change_title"),
+						htmlPara(tf, "mail.verify.change_body", anyMap(ph)),
+						htmlCTA(tf, "mail.verify.change_link_label", "url"),
+						htmlNote(tf, "mail.verify.change_note", anyMap(ph)),
 					)
 				},
 			},
@@ -103,44 +109,44 @@ var defaultSpecs = map[Type]defaultSpec{
 	TypeNewDeviceLogin: {
 		subjectID: "mail.notice.new_device.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.notice.new_device.title"),
-				mdPara(tf, "mail.notice.new_device.body", anyMap(ph)),
-				mdList(
+			return htmlJoin(
+				htmlHeading(tf, "mail.notice.new_device.title"),
+				htmlPara(tf, "mail.notice.new_device.body", anyMap(ph)),
+				htmlList(
 					tf("mail.notice.new_device.time", anyMap(ph)),
 					tf("mail.notice.new_device.ip", anyMap(ph)),
 				),
-				mdNote(tf, "mail.notice.new_device.note", anyMap(ph)),
+				htmlNote(tf, "mail.notice.new_device.note", anyMap(ph)),
 			)
 		},
 	},
 	TypeCredentialChanged: {
 		subjectID: "mail.notice.credential.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.notice.credential.title"),
-				mdPara(tf, "mail.notice.credential.body", anyMap(ph)),
-				mdNote(tf, "mail.notice.credential.note", anyMap(ph)),
+			return htmlJoin(
+				htmlHeading(tf, "mail.notice.credential.title"),
+				htmlPara(tf, "mail.notice.credential.body", anyMap(ph)),
+				htmlNote(tf, "mail.notice.credential.note", anyMap(ph)),
 			)
 		},
 	},
 	TypeAccountStatus: {
 		subjectID: "mail.notice.account.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.notice.account.title"),
-				mdPara(tf, "mail.notice.account.body", anyMap(ph)),
-				mdNote(tf, "mail.notice.account.note", anyMap(ph)),
+			return htmlJoin(
+				htmlHeading(tf, "mail.notice.account.title"),
+				htmlPara(tf, "mail.notice.account.body", anyMap(ph)),
+				htmlNote(tf, "mail.notice.account.note", anyMap(ph)),
 			)
 		},
 	},
 	TypeDeckShared: {
 		subjectID: "mail.deck_shared.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.deck_shared.title"),
-				mdPara(tf, "mail.deck_shared.body", anyMap(ph)),
-				mdCTA(tf, "mail.deck_shared.link_label", "url"),
+			return htmlJoin(
+				htmlHeading(tf, "mail.deck_shared.title"),
+				htmlPara(tf, "mail.deck_shared.body", anyMap(ph)),
+				htmlCTA(tf, "mail.deck_shared.link_label", "url"),
 			)
 		},
 	},
@@ -155,13 +161,13 @@ var defaultSpecs = map[Type]defaultSpec{
 				lineID = "mail.deck_permission.revoked"
 			}
 			blocks := []string{
-				mdHeading(tf, "mail.deck_permission.title"),
-				mdPara(tf, lineID, anyMap(ph)),
+				htmlHeading(tf, "mail.deck_permission.title"),
+				htmlPara(tf, lineID, anyMap(ph)),
 			}
 			if has("url") {
-				blocks = append(blocks, mdCTA(tf, "mail.deck_permission.link_label", "url"))
+				blocks = append(blocks, htmlCTA(tf, "mail.deck_permission.link_label", "url"))
 			}
-			return mdJoin(blocks...)
+			return htmlJoin(blocks...)
 		},
 	},
 	TypeInvite: {
@@ -171,21 +177,21 @@ var defaultSpecs = map[Type]defaultSpec{
 			if has("expires") {
 				note = tf("mail.invite.expires", anyMap(ph)) + " " + note
 			}
-			return mdJoin(
-				mdHeading(tf, "mail.invite.title"),
-				mdPara(tf, "mail.invite.body", anyMap(ph)),
-				mdCTA(tf, "mail.invite.link_label", "url"),
-				mdNoteText(note),
+			return htmlJoin(
+				htmlHeading(tf, "mail.invite.title"),
+				htmlPara(tf, "mail.invite.body", anyMap(ph)),
+				htmlCTA(tf, "mail.invite.link_label", "url"),
+				htmlNoteText(note),
 			)
 		},
 	},
 	TypeReviewReminder: {
 		subjectID: "mail.reminder.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.reminder.title"),
-				mdPara(tf, "mail.reminder.body", anyMap(ph)),
-				mdCTA(tf, "mail.reminder.link_label", "url"),
+			return htmlJoin(
+				htmlHeading(tf, "mail.reminder.title"),
+				htmlPara(tf, "mail.reminder.body", anyMap(ph)),
+				htmlCTA(tf, "mail.reminder.link_label", "url"),
 			)
 		},
 	},
@@ -194,51 +200,51 @@ var defaultSpecs = map[Type]defaultSpec{
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
 			// Each statistics line writes `{{.count}}` but reads a different variable, so the value is
 			// mapped per line; passing the whole table would let one line read another line's number.
-			return mdJoin(
-				mdHeading(tf, "mail.digest.title"),
-				mdPara(tf, "mail.digest.intro", nil),
-				mdList(
+			return htmlJoin(
+				htmlHeading(tf, "mail.digest.title"),
+				htmlPara(tf, "mail.digest.intro", nil),
+				htmlList(
 					tf("mail.digest.reviewed", map[string]any{"count": ph["count"]}),
 					tf("mail.digest.pass_rate", map[string]any{"rate": ph["rate"]}),
 					tf("mail.digest.streak", map[string]any{"days": ph["days"]}),
 					tf("mail.digest.new_cards", map[string]any{"count": ph["new_cards"]}),
 					tf("mail.digest.due", map[string]any{"count": ph["due"]}),
 				),
-				mdCTA(tf, "mail.digest.link_label", "url"),
+				htmlCTA(tf, "mail.digest.link_label", "url"),
 			)
 		},
 	},
 	TypeOptimizeDone: {
 		subjectID: "mail.optimize.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.optimize.title"),
-				mdPara(tf, "mail.optimize.body", anyMap(ph)),
-				mdCTA(tf, "mail.optimize.link_label", "url"),
+			return htmlJoin(
+				htmlHeading(tf, "mail.optimize.title"),
+				htmlPara(tf, "mail.optimize.body", anyMap(ph)),
+				htmlCTA(tf, "mail.optimize.link_label", "url"),
 			)
 		},
 	},
 	TypeJobFailed: {
 		subjectID: "mail.admin.job_failed.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.admin.job_failed.title"),
-				mdPara(tf, "mail.admin.job_failed.body", anyMap(ph)),
-				mdPara(tf, "mail.admin.job_failed.reason_label", nil),
+			return htmlJoin(
+				htmlHeading(tf, "mail.admin.job_failed.title"),
+				htmlPara(tf, "mail.admin.job_failed.body", anyMap(ph)),
+				htmlPara(tf, "mail.admin.job_failed.reason_label", nil),
 				// The failure reason is an English technical string from the job runner, not copy: it is
-				// kept as a fenced code block so line breaks in a stack trace survive.
-				"```\n{{reason}}\n```",
-				mdNote(tf, "mail.admin.job_failed.note", anyMap(ph)),
+				// kept in a preformatted block so line breaks in a stack trace survive.
+				htmlPre("{{reason}}"),
+				htmlNote(tf, "mail.admin.job_failed.note", anyMap(ph)),
 			)
 		},
 	},
 	TypeMediaDiskAlert: {
 		subjectID: "mail.admin.media_alert.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
-			return mdJoin(
-				mdHeading(tf, "mail.admin.media_alert.title"),
-				mdPara(tf, "mail.admin.media_alert.body", anyMap(ph)),
-				mdNote(tf, "mail.admin.media_alert.note", anyMap(ph)),
+			return htmlJoin(
+				htmlHeading(tf, "mail.admin.media_alert.title"),
+				htmlPara(tf, "mail.admin.media_alert.body", anyMap(ph)),
+				htmlNote(tf, "mail.admin.media_alert.note", anyMap(ph)),
 			)
 		},
 	},
@@ -267,7 +273,7 @@ func PlaceholderVars(t Type) Vars {
 // The body always comes back in template form, for either variable table: pass PlaceholderVars(t) and
 // the admin editor gets exactly what the sender's fallback renders. Real values only decide which
 // optional sections exist (through has) and fill the subject, which is plain text and never goes
-// through the Markdown renderer. The second return value says whether the type has a built-in wording
+// through the renderer. The second return value says whether the type has a built-in wording
 // (every type in the catalog should have one).
 func DefaultTemplate(t Type, variant string, tf TfFunc, vars Vars) (subject, body string, ok bool) {
 	spec, found := defaultSpecs[t]
@@ -296,9 +302,9 @@ func DefaultTemplate(t Type, variant string, tf TfFunc, vars Vars) (subject, bod
 	return tf(subjectID, anyMap(vars)), build(bodyTF, ph, has), true
 }
 
-// mdJoin joins Markdown blocks with one blank line, dropping empty ones so an absent section leaves
-// no stray gap.
-func mdJoin(blocks ...string) string {
+// htmlJoin concatenates already-rendered HTML blocks. Every helper returns its own trailing newline,
+// so joining is appending; an empty block is dropped so an absent optional section leaves no gap.
+func htmlJoin(blocks ...string) string {
 	out := make([]string, 0, len(blocks))
 	for _, b := range blocks {
 		if strings.TrimSpace(b) == "" {
@@ -306,55 +312,83 @@ func mdJoin(blocks ...string) string {
 		}
 		out = append(out, b)
 	}
-	return strings.Join(out, "\n\n")
+	return strings.Join(out, "")
 }
 
-// mdHeading renders a level-2 heading from copy. The mail uses h2 as its page title; h1 is left for
-// custom templates that want a larger one.
-func mdHeading(tf TfFunc, id string) string {
-	return "## " + tf(id, nil)
+// htmlHeading renders the page title. The mail uses h2 as its page title; h1 is left for custom
+// templates that want a larger one.
+func htmlHeading(tf TfFunc, id string) string {
+	return "<h2 style=\"" + mailstyle.StyleAttr("h2") + "\">" + inlineHTML(tf(id, nil)) + "</h2>\n"
 }
 
-// mdPara renders one paragraph of copy.
-func mdPara(tf TfFunc, id string, data map[string]any) string {
-	return tf(id, data)
+// htmlPara renders one paragraph of copy.
+func htmlPara(tf TfFunc, id string, data map[string]any) string {
+	return "<p style=\"" + mailstyle.StyleAttr("p") + "\">" + inlineHTML(tf(id, data)) + "</p>\n"
 }
 
-// mdNote renders copy as a blockquote: the note is supplementary information, not a warning, so it
+// htmlNote renders copy as a blockquote: the note is supplementary information, not a warning, so it
 // gets a quiet gray style rather than a coloured box.
-func mdNote(tf TfFunc, id string, data map[string]any) string {
-	return mdNoteText(tf(id, data))
+func htmlNote(tf TfFunc, id string, data map[string]any) string {
+	return htmlNoteText(tf(id, data))
 }
 
-// mdNoteText prefixes already-resolved copy with the blockquote marker, for a note assembled from
-// more than one language pack entry.
-func mdNoteText(text string) string {
+// htmlNoteText renders already-resolved copy as a blockquote, for a note assembled from more than one
+// language pack entry.
+func htmlNoteText(text string) string {
 	if strings.TrimSpace(text) == "" {
 		return ""
 	}
-	return "> " + text
+	return "<blockquote style=\"" + mailstyle.StyleAttr("blockquote") + "\">\n" +
+		"<p style=\"" + mailstyle.StyleAttr("p") + "\">" + inlineHTML(text) + "</p>\n" +
+		"</blockquote>\n"
 }
 
-// mdCTA renders a call-to-action link. The target is always the `{{url}}`-style placeholder: the real
-// address is substituted after rendering, so it is escaped by context and can never inject markup.
-func mdCTA(tf TfFunc, labelID, urlVar string) string {
+// htmlCTA renders a call-to-action link. The target is always the `{{url}}`-style placeholder: the
+// real address is substituted after template rendering, so it is HTML-escaped by context and can
+// never inject markup. The anchor is the only content of its paragraph, which is the button rule the
+// mail styles use.
+func htmlCTA(tf TfFunc, labelID, urlVar string) string {
 	label := tf(labelID, nil)
 	if strings.TrimSpace(label) == "" {
 		return ""
 	}
-	return "[" + label + "]({{" + urlVar + "}})"
+	return "<p style=\"" + mailstyle.StyleAttr("p") + "\">" +
+		"<a href=\"{{" + urlVar + "}}\" style=\"" + mailstyle.Button + "\">" + inlineHTML(label) + "</a>" +
+		"</p>\n"
 }
 
-// mdList renders a Markdown list, dropping empty lines so a line with no value leaves no bullet.
-func mdList(lines ...string) string {
-	out := make([]string, 0, len(lines))
+// htmlList renders the mail's list. A list line is language-pack copy shaped as `**label** value`
+// (the bold convention of the built-in copy); empty lines are dropped so a line with no value leaves
+// no bullet.
+func htmlList(lines ...string) string {
+	items := make([]string, 0, len(lines))
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		out = append(out, "- "+line)
+		items = append(items, "<li style=\""+mailstyle.StyleAttr("li")+"\">"+inlineHTML(line)+"</li>\n")
 	}
-	return strings.Join(out, "\n")
+	if len(items) == 0 {
+		return ""
+	}
+	return "<ul style=\"" + mailstyle.StyleAttr("ul") + "\">\n" + strings.Join(items, "") + "</ul>\n"
+}
+
+// htmlPre renders a preformatted block. The argument is template text (a `{{name}}` placeholder),
+// not copy: the value is substituted after template rendering, so it must not be escaped here.
+func htmlPre(text string) string {
+	return "<pre style=\"" + mailstyle.StyleAttr("pre") + "\"><code style=\"" + mailstyle.StyleAttr("code") + "\">" +
+		text + "\n</code></pre>\n"
+}
+
+// boldMarkup matches the `**...**` convention the built-in list copy uses for its labels.
+var boldMarkup = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+
+// inlineHTML escapes copy for HTML text and turns the built-in copy's `**label**` convention into a
+// styled strong element. The copy comes from the language packs, so it is text, never markup.
+func inlineHTML(text string) string {
+	escaped := html.EscapeString(text)
+	return boldMarkup.ReplaceAllString(escaped, "<strong style=\""+mailstyle.StyleAttr("strong")+"\">$1</strong>")
 }
 
 // anyMap converts the variable table into the any map go-i18n needs (a type conversion only, the

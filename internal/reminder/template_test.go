@@ -49,8 +49,12 @@ func TestReminderUsesAdminTemplate(t *testing.T) {
 
 	if err := store.NewMailTemplateStore(db).Upsert(context.Background(), &store.MailTemplate{
 		Type: string(mail.TypeReviewReminder), Locale: "en",
-		Subject:   "{{count}} cards are due",
-		BodyMD:    "**Time to review**\n\n[Open review]({{url}})\n\n[Unsubscribe]({{unsubscribe_url}})",
+		Subject: "{{count}} cards are due",
+		// A stored custom template body is HTML, not Markdown: the editor writes HTML and migration
+		// 0014 converted old rows once.
+		BodyMD: `<p><strong>Time to review</strong></p>` +
+			`<p><a href="{{url}}">Open review</a></p>` +
+			`<p><a href="{{unsubscribe_url}}">Unsubscribe</a></p>`,
 		UpdatedAt: time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("save template: %v", err)
@@ -69,6 +73,9 @@ func TestReminderUsesAdminTemplate(t *testing.T) {
 	}
 	if !strings.Contains(msg.HTMLBody, "Time to review</strong>") {
 		t.Errorf("html body = %q, want the template rendered", msg.HTMLBody)
+	}
+	if !strings.Contains(msg.HTMLBody, "/review") {
+		t.Errorf("html body = %q, want the admin template's review link delivered", msg.HTMLBody)
 	}
 	if !strings.Contains(msg.HTMLBody, "/unsubscribe?token=") {
 		t.Errorf("html body = %q, want the unsubscribe link in the footer", msg.HTMLBody)

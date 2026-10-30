@@ -466,8 +466,8 @@ func AllModels() []any {
 //
 // The unique key is (type, locale): one per language of each type. **No row in the table is a normal state** — it means that type
 // in that language uses the built-in body (the one the sender assembles), so 'deleting the customization' is deleting this row, and the built-in default can never
-// be lost. The body stores the Markdown source rather than the rendered result: rendering and variable substitution both happen at send time, so a template
-// change only affects mail enqueued afterwards.
+// be lost. The body stores HTML template text rather than the rendered result: variable substitution and the shell both happen at send time, so a template
+// change only affects mail enqueued afterwards. Migration 0014 converted the previously stored Markdown bodies to this form.
 type MailTemplate struct {
 	Type      string    `gorm:"primaryKey;size:64" json:"type"`
 	Locale    string    `gorm:"primaryKey;size:16" json:"locale"`

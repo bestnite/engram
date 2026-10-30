@@ -39,13 +39,6 @@ const ALLOWLIST: HtmlSink[] = [
       'Single-choice and boolean option labels render the server-sanitised option HTML the caller passes in. These are ' +
       'option labels, not card faces, and stay in the parent page with the other option HTML.',
   },
-  {
-    file: 'lib/views/admin/AdminMailTemplatesView.svelte',
-    expression: '{@html preview.html}',
-    reason:
-      'The admin mail-template preview renders the server-rendered mail body. It moves into a sandboxed frame together ' +
-      'with the mail preview, not with the card face.',
-  },
 ];
 
 const SRC_ROOT = fileURLToPath(new URL('..', import.meta.url));

@@ -71,7 +71,7 @@ func TestDefaultTemplateIsSavableAsIs(t *testing.T) {
 }
 
 // TestDefaultTemplateRendersWithRealValues asserts that the pre-filled default is not merely
-// "savable" but really renders: the Markdown body is rendered by the same pipeline, and the real
+// "savable" but really renders: the HTML body goes through the same pipeline, and the real
 // values substituted afterwards show up in the HTML and in the derived plain text.
 func TestDefaultTemplateRendersWithRealValues(t *testing.T) {
 	for _, def := range Catalog() {
@@ -219,7 +219,7 @@ func TestDefaultBodiesRenderWithRealCatalogs(t *testing.T) {
 					}
 					editorSubject, editorBody, _ := DefaultTemplate(typ, variant, loc.Tf, PlaceholderVars(typ))
 
-					// No custom template: the built-in Markdown is the fallback body.
+					// No custom template: the built-in HTML body is the fallback body.
 					sent := renderOne(t, RenderInput{
 						Type:            typ,
 						Site:            "Example",
@@ -268,7 +268,7 @@ func TestDefaultBodiesRenderWithRealCatalogs(t *testing.T) {
 
 // TestDefaultBodiesUsePlaceholdersNotValues is the injection guard on the built-in definitions: the
 // body builder must only ever emit `{{name}}`, so a real value passed to DefaultTemplate cannot appear
-// inside the returned Markdown source.
+// inside the returned HTML template.
 func TestDefaultBodiesUsePlaceholdersNotValues(t *testing.T) {
 	for _, def := range Catalog() {
 		typ := def.Type
@@ -280,8 +280,8 @@ func TestDefaultBodiesUsePlaceholdersNotValues(t *testing.T) {
 		if strings.Contains(body, "REAL-") {
 			t.Errorf("%s: built-in body embeds a real variable value:\n%s", typ, body)
 		}
-		if !strings.Contains(body, "## ") {
-			t.Errorf("%s: built-in body has no Markdown title:\n%s", typ, body)
+		if !strings.Contains(body, "<h2 ") {
+			t.Errorf("%s: built-in body has no title heading:\n%s", typ, body)
 		}
 	}
 }

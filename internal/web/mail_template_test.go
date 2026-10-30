@@ -23,19 +23,19 @@ func saveTemplate(t *testing.T, ts securityTestServer, typ, locale, subject, bod
 }
 
 // TestPasswordResetMailUsesAdminTemplate asserts that once a template is configured: the subject comes from the template, variables are substituted,
-// the HTML part carries the rendered Markdown, and the plain-text part is derived from the same tree (no Markdown markers, links keep their URL);
+// the HTML part carries the admin's markup, and the plain-text part is derived from the same tree (links keep their URL);
 // at the same time **type A mail still has no unsubscribe entry** (the shell footer must not add an unsubscribe line to security mail).
 func TestPasswordResetMailUsesAdminTemplate(t *testing.T) {
 	ts := newSecurityServer(t, true)
 	saveTemplate(t, ts, "password_reset", "en", "Reset for {{site}}",
-		"**Click here**: [reset]({{url}})\n\nLink expires {{expires}}.")
+		`<p><strong>Click here</strong>: <a href="{{url}}">reset</a></p>`+"\n<p>Link expires {{expires}}.</p>")
 
 	_, row := issueResetToken(t, ts)
 	if !strings.HasPrefix(row.Subject, "Reset for ") {
 		t.Errorf("subject = %q, want the subject from the template", row.Subject)
 	}
 	if !strings.Contains(row.HTMLBody, "Click here</strong>") {
-		t.Errorf("html body = %q, want the template rendered as markdown", row.HTMLBody)
+		t.Errorf("html body = %q, want the template rendered", row.HTMLBody)
 	}
 	if !strings.Contains(row.HTMLBody, "/reset-password?token=") {
 		t.Errorf("html body = %q, want the reset link substituted", row.HTMLBody)
@@ -43,10 +43,10 @@ func TestPasswordResetMailUsesAdminTemplate(t *testing.T) {
 	if strings.Contains(row.HTMLBody, "{{") {
 		t.Errorf("html body = %q, want no placeholder left", row.HTMLBody)
 	}
-	// The plain-text part is derived from the rendered tree: Markdown emphasis is gone, and the link
-	// keeps its target as "label (url)" so a plain-text reader can still open it.
-	if strings.Contains(row.TextBody, "**") {
-		t.Errorf("text body = %q, want no Markdown markers", row.TextBody)
+	// The plain-text part is derived from the rendered tree: tags are gone, and the link keeps its
+	// target as "label (url)" so a plain-text reader can still open it.
+	if strings.Contains(row.TextBody, "<p>") {
+		t.Errorf("text body = %q, want no tags", row.TextBody)
 	}
 	if !strings.Contains(row.TextBody, "reset (http") || !strings.Contains(row.TextBody, "/reset-password?token=") {
 		t.Errorf("text body = %q, want the link as label (url)", row.TextBody)

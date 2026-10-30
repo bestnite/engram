@@ -12,19 +12,20 @@ import (
 
 // This file is the renderer for mail templates.
 //
-// Rendering happens in five steps, and the order is part of the security; do not swap them:
-//  1. replace the {{var}} in the source with tokens carrying a per-render random salt;
-//  2. render the Markdown;
-//  3. replace the tokens with the values, HTML-escaping in the HTML segment;
-//  4. add the fixed inline styles and derive the plain-text part from the same tree;
-//  5. wrap the result in the fixed shell held by the code.
+// Rendering happens in four steps, and the order is part of the security; do not swap them:
+//  1. replace the {{var}} in the template with tokens carrying a per-render random salt;
+//  2. replace the tokens with HTML-escaped variable values;
+//  3. derive the plain-text part from the substituted HTML with notetype.PlainText;
+//  4. wrap the result in the fixed shell held by the code (site name, footer, unsubscribe row).
 //
-// **Why render first and substitute afterwards**: variable values contain user-controlled data
-// (usernames, deck names, failure reasons). Substituting into the source first hands the user data
-// to the Markdown parser and the allowlist decision -- a value of `**x**` becomes bold, `<b>x</b>`
-// becomes raw HTML. Rendering first means the value never entered the renderer, and substitution only
-// has to escape by context. This is exactly the lesson the card formula placeholders learned, and it
-// applies to mail too.
+// Nothing is sanitised and nothing is styled at render time: administrators write arbitrary HTML and
+// CSS, and the built-in bodies already carry the inline styles, so the renderer only substitutes,
+// derives the text part and applies the shell.
+//
+// **Why tokenise first and substitute afterwards**: variable values contain user-controlled data
+// (usernames, deck names, failure reasons). Substituting into the template first would let a value
+// such as `<b>x</b>` become markup. Tokenising first means the value never enters the template; step
+// 2 is the only step that writes a value, and it escapes it.
 
 // placeholderRe matches {{name}} in a template. Names are restricted to lowercase letters, digits
 // and underscores: that way a mathematical notation in the template (the single-brace kind such as
@@ -54,15 +55,16 @@ type RenderInput struct {
 	// Vars are the variable values.
 	Vars Vars
 
-	// Subject and BodyMD are the admin's custom template. A blank BodyMD means there is no
-	// customization, and FallbackSubject/FallbackBodyMD (the built-in body assembled by the sender) are
-	// used -- **the built-in body always lives in code**, so a corrupt or deleted template cannot stop
-	// mail from being sent.
+	// Subject and BodyMD are the admin's custom template. The field keeps the body_md name of the
+	// stored column and the JSON API, but its content is HTML template text. A blank BodyMD means there
+	// is no customization, and FallbackSubject/FallbackBodyMD (the built-in body assembled by the
+	// sender) are used -- **the built-in body always lives in code**, so a corrupt or deleted template
+	// cannot stop mail from being sent.
 	Subject string
 	BodyMD  string
 
-	// FallbackSubject and FallbackBodyMD are the built-in body, as Markdown. Both paths run through the
-	// same renderer: the built-in body is not a plain-text special case.
+	// FallbackSubject and FallbackBodyMD are the built-in body, as HTML template text. Both paths run
+	// through the same renderer: the built-in body is not a plain-text special case.
 	FallbackSubject string
 	FallbackBodyMD  string
 
@@ -76,8 +78,8 @@ type RenderInput struct {
 }
 
 // Rendered is the render result: subject, plain text segment, HTML segment. A successful render always
-// has a non-empty HTML segment; the plain-text segment is derived from the rendered body, not from the
-// Markdown source.
+// has a non-empty HTML segment; the plain-text segment is derived from the substituted body with
+// notetype.PlainText.
 type Rendered struct {
 	Subject string
 	Text    string
@@ -87,8 +89,8 @@ type Rendered struct {
 // Render renders one mail.
 //
 // The body is the custom template when one is set, otherwise the sender's built-in body; both are
-// Markdown and go through the same pipeline, so "no template" and "the template saved unchanged" are
-// the same mail.
+// HTML template text and go through the same pipeline, so "no template" and "the template saved
+// unchanged" are the same mail.
 func Render(in RenderInput) (Rendered, error) {
 	custom := strings.TrimSpace(in.BodyMD) != ""
 	bodyMD := in.BodyMD
@@ -117,28 +119,25 @@ func Render(in RenderInput) (Rendered, error) {
 		subject = in.FallbackSubject
 	}
 
+	// Step 1: placeholders become salted tokens in the template.
 	tokenised, order, salt := tokenise(bodyMD)
-	bodyHTML, err := renderMailMarkdown(tokenised)
-	if err != nil {
-		return Rendered{}, fmt.Errorf("render mail template: %w", err)
-	}
-	substituted := substituteTokens(bodyHTML, order, salt, in.Vars, true)
+	// Step 2: tokens become the HTML-escaped variable values.
+	substituted := substituteTokens(tokenised, order, salt, in.Vars, true)
 	if left := leftoverPlaceholderRe.FindString(substituted); left != "" {
 		return Rendered{}, fmt.Errorf("mail type %q: unresolved placeholder %q in body", in.Type, left)
 	}
-
-	styled, plain, err := styleFragment(substituted)
-	if err != nil {
-		return Rendered{}, fmt.Errorf("style mail body: %w", err)
-	}
-
+	// Step 3: the text-only part is derived from the substituted HTML, so both parts say the same
+	// thing. notetype.PlainText is the one HTML-to-text rule in the repository; links are expanded to
+	// "label (url)" first so the text part still carries the destination.
+	plain := mailPlainText(substituted)
 	if in.UnsubscribeURL != "" && in.UnsubscribeLabel != "" {
 		plain = strings.TrimRight(plain, "\n") + "\n\n" + in.UnsubscribeLabel + ": " + in.UnsubscribeURL
 	}
+	// Step 4: the fixed shell (site name, footer, unsubscribe row) closes the document.
 	return Rendered{
 		Subject: subject,
 		Text:    plain,
-		HTML:    wrapLayout(in.Site, in.Lang, styled, in.FooterNote, in.UnsubscribeURL, in.UnsubscribeLabel),
+		HTML:    wrapLayout(in.Site, in.Lang, substituted, in.FooterNote, in.UnsubscribeURL, in.UnsubscribeLabel),
 	}, nil
 }
 
@@ -329,7 +328,7 @@ const shellClose = `</table>
 // {{LANG}} goes into an attribute and {{SITE}} / {{FOOTER_NOTE}} / {{UNSUBSCRIBE_LABEL}} into text, so
 // all of them are escaped. A blank language drops the attribute instead of writing lang="": an empty
 // value claims the document has no language, while an absent attribute leaves the client its default.
-// {{BODY}} is the fragment that has already been rendered and styled; it is inserted verbatim.
+// {{BODY}} is the substituted template HTML; it is inserted verbatim. Nothing in it is sanitised.
 //
 // The shell placeholders are uppercase while template variables are lowercase, so the two naming
 // schemes cannot collide: tokenise only matches lowercase names, and the strings.Replacer does not

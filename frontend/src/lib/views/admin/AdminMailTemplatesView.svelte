@@ -10,6 +10,8 @@
   import { toast } from '../../components/ui/toast';
   import Badge from '../../components/ui/Badge.svelte';
   import Select from '../../components/ui/Select.svelte';
+  import RichTextField from '../../components/RichTextField.svelte';
+  import MailPreviewFrame from '../../components/MailPreviewFrame.svelte';
   import Skeleton from '../../components/ui/Skeleton.svelte';
   import { draftFor } from '../../mail-template-draft';
   import { Eye, RefreshCw, RotateCcw, Send } from '@lucide/svelte';
@@ -241,17 +243,19 @@
       </div>
       <div>
         <div class="flex items-center gap-1">
-          <label class="text-sm font-medium text-foreground" for="admin-mail-template-body">{$t('admin.mail.body_label')}</label>
+          <span class="text-sm font-medium text-foreground">{$t('admin.mail.body_label')}</span>
           <HelpTip testId="admin-mail-template-body-help" label={$t('admin.mail.body_label')} text={$t('admin.mail.body_hint')} />
         </div>
-        <textarea
-          id="admin-mail-template-body"
-          data-testid="admin-mail-template-body"
-          rows="10"
-          spellcheck="false"
-          bind:value={body}
-          class="field-input mt-1.5 w-full font-mono text-sm"
-        ></textarea>
+        <!-- The body is HTML now, so it is edited with the same sandboxed rich-text field as a note
+             field: the value never enters the parent DOM. -->
+        <div class="mt-1.5" data-testid="admin-mail-template-body">
+          <RichTextField
+            value={body}
+            label={$t('admin.mail.body_label')}
+            testId="admin-mail-template-body-field"
+            onvalue={(value: string) => (body = value)}
+          />
+        </div>
       </div>
 
       {#if currentType}
@@ -309,8 +313,11 @@
           <div class="grid divide-y divide-border lg:grid-cols-2 lg:divide-x lg:divide-y-0">
             <div class="p-4">
               <h3 class="text-xs text-muted-foreground">{$t('admin.mail.preview_html')}</h3>
-              <!-- The preview uses server-rendered HTML that has been allowlist-sanitized; as everywhere else in the admin pages, rendering the editor's raw text as HTML is forbidden. -->
-              <div class="mt-2 rounded-md bg-white p-4 text-zinc-900" data-testid="admin-mail-template-preview-html">{@html preview.html}</div>
+              <!-- The preview is the complete delivered document inside a sandboxed frame: the admin's
+                   HTML and CSS never enter the parent page. -->
+              <div class="mt-2" data-testid="admin-mail-template-preview-html">
+                <MailPreviewFrame html={preview.html} title={$t('admin.mail.preview_html')} testId="admin-mail-template-preview-frame" />
+              </div>
             </div>
             <div class="p-4">
               <h3 class="text-xs text-muted-foreground">{$t('admin.mail.preview_text')}</h3>

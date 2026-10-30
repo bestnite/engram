@@ -64,7 +64,7 @@ type mailTemplatesResponse struct {
 	Defaults []mailTemplateDefault `json:"defaults"`
 }
 
-// mailTemplateSaveRequest is the save request: subject and body are both raw Markdown.
+// mailTemplateSaveRequest is the save request: the body is administrator-written HTML template text.
 type mailTemplateSaveRequest struct {
 	Subject string `json:"subject"`
 	BodyMD  string `json:"body_md"`
@@ -211,8 +211,10 @@ func (s *Server) adminMailTemplateSave(c *gin.Context) {
 		return
 	}
 	subject := strings.TrimSpace(req.Subject)
-	body := strings.TrimSpace(req.BodyMD)
-	if body == "" {
+	// The body is stored verbatim: it is HTML now, where a trailing space or newline can be part of
+	// the markup the admin wrote. Only an all-whitespace body is rejected, because that is not a body.
+	body := req.BodyMD
+	if strings.TrimSpace(body) == "" {
 		// An empty body means "no customization"; that is the semantics of deletion, so do not let a save quietly turn it into a fallback.
 		adminError(c, http.StatusBadRequest, "empty_body")
 		return
