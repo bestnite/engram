@@ -242,8 +242,6 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 - [ ] **M17-45 A note write keeps cards that became empty** — Anki's rule: editing a note adds cards
   and never removes one.
-  *Depends on:* M17-50, because the note type update must stop sharing the note write's card rule
-  first.
   *Files:* `internal/store/card.go` (`syncCards`); `internal/web/review.go`; `internal/store/*_test.go`;
   `internal/web/*_test.go`; `internal/i18n/locales/` (append a block with the prefix
   `review.empty_card.`).
@@ -277,37 +275,9 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
 
 **Phase 5 follow-up — defects found in the review of M17-22 to M17-24, M17-35 and M17-40 (on `main`)**
 
-These tasks land on `main` directly. M17-47, M17-48 and M17-49 fix wrong results or data loss and
-come first. The local Ultimate Geography package (`testdata/local/Ultimate-Geography.apkg`) is the
+These tasks land on `main` directly. M17-48 fixes a wrong result and comes first. The local Ultimate Geography package (`testdata/local/Ultimate-Geography.apkg`) is the
 evidence named below. It is gitignored, so a test that reads it skips when the file is absent.
 
-- [ ] **M17-47 Choose the imported deck from the decks that hold cards** — the top deck must not be
-  Anki's empty `Default` deck.
-  *Files:* `internal/store/anki_import.go` (`planAnkiDecks`); `internal/store/anki_import_test.go`.
-  *Problem:* an Anki package always carries the deck `Default` (id 1). `planAnkiDecks` takes the
-  shortest deck name as the top deck, so the Ultimate Geography import creates a deck named
-  `Default`, and all 975 cards get `deck_path = "Ultimate Geography"`. `TestLocalAnkiPackage` passes
-  `NewDeckName`, which hides the deck name.
-  *Work:*
-  - Only decks that at least one package card references take part in the choice. A deck that no card
-    references is ignored, whatever its name or id.
-  - Split each card deck name into `::` components. The top name is the longest component prefix that
-    all card deck names share.
-  - When the card decks share no first component, the top name is the first component of the card
-    deck with the most cards. On a tie, the lowest deck id wins.
-  - A card in the deck whose full name equals the top name gets `deck_path = NULL`. A card in a deck
-    below the top name gets the path relative to it. Any other card gets its full package deck name.
-  - The new deck's description is the description of the package deck whose full name equals the top
-    name, and empty when there is no such deck.
-
-  *Acceptance:*
-  - Table-driven tests on constructed packages: `Default` without cards plus one deck with cards; a
-    tree `A`, `A::B`, `A::C` whose cards sit only in `A::B` and `A::C` (top `A`, paths `B` and `C`);
-    two unrelated decks `A` and `B`; `Default` holding cards.
-  - A test that imports the local Ultimate Geography package without `NewDeckName` gets the deck name
-    `Ultimate Geography` and `deck_path = NULL` on all 975 cards.
-
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 - [ ] **M17-48 Re-importing an `.apkg` restores soft-deleted notes** — a guid that matches a deleted
   note must not break the import.
   *Files:* `internal/store/anki_import.go` (`importAnkiInTx`, `writeAnkiNote`);
@@ -328,52 +298,6 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
   *Acceptance:* store tests for both cases: the import succeeds; the matched note keeps its id; and a
   card that had a `card_states` row before still has it.
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-- [ ] **M17-49 Note responses carry the stored field HTML** — the editor must not round-trip fields
-  through plain text.
-  *Files:* `internal/api/note_view.go`; `internal/store/legacy_fields.go`; `internal/api/notes.go`;
-  `internal/mcp/`; `frontend/src/lib/views/NoteEditView.svelte` (single-writer hotspot); the tests
-  beside them.
-  *Problem:* the note response presents stock-kind fields in legacy shapes through
-  `LegacyNoteFields`. `options`, `items` and `accept` become `answer.ParseLines(html)`, which is plain
-  text. A bool or number that fails to parse is left out. The editor joins arrays with `<br>` and saves
-  the result. Opening and saving a choice note therefore deletes the images and the formatting in its
-  options, and an unparseable bool or number field is saved empty. Migration 0012 kept images in options
-  on purpose. M17-16 already defines the note payload's field values as HTML strings.
-  *Work:*
-  - Every note response returns each field's stored HTML string unchanged: REST note get, list and
-    search, and the MCP note tools. The keys stay as they are today.
-  - Delete `LegacyNoteFields` and `transitionalFields` from the response path.
-  - The editor loads a field value as the string it receives. It does no array, bool or number
-    conversion.
-
-  *Acceptance:*
-  - A handler test: a `choice_single` note whose option holds `<img src="x.png">` and `<b>` returns the
-    stored HTML string for `options`.
-  - A client test: loading that note into the editor and saving it without changes sends the same HTML.
-  - The REST and MCP tests pass.
-
-  *Verify:* `go test ./internal/api/... ./internal/mcp/... ./internal/store/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
-- [ ] **M17-50 A note type update removes only the cards of removed templates** — empty cards are not
-  removed by a note type update.
-  *Files:* `internal/store/card.go` (`regenerateNoteTypeCards`); `internal/store/notetype_test.go`;
-  `internal/api/note_types_test.go`.
-  *Problem:* `regenerateNoteTypeCards` calls `syncCardsWithChange`, which soft-deletes every card the
-  new config no longer generates. That includes a card whose template still exists but whose front now
-  renders empty. M17-40 asked only for the cards of a template that the new config no longer declares.
-  *Work:*
-  - For a normal note type, the update soft-deletes exactly the cards whose template id the new config
-    does not declare. For a cloze note type, it soft-deletes no card.
-  - The update creates every card the new config generates that the note lacks, and restores a
-    soft-deleted card of a declared template when the new config generates it.
-  - The impact counts follow the same rule.
-  - M17-45 changes the note write path only. This rule for note type updates stays as written here.
-
-  *Acceptance:*
-  - A store test: changing a template so that its front references an empty field keeps those cards and
-    reports `cards_removed = 0`.
-  - The existing M17-40 tests pass.
-
-  *Verify:* `go test ./internal/store/... ./internal/api/...`.
 - [ ] **M17-51 A structural re-import removes the cards of missing templates** — a moved note must not
   keep a card its new note type cannot render.
   *Files:* `internal/store/anki_import.go`; `internal/store/package_import.go` (`PackageImportReport`);
@@ -646,6 +570,8 @@ bluemonday-sanitised `internal/render` are gone.
 | Note type styles and deck special fields in review (M17-33, M17-44) | Every card frame in the review page and the note preview now takes its HTML, body class and media base from the server's per-side face object, and its style is the engram face sheet followed by the note type's CSS, so a note type rule overrides the default typography. `{{Deck}}` renders the deck name joined with the card's subdeck path (`Lesson 1::Verbs`) and `{{Subdeck}}` its last component; a card outside a subdeck renders the deck name for both. | No — response shapes are unchanged |
 | Review of any note type (M17-34, M17-41) | The due-card payload carries `answer_control`, `machine_graded` and `field_order`, and the review page chooses the self-rating, essay or machine-graded flow from them instead of the card-kind catalog, so a note type that matches no stock kind reviews normally. A note type write (REST create/update, package import, stock creation, migration) now validates every template's answer spec: the control must be registered, every required role bound, and every binding must name a declared field; a bad REST write returns 400 naming the template and role, and a bad package is `package_bad_format` with no rows written. | No — three fields added to the due-card response; previously accepted invalid note types are now rejected |
 | Anki `.apkg` import (M17-23, M17-24) | `internal/anki` reads all three Anki package layouts (legacy `collection.anki2`, `collection.anki21`, and zstd-compressed `collection.anki21b` with protobuf note type/deck configuration) under the deck package's entry, per-file and total caps. The import page, `POST` package import, upload tickets and the MCP `import_deck` accept `.apkg`: the top-level package deck becomes one engram deck, subdecks fill `cards.deck_path`, note types arrive unchanged with no answer spec, notes carry `external_ref = "anki:<guid>"`, media is registered by name, and the package's cards are created as they exist. Re-importing into the same deck matches notes by guid and note types by `anki_origin.notetype_id`, keeping cards and progress; an equal field/template structure is overwritten in place, a changed one creates a new note type and moves the notes. The report lists missing media, unplayable video, external scripts/stylesheets and missing LaTeX images. | No — a new input format is accepted and the import report gains four lists |
+| Anki import deck choice (M17-47) | An `.apkg` is named after its real deck tree, not Anki's usually empty `Default` deck: only decks that hold package cards take part, the top name is the longest `::` component prefix they share (or the largest branch when they share none), cards in it get no subdeck path, and the package description is adopted only when the deck rules accept it. | No |
+| Note field HTML in responses and note type card removal (M17-49, M17-50) | Every note response (REST get/list/search, MCP note tools, due-card fields) returns each field's stored HTML string unchanged instead of reshaping stock-kind fields into arrays, booleans and numbers, so opening and saving a choice note no longer deletes the formatting of its options. A note type update soft-deletes only the cards of templates the new config no longer declares; a declared template whose front is now empty keeps its cards, and a cloze update removes none. | Yes — note response field values are HTML strings for every note type where some stock kinds used to return arrays, booleans or numbers |
 | Editor on note types (M17-35, M17-40) | The note editor lists the deck's note types, builds the form from the selected type's fields in config order (field options included) and saves `{note_type, fields}` without a kind; the preview renders the stored type's own templates and CSS and answers 404 for a type of another deck. A note type update regenerates the cards of every live note of the type in one transaction: an added template creates the missing cards, a removed template soft-deletes their cards while `card_states` and `reviews` stay. The edit body takes `dry_run` and `confirm_card_removal`; a removal without confirmation is 409 `card_removal_unconfirmed` with the three counts, a kind change is 400, and a successful update writes one audit row with the counts. | Yes — the note preview request takes `note_type` instead of `kind`; the note type update response gains four fields and a new 409 code |
 | Audio, video and TTS playback (M17-25) | The review frame plays the server's AV tag list: the question side autoplays its tags in order, the answer side plays only the tags it adds (audio inserted by `{{FrontSide}}` is not replayed), and both follow the deck's new `autoplay` setting (default on, owner-only). `r` and `F5` replay; an mp4 or webm `[sound:]` plays in an inline video; TTS maps `lang`, `voices`, `speed` and `cloze_blank` onto `speechSynthesis`; `span.engram-sound` start/end/rate/loop reach the player, and the editor's insert-audio dialog sets them. | No — a deck field is added and the card-face payload gains `av_tags` and `autoplay` |
 | Note type management (M17-27) | A deck page lists, creates (from a stock definition or by copying) and edits note types: fields with options and Anki-style template-reference rewriting, templates with browser variants, CSS, the answer-spec control and its field bindings, and live sandboxed previews. A save previews the card impact with `dry_run` and asks before removing cards. Stock definitions and answer controls come from two additive read endpoints. | No — a page and two read endpoints are added |
