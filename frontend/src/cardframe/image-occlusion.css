@@ -1,0 +1,37 @@
+/*
+ * Copyright: Ankitects Pty Ltd and contributors
+ * License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+ *
+ * Image-occlusion review layout, ported from ts/routes/image-occlusion/review.scss at tag 26.09.3 of ankitects/anki.
+ *
+ * The mask is a canvas laid exactly over the picture, so a shape's coordinates address the same pixel of both. The
+ * note type's own CSS carries only the mask colours; these rules carry the stacking that makes the canvas line up with
+ * the image.
+ *
+ * Anki also caps the container at `calc(95vh - 40px)`. That cap is left out here on purpose: the frame's height is
+ * derived from its content and reported to the parent page, so a viewport-relative cap would make the card's height
+ * depend on the height the parent just gave the frame. The aspect ratio below already keeps the picture proportional.
+ */
+
+#image-occlusion-container {
+  position: relative;
+  margin: 0 auto;
+}
+
+#image-occlusion-container img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  max-width: unset;
+  max-height: unset;
+}
+
+#image-occlusion-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}

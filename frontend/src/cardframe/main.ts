@@ -1,5 +1,6 @@
 import '../app.css';
 import './reviewer.css';
+import './image-occlusion.css';
 import { createRuntime } from './runtime';
 
 /**

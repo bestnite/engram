@@ -1,5 +1,6 @@
 import { isSupportedLocale, setLocale } from '../lib/i18n';
 import { enhanceShortcodes, playShortcodeSequence } from '../lib/shortcodes';
+import { installImageOcclusion } from './image-occlusion';
 import { readMathJaxURL, typesetCard } from './mathjax';
 import type { AVTag } from '../lib/api/types';
 import {
@@ -159,6 +160,10 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   // The answer controls live in the same content root for the frame's whole life; one delegated listener pair is enough
   // and re-attaching it per show would post every value twice.
   const answerReader: AnswerReader | null = root ? attachAnswerControls(root, emitAnswer) : null;
+
+  // An image-occlusion template calls `anki.imageOcclusion.setup()` from its own inline script, so the global must exist
+  // before the first show re-executes scripts. The disposer removes the listeners the installation owns on destroy.
+  const disposeImageOcclusion = installImageOcclusion(win, doc);
 
   installReviewerGlobals(win, {
     answer: () => answerReader?.currentAnswer(),
@@ -435,6 +440,7 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
       post({ type: 'ready' });
     },
     destroy() {
+      disposeImageOcclusion();
       win.removeEventListener('keydown', onKeyDown);
       doc.removeEventListener('click', onClick);
       win.removeEventListener('message', onMessage);

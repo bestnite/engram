@@ -313,7 +313,9 @@ change.
   It also supplies the Anki reviewer environment a shared template expects: the body classes
   `card cardN` and `nightMode night_mode`, the browser and platform classes ported from Anki's
   `browser_selector.ts`, the `$`, `jQuery`, `getTypedAnswer`, `pycmd` and `bridgeCommand` globals, the
-  answer controls' posted values, and engram's audio controls on every play marker. The frame
+  answer controls' posted values, the image-occlusion surface `anki.imageOcclusion.setup()` (with
+  the deprecated `anki.setupImageCloze` alias) that paints the server's occlusion shapes on a
+  canvas over the picture, and engram's audio controls on every play marker. The frame
   turns each marker into the same audio, video or speech source the shortcodes produce, autoplays
   only the face's own tags when the deck allows it, and replays the face on `r` or `F5`.
 - `frontend/src/editframe/` is the editing frame runtime. It parses the field HTML only inside the
