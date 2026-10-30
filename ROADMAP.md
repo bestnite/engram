@@ -446,56 +446,10 @@ is a note type whose shape matches no engram stock kind.
   gets a report.
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 
-**Phase 4 — media (on `main`, after the integration merge)**
-
-- [ ] **M17-22 Media by file name and by any type** — resolve media through `media_names`, accept
-  every file type, and serve it safely.
-  *Files:* `internal/mediatype/`; `internal/media/`; `internal/store/media_*.go`;
-  `internal/web/frame_media.go`; `internal/web/media.go`.
-  *Work:*
-  - `/fm/<token>/<name>` resolves `name` through `media_names` for the token's deck.
-  - The allowlist becomes a classification: image (including SVG and AVIF), audio (including wav,
-    flac and opus), video (mp4, webm), font, script, style, other.
-  - Upload and import accept every class, within the quota.
-  - `/media/<sha>` sends `Content-Security-Policy: sandbox` on every response, and serves everything
-    that is not image, audio or video as an attachment.
-  - Templates and CSS that reference `_`-prefixed files record them in `media_note_types`. Media
-    garbage collection counts these references.
-  - On import, a name clash with different content renames the new file as Anki does and rewrites
-    its references.
-
-  *Acceptance:* tests cover:
-  - detection of each class;
-  - an SVG containing `<script>` served from `/media/<sha>` with the sandbox CSP;
-  - a JS file served as an attachment;
-  - a `_font.woff2` referenced only from CSS that survives garbage collection;
-  - the clash rename;
-  - a frame media request for a sha that the token user can read in another deck, but that no
-    `media_names` row of the token's deck names, returns 404.
-
-  *Verify:* `go test ./internal/mediatype/... ./internal/media/... ./internal/store/... ./internal/web/...`.
-
 **Phase 5 — `.apkg` import**
 
-- [ ] **M17-23 `.apkg` reader** — read all three package formats into an in-memory model.
-  *Depends on:* M17-22.
-  *Files:* `internal/anki/` (new); `go.mod`, adding `github.com/klauspost/compress/zstd` (reason: the
-  standard library has no zstd, and `collection.anki21b` is zstd-compressed).
-  *Work:*
-  - `collection.anki2` and `collection.anki21`: SQLite through `glebarez/sqlite`. Note types and
-    decks come from the JSON columns; the `media` map is JSON.
-  - `collection.anki21b`: zstd, then SQLite. Note types, fields and templates are protobuf configs.
-    The `meta` and `media` entries are protobuf, decoded with
-    `google.golang.org/protobuf/encoding/protowire` by field number, with no code generation.
-  - Archive limits match the `.edeck` reader: entry count, total size and path safety.
-
-  *Acceptance:*
-  - The three fixture packages from M17-5 decode to the same model.
-  - Negative cases: a corrupt zstd stream, a missing collection, and a path-traversal entry.
-
-  *Verify:* `go test ./internal/anki/... && go vet ./internal/anki/...`.
 - [ ] **M17-24 `.apkg` import into a deck** — map the decoded package onto the data model.
-  *Depends on:* M17-23, M17-33, M17-34, M17-35, M17-41, M17-44.
+  *Depends on:* M17-33, M17-34, M17-35, M17-41, M17-44.
   *Files:* `internal/anki/import.go`; `internal/api/package*.go`; `internal/mcp/mcp.go`;
   `frontend/src/lib/views/ImportView.svelte`; the locale catalogs (append a block with the prefix
   `import.apkg.`).
@@ -530,7 +484,7 @@ is a note type whose shape matches no engram stock kind.
 **Phase 6–9 — remaining capabilities**
 
 - [ ] **M17-25 Audio, video and TTS** — complete playback.
-  *Depends on:* M17-17, M17-22.
+  *Depends on:* M17-17.
   *Files:* `frontend/src/cardframe/`; `internal/store/models.go` (the deck column `autoplay`, a `*bool`
   defaulting to true per `AGENTS.md` 2.3 item 9); the deck settings view; the locale catalogs (append
   a block with the prefix `deck.autoplay.`).
@@ -694,8 +648,9 @@ release; a task moves into a release milestone when it is scheduled.
 ### 2.1 Completed since v0.2.0 (2026-10-26)
 
 **The M17 content-model merge is a breaking release of the HTTP API, the MCP tools, the database
-schema and the `.edeck` file format. Everything else listed here is additive except one removal: the
-unused `archived_at` deck field and its column. No configuration key changed.** The v0.2.0 release
+schema and the `.edeck` file format. Everything else listed here is additive except two removals:
+the unused `archived_at` deck field and its column, and the `media_allowed_mimes` configuration key
+with its environment variable.** The v0.2.0 release
 notes cover everything before it.
 
 #### Anki-compatible content model (M17 phases 1–3, breaking)
@@ -742,6 +697,7 @@ bluemonday-sanitised `internal/render` are gone.
 | Goal | What shipped | Breaking change |
 |---|---|---|
 | Anki-compatible content model (M17 phases 1–3) | Note types as data with eight registered answer controls; the `{note_type, fields}` REST/MCP note payload, the note type endpoints, the sandboxed card and edit frames, `/fm/` media tokens; migrations 0012–0014; `.edeck` format 2 and the regenerated bundled decks. Details above. | Yes — HTTP API, MCP, database schema, file format |
+| Media by file name and by any type (M17-22) | Media is classified (image, audio, video, font, script, style, other) instead of allowlisted; upload and import accept every class within the quota. `/fm/<token>/<name>` resolves a deck-scoped name through `media_names`, so CSS-only `_` assets are served. Every media response carries `Content-Security-Policy: sandbox` and everything not image/audio/video is an attachment. Note-type `_`-prefixed references are kept by garbage collection (migration 0015 backfills them) and travel with an export. An import whose name holds different bytes renames the new file as Anki does. A note write turns the editor's `/media/<sha256>` and `[sound:<sha256>]` into deck media names, so the frame, references, garbage collection and export resolve them. | Yes — the `media_allowed_mimes` configuration key and its environment variable are removed; every `/media/` and `/fm/` response gains a sandbox CSP and a download disposition for non-inline classes |
 | Deck progress | The deck list, the home deck list and the deck detail header show how many of the deck's cards the user has studied and how many new cards are left, as `Studied N · Left M`. On the home deck list each deck gets a second line of numbers: today's new and review counts as badges, which turn grey at zero, and a progress bar beside the studied and remaining text, which turns to the success colour once no new card is left. The counts are per user, so a shared deck never shows another member's progress, and they ignore the daily limits. A suspended new card is not counted as left; a suspended studied card still counts as studied. | No — two fields added to a session-only response |
 | Deck pause | A user pauses a deck for themselves from the deck list (a toggle beside delete or leave) or the deck detail header; the owner and every member, readers included, decide alone. A paused deck keeps a `Paused` badge on the deck list and disappears from the home deck list and the sidebar. It stays out of the default review queue, the home due count, the unfiltered forecast, the weekly digest and the reminder mail, while naming it (`/review?deck=…`, batch review, a stats deck filter) still studies or shows it. Progress is kept and cards keep falling due. Pausing and resuming write the audit actions `deck.pause` and `deck.resume`. | No — additive route, tool, table and field; nothing changes until a user pauses a deck |
 | Note search on field text | Note search (`GET /api/v1/decks/:id/notes?q=`, `search_notes` and the card list) matches the text of the fields instead of their JSON encoding. A field key such as `front` no longer matches every note; `<`, `>`, `&`, quotes and text across a line break can be found; case folding of non-ASCII letters is the same on SQLite and PostgreSQL. A query is split on whitespace and every term must occur, in any order. | No — results change, the request and response shapes do not |
