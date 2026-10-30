@@ -114,3 +114,45 @@ jobs:
       # Full test run; no TEST_PG_DSN is set, so the PostgreSQL cases skip themselves (see the file header).
       - name: Test
         run: go test ./...
+
+  # Browser isolation suite (ROADMAP.md M17-4). It runs in its own job because it needs a Chromium download and a real
+  # browser, while `verify` must stay a fast, deterministic build/test pass. The suite starts the Go server itself with a
+  # throwaway SQLite database, and the global setup builds frontend/dist first, because `go run` embeds it.
+  e2e:
+    name: browser isolation (e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      # The npm version comes from packageManager in frontend/package.json; install it explicitly so lockfile handling
+      # matches every other run.
+      - name: Pin npm
+        run: npm install -g npm@12.2.1
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci
+
+      # Playwright's own Chromium build (not the distribution package): the version matches @playwright/test in
+      # package-lock.json, so the browser and the driver cannot drift apart.
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser isolation suite
+        run: npm --prefix frontend run test:e2e
