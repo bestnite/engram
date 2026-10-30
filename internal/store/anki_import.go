@@ -749,8 +749,35 @@ func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r
 	return report, nil
 }
 
+// dropUnusedAnkiNoteTypes removes the package's note types that no note uses.
+//
+// Anki's importer creates only the note types its imported notes refer to; a package that carries
+// an extra note type changes nothing for it. The fixture
+// internal/notetype/testdata/anki/notetype-import.anki21b.apkg holds such a package, and its golden
+// records the names Anki 26.09.3 added when it imported the package into an empty collection.
+func dropUnusedAnkiNoteTypes(pkg *anki.Package) {
+	if len(pkg.NoteTypes) == 0 {
+		return
+	}
+	used := make(map[int64]bool, len(pkg.Notes))
+	for i := range pkg.Notes {
+		used[pkg.Notes[i].NoteTypeID] = true
+	}
+	kept := pkg.NoteTypes[:0]
+	for i := range pkg.NoteTypes {
+		if used[pkg.NoteTypes[i].ID] {
+			kept = append(kept, pkg.NoteTypes[i])
+		}
+	}
+	pkg.NoteTypes = kept
+}
+
 // importAnkiInTx performs the Anki mapping inside one transaction.
 func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *anki.Package, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport, writtenMedia *[]mediaWrite) error {
+	// The unused note types leave no trace in the target: they are not created, they contribute no
+	// media references to the report, and no stored row points at them.
+	dropUnusedAnkiNoteTypes(pkg)
+
 	deckID, err := s.resolveAnkiTargetDeck(ctx, tx, actorUserID, plan, targetKind, targetDeckID, opts)
 	if err != nil {
 		return err

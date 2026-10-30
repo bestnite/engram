@@ -56,9 +56,17 @@ drift apart.
 | `cardgen.anki21b.apkg` | `collection.anki21b` | card generation (M17-9) |
 | `audio-tts-latex.anki21b.apkg` | `collection.anki21b` | audio, TTS and LaTeX markup (M17-10) |
 | `typeanswer.anki21b.apkg` | `collection.anki21b` | type-in comparison (M17-11) |
+| `notetype-import.anki21b.apkg` | `collection.anki21b` | two note types, one of which no note uses (M17-54) |
 
 Each package is imported back into a fresh collection at the end of the run, and the note guids
 and card count must match its golden. A package that cannot be imported fails the run.
+
+`notetype-import` is the one fixture whose package is not written by the exporter untouched.
+Anki's exporter keeps only the note types an exported note refers to, so a package it writes never
+carries an unused one. Packages written by older exporters did carry them, and the note types an
+importer creates from such a package is what this fixture pins. The generator therefore copies the
+unused note type's rows from the source collection into the exported database before the ids,
+timestamps and ZIP are normalised, so the fixture is as deterministic as every other package.
 
 The media files (`placeholder.png`, `placeholder2.png`, `placeholder.wav`, `placeholder2.wav`)
 are generated as fixed bytes. A package carries only the media its own notes reference.
@@ -133,6 +141,7 @@ One file per fixture group, UTF-8, keys sorted, two-space indent, one trailing n
   "source": "anki==26.9.3",
   "fixture": "stock",
   "packages": ["stock.anki2.apkg", "stock.anki21.apkg", "stock.anki21b.apkg"],
+  "import_note_types": ["…"],
   "note_types": [
     {
       "name": "…",
@@ -196,6 +205,9 @@ Fields:
 
 - `source` is the pinned package version the values came from.
 - `fixture` is the file-name stem; `packages` lists the package files built from it.
+- `import_note_types` is present only in `notetype-import.golden.json`: the note type names
+  Anki's importer added when it imported the package into an empty collection, in the order
+  `models.all()` returned them. It records that a note type no note uses is not created.
 - `note_types` repeats the note type definition the fixture needs to be rendered. A Go test can
   build the note type from this block instead of importing a package. An entry carries the full
   legacy config Anki reports: the CSS, the sort field index, the LaTeX pre/post strings and

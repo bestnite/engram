@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -72,6 +73,7 @@ var ankiFixtures = []struct {
 	{"cardgen.anki21b.apkg", "cardgen"},
 	{"audio-tts-latex.anki21b.apkg", "audio-tts-latex"},
 	{"typeanswer.anki21b.apkg", "typeanswer"},
+	{"notetype-import.anki21b.apkg", "notetype-import"},
 }
 
 func ankiFixturePath(name string) string {
@@ -136,6 +138,76 @@ func TestAnkiImportFixturesRenderLikeGolden(t *testing.T) {
 						}
 					}
 				})
+			}
+		})
+	}
+}
+
+// TestAnkiImportCreatesOnlyTheNoteTypesAnkiCreates imports the fixture whose package carries a
+// note type that no note uses. Anki 26.09.3 creates only the note types its imported notes refer
+// to, and the golden records the names it added to an empty collection; the imported deck must
+// hold exactly those names.
+func TestAnkiImportCreatesOnlyTheNoteTypesAnkiCreates(t *testing.T) {
+	const archive = "notetype-import.anki21b.apkg"
+	raw, err := os.ReadFile(ankiFixturePath(archive))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var golden struct {
+		ImportNoteTypes []string `json:"import_note_types"`
+	}
+	encoded, err := os.ReadFile(filepath.Join("..", "notetype", "testdata", "anki", "notetype-import.golden.json"))
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	if err := json.Unmarshal(encoded, &golden); err != nil {
+		t.Fatalf("decode golden: %v", err)
+	}
+	if len(golden.ImportNoteTypes) == 0 {
+		t.Fatal("golden records no imported note types")
+	}
+
+	// The fixture's shape is the point of the test: the package must carry an unused note type,
+	// otherwise the import would pass without exercising the rule.
+	pkg, err := anki.Read(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		t.Fatalf("read package: %v", err)
+	}
+	used := make(map[int64]bool, len(pkg.Notes))
+	for i := range pkg.Notes {
+		used[pkg.Notes[i].NoteTypeID] = true
+	}
+	unused := 0
+	for i := range pkg.NoteTypes {
+		if !used[pkg.NoteTypes[i].ID] {
+			unused++
+		}
+	}
+	if unused == 0 {
+		t.Fatal("fixture package carries no unused note type")
+	}
+
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			owner := seedUsers(t, db, "anki_notetype_import")[0]
+			report, err := NewDeckStore(db).ImportPackage(ctx, owner, bytes.NewReader(raw), PackageImportOptions{
+				Target:    PackageTargetNewDeck,
+				MediaRoot: t.TempDir(),
+			})
+			if err != nil {
+				t.Fatalf("ImportPackage: %v", err)
+			}
+			types, err := NewNoteTypeStore(db).ListByDeck(ctx, report.DeckID)
+			if err != nil {
+				t.Fatalf("list note types: %v", err)
+			}
+			names := make([]string, len(types))
+			for i := range types {
+				names[i] = types[i].Name
+			}
+			if !slices.Equal(names, golden.ImportNoteTypes) {
+				t.Fatalf("imported note types = %v, want %v", names, golden.ImportNoteTypes)
 			}
 		})
 	}

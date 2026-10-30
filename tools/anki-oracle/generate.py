@@ -630,6 +630,28 @@ TYPEANSWER_NOTETYPES = [
     ),
 ]
 
+# The import fixture does not test rendering: it pins which note types Anki's importer creates.
+# Its package carries "Unused Import Type", a note type no note uses. Anki's exporter drops every
+# note type that no exported note refers to, so the generator copies the unused note type back into
+# the package from the source collection; the shape matches packages written by older exporters,
+# which kept unused note types in the collection they shipped. The two names and the note guid sort
+# after every other fixture value, so adding this group leaves the other packages and goldens
+# byte-identical: note ids, card ids, field ids and template ids are assigned in sorted name order.
+IMPORT_NOTETYPES = [
+    FixtureNotetype(
+        name="Used Import Type",
+        fields=["Front", "Back"],
+        templates=[t("Card 1", "{{Front}}", "{{FrontSide}}<hr id=answer>{{Back}}")],
+        notes=[FixtureNote("used-import-type-one", {"Front": "front one", "Back": "back one"})],
+    ),
+    FixtureNotetype(
+        name="Unused Import Type",
+        fields=["Front", "Back"],
+        templates=[t("Card 1", "{{Front}}", "{{FrontSide}}<hr id=answer>{{Back}}")],
+        notes=[],
+    ),
+]
+
 
 @dataclass
 class Package:
@@ -637,6 +659,8 @@ class Package:
     notetypes: list[FixtureNotetype]
     formats: tuple[str, ...]
     stock: bool = False
+    # Record the note type names Anki's importer adds to an empty collection in the golden.
+    record_import_note_types: bool = False
 
 
 PACKAGES = [
@@ -675,6 +699,12 @@ PACKAGES = [
         fixture="typeanswer",
         notetypes=TYPEANSWER_NOTETYPES,
         formats=("anki21b",),
+    ),
+    Package(
+        fixture="notetype-import",
+        notetypes=IMPORT_NOTETYPES,
+        formats=("anki21b",),
+        record_import_note_types=True,
     ),
 ]
 
@@ -1330,6 +1360,67 @@ def normalise_media(entries: dict[str, bytes], fmt: str) -> None:
         entries[str(index)] = payloads[name]
 
 
+def inject_unused_notetypes(
+    src: Path, dst: Path, source_db: Path, names: list[str], workdir: Path
+) -> None:
+    """Copy note types that no note uses into an exported modern package.
+
+    Anki's exporter writes only the note types an exported note refers to, so a package built by
+    the pinned exporter never carries an unused one. Packages written by older exporters did carry
+    them, and which note types an importer creates from such a package is the behaviour this
+    fixture records. The note type, field and template rows are copied from the source collection
+    with their ids unchanged, and no note refers to them.
+    """
+    assert names, "no unused note type to inject"
+    with zipfile.ZipFile(src) as archive:
+        order = [info.filename for info in archive.infolist()]
+        entries = {info.filename: archive.read(info.filename) for info in archive.infolist()}
+
+    database_path = workdir / "inject.db"
+    database_path.write_bytes(zstd_decompress(entries["collection.anki21b"]))
+    conn = connect(database_path)
+    source = connect(source_db)
+    try:
+        for name in names:
+            row = source.execute("select id from notetypes where name = ?", (name,)).fetchone()
+            assert row is not None, name
+            ntid = row[0]
+            assert conn.execute(
+                "select 1 from notetypes where id = ?", (ntid,)
+            ).fetchone() is None, name
+            nt = source.execute(
+                "select id, name, config from notetypes where id = ?", (ntid,)
+            ).fetchone()
+            conn.execute(
+                "insert into notetypes (id, name, mtime_secs, usn, config) values (?, ?, 0, 0, ?)",
+                nt,
+            )
+            for field_config in source.execute(
+                "select ntid, ord, name, config from fields where ntid = ?", (ntid,)
+            ):
+                conn.execute(
+                    "insert into fields (ntid, ord, name, config) values (?, ?, ?, ?)",
+                    field_config,
+                )
+            for template in source.execute(
+                "select ntid, ord, name, config from templates where ntid = ?", (ntid,)
+            ):
+                conn.execute(
+                    "insert into templates (ntid, ord, name, mtime_secs, usn, config)"
+                    " values (?, ?, ?, 0, 0, ?)",
+                    template,
+                )
+        conn.commit()
+    finally:
+        source.close()
+        conn.close()
+
+    entries["collection.anki21b"] = zstd_compress(database_path.read_bytes())
+    with zipfile.ZipFile(dst, "w") as archive:
+        for name in order:
+            archive.writestr(name, entries[name])
+
+
 def rewrite_package(src: Path, dst: Path, *, fmt: str, workdir: Path) -> None:
     """Rewrite an exported package with normalised databases and a fixed ZIP."""
     with zipfile.ZipFile(src) as archive:
@@ -1679,16 +1770,20 @@ def render_package(col: Collection, package: Package) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def verify_package(path: Path, golden: dict, workdir: Path) -> None:
+def verify_package(path: Path, golden: dict, workdir: Path) -> list[str]:
     """Import a written package into a fresh collection and compare its content.
 
     This is the only check that reads the three formats the way a client does:
     it fails if a normalised database or the rebuilt ZIP cannot be imported.
+
+    Returns the note type names the import added, in Anki's order, so the caller
+    can record them in a golden.
     """
     check_dir = workdir / ("verify-" + path.stem)
     check_dir.mkdir()
     col = Collection(str(check_dir / "check.anki2"))
     try:
+        before = {notetype["id"] for notetype in col.models.all()}
         col.import_anki_package(
             ImportAnkiPackageRequest(
                 package_path=str(path),
@@ -1711,7 +1806,16 @@ def verify_package(path: Path, golden: dict, workdir: Path) -> None:
         card_count = len(col.find_cards(""))
         expected_cards = sum(len(note["cards"]) for note in golden["notes"])
         assert card_count == expected_cards, (path.name, card_count, expected_cards)
-        print("verified %s: %d notes, %d cards" % (path.name, len(guids), card_count))
+        added = [
+            notetype["name"]
+            for notetype in col.models.all()
+            if notetype["id"] not in before
+        ]
+        print(
+            "verified %s: %d notes, %d cards, %d note types added"
+            % (path.name, len(guids), card_count, len(added))
+        )
+        return added
     finally:
         col.close()
 
@@ -1751,6 +1855,7 @@ def main(argv: list[str]) -> int:
         normalise_collection(collection_path)
 
         written: list[tuple[Path, dict]] = []
+        goldens: dict[str, dict] = {}
         col = Collection(str(collection_path))
         for package in PACKAGES:
             guids = package_guids(package)
@@ -1762,8 +1867,9 @@ def main(argv: list[str]) -> int:
             assert len(note_ids) == len(guids), (package.fixture, len(note_ids), len(guids))
 
             golden = render_package(col, package)
-            write_json(OUT_DIR / ("%s.golden.json" % package.fixture), golden)
+            goldens[package.fixture] = golden
 
+            unused = [notetype.name for notetype in package.notetypes if not notetype.notes]
             for fmt in package.formats:
                 raw = workdir / ("%s.%s.raw.apkg" % (package.fixture, fmt))
                 col.export_anki_package(
@@ -1777,12 +1883,29 @@ def main(argv: list[str]) -> int:
                     limit=NoteIdsLimit(note_ids=note_ids),
                 )
                 target = OUT_DIR / ("%s.%s.apkg" % (package.fixture, fmt))
-                rewrite_package(raw, target, fmt=fmt, workdir=workdir)
+                if unused:
+                    # Only the modern package format is built for a group with an unused note
+                    # type; the injection edits the modern database it carries.
+                    assert fmt == "anki21b", (package.fixture, fmt)
+                    injected = workdir / ("%s.%s.injected.apkg" % (package.fixture, fmt))
+                    inject_unused_notetypes(raw, injected, collection_path, unused, workdir)
+                    rewrite_package(injected, target, fmt=fmt, workdir=workdir)
+                else:
+                    rewrite_package(raw, target, fmt=fmt, workdir=workdir)
                 written.append((target, golden))
         col.close()
 
+        imported: dict[str, list[str]] = {}
         for path, golden in written:
-            verify_package(path, golden, workdir)
+            added = verify_package(path, golden, workdir)
+            previous = imported.setdefault(golden["fixture"], added)
+            assert previous == added, (path.name, previous, added)
+
+        for package in PACKAGES:
+            golden = goldens[package.fixture]
+            if package.record_import_note_types:
+                golden["import_note_types"] = imported[package.fixture]
+            write_json(OUT_DIR / ("%s.golden.json" % package.fixture), golden)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
