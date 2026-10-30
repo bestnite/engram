@@ -110,6 +110,11 @@ change.
   ignored. The route replaces the site headers with the frame's own sandbox CSP, sends
   `Referrer-Policy: no-referrer`, and drops `X-Frame-Options`; the parent page embeds the document
   in a sandboxed iframe and communicates with it only through `postMessage`.
+- **Editing frame.** `GET /edit-frame/<build-version>` serves the note editor's rich-text iframe
+  document (`internal/web/edit_frame.go`). It carries the card frame's exact isolation and headers,
+  because a field value is untrusted note content parsed by a sandboxed document; the parent page
+  sends the field HTML and the toolbar commands with `postMessage` and receives `change`, `height`
+  and upload requests.
 - **Frame media.** `GET /fm/<token>/<name>` (`internal/web/frame_media.go`) serves media to the
   sandboxed frame, which has no session cookie. The token is an HMAC over `(user_id, deck_id,
   expiry)`; its key lives in the encrypted settings channel under `frame_media_key` and is
@@ -134,7 +139,8 @@ change.
   repeat their HTML and `options_html`, `option_order` and `blanks` remain in the payload, though
   the review page no longer renders controls from them. Those flat fields, and the card-kind
   vocabulary the note response still carries (`kind` as a transitional alias, the description
-  catalog in `internal/api/card_catalog.go`), are removed with the rich-text editor. A note write
+  catalog in `internal/api/card_catalog.go`), stay while the SPA note form still reads that
+  catalog; removing them requires the form to read note types instead of card kinds. A note write
   already uses the permanent payload: `note_type` plus `fields` keyed by field name with HTML
   values.
 - **Note write and review.** `NoteStore.Save` resolves the note type (deck and note type id),
@@ -154,7 +160,8 @@ change.
   `GET|POST /decks/:id/note-types` and `GET|PATCH|DELETE /decks/:id/note-types/:type_id`; an update
   names the version it read and a stale version is `409`, and a delete is refused while a note still
   uses the type. A reader may list and read note types but only an editor may change them. `kind`
-  remains a transitional alias for `note_type` on a note write until the rich-text editor lands.
+  remains a transitional alias for `note_type` on a note write while the SPA editor still sends the
+  card kind.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on
   every request. `list_note_types` and `get_note_type` expose a deck's note types; `create_notes`
   and `update_note` take `note_type` and send field values as an HTML map.
@@ -272,8 +279,9 @@ change.
 
 - `frontend/src/lib/views/` holds one view per page, `frontend/src/lib/components/` the shared
   components, and `frontend/src/lib/api/` the typed client for the JSON endpoints.
-- Vite has two entries: `frontend/index.html` (the SPA shell) and `frontend/card-frame.html`
-  (the card frame document). `frontend/src/cardframe/` is the frame runtime: it holds no Svelte component
+- Vite has three entries: `frontend/index.html` (the SPA shell), `frontend/card-frame.html`
+  (the card frame document) and `frontend/edit-frame.html` (the rich-text editing frame).
+  `frontend/src/cardframe/` is the review frame runtime: it holds no Svelte component
   and reads no cookie; it writes the content sent by the parent page into `#qa`, re-executes the content
   scripts, typesets the face, attaches the shortcode controls to it, and posts height, keys, answers
   and links back to the parent. Its language is the `<html lang>` the server resolved for the request.
@@ -281,12 +289,18 @@ change.
   `card cardN` and `nightMode night_mode`, the browser and platform classes ported from Anki's
   `browser_selector.ts`, the `$`, `jQuery`, `getTypedAnswer`, `pycmd` and `bridgeCommand` globals, the
   answer controls' posted values, and engram's audio controls on every `[sound:]` tag.
+- `frontend/src/editframe/` is the editing frame runtime. It parses the field HTML only inside the
+  sandboxed document, applies the toolbar's range commands (`commands.ts`), handles paste and drop,
+  switches between the rich surface, the plain-text textarea and the HTML source textarea, and posts
+  `change`, `height` and upload requests back to the parent.
 - `frontend/src/lib/components/CardFrame.svelte` is the only way a view embeds a card face: it owns
   the sandboxed iframe, sends `show` (with the card ordinal, side and media base) and `theme`, and
-  forwards the frame's key presses and `answer {value}` messages to the view. Card-face HTML therefore
-  never enters the parent DOM. The SPA's remaining HTML sinks are the per-item grading breakdown and
-  the admin mail preview, and `frontend/src/tests/html-sink-allowlist.test.ts` lists each of them with
-  its reason.
+  forwards the frame's key presses and `answer {value}` messages to the view.
+  `frontend/src/lib/components/RichTextField.svelte` is the only way a note field is edited: it owns
+  the editing iframe and the toolbar, sends `load` and `command`, and writes the frame's `change`
+  back into the form. Card-face and field HTML therefore never enter the parent DOM. The SPA's
+  remaining HTML sinks are the per-item grading breakdown and the admin mail preview, and
+  `frontend/src/tests/html-sink-allowlist.test.ts` lists each of them with its reason.
 - `frontend/src/lib/format.ts` is the only place numbers, percentages, byte counts, dates and raw field
   values become text; components pass the current locale.
 - UI text comes from `frontend/src/lib/i18n/locales/{zh-CN,en}.ts`. Text produced by the

@@ -38,6 +38,10 @@ type Shell struct {
 	// never receives the PWA shell (manifest, theme bootstrap, service worker). It carries no user-facing copy of its own.
 	rawCardFrame  []byte
 	cardFrameHTML []byte
+	// rawEditFrame and editFrameHTML are the rich-text editing frame entry (edit-frame.html) as built. It is a separate Vite
+	// input for the same reason: the editor is a sandboxed document, not a page of the SPA.
+	rawEditFrame  []byte
+	editFrameHTML []byte
 	// mathjaxURL is the content-hashed URL of the self-hosted MathJax; empty means not injected (resource missing or SetMathJaxURL never called).
 	mathjaxURL string
 	// version is the program version injected into the entry <head>; empty means not injected, and the frontend footer then shows no version.
@@ -62,6 +66,11 @@ func LoadShell() (*Shell, error) {
 	// Failing at startup makes that a build error instead of a 404 found in production.
 	if len(shell.rawCardFrame) == 0 {
 		return nil, fmt.Errorf("web: embedded frontend has no card-frame.html entry")
+	}
+	// The rich-text editor is served by its own frame route for the same reason: a build without the entry
+	// would leave the note editor unable to render a field.
+	if len(shell.rawEditFrame) == 0 {
+		return nil, fmt.Errorf("web: embedded frontend has no edit-frame.html entry")
 	}
 	return shell, nil
 }
@@ -145,6 +154,9 @@ func NewShell(subFS fs.FS) (*Shell, error) {
 	// from a small synthetic fs; the embedded production build always contains it, and LoadShell rejects a build without it.
 	if asset, ok := shell.assets["card-frame.html"]; ok {
 		shell.rawCardFrame = asset.data
+	}
+	if asset, ok := shell.assets["edit-frame.html"]; ok {
+		shell.rawEditFrame = asset.data
 	}
 	shell.rebuild()
 
@@ -266,12 +278,21 @@ func (s *Shell) rebuild() {
 	if len(s.rawCardFrame) > 0 && s.mathjaxURL != "" {
 		s.cardFrameHTML = injectMathJaxMeta(s.rawCardFrame, s.mathjaxURL)
 	}
+
+	// The editing frame typesets nothing and loads no MathJax, so its entry is served exactly as built.
+	s.editFrameHTML = s.rawEditFrame
 }
 
 // CardFrameHTML returns the card frame entry as served by GET /card-frame/<build-version>.
 // An empty result means the build has no frame entry; the handler then answers 404.
 func (s *Shell) CardFrameHTML() []byte {
 	return s.cardFrameHTML
+}
+
+// EditFrameHTML returns the rich-text editing frame entry as served by GET /edit-frame/<build-version>.
+// An empty result means the build has no editing frame entry; the handler then answers 404.
+func (s *Shell) EditFrameHTML() []byte {
+	return s.editFrameHTML
 }
 
 // indexHashOf takes the hex of the first 8 bytes of the content's SHA-256 as the strong validator for the entry ETag.

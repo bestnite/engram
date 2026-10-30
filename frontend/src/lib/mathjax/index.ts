@@ -7,8 +7,9 @@
  * this module reads that meta and loads it with a dynamic `<script src>`. The CSP's `script-src 'self'` already allows same-origin
  * external scripts, so neither an inline config script nor nonce / 'unsafe-inline' is needed.
  *
- * Typesetting boundary: typeset is called only on "HTML containers returned sanitized by the server", never on the whole page - the
- * raw Markdown in the editor is plain text and must never pass through an HTML sink or be interpreted again by MathJax.
+ * Typesetting boundary: typeset is called only on "HTML containers returned sanitized by the server", never on the whole page - a
+ * note field's HTML is edited inside the sandboxed editing frame and must never pass through a parent HTML sink or be
+ * interpreted by the parent's MathJax.
  */
 
 const META_NAME = 'engram-mathjax';

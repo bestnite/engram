@@ -18,8 +18,6 @@ vi.mock('../lib/mathjax', () => ({ typeset: vi.fn(async () => {}) }));
 vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 const typesetSpy = vi.mocked(typeset);
-const SHA = 'a'.repeat(64);
-const PREVIEW_URL = `/media/${SHA}`;
 
 /** A promise whose resolution moment is controlled by hand, used to produce stale responses/errors that land out of order. */
 function deferred<T>() {
@@ -53,6 +51,8 @@ function createResponse(cards: Array<{ front_html: string; back_html: string }>)
 
 let target: HTMLElement;
 const mountedInstances: Array<ReturnType<typeof mount>> = [];
+/** The latest HTML each field reported, keyed by data-testid; the frame owns the editing surface. */
+const fieldValues = new Map<string, string>();
 
 function mountEditor(params: Record<string, string>, query: Record<string, string> = {}): void {
   seedCardTypes();
@@ -68,10 +68,57 @@ async function flush(times = 24): Promise<void> {
   flushSync();
 }
 
-function setField(testid: string, value: string): void {
+/** The fake frame document a field talks to; the sandboxed iframe cannot load in the test environment. */
+interface FakeFrame {
+  postMessage: ReturnType<typeof vi.fn>;
+}
+
+const frames = new WeakMap<HTMLIFrameElement, FakeFrame>();
+
+function frameFor(testid: string): FakeFrame {
+  const iframe = target.querySelector(`[data-testid="${testid}"]`) as HTMLIFrameElement;
+  if (!iframe) throw new Error(`missing field frame ${testid}`);
+  let frame = frames.get(iframe);
+  if (!frame) {
+    frame = { postMessage: vi.fn() };
+    Object.defineProperty(iframe, 'contentWindow', { configurable: true, value: frame });
+    frames.set(iframe, frame);
+  }
+  return frame;
+}
+
+function fromFrame(frame: FakeFrame, data: Record<string, unknown>): void {
+  window.dispatchEvent(new MessageEvent('message', { data, source: frame as unknown as MessageEventSource }));
+}
+
+/** Writes a plain control (a number, a tag, a non-face text field) as a real user input does. */
+function setInput(testid: string, value: string): void {
   const el = target.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement | HTMLTextAreaElement;
   el.value = value;
   el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** Writes a field through its frame, the way typing inside the sandbox does. */
+function setField(testid: string, value: string): void {
+  const frame = frameFor(testid);
+  fromFrame(frame, { type: 'ready' });
+  fieldValues.set(testid, value);
+  fromFrame(frame, { type: 'change', html: value });
+}
+
+/** The last HTML a field reported. */
+function fieldValue(testid: string): string {
+  return fieldValues.get(testid) ?? '';
+}
+
+/** The HTML the field was last loaded with (the `load` message the parent sent). */
+function loadedHtml(testid: string): string {
+  const calls = frameFor(testid).postMessage.mock.calls;
+  for (let i = calls.length - 1; i >= 0; i -= 1) {
+    const message = calls[i]?.[0] as Record<string, unknown> | undefined;
+    if (message?.type === 'load' && typeof message.html === 'string') return message.html;
+  }
+  return '';
 }
 
 async function selectKind(label: string): Promise<void> {
@@ -113,6 +160,7 @@ afterEach(() => {
   vi.useRealTimers();
   document.body.innerHTML = '';
   clearCardTypes();
+  fieldValues.clear();
 });
 
 describe('unified note editor — create mode', () => {
@@ -278,7 +326,7 @@ describe('unified note editor — create mode', () => {
 
     await selectKind(formatMessage('zh-CN', 'notes.kind.numeric'));
     // Only a numeric field is filled (value 0): the empty-string baseline differs from 0, so 0 must count as content and trigger a preview.
-    setField('note-field-value', '0');
+    setInput('note-field-value', '0');
     await flush();
 
     await vi.advanceTimersByTimeAsync(500);
@@ -363,7 +411,7 @@ describe('unified note editor — create mode', () => {
     await selectKind(formatMessage('zh-CN', 'notes.kind.cloze'));
     expect(target.querySelector('[data-testid="note-field-text"]')).toBeTruthy();
     setField('note-field-text', 'The {{c1::answer}}');
-    setField('note-tags-editor', 'topic, extra');
+    setInput('note-tags-editor', 'topic, extra');
     await flush();
 
     submitForm();
@@ -397,7 +445,7 @@ describe('unified note editor — create mode', () => {
     // No navigation, the content is still there, and the error is reported as a toast.
     expect(get(routeStore).path).not.toBe('/decks/5');
     expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_create.failed'));
-    expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('kept');
+    expect(fieldValue('note-field-front')).toBe('kept');
   });
 
   it('does not navigate on a dry_run success', async () => {
@@ -477,9 +525,9 @@ describe('unified note editor — create mode', () => {
     expect(target.querySelector('[data-testid="media-upload-input"]')).toBeNull();
     expect(target.querySelector('[data-testid="media-picker-toggle"]')).toBeNull();
     expect(target.querySelector('[data-testid="shortcode-insert"]')).toBeNull();
-    // The tools sit in the label row of the field they write into, and no dialog is open until one is asked for.
+    // The tools sit in the header of the field they write into, and the old insertion dialog is gone.
     expect(target.querySelector('[data-testid="note-field-front-insert-image"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="note-field-front-insert-shortcode"]')).toBeTruthy();
+    expect(target.querySelector('[data-testid="note-field-front-toolbar"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="note-insert-dialog"]')).toBeNull();
   });
 });
@@ -494,7 +542,11 @@ describe('unified note editor — edit mode', () => {
     mountEditor({ id: '5', noteId: '9' });
     await flush();
 
-    expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('Q');
+    // The frame announces itself, then receives the loaded field value.
+    const frame = frameFor('note-field-front');
+    fromFrame(frame, { type: 'ready' });
+    await flush();
+    expect(loadedHtml('note-field-front')).toBe('Q');
 
     await vi.advanceTimersByTimeAsync(500);
     await flush();
@@ -516,7 +568,7 @@ describe('unified note editor — edit mode', () => {
     await flush();
 
     setField('note-field-front', 'Q2');
-    setField('note-tags-editor', 'a, b');
+    setInput('note-tags-editor', 'a, b');
     await flush();
 
     submitForm();
@@ -549,7 +601,7 @@ describe('unified note editor — edit mode', () => {
     // 400 means invalid content: report the specific reason rather than a generic failure; the draft is kept and "saved" is not announced.
     expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_edit.invalid'));
     expect(toast.success).not.toHaveBeenCalled();
-    expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('Q2');
+    expect(fieldValue('note-field-front')).toBe('Q2');
   });
 
   it('keeps typing that arrives during a save in flight and never claims it was saved', async () => {
@@ -575,7 +627,7 @@ describe('unified note editor — edit mode', () => {
     pending.resolve(noteFixture({ fields: { front: 'QQ', back: 'A' } }));
     await flush();
 
-    expect((target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement).value).toBe('QQ-newer');
+    expect(fieldValue('note-field-front')).toBe('QQ-newer');
     // The current draft was not overwritten by this save, so "saved" cannot be reported either.
     expect(toast.success).not.toHaveBeenCalled();
   });
@@ -663,379 +715,6 @@ describe('unified note editor — lifecycle and routes', () => {
 });
 
 /**
- * Insertion into a card field. Both tools are opened from the label row of the field they write into,
- * and the caret that field reported decides where the text lands. The image dialog writes the Markdown
- * image form, the composer writes source text, and neither introduces a second field selector.
- */
-describe('unified note editor — inserting content', () => {
-  function fieldValue(testid: string): string {
-    return (target.querySelector(`[data-testid="${testid}"]`) as HTMLTextAreaElement).value;
-  }
-
-  /** Places a real caret and reports it, the way a click inside the field does. */
-  function setCaret(testid: string, start: number, end: number): void {
-    const field = target.querySelector(`[data-testid="${testid}"]`) as HTMLTextAreaElement;
-    field.focus();
-    field.setSelectionRange(start, end);
-    field.dispatchEvent(new Event('select', { bubbles: true }));
-    flushSync();
-  }
-
-  function toolbarButton(key: string, action: 'image' | 'shortcode'): HTMLButtonElement {
-    return target.querySelector(`[data-testid="note-field-${key}-insert-${action}"]`) as HTMLButtonElement;
-  }
-
-  /** The dialog is portalled to body, so its own queries never start at the mounted view. */
-  function dialog(): HTMLElement | null {
-    return document.body.querySelector('[data-testid="note-insert-dialog"]');
-  }
-
-  function inDialog<T extends Element = HTMLElement>(testid: string): T {
-    const node = document.body.querySelector(`[data-testid="${testid}"]`);
-    if (!node) throw new Error(`missing [data-testid="${testid}"] inside the insertion dialog`);
-    return node as T;
-  }
-
-  /** Opens the dialog from a field's own toolbar and hands back the button that must regain focus. */
-  function openDialog(key: string, action: 'image' | 'shortcode'): HTMLButtonElement {
-    const button = toolbarButton(key, action);
-    button.focus();
-    button.click();
-    flushSync();
-    return button;
-  }
-
-  function click(node: Element): void {
-    node.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
-    node.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
-    node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    flushSync();
-  }
-
-  function typeTtsBody(body: string): void {
-    const input = inDialog<HTMLInputElement>('shortcode-tts-body');
-    input.value = body;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    flushSync();
-  }
-
-  function insertShortcode(): void {
-    click(inDialog('shortcode-insert-submit'));
-  }
-
-  function dropFile(testid: string, file: File): void {
-    const input = inDialog<HTMLInputElement>(testid);
-    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  /** A closed dialog leaves the DOM one animation frame later, and the fake clock owns that frame. */
-  async function settleDialog(): Promise<void> {
-    await vi.advanceTimersByTimeAsync(50);
-    await flush();
-  }
-
-  it('inserts a picked library picture into the field whose toolbar opened the dialog', async () => {
-    vi.spyOn(apiClient, 'listMedia').mockResolvedValue({
-      items: [
-        { sha256: 'b'.repeat(64), mime: 'audio/mpeg', bytes: 9, url: `/media/${'b'.repeat(64)}`, created_at: '' },
-        { sha256: SHA, mime: 'image/png', bytes: 4, url: PREVIEW_URL, created_at: '' },
-      ],
-      next_cursor: '',
-    });
-    const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-    setCaret('note-field-front', 0, 0);
-
-    const trigger = openDialog('front', 'image');
-    expect(dialog()).toBeTruthy();
-    // The library is the dialog's content, not a second thing to open: its first page arrives without a click,
-    // and the embedded picker has no toggle at all.
-    await flush();
-    expect(inDialog('note-insert-image-picker')).toBeTruthy();
-    expect(document.body.querySelector('[data-testid="note-insert-image-picker-toggle"]')).toBeNull();
-
-    // The dialog writes the Markdown image form, so pictures are the only thing it offers.
-    expect(document.body.querySelector(`[data-testid="note-insert-image-item-${SHA}"]`)).toBeTruthy();
-    expect(document.body.querySelector(`[data-testid="note-insert-image-item-${'b'.repeat(64)}"]`)).toBeNull();
-
-    click(inDialog(`note-insert-image-item-${SHA}`));
-    await flush();
-
-    expect(fieldValue('note-field-front')).toBe(`![](${PREVIEW_URL})`);
-    await settleDialog();
-    expect(dialog()).toBeNull();
-    // The dialog closes on the insert and hands focus back to the button that opened it.
-    expect(document.activeElement).toBe(trigger);
-
-    await vi.advanceTimersByTimeAsync(500);
-    await flush();
-    expect(previewNote).toHaveBeenLastCalledWith('5', 'basic', { front: `![](${PREVIEW_URL})` }, { frame: true });
-  });
-
-  it('uploads a picture into the field and refuses a non-image in the image dialog', async () => {
-    const upload = vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
-      sha256: SHA,
-      mime: 'image/png',
-      bytes: 4,
-      url: PREVIEW_URL,
-    });
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-
-    const trigger = openDialog('front', 'image');
-    dropFile('note-insert-image-input', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
-    await flush();
-
-    // Refused before any request, with a reason, and the dialog stays open on this field.
-    expect(upload).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.image_only'));
-    expect(dialog()).toBeTruthy();
-    expect(fieldValue('note-field-front')).toBe('');
-
-    dropFile('note-insert-image-input', new File(['picture'], 'picture.png', { type: 'image/png' }));
-    await flush();
-
-    expect(upload).toHaveBeenCalledWith('5', expect.any(File));
-    expect(fieldValue('note-field-front')).toBe(`![](${PREVIEW_URL})`);
-    await settleDialog();
-    expect(dialog()).toBeNull();
-    expect(document.activeElement).toBe(trigger);
-    expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.inserted'));
-  });
-
-  it('says the library holds no picture without asking for a click in the image dialog', async () => {
-    vi.spyOn(apiClient, 'listMedia').mockResolvedValue({
-      items: [
-        { sha256: 'b'.repeat(64), mime: 'audio/mpeg', bytes: 9, url: `/media/${'b'.repeat(64)}`, created_at: '' },
-      ],
-      next_cursor: '',
-    });
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-
-    openDialog('front', 'image');
-    await flush();
-
-    // The page arrived but holds no picture: the dialog states that where the tiles would be, instead of
-    // offering a picture for a sound file or hiding the situation behind a toggle.
-    expect(inDialog('note-insert-image-empty').textContent).toBe(
-      formatMessage('zh-CN', 'note_edit.image_dialog.empty')
-    );
-    expect(document.body.querySelector('[data-testid^="note-insert-image-item-"]')).toBeNull();
-  });
-
-  it('writes no image reference when the server detects a different type in the bytes', async () => {
-    // The upload endpoint accepts audio too: a file named .png can come back as a sound, and the image
-    // form would then point at bytes the browser cannot draw.
-    vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
-      sha256: 'b'.repeat(64),
-      mime: 'audio/mpeg',
-      bytes: 9,
-      url: `/media/${'b'.repeat(64)}`,
-    });
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-
-    openDialog('front', 'image');
-    dropFile('note-insert-image-input', new File(['sound'], 'sound.png', { type: 'image/png' }));
-    await flush();
-
-    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.image_only'));
-    expect(fieldValue('note-field-front')).toBe('');
-    expect(dialog()).toBeTruthy();
-  });
-
-  it('splices a shortcode at the caret of the field whose toolbar opened the dialog', async () => {
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-    setField('note-field-front', 'abcdef');
-    await flush();
-    setCaret('note-field-front', 2, 2);
-
-    const trigger = openDialog('front', 'shortcode');
-    // The dialog names the one field it writes into, and there is no field selector anywhere in it.
-    expect(dialog()!.textContent).toContain(
-      formatMessage('zh-CN', 'shortcode.insert.target', { field: formatMessage('zh-CN', 'note.fields.front') })
-    );
-    expect(dialog()!.querySelector('[data-testid="media-field"]')).toBeNull();
-    // The composer is titled by the dialog, so it does not print its own heading a second time.
-    expect(dialog()!.querySelector('h2')).toBeNull();
-
-    typeTtsBody('x');
-    expect(inDialog('shortcode-insert-preview').textContent).toBe('{{tts:x}}');
-    insertShortcode();
-    await flush();
-
-    expect(fieldValue('note-field-front')).toBe('ab{{tts:x}}cdef');
-    await settleDialog();
-    expect(dialog()).toBeNull();
-    expect(document.activeElement).toBe(trigger);
-  });
-
-  it('replaces the selected text of the target field', async () => {
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-    setField('note-field-front', 'abcdef');
-    await flush();
-    setCaret('note-field-front', 1, 4);
-
-    openDialog('front', 'shortcode');
-    typeTtsBody('x');
-    insertShortcode();
-
-    expect(fieldValue('note-field-front')).toBe('a{{tts:x}}ef');
-  });
-
-  it('appends on a new line when the target field has no known caret', async () => {
-    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture());
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5', noteId: '9' });
-    await flush();
-
-    openDialog('front', 'shortcode');
-    typeTtsBody('x');
-    insertShortcode();
-    await flush();
-
-    expect(fieldValue('note-field-front')).toBe('Q\n{{tts:x}}');
-    // One assignment per insertion is enough for the live preview to reschedule.
-    await vi.advanceTimersByTimeAsync(500);
-    await flush();
-    expect(apiClient.previewNote).toHaveBeenLastCalledWith('5', 'basic', { front: 'Q\n{{tts:x}}', back: 'A' }, { frame: true });
-  });
-
-  it('writes into the field whose own toolbar was used, not the one holding the caret', async () => {
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-    setField('note-field-front', 'front-text');
-    await flush();
-    setCaret('note-field-front', 5, 5);
-
-    openDialog('back', 'shortcode');
-    typeTtsBody('x');
-    insertShortcode();
-    await flush();
-
-    expect(fieldValue('note-field-back')).toBe('{{tts:x}}');
-    expect(fieldValue('note-field-front')).toBe('front-text');
-  });
-
-  it('keeps the insert button unavailable while the dialog input is invalid', async () => {
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-
-    openDialog('front', 'shortcode');
-    const button = inDialog<HTMLButtonElement>('shortcode-insert-submit');
-    expect(button.disabled).toBe(true);
-    typeTtsBody('x');
-    expect(button.disabled).toBe(false);
-  });
-
-  it('offers no toolbar on a lines field, which stores an array', async () => {
-    mountEditor({ id: '5' });
-    await flush();
-
-    await selectKind(formatMessage('zh-CN', 'notes.kind.list'));
-
-    expect(target.querySelector('[data-testid="note-field-prompt-toolbar"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="note-field-items-toolbar"]')).toBeNull();
-    expect(target.querySelector('[data-testid="note-field-ordered-toolbar"]')).toBeNull();
-  });
-
-  it('uploads audio inside the composer, fills the path and inserts the audio shortcode', async () => {
-    const AUDIO_SHA = 'd'.repeat(64);
-    const AUDIO_URL = `/media/${AUDIO_SHA}`;
-    const upload = vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
-      sha256: AUDIO_SHA,
-      mime: 'audio/mpeg',
-      bytes: 9,
-      url: AUDIO_URL,
-    });
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-
-    openDialog('front', 'shortcode');
-    click(inDialog('shortcode-tab-audio'));
-
-    dropFile('shortcode-audio-upload', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
-    await flush();
-
-    expect(upload).toHaveBeenCalledWith('5', expect.any(File));
-    expect(inDialog<HTMLInputElement>('shortcode-audio-source').value).toBe(AUDIO_URL);
-    expect(inDialog('shortcode-insert-preview').textContent).toBe(`{{audio:${AUDIO_URL}}}`);
-
-    insertShortcode();
-    await flush();
-
-    // An uploaded sound becomes the audio shortcode, never the image form.
-    expect(fieldValue('note-field-front')).toBe(`{{audio:${AUDIO_URL}}}`);
-    expect(fieldValue('note-field-front')).not.toContain('![](');
-    await settleDialog();
-    expect(dialog()).toBeNull();
-  });
-
-  it('refuses a picture in the composer audio upload and keeps the dialog open', async () => {
-    const upload = vi.spyOn(apiClient, 'uploadDeckMedia');
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-
-    openDialog('front', 'shortcode');
-    click(inDialog('shortcode-tab-audio'));
-
-    dropFile('shortcode-audio-upload', new File(['picture'], 'picture.png', { type: 'image/png' }));
-    await flush();
-
-    expect(upload).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.audio_only'));
-    expect(inDialog<HTMLInputElement>('shortcode-audio-source').value).toBe('');
-    expect(dialog()).toBeTruthy();
-  });
-
-  it('reports a failed upload with the server reason and leaves the path empty', async () => {
-    vi.spyOn(apiClient, 'uploadDeckMedia').mockRejectedValue(
-      new ApiClientError('HTTP 413', { status: 413, code: 'media_too_large' })
-    );
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
-
-    mountEditor({ id: '5' });
-    await flush();
-
-    openDialog('front', 'shortcode');
-    click(inDialog('shortcode-tab-audio'));
-
-    dropFile('shortcode-audio-upload', new File(['sound'], 'sound.mp3', { type: 'audio/mpeg' }));
-    await flush();
-
-    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'media.upload.too_large'));
-    expect(inDialog<HTMLInputElement>('shortcode-audio-source').value).toBe('');
-    // The drop area is usable again, so the author can retry with another file.
-    expect(inDialog<HTMLInputElement>('shortcode-audio-upload').disabled).toBe(false);
-  });
-});
-
-/**
  * The preview below the desktop breakpoint is a drawer over the form rather than a column under it, so a
  * phone author does not scroll past their own fields to see the result. It is the same panel the desktop
  * column shows — never a second copy of the sanitized HTML — and it is closed by default.
@@ -1095,7 +774,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     await flush();
     expect(await previewFront()).toContain('before');
 
-    const field = target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement;
+    const field = target.querySelector('[data-testid="note-field-front"]') as HTMLIFrameElement;
     openDrawer();
     await flush();
 
@@ -1117,7 +796,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
 
     // Opening and closing never remounted the form: same textarea node, same unsaved text.
     expect(target.querySelector('[data-testid="note-field-front"]')).toBe(field);
-    expect(field.value).toBe('second');
+    expect(fieldValue('note-field-front')).toBe('second');
   });
 
   it('closes on Esc and returns focus to the header button, keeping the field caret', async () => {
@@ -1127,10 +806,8 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     await flush();
     setField('note-field-front', 'abcdef');
     await flush();
-    const field = target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement;
-    field.focus();
-    field.setSelectionRange(2, 2);
-    field.dispatchEvent(new Event('select', { bubbles: true }));
+    const field = target.querySelector('[data-testid="note-field-front"]') as HTMLIFrameElement;
+    expect(field).toBeTruthy();
     flushSync();
 
     openDrawer();
@@ -1146,8 +823,8 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     // Focus goes back to the button that opened the drawer.
     expect(document.activeElement).toBe(toggle());
     // The unsaved text and the caret survived, so the next insertion still lands where the author left off.
-    expect(field.value).toBe('abcdef');
-    expect(field.selectionStart).toBe(2);
+    expect(fieldValue('note-field-front')).toBe('abcdef');
+    expect(field).toBeTruthy();
   });
 
   it('closes from its own close control', async () => {

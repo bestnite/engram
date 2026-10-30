@@ -4,7 +4,8 @@
   import Checkbox from './ui/Checkbox.svelte';
   import Select from './ui/Select.svelte';
   import HelpTip from './ui/HelpTip.svelte';
-  import MarkdownField from './MarkdownField.svelte';
+  import RichTextField, { type RichFieldOptions } from './RichTextField.svelte';
+  import type { MediaReference } from '../../editframe/runtime';
 
   /**
    * Renders the field form per card kind.
@@ -12,7 +13,7 @@
    * Field order and control shape come from the server's card-kind self-description, and this component contains no per-kind branching
    * business logic; views therefore no longer hand fields to the user as raw JSON to edit.
    *
-   * The card face fields that hold Markdown source render as a MarkdownField, with the formatting and
+   * The card face fields render as a RichTextField: a sandboxed editing frame with the formatting and
    * insertion tools in the field's own header. Every other field stays a plain control: an answer,
    * a URL or the extra note is not card face content, and a formatting button there would write
    * markup into text that is compared or linked rather than rendered.
@@ -23,24 +24,19 @@
     fields: Record<string, unknown>;
     /**
      * The card face field names (the kind's front and back fields). Only a face field whose control is
-     * a textarea gets the Markdown tools; without this prop no field gets them.
+     * a textarea gets the rich-text editor; without this prop no field gets it.
      */
     faceFields?: readonly string[];
     /** Prefix for generating data-testid: `<prefix>-<field name>`. */
     testIdPrefix?: string;
     /**
-     * Reports the caret of a Markdown field as (field key, selection start, selection end) on focus
-     * moves, clicks, key presses and edits. A view that inserts at the caret keeps the last report per
-     * field; a view that always appends simply omits the prop.
+     * Presentation options per field name: sticky, collapsed, plain text, RTL, font and size. The
+     * current card-kind catalog carries none, so a host that has note-type field options passes them
+     * here; a field without an entry uses the editor defaults.
      */
-    oncaret?: (key: string, start: number, end: number) => void;
-    /**
-     * Opens the image insertion dialog for one field. The button is handed over as the second argument so
-     * the view can put focus back on it when the dialog closes.
-     */
-    oninsertimage?: (key: string, trigger: HTMLButtonElement) => void;
-    /** Opens the shortcode dialog for one field; the same trigger hand-back as `oninsertimage`. */
-    oninsertshortcode?: (key: string, trigger: HTMLButtonElement) => void;
+    fieldOptions?: Record<string, RichFieldOptions>;
+    /** Uploads one media file for the editor; without it the field inserts nothing by upload. */
+    upload?: (file: File) => Promise<MediaReference>;
   }
 
   let {
@@ -48,9 +44,8 @@
     fields,
     faceFields = [],
     testIdPrefix = 'note-field',
-    oncaret,
-    oninsertimage,
-    oninsertshortcode,
+    fieldOptions = {},
+    upload,
   }: Props = $props();
 
   /**
@@ -137,14 +132,13 @@
       </div>
       {#if spec.control === 'textarea' && faceFields.includes(spec.key)}
         <div class="mt-1.5">
-          <MarkdownField
+          <RichTextField
             value={asString(spec.key)}
             label={fieldLabel}
             testId="{testIdPrefix}-{spec.key}"
+            options={fieldOptions[spec.key]}
+            {upload}
             onvalue={(value) => setString(spec.key, value)}
-            oncaret={oncaret ? (start, end) => oncaret(spec.key, start, end) : undefined}
-            oninsertimage={oninsertimage ? (trigger) => oninsertimage(spec.key, trigger) : undefined}
-            oninsertshortcode={oninsertshortcode ? (trigger) => oninsertshortcode(spec.key, trigger) : undefined}
           />
         </div>
       {:else if spec.control === 'textarea'}

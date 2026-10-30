@@ -6,8 +6,6 @@
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Note } from '../api';
-  import MediaPicker from '../components/MediaPicker.svelte';
-  import ShortcodeInsert from '../components/ShortcodeInsert.svelte';
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import Select from '../components/ui/Select.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -15,13 +13,11 @@
   import { toast } from '../components/ui/toast';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
-  import Dropzone from '../components/ui/Dropzone.svelte';
   import CardFrame from '../components/CardFrame.svelte';
   import { NOTE_PREVIEW_CSS } from '../card-frame';
   import { emptyFields, toFormFields, toPayloadFields } from '../card-fields';
   import { backField, cardTypes, fieldsForKind, frontField, kindOrder, loadCardTypes } from '../card-types';
-  import { insertSource, type Caret } from '../shortcode-source';
-  import { uploadErrorKeyFor } from '../media-upload';
+  import type { MediaReference } from '../../editframe/runtime';
   import { Check, Eye, Plus, Trash2, X } from '@lucide/svelte';
 
   // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
@@ -57,19 +53,6 @@
   let deleting = $state(false);
   let deleteError = $state('');
 
-  // Last known caret per field, reported by NoteFieldsForm. A field the user never placed the caret in has
-  // no entry, so an insertion there appends to the end instead of guessing a position.
-  let carets = $state<Record<string, Caret>>({});
-
-  // Insertion dialog: the field its toolbar opened it for, which of the two actions is on offer, and the
-  // button that asked for it, so focus goes back to that button when the dialog closes. The toolbar's
-  // field is the target, which is why the dialog carries no field selector.
-  let insertKey = $state('');
-  let insertMode = $state<'image' | 'shortcode'>('image');
-  let insertOpen = $state(false);
-  let insertTrigger = $state<HTMLButtonElement | null>(null);
-  let imageUploading = $state(false);
-
   // Preview drawer below the desktop breakpoint. At lg and wider the same panel is the sticky second
   // column, so this state only decides whether it is on screen; it never adds a second HTML sink.
   let previewOpen = $state(false);
@@ -96,10 +79,6 @@
 
   // Stable signature of the field contents: a change to kind or any field yields a new string, and the live preview reschedules off it.
   const signature = $derived(JSON.stringify({ kind, fields: collectFields() }));
-
-  // Localized name of the field the open dialog writes into; the dialog titles itself with it, so the
-  // target is never in doubt even though nothing on screen is a field selector any more.
-  const insertFieldLabel = $derived(insertKey === '' ? '' : $t('note.fields.' + insertKey));
 
   // Draft signature: a change to kind, the submitted fields or the tags yields a new string (tags use the parsed array, so changing only whitespace
   // does not count as a new change either). Saving is only responsible for the snapshot at the moment of submission, so it is used to tell whether the draft was already changed when the response lands.
@@ -195,97 +174,16 @@
   function changeKind(next: string): void {
     kind = next;
     fields = emptyFields(fieldsForKind($cardTypes, next));
-    // The caret offsets belonged to the previous field set; keeping them would splice into unrelated text.
-    carets = {};
-  }
-
-  /** Records the caret NoteFieldsForm reported for one field. */
-  function trackCaret(key: string, start: number, end: number): void {
-    carets[key] = { start, end };
   }
 
   /**
-   * The text of a field, or null when the field is not a single string. A cleared text field has no
-   * key at all — the form model deletes empty strings — and that is an empty text field, not a field
-   * of another type, so clearing a field must not make insertion refuse to write into it.
+   * Uploads one file the rich-text editor's toolbar or a paste offered, and hands back the URL, the
+   * deck media name and the mime type the server detected. The editor decides between an image and a
+   * sound from the mime type, so a file whose name lies about its type is still inserted correctly.
    */
-  function fieldText(key: string): string | null {
-    const value = fields[key];
-    if (typeof value === 'string') return value;
-    return value === undefined || value === null ? '' : null;
-  }
-
-  /**
-   * Writes one source string into a field: at the last known caret when there is one (replacing the
-   * selection), otherwise appended on a new line. Only single-string fields can take it, so an array
-   * field (the list card's items) reports failure and the caller leaves the content untouched.
-   */
-  function insertInto(key: string, source: string): boolean {
-    const current = fieldText(key);
-    if (current === null) return false;
-    const next = insertSource(current, source, carets[key] ?? null);
-    // One assignment: the live preview reschedules off the field contents, and the previous caret is
-    // kept as the position just after what was written so a second insertion continues from there.
-    fields[key] = next.text;
-    carets[key] = next.caret;
-    return true;
-  }
-
-  /**
-   * Opens one of the two insertion dialogs for a field. The dialog's target is the field whose label row
-   * holds the button, so neither dialog carries a field selector of its own.
-   */
-  function openInsert(mode: 'image' | 'shortcode', key: string, trigger: HTMLButtonElement): void {
-    insertMode = mode;
-    insertKey = key;
-    insertTrigger = trigger;
-    insertOpen = true;
-  }
-
-  /** Closes the dialog and puts focus back on the toolbar button that opened it. */
-  function closeInsert(): void {
-    insertOpen = false;
-    const trigger = insertTrigger;
-    insertTrigger = null;
-    if (trigger) void tick().then(() => trigger.focus());
-  }
-
-  /**
-   * Writes one source string into the dialog's field, then closes the dialog. The toolbar only exists on
-   * fields that hold a single string, so the write is not refusable; the result is still honoured so a
-   * field that cannot take it never closes a dialog as if something had been written.
-   */
-  function insertAtTarget(source: string): void {
-    if (insertInto(insertKey, source)) closeInsert();
-  }
-
-  /**
-   * Uploads one picture and inserts its Markdown image reference into the dialog's field. A file that is
-   * not an image is refused before any request: the upload endpoint also accepts audio, and an audio file
-   * written as an image would produce a picture the browser cannot decode.
-   */
-  async function uploadImage(file: File): Promise<void> {
-    if (!file.type.toLowerCase().startsWith('image/')) {
-      toast.error($t('media.upload.image_only'));
-      return;
-    }
-    imageUploading = true;
-    try {
-      const uploaded = await apiClient.uploadDeckMedia(deckId, file);
-      if (disposed) return;
-      // The server decides the type from the bytes, so a file whose name promised an image can come back as something else.
-      if (!uploaded.mime.toLowerCase().startsWith('image/')) {
-        toast.error($t('media.upload.image_only'));
-        return;
-      }
-      insertAtTarget(`![](${uploaded.url})`);
-      toast.success($t('media.upload.inserted'));
-    } catch (err) {
-      if (disposed) return;
-      toast.error($t(uploadErrorKeyFor(err)));
-    } finally {
-      if (!disposed) imageUploading = false;
-    }
+  async function uploadFieldMedia(file: File): Promise<MediaReference> {
+    const uploaded = await apiClient.uploadDeckMedia(deckId, file);
+    return { url: uploaded.url, name: uploaded.sha256, mime: uploaded.mime };
   }
 
   /** Opens the preview drawer below the desktop breakpoint, leaving focus where the author was typing. */
@@ -305,8 +203,8 @@
 
   function handleWindowKeydown(event: KeyboardEvent): void {
     if (event.key !== 'Escape' || !previewOpen) return;
-    // The dialogs close themselves on Esc; a key press they already answered must not also shut the drawer.
-    if (insertOpen || deleteOpen) return;
+    // The delete dialog closes itself on Esc; a key press it already answered must not also shut the drawer.
+    if (deleteOpen) return;
     closePreview();
   }
 
@@ -490,7 +388,7 @@
 </script>
 
 <!-- Esc closes the preview drawer. The drawer is a panel of this page rather than a dialog of its own, so its
-     keyboard dismissal is handled here; an open insertion dialog keeps its own Esc. -->
+     keyboard dismissal is handled here; an open delete dialog keeps its own Esc. -->
 <svelte:window onkeydown={handleWindowKeydown} />
 
 <Page as="section">
@@ -550,9 +448,7 @@
               {fields}
               faceFields={[frontField($cardTypes, kind), backField($cardTypes, kind)]}
               testIdPrefix="note-field"
-              oncaret={trackCaret}
-              oninsertimage={(key, trigger) => openInsert('image', key, trigger)}
-              oninsertshortcode={(key, trigger) => openInsert('shortcode', key, trigger)}
+              upload={uploadFieldMedia}
             />
 
             <label class="block text-sm font-medium text-foreground">{$t('note_edit.tags')}
@@ -727,53 +623,5 @@
       </div>
     </Dialog>
 
-    <!-- One dialog serves both insertion actions; which one is open, and for which field, is the state above.
-         Its content is not inside the form element: an upload or a pick writes into the form model, and neither
-         panel submits anything. -->
-    <Dialog
-      bind:open={insertOpen}
-      onOpenChange={(open) => {
-        if (!open) closeInsert();
-      }}
-      title={insertMode === 'image' ? $t('note_edit.insert_image', { field: insertFieldLabel }) : $t('shortcode.insert.heading')}
-      description={insertMode === 'image' ? $t('note_edit.image_dialog.hint') : undefined}
-      size="lg"
-      testId="note-insert-dialog"
-    >
-      {#if insertMode === 'image'}
-        <div class="space-y-4">
-          <div class="space-y-2">
-            <span class="block text-sm font-medium text-foreground">{$t('note_edit.image_dialog.upload')}</span>
-            <!-- Uploading right away keeps the dialog to one decision: the file is inserted where the caret was, and the
-                 dialog closes. A file that is not an image is refused with a message and the dialog stays open. -->
-            <Dropzone
-              testId="note-insert-image-input"
-              accept="image/*"
-              disabled={imageUploading}
-              hint={imageUploading ? $t('media.upload.uploading') : $t('note_edit.image_dialog.formats')}
-              onfile={uploadImage}
-            />
-          </div>
-          <!-- Only pictures are listed: this dialog writes the Markdown image form, which cannot address a sound file.
-               The library is the dialog's content, not something to open: it is there the moment the dialog is. -->
-          <MediaPicker
-            mimePrefix="image/"
-            idPrefix="note-insert-image"
-            size="sm"
-            embedded
-            emptyLabel={$t('note_edit.image_dialog.empty')}
-            onselect={(item) => insertAtTarget(`![](${item.url})`)}
-          />
-        </div>
-      {:else}
-        <ShortcodeInsert
-          showHeading={false}
-          targetLabel={insertFieldLabel}
-          targetWritable={fieldText(insertKey) !== null}
-          deckId={deckId}
-          oninsert={insertAtTarget}
-        />
-      {/if}
-    </Dialog>
   {/if}
 </Page>

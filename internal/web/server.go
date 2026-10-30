@@ -334,6 +334,8 @@ func New(addr string, deps Deps) (*Server, error) {
 	// The review iframe page: a separate, minimal document owned by the frame runtime, not the SPA shell. Its version segment only
 	// busts the iframe cache; see registerCardFrameRoutes.
 	s.registerCardFrameRoutes(router)
+	// The rich-text editing iframe page: a second sandboxed document with the same isolation, serving the note editor's fields.
+	s.registerEditFrameRoutes(router)
 	// Frame media: the sandboxed frame has no session, so it loads media through HMAC-signed /fm/<token>/<name> URLs.
 	s.registerFrameMediaRoutes(router)
 	if deps.Sessions != nil && deps.Users != nil {

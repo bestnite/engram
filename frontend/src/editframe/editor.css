@@ -1,0 +1,87 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+}
+
+body {
+  /* The editor mirrors the card frame: the parent page's tokens are not inherited across the
+     iframe boundary, so the frame carries its own light and dark colours. */
+  color: #1f2937;
+  background: #ffffff;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.dark body {
+  color: #e5e7eb;
+  background: #111827;
+}
+
+.edit-surface {
+  position: relative;
+}
+
+.edit-field {
+  min-height: 5rem;
+  padding: 0.5rem 0.75rem;
+  outline: none;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.edit-field:focus {
+  outline: none;
+}
+
+.edit-field img {
+  max-width: 100%;
+}
+
+.edit-field:empty::after {
+  /* Keeps the caret line visible in an empty contenteditable. */
+  content: '\200b';
+}
+
+.edit-placeholder {
+  position: absolute;
+  inset-inline-start: 0.75rem;
+  inset-block-start: 0.5rem;
+  color: #9ca3af;
+  pointer-events: none;
+  user-select: none;
+}
+
+.dark .edit-placeholder {
+  color: #6b7280;
+}
+
+.edit-placeholder.is-hidden {
+  display: none;
+}
+
+.edit-plain,
+.edit-source {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 5rem;
+  resize: vertical;
+  border: 0;
+  padding: 0.5rem 0.75rem;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  outline: none;
+}
+
+.edit-source {
+  white-space: pre;
+  font-family: ui-monospace, monospace;
+}
+
+.is-hidden {
+  display: none !important;
+}
