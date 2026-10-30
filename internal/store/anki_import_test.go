@@ -302,6 +302,169 @@ func TestAnkiReimportKeepsProgress(t *testing.T) {
 	}
 }
 
+// TestAnkiReimportRestoresDeletedNote covers the into_deck case: after the user deleted one imported
+// note, re-importing the same package must restore that row instead of violating the unique
+// (deck_id, external_ref) index. The restored note keeps its id, and its card keeps its progress.
+func TestAnkiReimportRestoresDeletedNote(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			owner := seedUsers(t, db, "anki_restore_"+driver)[0]
+			raw, err := os.ReadFile(ankiFixturePath("stock.anki21b.apkg"))
+			if err != nil {
+				t.Fatalf("read fixture: %v", err)
+			}
+			store := NewDeckStore(db)
+			first, err := store.ImportPackage(ctx, owner, bytes.NewReader(raw), PackageImportOptions{
+				Target:    PackageTargetNewDeck,
+				MediaRoot: t.TempDir(),
+			})
+			if err != nil {
+				t.Fatalf("first import: %v", err)
+			}
+
+			var note Note
+			if err := db.Where("deck_id = ?", first.DeckID).Order("id ASC").First(&note).Error; err != nil {
+				t.Fatalf("load note: %v", err)
+			}
+			var card Card
+			if err := db.Where("note_id = ?", note.ID).Order("id ASC").First(&card).Error; err != nil {
+				t.Fatalf("load card: %v", err)
+			}
+			due := time.Now().UTC()
+			state := CardState{
+				CardID: card.ID, UserID: owner, State: "review", DueAt: &due,
+				Reps: 5, ScheduledDays: 5, Version: 2,
+			}
+			if err := db.Create(&state).Error; err != nil {
+				t.Fatalf("seed card state: %v", err)
+			}
+			if err := NewNoteStore(db).Delete(ctx, note.ID); err != nil {
+				t.Fatalf("delete note: %v", err)
+			}
+
+			second, err := store.ImportPackage(ctx, owner, bytes.NewReader(raw), PackageImportOptions{
+				Target:    "into_deck:" + strconv.FormatUint(first.DeckID, 10),
+				MediaRoot: t.TempDir(),
+			})
+			if err != nil {
+				t.Fatalf("re-import after delete: %v", err)
+			}
+			if second.NotesCreated != 0 || second.NotesUpdated == 0 {
+				t.Fatalf("re-import report = %+v, want updates and no creates", second)
+			}
+
+			var restored Note
+			if err := db.Unscoped().Where("id = ?", note.ID).First(&restored).Error; err != nil {
+				t.Fatalf("load note %d: %v", note.ID, err)
+			}
+			if restored.DeletedAt.Valid {
+				t.Fatalf("note %d is still soft-deleted after the re-import", note.ID)
+			}
+			var sameRef int64
+			if err := db.Unscoped().Model(&Note{}).
+				Where("deck_id = ? AND external_ref = ?", first.DeckID, *note.ExternalRef).
+				Count(&sameRef).Error; err != nil {
+				t.Fatalf("count notes by ref: %v", err)
+			}
+			if sameRef != 1 {
+				t.Fatalf("%d notes carry the ref %q, want the single restored row", sameRef, *note.ExternalRef)
+			}
+
+			var stateAfter CardState
+			if err := db.Where("card_id = ? AND user_id = ?", card.ID, owner).First(&stateAfter).Error; err != nil {
+				t.Fatalf("card %d lost its progress after the re-import: %v", card.ID, err)
+			}
+			if stateAfter.Reps != 5 || stateAfter.Version != 2 {
+				t.Fatalf("progress after re-import = %+v, want the original state kept", stateAfter)
+			}
+		})
+	}
+}
+
+// TestAnkiReplaceDeckRestoresNotes covers the replace_deck case: the deck already holds the package,
+// and replace_deck soft-deletes every note before writing the same guids back. Every note must be
+// restored with its id, and its cards must keep their progress.
+func TestAnkiReplaceDeckRestoresNotes(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			owner := seedUsers(t, db, "anki_replace_"+driver)[0]
+			raw, err := os.ReadFile(ankiFixturePath("stock.anki21b.apkg"))
+			if err != nil {
+				t.Fatalf("read fixture: %v", err)
+			}
+			store := NewDeckStore(db)
+			first, err := store.ImportPackage(ctx, owner, bytes.NewReader(raw), PackageImportOptions{
+				Target:    PackageTargetNewDeck,
+				MediaRoot: t.TempDir(),
+			})
+			if err != nil {
+				t.Fatalf("first import: %v", err)
+			}
+
+			var before []Note
+			if err := db.Where("deck_id = ?", first.DeckID).Order("id ASC").Find(&before).Error; err != nil {
+				t.Fatalf("load notes: %v", err)
+			}
+			if len(before) == 0 {
+				t.Fatal("first import wrote no notes")
+			}
+			ids := make(map[string]uint64, len(before))
+			for i := range before {
+				ids[*before[i].ExternalRef] = before[i].ID
+			}
+			var card Card
+			if err := db.Where("note_id = ?", before[0].ID).Order("id ASC").First(&card).Error; err != nil {
+				t.Fatalf("load card: %v", err)
+			}
+			due := time.Now().UTC()
+			state := CardState{
+				CardID: card.ID, UserID: owner, State: "review", DueAt: &due,
+				Reps: 3, ScheduledDays: 2, Version: 1,
+			}
+			if err := db.Create(&state).Error; err != nil {
+				t.Fatalf("seed card state: %v", err)
+			}
+
+			second, err := store.ImportPackage(ctx, owner, bytes.NewReader(raw), PackageImportOptions{
+				Target:    "replace_deck:" + strconv.FormatUint(first.DeckID, 10),
+				MediaRoot: t.TempDir(),
+			})
+			if err != nil {
+				t.Fatalf("replace import over an existing package: %v", err)
+			}
+			if second.NotesCreated != 0 || second.NotesUpdated != len(before) {
+				t.Fatalf("replace report = %+v, want %d updates and no creates", second, len(before))
+			}
+
+			var after []Note
+			if err := db.Where("deck_id = ?", first.DeckID).Order("id ASC").Find(&after).Error; err != nil {
+				t.Fatalf("load notes after replace: %v", err)
+			}
+			if len(after) != len(before) {
+				t.Fatalf("replace left %d notes, want %d", len(after), len(before))
+			}
+			for i := range after {
+				if after[i].ExternalRef == nil {
+					t.Fatalf("note %d lost its external ref", after[i].ID)
+				}
+				if want, ok := ids[*after[i].ExternalRef]; !ok || want != after[i].ID {
+					t.Fatalf("note with ref %q has id %d, want %d", *after[i].ExternalRef, after[i].ID, want)
+				}
+			}
+
+			var stateAfter CardState
+			if err := db.Where("card_id = ? AND user_id = ?", card.ID, owner).First(&stateAfter).Error; err != nil {
+				t.Fatalf("card %d lost its progress after the replace: %v", card.ID, err)
+			}
+			if stateAfter.Reps != 3 || stateAfter.Version != 1 {
+				t.Fatalf("progress after replace = %+v, want the original state kept", stateAfter)
+			}
+		})
+	}
+}
+
 // TestAnkiDryRunWritesNothing proves dry_run counts the package without leaving a row or a file.
 func TestAnkiDryRunWritesNothing(t *testing.T) {
 	ctx := context.Background()

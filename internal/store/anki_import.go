@@ -811,8 +811,12 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 
 	// Existing notes are matched by external_ref only. A content fingerprint match would attach
 	// the import to a note the user wrote themselves, which re-using an Anki guid must not do.
+	// The lookup includes soft-deleted rows: the unique index on (deck_id, external_ref) covers
+	// them too, so a deleted note carrying the same guid must be restored instead of colliding
+	// with a new row. replace_deck reaches this state by soft-deleting every note of the deck
+	// before the package is written.
 	var existing []Note
-	if err := tx.WithContext(ctx).Where("deck_id = ?", deckID).Find(&existing).Error; err != nil {
+	if err := tx.WithContext(ctx).Unscoped().Where("deck_id = ?", deckID).Find(&existing).Error; err != nil {
 		return fmt.Errorf("load existing notes: %w", err)
 	}
 	byRef := make(map[string]*Note, len(existing))
@@ -1043,6 +1047,13 @@ func writeAnkiNote(ctx context.Context, tx *gorm.DB, actorUserID, deckID uint64,
 	}
 	if err := checkNewMediaRefs(ctx, tx, actorUserID, deckID, oldValues, values); err != nil {
 		return 0, false, err
+	}
+	// A soft-deleted match is restored first: it keeps its id, so its cards and their card_states
+	// stay attached, and a default-scoped update would otherwise touch no row.
+	if old.DeletedAt.Valid {
+		if err := NewNoteStore(tx).RestoreInTx(ctx, tx, old.ID); err != nil {
+			return 0, false, err
+		}
 	}
 	updates := map[string]any{
 		"note_type_id": noteTypeID,
