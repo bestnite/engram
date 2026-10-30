@@ -452,6 +452,55 @@ func TestLocalAnkiPackage(t *testing.T) {
 	}
 }
 
+// TestLocalUltimateGeographyDeckName is the acceptance check for the top-deck rule on a real
+// package. The Ultimate Geography archive carries Anki's empty "Default" deck next to the deck
+// that holds its cards. Importing it without NewDeckName must name the engram deck after the
+// populated deck and put every card directly in it, never below a package deck path. The archive
+// is gitignored, so the test skips when it is absent.
+func TestLocalUltimateGeographyDeckName(t *testing.T) {
+	const cardCount = 975
+	file := filepath.Join("..", "..", "testdata", "local", "Ultimate-Geography.apkg")
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("no %s", file)
+		}
+		t.Fatalf("read %s: %v", file, err)
+	}
+	ctx := context.Background()
+	db := packageDatabases(t)["sqlite"]
+	owner := seedUsers(t, db, "anki_ug")[0]
+	report, err := NewDeckStore(db).ImportPackage(ctx, owner, bytes.NewReader(raw), PackageImportOptions{
+		Target: PackageTargetNewDeck, MediaRoot: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("import %s: %v", file, err)
+	}
+	deck, err := NewDeckStore(db).ByID(ctx, report.DeckID)
+	if err != nil {
+		t.Fatalf("load deck: %v", err)
+	}
+	if deck.Name != "Ultimate Geography" {
+		t.Fatalf("deck name = %q, want %q", deck.Name, "Ultimate Geography")
+	}
+	var total, withPath int64
+	if err := db.Model(&Card{}).Joins("JOIN notes ON notes.id = cards.note_id").
+		Where("notes.deck_id = ?", report.DeckID).Count(&total).Error; err != nil {
+		t.Fatalf("count cards: %v", err)
+	}
+	if err := db.Model(&Card{}).Joins("JOIN notes ON notes.id = cards.note_id").
+		Where("notes.deck_id = ? AND cards.deck_path IS NOT NULL", report.DeckID).Count(&withPath).Error; err != nil {
+		t.Fatalf("count cards with a deck path: %v", err)
+	}
+	if total != cardCount {
+		t.Fatalf("imported %d cards, want %d", total, cardCount)
+	}
+	if withPath != 0 {
+		t.Fatalf("%d of %d cards carry a deck path, want 0", withPath, total)
+	}
+	t.Logf("deck %q: %d cards, %d with a deck path", deck.Name, total, withPath)
+}
+
 // ankiDeckFaceDigest renders every card of the deck and returns the card count plus one line per
 // face ("guid|ordinal|front|back"). The line format is the evidence format the report documents.
 func ankiDeckFaceDigest(t *testing.T, db *gorm.DB, deckID uint64) (int, []string) {
@@ -648,24 +697,132 @@ func mustNoteTypes(t *testing.T, db *gorm.DB, deckID uint64) []NoteType {
 	return types
 }
 
-// TestPlanAnkiDecks covers the deck mapping: the shortest name is the engram deck, a deck under it
-// becomes a relative card path, and a deck outside the chosen tree keeps its own name as the path.
+// TestPlanAnkiDecks covers the top-deck rule on constructed packages: only decks that hold cards
+// take part, the top name is the longest shared "::" prefix (or the largest branch's first
+// component), a deck under the top name becomes a relative path, and a deck outside the chosen
+// tree keeps its own name as the path.
 func TestPlanAnkiDecks(t *testing.T) {
-	pkg := &anki.Package{Decks: []anki.Deck{
-		{ID: 1, Name: "Languages"},
-		{ID: 2, Name: "Languages::Lesson 1"},
-		{ID: 3, Name: "Languages::Lesson 1::Verbs"},
-		{ID: 4, Name: "::Zookeeper"},
-	}}
-	plan := planAnkiDecks(pkg)
-	if plan.TopName != "Languages" {
-		t.Fatalf("top deck = %q, want Languages", plan.TopName)
+	cases := []struct {
+		name            string
+		decks           []anki.Deck
+		cardDecks       []int64
+		wantTop         string
+		wantDescription string
+		wantPaths       map[int64]string
+	}{
+		{
+			// Anki's packaged "Default" deck holds no card and must not name the engram deck.
+			name: "empty Default deck with one populated deck",
+			decks: []anki.Deck{
+				{ID: 1, Name: "Default", Description: "packaged default"},
+				{ID: 1001, Name: "Ultimate Geography", Description: "geography notes"},
+			},
+			cardDecks:       []int64{1001, 1001, 1001},
+			wantTop:         "Ultimate Geography",
+			wantDescription: "geography notes",
+			wantPaths:       map[int64]string{1: "Default", 1001: ""},
+		},
+		{
+			// Cards only below a common parent: the parent is the top deck even though it holds
+			// no card of its own.
+			name: "tree whose cards sit only in the subdecks",
+			decks: []anki.Deck{
+				{ID: 1, Name: "A", Description: "deck A"},
+				{ID: 2, Name: "A::B"},
+				{ID: 3, Name: "A::C"},
+			},
+			cardDecks:       []int64{2, 2, 3},
+			wantTop:         "A",
+			wantDescription: "deck A",
+			wantPaths:       map[int64]string{1: "", 2: "B", 3: "C"},
+		},
+		{
+			// The longest shared prefix wins over the shortest populated name.
+			name: "shared prefix nested below the root",
+			decks: []anki.Deck{
+				{ID: 1, Name: "A"},
+				{ID: 2, Name: "A::B"},
+				{ID: 3, Name: "A::B::C"},
+			},
+			cardDecks:       []int64{2, 3},
+			wantTop:         "A::B",
+			wantDescription: "",
+			wantPaths:       map[int64]string{1: "A", 2: "", 3: "C"},
+		},
+		{
+			// No shared component: the branch holding the most cards names the deck.
+			name: "unrelated decks",
+			decks: []anki.Deck{
+				{ID: 1, Name: "A"},
+				{ID: 2, Name: "B", Description: "deck B"},
+			},
+			cardDecks:       []int64{1, 1, 2, 2, 2},
+			wantTop:         "B",
+			wantDescription: "deck B",
+			wantPaths:       map[int64]string{1: "A", 2: ""},
+		},
+		{
+			// Equal counts: the lowest deck id wins, not the package order.
+			name: "unrelated decks with an equal card count",
+			decks: []anki.Deck{
+				{ID: 7, Name: "B"},
+				{ID: 3, Name: "A"},
+			},
+			cardDecks:       []int64{7, 7, 3, 3},
+			wantTop:         "A",
+			wantDescription: "",
+			wantPaths:       map[int64]string{3: "", 7: "B"},
+		},
+		{
+			// The packaged "Default" deck may hold cards; when it does, it competes on equal
+			// terms and wins here because it holds more.
+			name: "Default deck holding cards",
+			decks: []anki.Deck{
+				{ID: 1, Name: "Default"},
+				{ID: 2, Name: "Other::Sub"},
+			},
+			cardDecks:       []int64{1, 1, 1, 2},
+			wantTop:         "Default",
+			wantDescription: "",
+			wantPaths:       map[int64]string{1: "", 2: "Other::Sub"},
+		},
+		{
+			// A description the deck model would reject is dropped, not allowed to fail the
+			// import: real Anki decks carry multi-line HTML blurbs over the length bound.
+			name: "unstorable description is dropped",
+			decks: []anki.Deck{
+				{ID: 1, Name: "A", Description: strings.Repeat("x", 2001)},
+				{ID: 2, Name: "B", Description: "line\nbreak"},
+			},
+			cardDecks:       []int64{1, 2, 2},
+			wantTop:         "B",
+			wantDescription: "",
+			wantPaths:       map[int64]string{1: "A", 2: ""},
+		},
 	}
-	cases := map[int64]string{1: "", 2: "Lesson 1", 3: "Lesson 1::Verbs", 4: "Zookeeper"}
-	for id, want := range cases {
-		if got := plan.Paths[id]; got != want {
-			t.Errorf("deck %d path = %q, want %q", id, got, want)
-		}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pkg := &anki.Package{Decks: tc.decks}
+			for i, deckID := range tc.cardDecks {
+				pkg.Cards = append(pkg.Cards, anki.Card{ID: int64(i + 1), DeckID: deckID})
+			}
+			plan := planAnkiDecks(pkg)
+			if plan.TopName != tc.wantTop {
+				t.Errorf("top deck = %q, want %q", plan.TopName, tc.wantTop)
+			}
+			if plan.Description != tc.wantDescription {
+				t.Errorf("description = %q, want %q", plan.Description, tc.wantDescription)
+			}
+			if len(plan.Paths) != len(tc.wantPaths) {
+				t.Errorf("planned %d deck paths, want %d: %v", len(plan.Paths), len(tc.wantPaths), plan.Paths)
+			}
+			for id, want := range tc.wantPaths {
+				if got := plan.Paths[id]; got != want {
+					t.Errorf("deck %d path = %q, want %q", id, got, want)
+				}
+			}
+		})
 	}
 }
 

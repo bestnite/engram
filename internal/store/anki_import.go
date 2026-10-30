@@ -81,28 +81,108 @@ func ankiDeckName(name string) string {
 	return strings.TrimLeft(strings.TrimSpace(name), ":")
 }
 
-// planAnkiDecks chooses the top-level deck and computes every subdeck path. The top deck is the
-// shortest normalised name (ties broken lexicographically, so the choice is deterministic). A
-// package deck under the top deck loses the "Top::" prefix; a deck outside that tree keeps its
-// own name as the path.
+// ankiDeckParts splits a normalised deck name into its "::" components. An empty name has no
+// components, so it cannot contribute to, or contradict, the shared prefix.
+func ankiDeckParts(name string) []string {
+	if name == "" {
+		return nil
+	}
+	return strings.Split(name, "::")
+}
+
+// ankiSharedDeckPrefix returns the leading components two component lists share.
+func ankiSharedDeckPrefix(a, b []string) []string {
+	n := 0
+	for n < len(a) && n < len(b) && a[n] == b[n] {
+		n++
+	}
+	return a[:n]
+}
+
+// planAnkiDecks chooses the top-level deck and computes every subdeck path.
+//
+// Only decks that at least one package card references take part in the choice: an Anki package
+// always carries the deck "Default", usually empty, and picking it would put every real deck
+// below a deck the user never used. The top name is the longest "::" component prefix shared by
+// the referenced deck names. When the referenced decks share no first component, the top name is
+// the first component of the referenced deck holding the most cards; the lowest deck id wins a
+// tie, so the choice does not depend on package order. The description comes from the package
+// deck whose full normalised name equals the top name; it is empty when no such deck exists, and
+// empty when the deck model's own rules (length bound, control characters) would reject it.
+//
+// A card in the deck whose full name equals the top name sits directly in the engram deck and
+// gets no path; a card below it gets the path relative to the top name; any other card gets its
+// full package deck name, so no card loses the deck it came from.
 func planAnkiDecks(pkg *anki.Package) ankiDeckPlan {
 	plan := ankiDeckPlan{Paths: map[int64]string{}}
+
+	names := make(map[int64]string, len(pkg.Decks))
 	for i := range pkg.Decks {
-		name := ankiDeckName(pkg.Decks[i].Name)
-		if name == "" {
+		names[pkg.Decks[i].ID] = ankiDeckName(pkg.Decks[i].Name)
+	}
+	cardCount := make(map[int64]int, len(names))
+	for _, card := range pkg.Cards {
+		if names[card.DeckID] == "" {
 			continue
 		}
-		if plan.TopName == "" || len(name) < len(plan.TopName) ||
-			(len(name) == len(plan.TopName) && name < plan.TopName) {
-			plan.TopName = name
-			plan.Description = pkg.Decks[i].Description
-		}
+		cardCount[card.DeckID]++
 	}
-	if plan.TopName == "" {
+
+	var prefix []string
+	prefixSet := false
+	for i := range pkg.Decks {
+		name := names[pkg.Decks[i].ID]
+		if name == "" || cardCount[pkg.Decks[i].ID] == 0 {
+			continue
+		}
+		parts := ankiDeckParts(name)
+		if !prefixSet {
+			prefix = parts
+			prefixSet = true
+			continue
+		}
+		prefix = ankiSharedDeckPrefix(prefix, parts)
+	}
+
+	switch {
+	case len(prefix) > 0:
+		plan.TopName = strings.Join(prefix, "::")
+	case prefixSet:
+		// The referenced decks branch away from the first component on, so the largest branch
+		// names the deck. Iterating pkg.Decks keeps the tie break explicit: strictly more cards,
+		// or the same count on a lower deck id.
+		var bestID int64
+		bestCount := 0
+		for i := range pkg.Decks {
+			id := pkg.Decks[i].ID
+			if names[id] == "" || cardCount[id] == 0 {
+				continue
+			}
+			if cardCount[id] > bestCount || (cardCount[id] == bestCount && id < bestID) {
+				bestID = id
+				bestCount = cardCount[id]
+			}
+		}
+		plan.TopName = ankiDeckParts(names[bestID])[0]
+	default:
 		plan.TopName = "Imported deck"
 	}
+
 	for i := range pkg.Decks {
-		name := ankiDeckName(pkg.Decks[i].Name)
+		if names[pkg.Decks[i].ID] == plan.TopName {
+			// The deck model rejects a description over its length bound or carrying a control
+			// character, and real Anki decks routinely carry multi-line HTML blurbs. A cosmetic
+			// field must not fail the import of the cards, so an unstorable description is
+			// dropped instead of written invalid.
+			if len(deckMetaErrors("", pkg.Decks[i].Description)) == 0 {
+				plan.Description = pkg.Decks[i].Description
+			}
+			break
+		}
+	}
+
+	for i := range pkg.Decks {
+		name := names[pkg.Decks[i].ID]
 		switch {
 		case name == "" || name == plan.TopName:
 			plan.Paths[pkg.Decks[i].ID] = ""
