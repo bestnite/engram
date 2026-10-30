@@ -1594,4 +1594,5 @@ export const en: LocaleCatalog = {
   'notetype.change.invalid': 'The field or template mapping is not valid.',
   'notetype.change.not_found': 'The note type or the target note type was not found.',
   'notetype.change.done': 'Note type changed.',
+  'notetype.preview.failed': 'Could not render the preview. Check the fields and templates.',
 };

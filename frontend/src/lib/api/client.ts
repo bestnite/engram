@@ -83,6 +83,8 @@ import {
   type UpdateNoteTypeRequest,
   type UpdateNoteTypeResponse,
   type NoteType,
+  type NoteTypeConfig,
+  type NoteTypePreviewResponse,
   type EmptyCardListResponse,
   type CleanupEmptyCardsRequest,
   type EmptyCardCleanupResult,
@@ -389,6 +391,28 @@ export class ApiClient {
   async listNoteTypes(deckId: string): Promise<NoteTypesResponse> {
     const id = encodeURIComponent(String(deckId));
     return this.request<NoteTypesResponse>(`/api/v1/decks/${id}/note-types`);
+  }
+
+  /**
+   * Render one template of an unsaved note type config (POST /api/v1/decks/:id/note-types/preview, editor role).
+   *
+   * The body carries the whole draft config and the selected template id, so the server's own renderer produces the
+   * preview instead of a second renderer in the page. Every field renders with its own name as the value. A request
+   * with `frame: true` receives media names relative to the frame's `<base href>`; the HTML only enters the frame.
+   */
+  async previewNoteType(
+    deckId: string,
+    config: NoteTypeConfig,
+    templateId: string,
+    options?: CardFaceRequestOptions,
+  ): Promise<NoteTypePreviewResponse> {
+    if (!this.csrfToken) await this.getSession();
+    const id = encodeURIComponent(String(deckId));
+    return this.request<NoteTypePreviewResponse>(`/api/v1/decks/${id}/note-types/preview`, {
+      method: 'POST',
+      headers: frameHeaders(options),
+      body: JSON.stringify({ config, template_id: templateId }),
+    });
   }
 
   /**

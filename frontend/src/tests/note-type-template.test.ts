@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderPreview, rewriteFieldReferences } from '../lib/note-type-template';
+import { rewriteFieldReferences } from '../lib/note-type-template';
 
 describe('field rename rewrites template references', () => {
   it('rewrites the plain, conditional and filter forms', () => {
@@ -53,25 +53,5 @@ describe('field rename rewrites template references', () => {
         `before ${to} after`,
       );
     }
-  });
-});
-
-describe('live template preview', () => {
-  it('fills field references with the provided values', () => {
-    const html = renderPreview('<div>{{Front}}</div><div>{{text:Back}}</div>', {
-      Front: 'Front',
-      Back: 'Back',
-    });
-    expect(html).toBe('<div>Front</div><div>Back</div>');
-  });
-
-  it('resolves conditionals and the FrontSide reference on the answer side', () => {
-    const front = renderPreview('{{#Front}}{{Front}}{{/Front}}{{^Back}}fallback{{/Back}}', {
-      Front: 'Question',
-      Back: '',
-    });
-    expect(front).toBe('Questionfallback');
-    const back = renderPreview('{{FrontSide}}<hr id=answer>{{Back}}', { Back: 'Answer' }, front);
-    expect(back).toBe('Questionfallback<hr id=answer>Answer');
   });
 });

@@ -1,11 +1,8 @@
 /**
- * Field-reference rewriting and a deliberately small template preview for the note type editor.
+ * Field-reference rewriting for the note type editor.
  *
- * The server's renderer (internal/notetype/template.go) is the authority for what a card finally
- * shows. This module exists so the editor can show the effect of unsaved templates without a round
- * trip: `rewriteFieldReferences` follows Anki's rename rule, and `renderPreview` expands the common
- * template forms. The preview is an approximation, not a second renderer; the card frame still keeps
- * the unsanitised output away from the parent page.
+ * The server's renderer (internal/notetype/template.go) is the authority for what a card shows. This module holds only
+ * the rename rule: `rewriteFieldReferences` follows Anki's rewrite of a template when a field is renamed.
  */
 
 /** Matches every `{{...}}` reference in one pass. Template content cannot contain a brace itself. */
@@ -60,65 +57,4 @@ export function rewriteFieldReferences(text: string, oldName: string, newName: s
     }
     return match;
   });
-}
-
-/** The special fields a template can reference besides the note's own fields. */
-const SPECIAL_FIELDS = new Set(['FrontSide', 'Tags', 'Type', 'Deck', 'Subdeck', 'Card', 'CardFlag', 'CardID']);
-
-/**
- * Expand a template for the live preview.
- *
- * `values` maps a field name to the text the preview shows for it; the editor passes the field name
- * itself, so the preview makes the layout visible without inventing sample content. Conditionals are
- * resolved by whether the referenced value is non-empty. `frontSide` is the already-rendered question
- * used by `{{FrontSide}}` on the answer side.
- *
- * This does not run answer controls, cloze expansion, LaTeX, media or typing filters; it substitutes
- * the field value for them. The result is card-author HTML and may only enter the sandboxed frame.
- */
-export function renderPreview(
-  template: string,
-  values: Record<string, string>,
-  frontSide = '',
-): string {
-  let out = resolveConditionals(template, values);
-  out = out.replace(REFERENCE, (match, rawInner: string) => {
-    const inner = rawInner.trim();
-    if (inner === '') return match;
-    if (inner === 'FrontSide') return frontSide;
-    if (inner.startsWith('#') || inner.startsWith('^') || inner.startsWith('/')) return '';
-    // A filter form names its field after the last colon; every filter therefore resolves to the
-    // same field value, which is enough to show the layout.
-    const colon = inner.lastIndexOf(':');
-    const name = (colon >= 0 ? inner.slice(colon + 1) : inner).trim();
-    if (name === '') return '';
-    if (name in values) return values[name] ?? '';
-    if (SPECIAL_FIELDS.has(name)) return name;
-    return '';
-  });
-  return out;
-}
-
-/**
- * Resolve `{{#Field}}…{{/Field}}` and `{{^Field}}…{{/Field}}` from the innermost pair outwards.
- * A condition is true when the field value is non-empty (`#`) or empty (`^`).
- */
-function resolveConditionals(template: string, values: Record<string, string>): string {
-  const pair = /\{\{([#^])([^{}]*?)\}\}([\s\S]*?)\{\{\/([^{}]*?)\}\}/;
-  let out = template;
-  // A malformed template has no close for its open, so the loop bound stops it from spinning.
-  for (let i = 0; i < 100; i += 1) {
-    const match = pair.exec(out);
-    if (!match) break;
-    const [whole = '', kind = '', openName = '', body = '', closeName = ''] = match;
-    const name = openName.trim();
-    if (name !== closeName.trim()) {
-      // A mismatched pair is left as-is for the server's validation to report.
-      break;
-    }
-    const filled = (values[name] ?? '').trim() !== '';
-    const keep = kind === '#' ? filled : !filled;
-    out = out.slice(0, match.index) + (keep ? body : '') + out.slice(match.index + whole.length);
-  }
-  return out;
 }

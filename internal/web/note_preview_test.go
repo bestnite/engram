@@ -169,6 +169,116 @@ func TestNotePreviewRejectsNoteTypeOfAnotherDeck(t *testing.T) {
 	}
 }
 
+// postNoteTypePreview sends one unsaved-config preview with the given session and CSRF token.
+func postNoteTypePreview(t *testing.T, srv *Server, deckPublicID string, cookies []*http.Cookie, csrf string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("encode note type preview request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deckPublicID+"/note-types/preview", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-CSRF-Token", csrf)
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+// TestNoteTypePreviewRendersClozeMarkup is the acceptance case for an unsaved cloze config: the preview runs the
+// server's cloze filter, so the frame sees the blank markup instead of the field name alone.
+func TestNoteTypePreviewRendersClozeMarkup(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Unsaved cloze preview")
+	cfg := notetype.Config{
+		Kind:   notetype.KindCloze,
+		Fields: []notetype.Field{{ID: "f-text", Name: "Text"}},
+		Templates: []notetype.Template{{
+			ID:      "t-cloze",
+			Name:    "Cloze",
+			QFormat: "{{cloze:Text}}",
+			AFormat: "{{cloze:Text}}",
+		}},
+		CSS: `.card { color: rgb(3, 3, 3); }`,
+	}
+	rec := postNoteTypePreview(t, srv, deck.PublicID, cookies, csrf, noteTypePreviewRequest{Config: &cfg, TemplateID: "t-cloze"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("note type preview status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Front struct {
+			HTML string `json:"html"`
+			CSS  string `json:"css"`
+			Side string `json:"side"`
+		} `json:"front"`
+		Back struct {
+			HTML string `json:"html"`
+			Side string `json:"side"`
+		} `json:"back"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode note type preview response: %v (body %s)", err, rec.Body.String())
+	}
+	if !strings.Contains(body.Front.HTML, `class="cloze"`) || !strings.Contains(body.Front.HTML, `data-cloze="Text"`) {
+		t.Errorf("cloze preview front = %q, want the hidden cloze markup", body.Front.HTML)
+	}
+	if !strings.Contains(body.Back.HTML, `class="cloze"`) || !strings.Contains(body.Back.HTML, ">Text</span>") {
+		t.Errorf("cloze preview back = %q, want the revealed cloze markup", body.Back.HTML)
+	}
+	if body.Front.CSS != cfg.CSS {
+		t.Errorf("cloze preview css = %q, want the unsaved %q", body.Front.CSS, cfg.CSS)
+	}
+	if body.Front.Side != notetype.SideFront.String() || body.Back.Side != notetype.SideBack.String() {
+		t.Errorf("preview sides = %q / %q, want front / back", body.Front.Side, body.Back.Side)
+	}
+}
+
+// TestNoteTypePreviewRejectsInvalidConfig covers the negative case: the same validation rule a stored note type runs
+// rejects the draft, and the response names the offending template.
+func TestNoteTypePreviewRejectsInvalidConfig(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Invalid unsaved preview")
+	cfg := notetype.Config{
+		Kind:   notetype.KindNormal,
+		Fields: []notetype.Field{{ID: "f-front", Name: "Front"}},
+		Templates: []notetype.Template{{
+			ID:      "t-broken",
+			Name:    "Broken card",
+			QFormat: "{{Missing}}",
+			AFormat: "{{Front}}",
+		}},
+	}
+	rec := postNoteTypePreview(t, srv, deck.PublicID, cookies, csrf, noteTypePreviewRequest{Config: &cfg, TemplateID: "t-broken"})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid config preview status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Broken card") {
+		t.Errorf("invalid config response does not name the template: %s", rec.Body.String())
+	}
+}
+
+// TestNoteTypePreviewRequiresEditor covers the role gate: a reader of the deck may not render a draft through the
+// preview, because the endpoint belongs to the note type editor.
+func TestNoteTypePreviewRequiresEditor(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Reader preview")
+	readerID, readerCookies, readerCSRF := createUserAndLogin(t, srv, db, "preview-reader")
+	grantRole(t, srv, deck.ID, readerID, store.RoleReader, ownerCookies, ownerCSRF)
+	cfg := notetype.Config{
+		Kind:   notetype.KindNormal,
+		Fields: []notetype.Field{{ID: "f-front", Name: "Front"}},
+		Templates: []notetype.Template{{
+			ID: "t-one", Name: "Card 1", QFormat: "{{Front}}", AFormat: "{{Front}}",
+		}},
+	}
+	rec := postNoteTypePreview(t, srv, deck.PublicID, readerCookies, readerCSRF, noteTypePreviewRequest{Config: &cfg, TemplateID: "t-one"})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("reader preview status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
 func TestNotePreviewRequiresSessionAndCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Preview")

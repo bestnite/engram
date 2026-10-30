@@ -13,6 +13,7 @@
     NoteTypeConfig,
     NoteTypeField,
     NoteTypeImpact,
+    NoteTypePreviewResponse,
     NoteTypeStock,
     NoteTypeTemplate,
   } from '../api';
@@ -25,7 +26,7 @@
   import CardFrame from '../components/CardFrame.svelte';
   import { toast } from '../components/ui/toast';
   import { NOTE_PREVIEW_CSS, faceStyle } from '../card-frame';
-  import { renderPreview, rewriteFieldReferences } from '../note-type-template';
+  import { rewriteFieldReferences } from '../note-type-template';
   import { ArrowDown, ArrowUp, Plus, RefreshCw, Trash2 } from '@lucide/svelte';
 
   interface Props {
@@ -153,19 +154,53 @@
     draft?.config.kind === 'normal' ? (draft?.config.templates ?? []) : [],
   );
 
-  // Preview values are the field names themselves: the preview shows the layout without inventing
-  // card content. The rendered HTML goes only into the sandboxed frame, never into this page.
-  const previewValues = $derived(
-    Object.fromEntries((draft?.config.fields ?? []).map((field) => [field.name, field.name])),
-  );
-  const previewFront = $derived(
-    selectedTemplate ? renderPreview(selectedTemplate.qfmt, previewValues) : '',
-  );
-  const previewBack = $derived(
-    selectedTemplate
-      ? renderPreview(selectedTemplate.afmt, previewValues, previewFront)
+  // The preview is rendered by the server: the request carries the whole unsaved config and the selected template id,
+  // so the frames show the same faces a stored note type produces instead of a second renderer in this page. Every field
+  // is rendered with its own name as the value. The returned HTML only enters the sandboxed frame, never this page.
+  let preview = $state<NoteTypePreviewResponse | null>(null);
+  let previewError = $state('');
+  // The config is serialised into one key so a nested edit (a template, a field, the CSS) reruns the effect below; reading
+  // the object alone would only notice a replaced config.
+  const previewKey = $derived(
+    draft && selectedTemplate
+      ? JSON.stringify({ config: draft.config, template_id: selectedTemplate.id })
       : '',
   );
+
+  $effect(() => {
+    const key = previewKey;
+    const config = draft?.config ?? null;
+    const templateId = selectedTemplate?.id ?? '';
+    if (!key || !deckId || !config || !templateId) {
+      preview = null;
+      previewError = '';
+      return;
+    }
+    // Edits arrive keystroke by keystroke; one request per pause keeps the preview responsive without one render per
+    // character. The cleanup drops both a pending timer and a response that arrives after the config changed again.
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await apiClient.previewNoteType(deckId, config, templateId, { frame: true });
+          if (!cancelled) {
+            preview = result;
+            previewError = '';
+          }
+        } catch {
+          if (!cancelled) {
+            preview = null;
+            previewError = 'notetype.preview.failed';
+          }
+        }
+      })();
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  });
+
   const previewCSS = $derived(faceStyle(NOTE_PREVIEW_CSS, draft?.config.css ?? ''));
 
   const clozeKind = $derived(draft?.config.kind === 'cloze');
@@ -1268,31 +1303,36 @@
             ></textarea>
           </section>
 
-          <!-- Preview: unsaved template and CSS, rendered client-side and shown only inside the sandboxed frame. -->
+          <!-- Preview: the unsaved template and CSS rendered by the server, shown only inside the sandboxed frame. -->
           <section class="rounded-lg border border-border p-4" data-testid="notetype-preview">
             <h2 class="text-sm font-semibold text-foreground">{$t('notetype.preview.title')}</h2>
             <p class="mt-0.5 text-xs text-muted-foreground">{$t('notetype.preview.hint')}</p>
+            {#if previewError}
+              <p role="alert" data-testid="notetype-preview-error" class="mt-2 text-sm text-destructive-foreground">
+                {$t(previewError)}
+              </p>
+            {/if}
             {#if selectedTemplate}
               <div class="mt-3 grid gap-4 xl:grid-cols-2">
                 <div data-testid="notetype-preview-front" class="space-y-2 rounded-md border border-border p-3">
                   <h3 class="text-xs font-medium text-muted-foreground">{$t('notetype.preview.front')}</h3>
                   <CardFrame
-                    html={previewFront}
+                    html={preview?.front.html ?? ''}
                     css={previewCSS}
-                    bodyClass="card card1"
+                    bodyClass={preview?.front.body_class ?? 'card'}
                     side="question"
-                    mediaBase=""
+                    mediaBase={preview?.front.media_base ?? ''}
                     title={$t('notetype.preview.front')}
                   />
                 </div>
                 <div data-testid="notetype-preview-back" class="space-y-2 rounded-md border border-border p-3">
                   <h3 class="text-xs font-medium text-muted-foreground">{$t('notetype.preview.back')}</h3>
                   <CardFrame
-                    html={previewBack}
+                    html={preview?.back.html ?? ''}
                     css={previewCSS}
-                    bodyClass="card card1"
+                    bodyClass={preview?.back.body_class ?? 'card'}
                     side="answer"
-                    mediaBase=""
+                    mediaBase={preview?.back.media_base ?? ''}
                     title={$t('notetype.preview.back')}
                   />
                 </div>

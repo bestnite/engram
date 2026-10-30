@@ -1593,4 +1593,5 @@ export const zhCN: LocaleCatalog = {
   'notetype.change.invalid': '字段或模板映射无效。',
   'notetype.change.not_found': '找不到笔记类型或目标笔记类型。',
   'notetype.change.done': '已更改笔记类型。',
+  'notetype.preview.failed': '无法渲染预览。请检查字段与模板。',
 };

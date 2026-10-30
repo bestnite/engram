@@ -29,6 +29,8 @@ func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	router.GET("/decks/:id/new-note", s.noteNewRoute)
 	// The SPA's create/edit preview goes over JSON.
 	router.POST("/api/v1/decks/:id/notes/preview", s.sessions.CSRFMiddleware(), s.notePreview)
+	// The note type editor previews an unsaved config through the same renderer the server uses for stored types.
+	router.POST("/api/v1/decks/:id/note-types/preview", s.sessions.CSRFMiddleware(), s.noteTypePreview)
 }
 
 // requireUser takes the current signed-in user; when not signed in it redirects to the login page and returns false.

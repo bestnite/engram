@@ -392,6 +392,18 @@ export interface NoteTypesResponse {
 }
 
 /**
+ * POST /api/v1/decks/:id/note-types/preview response.
+ *
+ * The front and back faces are the server's own rendering of the unsaved config, so they are the shape a review
+ * receives. The HTML only enters the sandboxed card frame, never the parent page.
+ */
+export interface NoteTypePreviewResponse {
+  front: CardFace;
+  back: CardFace;
+  media_base?: string;
+}
+
+/**
  * One stock definition a note type can be created from (GET /api/v1/note-type-stocks).
  * The id is "source:kind" because Anki's and engram's stock sets share kind values;
  * label_key is the translation catalog entry for the display name.

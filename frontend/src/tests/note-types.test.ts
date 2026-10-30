@@ -77,7 +77,7 @@ describe('NoteTypesView', () => {
     expect(html).toContain('版本 3');
   });
 
-  it('renders a live preview from the unsaved template', () => {
+  it('renders the preview frames the server response feeds', () => {
     const { html } = render(NoteTypesView, {
       props: {
         initialLoading: false,
@@ -86,9 +86,11 @@ describe('NoteTypesView', () => {
         initialControls: controls,
       },
     });
-    // renderPreview substitutes the field names; the frames receive that HTML, never this page.
-    expect(html).toContain('Front');
-    expect(html).toContain('Back');
+    // The preview HTML comes from the server after mount, so the SSR pass renders the two frames empty;
+    // frontend/src/tests/note-types.client.ts covers the rendered face. The HTML must never be produced in this page.
+    expect(html).toContain('data-testid="notetype-preview"');
+    expect(html).toContain('data-side="question"');
+    expect(html).toContain('data-side="answer"');
   });
 
   it('shows the empty state when the deck has no note types', () => {

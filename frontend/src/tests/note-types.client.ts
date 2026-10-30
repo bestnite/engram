@@ -36,7 +36,7 @@ function impactResponse(added: number, removed: number, reviews: number): Update
   };
 }
 
-describe('NoteTypesView card-impact confirmation', () => {
+describe('NoteTypesView editor', () => {
   let instance: ReturnType<typeof mount> | null = null;
   let target: HTMLElement;
 
@@ -44,6 +44,7 @@ describe('NoteTypesView card-impact confirmation', () => {
     if (instance) unmount(instance);
     instance = null;
     document.body.innerHTML = '';
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -117,5 +118,73 @@ describe('NoteTypesView card-impact confirmation', () => {
     expect(update).toHaveBeenCalledTimes(2);
     expect(update.mock.calls[1]?.[2]).toMatchObject({ dry_run: false, confirm_card_removal: false });
     expect(document.body.querySelector('[data-testid="notetype-impact"]')).toBeNull();
+  });
+
+  it('sends the unsaved config to the server preview and shows the returned HTML in the frame', async () => {
+    vi.useFakeTimers();
+    const preview = vi.spyOn(apiClient, 'previewNoteType').mockResolvedValue({
+      front: {
+        html: '<div id="server-front">SERVER-FRONT</div>',
+        css: '.card {}',
+        body_class: 'card',
+        side: 'front',
+        media_base: '',
+      },
+      back: {
+        html: '<div id="server-back">SERVER-BACK</div>',
+        css: '.card {}',
+        body_class: 'card',
+        side: 'back',
+        media_base: '',
+      },
+    });
+    setLocale('zh-CN');
+    routeStore.set(matchRoute('/decks/d1/note-types'));
+    target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(NoteTypesView, {
+      target,
+      props: {
+        initialLoading: false,
+        initialNoteTypes: [noteType()],
+        initialStocks: [],
+        initialControls: [],
+      },
+    });
+    await flush();
+    await vi.advanceTimersByTimeAsync(300);
+    await flush();
+    // The mount already previewed the initial draft; the edit below is the request this test asserts.
+    preview.mockClear();
+
+    const qfmt = document.body.querySelector('[data-testid="notetype-template-qfmt"]') as HTMLTextAreaElement | null;
+    expect(qfmt).not.toBeNull();
+    qfmt!.value = '{{Front}} EDITED';
+    qfmt!.dispatchEvent(new Event('input', { bubbles: true }));
+    await flush();
+    await vi.advanceTimersByTimeAsync(300);
+    await flush();
+
+    expect(preview).toHaveBeenCalledTimes(1);
+    const [deck, config, templateId, options] = preview.mock.calls[0]!;
+    expect(deck).toBe('d1');
+    expect(config.templates[0]?.qfmt).toBe('{{Front}} EDITED');
+    expect(templateId).toBe('t-1');
+    expect(options).toEqual({ frame: true });
+
+    // happy-dom mounts the iframe without loading the frame document, so the test answers the frame protocol the way
+    // the real frame does and reads what CardFrame sends into it.
+    const element = document.body.querySelector(
+      '[data-testid="notetype-preview-front"] iframe[data-card-frame]',
+    ) as HTMLIFrameElement | null;
+    expect(element).not.toBeNull();
+    const win = element!.contentWindow!;
+    vi.spyOn(win, 'postMessage').mockImplementation(() => {});
+    window.dispatchEvent(new MessageEvent('message', { data: { type: 'ready' }, source: win }));
+    await flush();
+    const shows = ((win.postMessage as unknown as { mock: { calls: unknown[][] } }).mock.calls ?? [])
+      .map((call) => call[0] as Record<string, unknown>)
+      .filter((message) => message.type === 'show');
+    expect(shows.at(-1)?.html).toContain('SERVER-FRONT');
   });
 });
