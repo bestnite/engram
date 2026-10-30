@@ -2,14 +2,17 @@ package web
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
 
-// TestEditFrameServesTheFrameIsolation pins the editing frame's route: the editing area has the same
-// opaque-origin sandbox as the card frame, because a field value is untrusted note content. The route
-// must therefore carry the frame CSP, no-referrer, and no X-Frame-Options; the site policy would block
-// the iframe and would not allow the inline styles the editor writes.
+// TestEditFrameServesTheFrameIsolation pins the editing frame's route: the editing area has the card
+// frame's opaque-origin sandbox, because a field value is untrusted note content. The route must
+// therefore carry a frame CSP, no-referrer, and no X-Frame-Options; the site policy would block the
+// iframe and would not allow the inline styles the editor writes. Its script-src is the origin only:
+// the runtime is a same-origin module, so no inline script is needed, and the field value is written
+// with innerHTML, so an inline event handler attribute must not run.
 func TestEditFrameServesTheFrameIsolation(t *testing.T) {
 	srv, _, _, _, _ := newNotesServer(t)
 	const origin = "https://engram.example.com"
@@ -22,8 +25,25 @@ func TestEditFrameServesTheFrameIsolation(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("Content-Type = %q, want text/html", ct)
 	}
-	if got, want := rec.Header().Get(cspHeader), cardFrameCSP(origin); got != want {
-		t.Errorf("edit frame CSP = %q, want %q", got, want)
+
+	wantCSP := "sandbox allow-scripts; " +
+		"default-src 'none'; " +
+		"script-src " + origin + "; " +
+		"style-src " + origin + " 'unsafe-inline'; " +
+		"img-src " + origin + " https: data: blob:; " +
+		"media-src " + origin + " https: blob:; " +
+		"font-src " + origin + " https: data:; " +
+		"connect-src " + origin + "/fm/; " +
+		"form-action 'none'; " +
+		"frame-ancestors 'self'"
+	got := rec.Header().Get(cspHeader)
+	if got != wantCSP {
+		t.Errorf("edit frame CSP = %q, want %q", got, wantCSP)
+	}
+	// Every directive other than script-src stays identical to the card frame's, so a directive added
+	// to one frame cannot drift apart from the other.
+	if got, want := nonScriptDirectives(rec.Header().Get(cspHeader)), nonScriptDirectives(cardFrameCSP(origin)); !slices.Equal(got, want) {
+		t.Errorf("edit frame non-script directives = %q, want the card frame's %q", got, want)
 	}
 	if got := rec.Header().Get("Referrer-Policy"); got != "no-referrer" {
 		t.Errorf("edit frame Referrer-Policy = %q, want no-referrer", got)
@@ -48,6 +68,19 @@ func TestEditFrameServesTheFrameIsolation(t *testing.T) {
 			t.Errorf("edit frame document must not contain %q: %s", forbidden, snippet(body))
 		}
 	}
+}
+
+// nonScriptDirectives splits a CSP into its directives and drops script-src, so a test can compare two
+// policies without the one directive they deliberately differ in.
+func nonScriptDirectives(csp string) []string {
+	var out []string
+	for _, directive := range strings.Split(csp, "; ") {
+		if directive == "" || strings.HasPrefix(directive, "script-src ") {
+			continue
+		}
+		out = append(out, directive)
+	}
+	return out
 }
 
 // TestEditFrameRejectsEmptyBuildEntry documents the 404 path when the embedded build has no editing

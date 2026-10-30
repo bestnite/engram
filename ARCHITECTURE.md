@@ -115,10 +115,11 @@ change.
   `Referrer-Policy: no-referrer`, and drops `X-Frame-Options`; the parent page embeds the document
   in a sandboxed iframe and communicates with it only through `postMessage`.
 - **Editing frame.** `GET /edit-frame/<build-version>` serves the note editor's rich-text iframe
-  document (`internal/web/edit_frame.go`). It carries the card frame's exact isolation and headers,
-  because a field value is untrusted note content parsed by a sandboxed document; the parent page
-  sends the field HTML and the toolbar commands with `postMessage` and receives `change`, `height`
-  and upload requests.
+  document (`internal/web/edit_frame.go`). It carries the card frame's sandbox isolation, headers and
+  every CSP directive except `script-src`, which names only the origin: the runtime is a same-origin
+  module, and the field value is written with `innerHTML`, so an inline event handler attribute in a
+  shared deck's field must stay inert. The parent page sends the field HTML and the toolbar commands
+  with `postMessage` and receives `change`, `height` and upload requests.
 - **Frame media.** `GET /fm/<token>/<name>` (`internal/web/frame_media.go`) serves media to the
   sandboxed frame, which has no session cookie. The token is an HMAC over `(user_id, deck_id,
   expiry)`; its key lives in the encrypted settings channel under `frame_media_key` and is

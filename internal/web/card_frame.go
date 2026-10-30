@@ -18,25 +18,27 @@ func (s *Server) registerCardFrameRoutes(router *gin.Engine) {
 	router.GET(cardFramePath, s.cardFrame)
 }
 
-// cardFrameCSP builds the frame's own policy. The frame runs card content (including the card author's inline scripts) inside
-// an opaque-origin sandbox, so it is deliberately wider than the site policy while still naming every source it may use:
+// frameCSP builds the policy of one sandboxed frame document. Both frame documents render untrusted note content inside an
+// opaque-origin sandbox and differ only in how much script they may run, so every directive except script-src is written
+// once here: a directive added to one frame cannot silently diverge from the other. scriptSrc is the complete source list
+// of the caller's script-src directive.
 //
-//   - sandbox allow-scripts: card content may run scripts, but without allow-same-origin it gets an opaque origin and cannot read
-//     the parent's cookies or storage. allow-scripts is the only sandbox token.
+//   - sandbox allow-scripts: the frame's own runtime must run, but without allow-same-origin the document gets an opaque
+//     origin and cannot read the parent's cookies or storage. allow-scripts is the only sandbox token.
 //   - default-src 'none': nothing is allowed unless a directive below names it.
-//   - script-src <origin> 'unsafe-inline' 'unsafe-eval': the runtime bundle is same-origin; card content carries inline scripts and
-//     MathJax compiles TeX at runtime.
-//   - style-src <origin> 'unsafe-inline': the runtime bundle's stylesheet is same-origin, card CSS is written inline by the runtime.
-//   - img-src/media-src/font-src: frame media comes from the same origin (/fm/<token>/...), card content may reference https media,
-//     data: images/fonts and blob: media; media only needs the same origin, https and blob.
+//   - script-src: supplied by the caller; the two frames enforce different script policies.
+//   - style-src <origin> 'unsafe-inline': the runtime bundle's stylesheet is same-origin, and the runtime writes content
+//     styles inline.
+//   - img-src/media-src/font-src: frame media comes from the same origin (/fm/<token>/...), content may reference https
+//     media, data: images/fonts and blob: media; media only needs the same origin, https and blob.
 //   - connect-src <origin>/fm/: the frame itself only fetches media through the /fm/ token paths.
-//   - form-action 'none': a card must not submit a form.
-//   - frame-ancestors 'self': only this site may embed the frame. X-Frame-Options is removed on this route (see cardFrame), because
+//   - form-action 'none': a frame must not submit a form.
+//   - frame-ancestors 'self': only this site may embed a frame. X-Frame-Options is removed on both frame routes, because
 //     the global DENY would block the iframe before the sandbox had a chance to restrict it.
-func cardFrameCSP(origin string) string {
+func frameCSP(origin, scriptSrc string) string {
 	return "sandbox allow-scripts; " +
 		"default-src 'none'; " +
-		"script-src " + origin + " 'unsafe-inline' 'unsafe-eval'; " +
+		"script-src " + scriptSrc + "; " +
 		"style-src " + origin + " 'unsafe-inline'; " +
 		"img-src " + origin + " https: data: blob:; " +
 		"media-src " + origin + " https: blob:; " +
@@ -44,6 +46,13 @@ func cardFrameCSP(origin string) string {
 		"connect-src " + origin + "/fm/; " +
 		"form-action 'none'; " +
 		"frame-ancestors 'self'"
+}
+
+// cardFrameCSP builds the card frame's policy. Card content may carry the author's inline scripts, and MathJax compiles
+// TeX at runtime, so script-src allows inline and evaluated script in addition to the same-origin runtime bundle. Every
+// other directive comes from frameCSP.
+func cardFrameCSP(origin string) string {
+	return frameCSP(origin, origin+" 'unsafe-inline' 'unsafe-eval'")
 }
 
 // cardFrame serves the card frame document.

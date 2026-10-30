@@ -37,6 +37,10 @@ const HARNESS_PATH = '/__e2e_harness';
 const SUBMIT_PATH = '/__e2e_submit';
 const FRAME_URL = `${baseURL}/card-frame/e2e`;
 
+const EDIT_HARNESS_PATH = '/__e2e_edit_harness';
+const EDIT_FRAME_URL = `${baseURL}/edit-frame/e2e`;
+const MISSING_IMAGE_PATH = '/__e2e_missing.png';
+
 /** A 1x1 transparent PNG; the route serves it so the image assertion does not depend on the network. */
 const PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -195,6 +199,49 @@ const PROBE_IDS = [
   'image-csp',
 ] as const;
 
+/**
+ * The harness page for the editing frame: one sandboxed iframe on `/edit-frame/e2e` and the same `load` message the
+ * parent page's `RichTextField` sends. The runtime only accepts messages from its parent window, so the harness must
+ * be the embedder.
+ */
+const EDIT_HARNESS_HTML = `<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>edit frame csp harness</title></head>
+  <body>
+    <iframe id="frame" sandbox="allow-scripts" src="/edit-frame/e2e"></iframe>
+    <script>
+      window.__probes = [];
+      window.__frameReady = false;
+      window.__loadField = function (html) {
+        document.getElementById('frame').contentWindow.postMessage(
+          { type: 'load', html: html, plainText: false, rtl: false, font: '', size: 0, description: '', dark: false, source: false },
+          '*',
+        );
+      };
+      var frame = document.getElementById('frame');
+      window.addEventListener('message', function (event) {
+        if (event.source !== frame.contentWindow) return;
+        var data = event.data;
+        if (!data || typeof data !== 'object') return;
+        if (data.type === 'ready') {
+          window.__frameReady = true;
+          return;
+        }
+        if (data.type === 'probe') {
+          window.__probes.push({ id: data.id, detail: data.detail });
+        }
+      });
+    </script>
+  </body>
+</html>`;
+
+/**
+ * A field value with an event handler attribute, the shape a shared deck can carry. The image cannot load, so the
+ * browser would dispatch `error`; the handler records that it ran and posts a probe the parent page would receive. Both
+ * are observable, so the assertion distinguishes "the handler was blocked" from "the handler never had a chance".
+ */
+const FIELD_WITH_HANDLER = `<p id="field-probe">field value</p><img id="handler-probe" src="${MISSING_IMAGE_PATH}" onerror="window.__handlerRan=true;parent.postMessage({type:'probe',id:'onerror',detail:'inline handler ran'},'*')">`;
+
 test('the card frame sandbox blocks every escape attempt and still loads https media', async ({ page }) => {
   const harnessURL = new URL(HARNESS_PATH, baseURL).toString();
   const unexpectedRequests: string[] = [];
@@ -299,4 +346,75 @@ test('the card frame sandbox blocks every escape attempt and still loads https m
   expect.soft(unexpectedRequests, 'the sandbox requested an escape or popup URL').toEqual([]);
   expect.soft(submitRequests, 'the form submission reached the server').toEqual([]);
   expect.soft(pixelRequests, 'the https image was never requested').toHaveLength(1);
+});
+
+/**
+ * Proves the editing frame runs no inline script (M17-42).
+ *
+ * The editing frame writes the field value with `innerHTML`, so an event handler attribute in a shared deck's field
+ * would execute inside the frame if its `script-src` allowed inline script. The narrowed policy allows only the
+ * same-origin runtime module, so the handler must stay inert. The test loads a real field value containing
+ * `<img onerror=...>`, waits until the image has failed (which is what dispatches `error`), and then asserts that the
+ * attribute is still present but its handler never ran and never posted its probe.
+ */
+test('an inline event handler in a loaded field value does not run in the editing frame', async ({ page }) => {
+  const harnessURL = new URL(EDIT_HARNESS_PATH, baseURL).toString();
+
+  await page.route(`**${EDIT_HARNESS_PATH}`, (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: EDIT_HARNESS_HTML }),
+  );
+  // The image must fail, because a failing image is what dispatches the `error` event the handler is attached to.
+  await page.route(`**${MISSING_IMAGE_PATH}`, (route) =>
+    route.fulfill({ status: 404, contentType: 'text/plain; charset=utf-8', body: 'not an image' }),
+  );
+
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.goto(harnessURL);
+  await page.waitForFunction(
+    () => (window as unknown as { __frameReady?: boolean }).__frameReady === true,
+    undefined,
+    { timeout: 20_000 },
+  );
+
+  const frame = page.frames().find((candidate) => candidate.url().includes('/edit-frame/'));
+  expect(frame, `the editing frame was not found; frames: ${JSON.stringify(page.frames().map((f) => f.url()))}`).toBeDefined();
+  expect(frame?.url()).toBe(EDIT_FRAME_URL);
+
+  await page.evaluate(
+    (html) => (window as unknown as { __loadField(html: string): void }).__loadField(html),
+    FIELD_WITH_HANDLER,
+  );
+
+  // The runtime renders the field only after `load`, so the field marker proves the value reached the frame.
+  await frame!.waitForFunction(() => document.querySelector('#field-probe') !== null, undefined, { timeout: 10_000 });
+  await frame!.waitForFunction(
+    () => {
+      const image = document.querySelector('#handler-probe');
+      return image instanceof HTMLImageElement && image.complete;
+    },
+    undefined,
+    { timeout: 10_000 },
+  );
+  // The image is complete before the error event is dispatched; leave room for it and for a postMessage that was
+  // allowed to travel.
+  await page.waitForTimeout(500);
+
+  const present = await frame!.evaluate(() => {
+    const image = document.querySelector('#handler-probe');
+    return image instanceof HTMLImageElement && image.getAttribute('onerror') !== null;
+  });
+  expect(present, 'the handler attribute was not rendered, so the assertion would not prove it was blocked').toBe(true);
+
+  const handlerRan = await frame!.evaluate(
+    () => (window as unknown as { __handlerRan?: boolean }).__handlerRan === true,
+  );
+  expect(handlerRan, 'the inline onerror handler ran inside the editing frame').toBe(false);
+
+  const probes = await page.evaluate(() => (window as unknown as { __probes: Array<{ id: string; detail: string }> }).__probes);
+  expect(probes, 'the inline handler posted a message to the parent page').toEqual([]);
+  // A blocked handler is not a page error: the frame stays healthy and keeps its document.
+  expect(pageErrors).toEqual([]);
+  expect(frame!.url()).toBe(EDIT_FRAME_URL);
 });
