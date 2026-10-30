@@ -213,7 +213,7 @@
         <!-- Validation is left entirely to the local criterion in submit: the native required would make the browser show its
              own prompt on a real submit, conflicting with the "show the language pack copy when missing" convention, so
              required is not set. -->
-        <Dropzone bind:file testId="import-file" accept=".edeck,.zip" hint={$t('dropzone.import_hint')} />
+        <Dropzone bind:file testId="import-file" accept=".edeck,.zip,.apkg" hint={$t('dropzone.import_hint')} />
       </div>
     {:else}
       <label class="block text-sm font-medium">{$t('package.import.url')}
@@ -281,6 +281,22 @@
         {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border py-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium tabular-nums">{key.endsWith('dry_run') || key.endsWith('progress_discarded') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
       </dl>
       {#if report.errors.length}<h3 class="mt-5 text-sm font-semibold">{$t('package.report.errors')}</h3><ul class="mt-2 list-disc pl-5 text-sm">{#each report.errors as item}<li>{item.entry}: {item.reason}</li>{/each}</ul>{/if}
+      {#if report.missing_media?.length}
+        <h3 class="mt-5 text-sm font-semibold">{$t('import.apkg.missing_media')}</h3>
+        <ul class="mt-2 list-disc pl-5 text-sm">{#each report.missing_media as item}<li>{item}</li>{/each}</ul>
+      {/if}
+      {#if report.unplayable_video?.length}
+        <h3 class="mt-5 text-sm font-semibold">{$t('import.apkg.unplayable_video')}</h3>
+        <ul class="mt-2 list-disc pl-5 text-sm">{#each report.unplayable_video as item}<li>{item}</li>{/each}</ul>
+      {/if}
+      {#if report.external_assets?.length}
+        <h3 class="mt-5 text-sm font-semibold">{$t('import.apkg.external_assets')}</h3>
+        <ul class="mt-2 list-disc pl-5 text-sm">{#each report.external_assets as item}<li>{item}</li>{/each}</ul>
+      {/if}
+      {#if report.latex_missing_images?.length}
+        <h3 class="mt-5 text-sm font-semibold">{$t('import.apkg.latex_missing_images')}</h3>
+        <ul class="mt-2 list-disc pl-5 text-sm">{#each report.latex_missing_images as item}<li>{item}</li>{/each}</ul>
+      {/if}
       {#if report.dry_run}<p class="mt-4 text-sm text-warning">{$t('package.report.preview_notice')}</p>{/if}
     </section>
   {/if}

@@ -476,8 +476,12 @@ func modernDecks(db *gorm.DB) ([]Deck, error) {
 			return nil, fmt.Errorf("%w: deck %q config: %v", ErrCorruptCollection, name, err)
 		}
 		decks = append(decks, Deck{
-			ID:                  id,
-			Name:                name,
+			ID: id,
+			// The modern schema joins subdeck components with the ASCII unit
+			// separator, while the legacy layouts and every consumer use "::".
+			// Exposing the raw byte would make the same deck tree look
+			// different depending on the package layout.
+			Name:                strings.ReplaceAll(name, "\x1f", "::"),
 			Description:         cfg.Description,
 			MarkdownDescription: cfg.MarkdownDescription,
 		})

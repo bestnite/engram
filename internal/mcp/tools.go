@@ -120,10 +120,10 @@ type bulkActionIn struct {
 
 // importDeckIn is the input of import_deck: it accepts a deck package, with the source being one of two alternatives.
 type importDeckIn struct {
-	// Package is the package body itself: the JSON document export_deck outputs, or a base64-encoded .edeck zip. Mutually exclusive with URL.
-	Package any `json:"package,omitempty" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck archive; mutually exclusive with url"`
-	// URL is a public HTTPS direct link (.edeck/.zip); it is downloaded and validated by the server, and is mutually exclusive with Package.
-	URL string `json:"url,omitempty" jsonschema:"public HTTPS direct link to a .edeck/.zip package; mutually exclusive with package"`
+	// Package is the package body itself: the JSON document export_deck outputs, a base64-encoded .edeck zip, or a base64-encoded .apkg archive. Mutually exclusive with URL.
+	Package any `json:"package,omitempty" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck/.apkg archive; mutually exclusive with url"`
+	// URL is a public HTTPS direct link (.edeck/.zip/.apkg); it is downloaded and validated by the server, and is mutually exclusive with Package.
+	URL string `json:"url,omitempty" jsonschema:"public HTTPS direct link to a .edeck/.zip/.apkg package; mutually exclusive with package"`
 	// Target takes new_deck (default), into_deck:<public id>, or replace_deck:<public id>.
 	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<public id> or replace_deck:<public id>"`
 	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`

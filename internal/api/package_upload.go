@@ -130,7 +130,7 @@ func (a *API) CreateImportUpload(ctx context.Context, u *store.User, apiKeyID *u
 //
 // The ticket is consumed first, bytes are read after: a request with an invalid ticket reads not a single byte; once presented the ticket is spent, and a failed import
 // cannot be replayed - the caller just issues a new one (issuance is cheap, and the uploaded bytes never went through the model anyway).
-// The body may be an .edeck zip or the JSON document produced by export_deck, told apart by the first non-whitespace byte.
+// The body may be an .edeck or .apkg zip, or the JSON document produced by export_deck, told apart by the first non-whitespace byte.
 func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io.Reader) (*store.PackageImportReport, error) {
 	invalid := newServiceError(http.StatusNotFound, CodeImportUploadInvalid, "")
 	now := a.now()
@@ -188,7 +188,7 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 }
 
 // uploadPackageReader decides the body shape from the first non-whitespace byte: '{' means a JSON document, handed to the same
-// store.PackageReader as MCP uses, restoring it to a zip; anything else is taken as .edeck bytes. Agents therefore need not build a zip themselves.
+// store.PackageReader as MCP uses, restoring it to a zip; anything else is taken as archive bytes (.edeck or .apkg). Agents therefore need not build a zip themselves.
 func uploadPackageReader(body io.Reader) (io.Reader, error) {
 	br := bufio.NewReader(body)
 	head, err := br.Peek(64)

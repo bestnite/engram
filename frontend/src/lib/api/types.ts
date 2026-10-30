@@ -471,6 +471,14 @@ export interface PackageImportReport {
   weights_applied: boolean;
   weights_discarded: boolean;
   match_rule?: string;
+  /** Anki .apkg report: media references with no bytes in the package. */
+  missing_media?: string[];
+  /** Anki .apkg report: video files a browser cannot play (only mp4 and webm can). */
+  unplayable_video?: string[];
+  /** Anki .apkg report: absolute script and stylesheet references. */
+  external_assets?: string[];
+  /** Anki .apkg report: LaTeX images the package does not carry. */
+  latex_missing_images?: string[];
   errors: Array<{ entry: string; reason: string }>;
 }
 

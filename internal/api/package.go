@@ -14,7 +14,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// REST entry points for deck packages (.edeck):
+// REST entry points for deck packages (.edeck and .apkg):
 //   GET  /api/v1/decks/:id/package  export (read)
 //   POST /api/v1/decks/import       import (write)
 // All the logic is in the store layer; this only shapes parameters, decides permissions and maps errors.
@@ -34,7 +34,7 @@ func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, opts
 	return pkg, nil
 }
 
-// ImportDeckPackage parses and imports one deck package; target picks one of three destinations.
+// ImportDeckPackage parses and imports one deck package (.edeck or .apkg); target picks one of three destinations.
 // allowOthersProgress only takes effect when the caller is an admin (the progress-import boundary).
 func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *uint64, r io.Reader, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
 	target, err := a.authorizeImportTarget(ctx, u.ID, opts.Target)

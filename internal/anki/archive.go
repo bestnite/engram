@@ -285,7 +285,15 @@ func readLegacyMedia(raw []byte, entries map[string][]byte) ([]MediaEntry, error
 }
 
 func readModernMedia(raw []byte, entries map[string][]byte, limits Limits, total *int64) ([]MediaEntry, error) {
-	metas, err := decodeMediaEntries(raw)
+	// The modern layout stores the media table itself as a zstd frame, like
+	// the collection; only the numbered per-file payloads have their own
+	// frames. A table read as protobuf directly happens to parse for the
+	// all-zero stock frame, which hid the missing decompression.
+	table, err := inflateZstd("media", raw, limits, total)
+	if err != nil {
+		return nil, err
+	}
+	metas, err := decodeMediaEntries(table)
 	if err != nil {
 		return nil, err
 	}

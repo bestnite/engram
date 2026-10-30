@@ -154,19 +154,27 @@ type PackageImportReport struct {
 	Target string `json:"target"`
 	DryRun bool   `json:"dry_run"`
 	// DeckID is the internal numeric primary key, for internal uses such as audit; what is exposed externally is DeckPublicID.
-	DeckID            uint64               `json:"-"`
-	DeckPublicID      string               `json:"deck_id,omitempty"`
-	NotesCreated      int                  `json:"notes_created"`
-	NotesUpdated      int                  `json:"notes_updated"`
-	NotesSkipped      int                  `json:"notes_skipped"`
-	CardsCreated      int                  `json:"cards_created"`
-	MediaNew          int                  `json:"media_new"`
-	MediaMissing      int                  `json:"media_missing"`
-	ProgressApplied   int                  `json:"progress_applied"`
-	ProgressSkipped   int                  `json:"progress_skipped"`
-	ProgressDiscarded bool                 `json:"progress_discarded"`
-	MatchRule         string               `json:"match_rule,omitempty"`
-	Errors            []PackageImportError `json:"errors"`
+	DeckID            uint64 `json:"-"`
+	DeckPublicID      string `json:"deck_id,omitempty"`
+	NotesCreated      int    `json:"notes_created"`
+	NotesUpdated      int    `json:"notes_updated"`
+	NotesSkipped      int    `json:"notes_skipped"`
+	CardsCreated      int    `json:"cards_created"`
+	MediaNew          int    `json:"media_new"`
+	MediaMissing      int    `json:"media_missing"`
+	ProgressApplied   int    `json:"progress_applied"`
+	ProgressSkipped   int    `json:"progress_skipped"`
+	ProgressDiscarded bool   `json:"progress_discarded"`
+	MatchRule         string `json:"match_rule,omitempty"`
+	// MissingMedia names every media reference that the package does not carry bytes for.
+	MissingMedia []string `json:"missing_media,omitempty"`
+	// UnplayableVideo names the video files a browser cannot play (anything other than mp4 or webm).
+	UnplayableVideo []string `json:"unplayable_video,omitempty"`
+	// ExternalAssets names every absolute script or stylesheet reference found in note fields, templates or CSS.
+	ExternalAssets []string `json:"external_assets,omitempty"`
+	// LatexMissingImages names every LaTeX image a note refers to that the package does not carry.
+	LatexMissingImages []string             `json:"latex_missing_images,omitempty"`
+	Errors             []PackageImportError `json:"errors"`
 	// WeightsApplied means the package's weights were written into the new preset.
 	WeightsApplied bool `json:"weights_applied"`
 	// WeightsDiscarded means the package carried weights that were not adopted: ApplyWeights was off, or the target was not new_deck.
@@ -179,6 +187,17 @@ var ErrPackageDryRun = errors.New("deck package: dry run rollback")
 // ReadPackageArchive reads a zip safely: it rejects path traversal, absolute paths and symlinks,
 // and caps the entry count and the total extracted size ("safety").
 func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, error) {
+	raw, err := readArchiveBytes(r, limits)
+	if err != nil {
+		return nil, err
+	}
+	return unzipPackageArchive(raw, limits)
+}
+
+// readArchiveBytes reads the whole archive into memory under the total-size cap. The import entry
+// point needs the bytes before it can tell an .apkg from an .edeck, because telling them apart means
+// looking at the zip entries, not at the file name.
+func readArchiveBytes(r io.Reader, limits PackageLimits) ([]byte, error) {
 	// Read it all into memory first (with a total cap), because zip.NewReader needs a ReaderAt.
 	raw, err := io.ReadAll(io.LimitReader(r, limits.MaxTotalBytes+1))
 	if err != nil {
@@ -187,6 +206,11 @@ func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, e
 	if int64(len(raw)) > limits.MaxTotalBytes {
 		return nil, &PackageError{Code: CodePackageTooLarge, Message: "archive exceeds the total size limit"}
 	}
+	return raw, nil
+}
+
+// unzipPackageArchive applies the entry checks to already-read archive bytes.
+func unzipPackageArchive(raw []byte, limits PackageLimits) (map[string][]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
 	if err != nil {
 		return nil, &PackageError{Code: CodePackageBadFormat, Message: "not a valid zip archive"}
@@ -321,7 +345,17 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		return nil, err
 	}
 
-	entries, err := ReadPackageArchive(r, DefaultPackageLimits())
+	limits := DefaultPackageLimits()
+	raw, err := readArchiveBytes(r, limits)
+	if err != nil {
+		return nil, err
+	}
+	// An Anki package is told apart from an .edeck by its entries, never by the file name: an
+	// .apkg archive carries a collection entry and/or a "meta" entry.
+	if isAnkiArchive(raw) {
+		return s.importAnkiPackage(ctx, actorUserID, raw, opts, targetKind, targetDeckID)
+	}
+	entries, err := unzipPackageArchive(raw, limits)
 	if err != nil {
 		return nil, err
 	}
@@ -726,6 +760,13 @@ func headBytes(raw []byte) []byte {
 // quota<=0 means unlimited and passes straight through. Exceeding it returns CodePackageQuotaExceeded and the caller returns before the transaction,
 // so no deck/card/media row or disk file is left behind.
 func checkImportMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64, pkg *packageModel, quota int64) error {
+	return checkMediaQuota(ctx, db, actorUserID, pkg.MediaRaw, quota)
+}
+
+// checkMediaQuota is the shared quota rule for every package import path: the bytes newly added by
+// the package (de-duplicated by sha256, minus the shas the importer is already charged for) must fit
+// in the importer's remaining quota. quota <= 0 means unlimited.
+func checkMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64, rawBySha map[string][]byte, quota int64) error {
 	if quota <= 0 {
 		return nil
 	}
@@ -734,7 +775,7 @@ func checkImportMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64,
 		return fmt.Errorf("import package: media usage: %w", err)
 	}
 	var extra int64
-	for sha, raw := range pkg.MediaRaw {
+	for sha, raw := range rawBySha {
 		if usage.Sha256[sha] {
 			continue
 		}

@@ -294,7 +294,7 @@ export const zhCN: LocaleCatalog = {
   'media.upload.magic_mismatch': '文件为空。',
   'media.upload.quota_exceeded': '媒体配额已用完。',
   'package.import.title': '导入卡组包',
-  'package.import.intro': '从 .edeck 文件或公开链接导入卡组。',
+  'package.import.intro': '从 .edeck 或 .apkg 文件、或公开链接导入卡组。',
   'package.import.file': '卡组包文件',
   'package.import.target': '导入到',
   'package.import.new_deck': '新卡组',
@@ -1086,7 +1086,7 @@ export const zhCN: LocaleCatalog = {
   'package.source.file': '上传文件',
   'package.source.url': '公开链接',
   'package.import.url': '链接',
-  'package.import.url_help': '仅支持可直接下载的 HTTPS 文件链接（.edeck 或 .zip），网页和需要登录的链接无法使用。',
+  'package.import.url_help': '仅支持可直接下载的 HTTPS 文件链接（.edeck、.zip 或 .apkg），网页和需要登录的链接无法使用。',
   'package.error.url_required': '请输入链接。',
   'package.error.url_scheme': '链接必须以 https:// 开头。',
   'package.error.url_invalid': '这个链接不可用：需要公开的 HTTPS 链接，且不能包含用户名或密码。',
@@ -1116,7 +1116,7 @@ export const zhCN: LocaleCatalog = {
   'dropzone.browse': '选择文件',
   'dropzone.release': '松开即可添加',
   'dropzone.remove': '移除文件',
-  'dropzone.import_hint': '支持 .edeck 与 .zip',
+  'dropzone.import_hint': '支持 .edeck、.zip 与 .apkg',
   // Lists and the batch action bar.
   'selection.toolbar': '批量操作',
   'selection.count': '已选 {count} 项',
@@ -1454,4 +1454,10 @@ export const zhCN: LocaleCatalog = {
   'note_edit.type.hint': '切换笔记类型会按新类型重新初始化字段。',
   'note_edit.type.empty': '此卡组还没有笔记类型，无法在此创建笔记。',
   'note_edit.type.missing': '此卡片的笔记类型在此卡组中已不可用。',
+
+  // ---- Anki .apkg 导入 ----
+  'import.apkg.missing_media': '缺失媒体',
+  'import.apkg.unplayable_video': '浏览器无法播放的视频',
+  'import.apkg.external_assets': '外部脚本或样式表',
+  'import.apkg.latex_missing_images': '未包含的 LaTeX 图片',
 };

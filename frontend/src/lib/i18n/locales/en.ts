@@ -294,7 +294,7 @@ export const en: LocaleCatalog = {
   'media.upload.magic_mismatch': 'The file is empty.',
   'media.upload.quota_exceeded': 'Media quota exceeded.',
   'package.import.title': 'Import deck package',
-  'package.import.intro': 'Import a deck from an .edeck file or a public link.',
+  'package.import.intro': 'Import a deck from an .edeck or .apkg file, or a public link.',
   'package.import.file': 'Package file',
   'package.import.target': 'Import into',
   'package.import.new_deck': 'A new deck',
@@ -1087,7 +1087,7 @@ export const en: LocaleCatalog = {
   'package.source.file': 'Upload file',
   'package.source.url': 'Public link',
   'package.import.url': 'Link',
-  'package.import.url_help': 'Direct HTTPS file links only (.edeck or .zip). Web pages and links that need a sign-in will not work.',
+  'package.import.url_help': 'Direct HTTPS file links only (.edeck, .zip or .apkg). Web pages and links that need a sign-in will not work.',
   'package.error.url_required': 'Enter a link.',
   'package.error.url_scheme': 'The link must start with https://.',
   'package.error.url_invalid': 'That link cannot be used: it must be a public HTTPS link without a username or password.',
@@ -1117,7 +1117,7 @@ export const en: LocaleCatalog = {
   'dropzone.browse': 'browse',
   'dropzone.release': 'Release to add the file',
   'dropzone.remove': 'Remove file',
-  'dropzone.import_hint': 'Accepts .edeck and .zip',
+  'dropzone.import_hint': 'Accepts .edeck, .zip and .apkg',
   // Lists and the batch action bar.
   'selection.toolbar': 'Bulk actions',
   'selection.count': '{count} selected',
@@ -1455,4 +1455,10 @@ export const en: LocaleCatalog = {
   'note_edit.type.hint': 'Choosing another note type re-initialises the fields for that type.',
   'note_edit.type.empty': 'This deck has no note types yet, so a note cannot be created here.',
   'note_edit.type.missing': 'The note type of this card is not available in this deck.',
+
+  // ---- Anki .apkg import ----
+  'import.apkg.missing_media': 'Missing media',
+  'import.apkg.unplayable_video': 'Video a browser cannot play',
+  'import.apkg.external_assets': 'External scripts or stylesheets',
+  'import.apkg.latex_missing_images': 'LaTeX image not included',
 };
