@@ -333,32 +333,11 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   *Work:* the usage count includes soft-deleted notes.
   *Acceptance:* a store test: a note type whose only note is soft-deleted returns `ErrNoteTypeInUse`.
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-- [ ] **M17-46 `check-migration` reads a database without public ids** — the pre-flight check must
-  not fail on the schema it inspects.
-  *Files:* `internal/store/migrate_notes.go` (`deckPublicIDs`); `internal/store/migrate_notes_test.go`.
-  *Problem:* the check selects `decks.public_id`. On a database older than migration 0004 that column
-  does not exist, and `check-migration` exits with an SQL error instead of a report.
-  *Work:* when `decks.public_id` is missing, the report names decks by their numeric id, as it already
-  does for a deck without a public id.
-  *Acceptance:* a test runs the check on a database whose `decks` table has no `public_id` column and
-  gets a report.
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-
 **Phase 5 follow-up — defects found in the review of M17-22 to M17-24, M17-35 and M17-40 (on `main`)**
 
 These tasks land on `main` directly. The local Ultimate Geography package (`testdata/local/Ultimate-Geography.apkg`) is the
 evidence named below. It is gitignored, so a test that reads it skips when the file is absent.
 
-- [ ] **M17-52 Index package notes by id during an `.apkg` import** — the card loop must not scan every
-  note for every card.
-  *Files:* `internal/store/anki_import.go` (`importAnkiInTx`).
-  *Problem:* for each package card, the card loop searches `pkg.Notes` linearly for the card's note.
-  The work grows with cards × notes: a package with 30 000 notes and 60 000 cards makes about 1.8
-  billion comparisons.
-  *Work:* build a map from package note id to package note once, before the card loop, and look notes
-  up in it.
-  *Acceptance:* the existing import tests and goldens pass unchanged.
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 - [ ] **M17-53 Stream large `.apkg` packages** — import a package of any realistic size with memory
   that does not grow with its media.
   *Files:* `internal/anki/`; `internal/store/anki_import.go`; `internal/store/package_import.go`;
@@ -563,3 +542,5 @@ bluemonday-sanitised `internal/render` are gone.
 | Note search on field text | Note search (`GET /api/v1/decks/:id/notes?q=`, `search_notes` and the card list) matches the text of the fields instead of their JSON encoding. A field key such as `front` no longer matches every note; `<`, `>`, `&`, quotes and text across a line break can be found; case folding of non-ASCII letters is the same on SQLite and PostgreSQL. A query is split on whitespace and every term must occur, in any order. | No — results change, the request and response shapes do not |
 | Admin user search wildcards | `_` and `%` in the admin user search match only themselves instead of acting as LIKE wildcards. | No |
 | Deck archive removal | The deck archive state is removed: it had no route, tool or page that set it, the sidebar's archived filter could never match, and pausing a deck already covers hiding one. The `archived_at` field leaves every deck response and the column leaves the database through a versioned migration. | Yes — HTTP API and MCP payload (`archived_at` removed) and database schema (column dropped by migration 0010) |
+| Package note index on `.apkg` import (M17-52) | The card loop resolves each package note through an index built once before it, so the import no longer spends cards × notes comparisons; the mapping, the card identity and the report counts are unchanged. | No |
+| `check-migration` on a database without deck public ids (M17-46) | The pre-flight check probes `decks.public_id` first, so a database created before the column existed gets a report naming each deck by its numeric id instead of an SQL error. | No |
