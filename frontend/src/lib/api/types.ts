@@ -172,6 +172,11 @@ export interface UpdateNoteRequest {
 /** POST /api/v1/decks/:id/notes/preview response; the HTML is already sanitized by the server. */
 export interface NotePreviewResponse {
   cards: Array<{ front_html: string; back_html: string }>;
+  /**
+   * `<base href>` prefix the frame needs to resolve the relative media names in the HTML (`/fm/<token>/`).
+   * The relative names are only handed out when the request carried `X-Engram-Frame: 1`.
+   */
+  media_base?: string;
 }
 
 /**
@@ -588,6 +593,8 @@ export interface GradedFeedback {
   score: number;
   rating: number;
   answer_html: string;
+  /** `<base href>` prefix for the media names in `answer_html`; see ReviewRenderResponse.media_base. */
+  media_base?: string;
   given: string;
   parsed?: string;
   /** Per-item result for card kinds graded item by item (list cards): sanitized HTML of each item's answer plus correctness, in item order. */
@@ -617,6 +624,8 @@ export interface RevealAnswerResponse {
   revealed: boolean;
   card_id: string;
   answer_html: string;
+  /** `<base href>` prefix for the media names in `answer_html`; see ReviewRenderResponse.media_base. */
+  media_base?: string;
 }
 
 /**
@@ -643,6 +652,11 @@ export interface ReviewRenderResponse {
   /** Prompt per blank of a blanks-graded card (answer_control = 'blanks') on this card, in order of appearance; empty string for no prompt, null for other kinds. */
   blanks?: string[] | null;
   edit_href: string;
+  /**
+   * `<base href>` prefix (`/fm/<token>/`) that the frame needs for the relative media names in front_html / back_html.
+   * The names are relative only when the request carried `X-Engram-Frame: 1`; without it the HTML keeps absolute /media/ URLs.
+   */
+  media_base?: string;
   /** Next interval (seconds) for each of the four grades, ordered Again/Hard/Good/Easy; empty array when the preview fails. */
   intervals?: RatingInterval[];
 }

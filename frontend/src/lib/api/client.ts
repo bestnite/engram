@@ -123,6 +123,22 @@ function inferErrorCodeFromStatus(status: number): string {
 /** Kinds of change for onDataChanged, see ApiClient.onDataChanged. */
 export type DataChangeKind = 'decks' | 'cards' | 'review';
 
+/**
+ * Options of a request whose card-face HTML is rendered by the card frame.
+ *
+ * With `frame: true` the request carries `X-Engram-Frame: 1`, so the server hands out the card-face HTML with media names
+ * relative to the frame's `<base href>` and reports that base as `media_base`. The flag is set only on the calls whose HTML
+ * actually enters the frame: choice-option HTML stays in the parent page and keeps the absolute `/media/<sha256>` names.
+ */
+export interface CardFaceRequestOptions {
+  frame?: boolean;
+}
+
+/** The header map for one card-face request; absent when the HTML is not going into the frame. */
+function frameHeaders(options?: CardFaceRequestOptions): Record<string, string> | undefined {
+  return options?.frame ? { 'X-Engram-Frame': '1' } : undefined;
+}
+
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
@@ -619,13 +635,19 @@ export class ApiClient {
   }
 
   /** Preview fields using the authenticated session-only sanitized preview endpoint. */
-  async previewNote(deckId: string, kind: string, fields: Record<string, unknown>): Promise<NotePreviewResponse> {
+  async previewNote(
+    deckId: string,
+    kind: string,
+    fields: Record<string, unknown>,
+    options?: CardFaceRequestOptions,
+  ): Promise<NotePreviewResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
     const encodedId = encodeURIComponent(String(deckId));
     return this.request<NotePreviewResponse>(`/api/v1/decks/${encodedId}/notes/preview`, {
       method: 'POST',
+      headers: frameHeaders(options),
       body: JSON.stringify({ kind, fields }),
     });
   }
@@ -828,31 +850,43 @@ export class ApiClient {
    * Submit raw answers for answer-graded card kinds; the server grades them and writes reviews.
    * The client does not submit a grade; the grade comes from the server's graderFor and the preset mapping.
    */
-  async submitGradedReview(input: SubmitGradedReviewRequest): Promise<GradedReviewResult> {
+  async submitGradedReview(
+    input: SubmitGradedReviewRequest,
+    options?: CardFaceRequestOptions,
+  ): Promise<GradedReviewResult> {
     return this.notifying('review', this.request<GradedReviewResult>('/api/v1/review/grade', {
       method: 'POST',
+      headers: frameHeaders(options),
       body: JSON.stringify(input),
     }));
   }
 
   /** Request revealing the correct answer for answer-graded kinds (read-only preview, writes no progress). */
-  async revealGradedAnswer(input: SubmitGradedReviewRequest): Promise<RevealAnswerResponse> {
+  async revealGradedAnswer(
+    input: SubmitGradedReviewRequest,
+    options?: CardFaceRequestOptions,
+  ): Promise<RevealAnswerResponse> {
     return this.request<RevealAnswerResponse>('/api/v1/review/grade', {
       method: 'POST',
+      headers: frameHeaders(options),
       body: JSON.stringify({ ...input, action: 'reveal' }),
     });
   }
 
   /**
    * Fetch server-sanitized HTML for both sides of a card plus its edit URL (POST /api/v1/review/render).
-   * The review page only hands this HTML to {@html} and never renders raw fields as Markdown.
+   * The review page only hands this HTML to the card frame and never renders raw fields as Markdown.
    */
-  async renderReviewCard(input: { card_id: string; deck?: string[]; tags?: string[] }): Promise<ReviewRenderResponse> {
+  async renderReviewCard(
+    input: { card_id: string; deck?: string[]; tags?: string[] },
+    options?: CardFaceRequestOptions,
+  ): Promise<ReviewRenderResponse> {
     if (!this.csrfToken) {
       await this.getSession();
     }
     return this.request<ReviewRenderResponse>('/api/v1/review/render', {
       method: 'POST',
+      headers: frameHeaders(options),
       body: JSON.stringify(input),
     });
   }

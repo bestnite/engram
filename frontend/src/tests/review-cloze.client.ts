@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { shownHtmlOnSide } from './card-frame-fixture';
 
 /**
  * Per-blank answering for cloze cards: the number of inputs and their hints come from the
@@ -109,11 +110,12 @@ describe('ReviewView cloze blanks', () => {
     (target.querySelector('[data-testid="review-graded-reveal"]') as HTMLElement).click();
     await flush();
     // After revealing the answer the stem stays above, and the answer panel is separated from it by its own top rule; the answer block itself draws no rule, so the two lines do not stack.
-    expect(target.querySelector('[data-testid="review-graded-prompt"]')?.textContent).toContain('city');
+    expect((await shownHtmlOnSide(target, 'question')).join('')).toContain('city');
     const panel = target.querySelector('[data-testid="review-graded-revealed"]') as HTMLElement;
     expect(panel.className).toContain('border-t');
     const answer = target.querySelector('[data-testid="review-graded-revealed-answer"]') as HTMLElement;
-    expect(answer.textContent).toContain('Paris and Rome');
+    // Both faces are rendered by the frame, so the answer text is read from what the answer frame was given.
+    expect((await shownHtmlOnSide(target, 'answer')).join('')).toContain('Paris and Rome');
     expect(answer.className).not.toContain('border-t');
     expect(target.querySelector('[data-testid="review-graded-blanks"]')).toBeNull();
   });

@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { shownHtmlOnSide } from './card-frame-fixture';
 
 /**
  * Per-item answering for list cards: the number of inputs comes from the render response
@@ -108,7 +109,7 @@ describe('ReviewView list items', () => {
       ['blue', 'true'],
     ]);
     expect(target.querySelector('[data-testid="review-graded-answer"]')).toBeNull();
-    // The stem stays above once the grading result appears.
-    expect(target.querySelector('[data-testid="review-graded-prompt"]')?.textContent).toContain('光的三原色是什么？');
+    // The stem stays above once the grading result appears; it is rendered by the frame, not by the parent page.
+    expect((await shownHtmlOnSide(target, 'question')).join('')).toContain('光的三原色是什么？');
   });
 });

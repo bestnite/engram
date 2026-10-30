@@ -59,6 +59,12 @@ func (s *Server) cardFrame(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
+	// The frame attaches the shortcode controls, whose labels come from the translation catalog, so the document carries the
+	// request's resolved language exactly like the SPA entry. The iframe navigation carries the session cookie, so the user's
+	// profile setting takes part in the resolution; the runtime reads the language from <html lang> and never reads a cookie.
+	if lang := requestLocale(c); lang != "" {
+		body = setHTMLLang(body, lang)
+	}
 
 	origin := s.requestBaseURL(c)
 	h := c.Writer.Header()

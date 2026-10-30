@@ -6,8 +6,6 @@
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Note } from '../api';
-  import { typeset } from '../mathjax';
-  import { enhanceShortcodes, stopShortcodePlayback } from '../shortcodes';
   import MediaPicker from '../components/MediaPicker.svelte';
   import ShortcodeInsert from '../components/ShortcodeInsert.svelte';
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
@@ -18,6 +16,8 @@
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import Dropzone from '../components/ui/Dropzone.svelte';
+  import CardFrame from '../components/CardFrame.svelte';
+  import { NOTE_PREVIEW_CSS } from '../card-frame';
   import { emptyFields, toFormFields, toPayloadFields } from '../card-fields';
   import { backField, cardTypes, fieldsForKind, frontField, kindOrder, loadCardTypes } from '../card-types';
   import { insertSource, type Caret } from '../shortcode-source';
@@ -80,15 +80,14 @@
   type PreviewStatus = 'empty' | 'loading' | 'ready' | 'incomplete' | 'error';
   let previewStatus = $state<PreviewStatus>('empty');
   let previewCards = $state<Array<{ front_html: string; back_html: string }> | null>(null);
-  // MathJax typesetting is only invoked on it: it is the only container carrying server-sanitized HTML.
-  let previewSection = $state<HTMLElement | null>(null);
+  // The `<base href>` prefix the frames need for the relative media names in the preview HTML.
+  let previewMediaBase = $state('');
   let previewReady = $state(false);
 
   // Non-reactive control slots: no state may be written after unmount; generation guarantees only the latest request can land.
   let disposed = false;
   let previewGeneration = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let typesetChain: Promise<void> = Promise.resolve();
 
   // Card type dropdown: the list and its order come from the server's self-description (kind in lexicographic order), empty while the metadata is not ready.
   const kindOptions = $derived(
@@ -333,39 +332,26 @@
     }, PREVIEW_DEBOUNCE_MS);
   }
 
-  /** The landing result of one preview request: success carries a card, failure carries the state (400 = incomplete fields, anything else = fetch failure). */
+  /** The landing result of one preview request: success carries the cards and their media base, failure carries the state (400 = incomplete fields, anything else = fetch failure). */
   type PreviewOutcome =
-    | { ok: true; cards: Array<{ front_html: string; back_html: string }> }
+    | { ok: true; cards: Array<{ front_html: string; back_html: string }>; mediaBase: string }
     | { ok: false; status: 'incomplete' | 'error' };
 
   /**
-   * Chain all three steps — "write the new card → wait for Svelte to mount the DOM → MathJax typesetting" — at the tail of one serial chain.
-   *
-   * Serializing only the typesetting is not enough: if a new response replaces the container's content while the previous
-   * round is still typesetting, the previous round's MathJax will rewrite the DOM that has already been swapped (old
-   * formulas inserted into the new card). With all three steps serialized together, each round of typesetting is guaranteed
-   * to see the container its own generation committed, and the newest generation lands last. Every step in the chain confirms
-   * it is still the newest generation; when the latest one failed, no typesetting runs.
+   * Lands one preview result if it is still the newest generation. The faces are rendered by the frame, which typesets and
+   * enhances its own document, so a stale result is simply discarded here: the newest generation is always the last one to
+   * write the state, and no later round can rewrite the DOM a newer card already replaced.
    */
   function commitPreview(generation: number, outcome: PreviewOutcome): void {
-    typesetChain = typesetChain.then(async () => {
-      if (disposed || generation !== previewGeneration) return;
-      if (!outcome.ok) {
-        previewCards = null;
-        previewStatus = outcome.status;
-        return;
-      }
-      previewCards = outcome.cards;
-      previewStatus = 'ready';
-      await tick();
-      if (disposed || generation !== previewGeneration) return;
-      const container = previewSection;
-      if (container) {
-        await typeset([container]);
-        // The preview is the only sanitized HTML container in the editor: controls are attached to it, never to the raw fields.
-        enhanceShortcodes([container]);
-      }
-    });
+    if (disposed || generation !== previewGeneration) return;
+    if (!outcome.ok) {
+      previewCards = null;
+      previewStatus = outcome.status;
+      return;
+    }
+    previewCards = outcome.cards;
+    previewMediaBase = outcome.mediaBase;
+    previewStatus = 'ready';
   }
 
   /** Fetch one preview. Before landing it first confirms it is still the newest generation; stale results and stale errors are both discarded. */
@@ -375,9 +361,10 @@
     const requestFields = collectFields();
     let outcome: PreviewOutcome;
     try {
-      const response = await apiClient.previewNote(deckId, requestKind, requestFields);
+      // The preview faces are rendered by the frame, so the request asks for frame-ready HTML and its media base.
+      const response = await apiClient.previewNote(deckId, requestKind, requestFields, { frame: true });
       if (disposed || generation !== previewGeneration) return;
-      outcome = { ok: true, cards: response.cards };
+      outcome = { ok: true, cards: response.cards, mediaBase: response.media_base ?? '' };
     } catch (err) {
       if (disposed || generation !== previewGeneration) return;
       // 400 means "the fields are not complete yet / the card type cannot render", expressed separately from a fetch failure.
@@ -498,8 +485,6 @@
         clearTimeout(debounceTimer);
         debounceTimer = null;
       }
-      // Speech and audio started from the preview must not outlive the editor.
-      stopShortcodePlayback();
     };
   });
 </script>
@@ -638,7 +623,6 @@
               {#if previewCards}
                 <!-- When the previous result is kept it is dimmed and aria-busy is set, making "stale but still rescheduling" visible instead of a blank flash. -->
                 <div
-                  bind:this={previewSection}
                   data-testid="note-preview-result"
                   aria-busy={previewStatus === 'loading'}
                   class="space-y-4 transition-opacity duration-150 {previewStatus === 'loading' ? 'opacity-60' : ''}"
@@ -647,13 +631,27 @@
                     <div class="divide-y divide-border overflow-hidden rounded-md border border-border bg-background">
                       <div data-testid="note-preview-front-{index}" class="space-y-2 p-4">
                         <h3 class="text-xs font-medium text-muted-foreground">{$t('note_preview.front')}</h3>
-                        <!-- Only the HTML returned by the preview API is used; the backend sanitizes it via RenderMarkdown and bluemonday, and passing the editor's raw fields into an HTML sink is forbidden. -->
-                        <div class="prose dark:prose-invert">{@html card.front_html}</div>
+                        <!-- Only the HTML returned by the preview API reaches the frame: the editor's raw fields never do. -->
+                        <CardFrame
+                          html={card.front_html}
+                          css={NOTE_PREVIEW_CSS}
+                          bodyClass=""
+                          side="question"
+                          mediaBase={previewMediaBase}
+                          title={$t('note_preview.front')}
+                        />
                       </div>
                       <div data-testid="note-preview-back-{index}" class="space-y-2 p-4">
                         <h3 class="text-xs font-medium text-muted-foreground">{$t('note_preview.back')}</h3>
-                        <!-- Only the HTML returned by the preview API is used; the backend sanitizes it via RenderMarkdown and bluemonday, and passing the editor's raw fields into an HTML sink is forbidden. -->
-                        <div class="prose dark:prose-invert">{@html card.back_html}</div>
+                        <!-- Only the HTML returned by the preview API reaches the frame: the editor's raw fields never do. -->
+                        <CardFrame
+                          html={card.back_html}
+                          css={NOTE_PREVIEW_CSS}
+                          bodyClass=""
+                          side="answer"
+                          mediaBase={previewMediaBase}
+                          title={$t('note_preview.back')}
+                        />
                       </div>
                     </div>
                   {/each}

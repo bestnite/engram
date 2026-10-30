@@ -178,8 +178,10 @@ describe('ReviewView graded answering', () => {
     expect(html).toContain('回答正确');
     expect(html).toContain('data-testid="review-graded-score"');
     expect(html).toContain('100%');
-    // The correct answer is HTML sanitized by the server, rendered as-is (one of the review page's HTML sinks).
-    expect(html).toContain('<strong>Paris</strong>');
+    // The correct answer is a card face: it is handed to the sandboxed frame, so it is not part of the parent's markup.
+    expect(html).toContain('data-testid="review-graded-answer"');
+    expect(html).toContain('data-card-frame');
+    expect(html).not.toContain('<strong>Paris</strong>');
     // The answer text renders as plain text and does not pass through the HTML sink.
     expect(html).toContain('paris');
     // The rating mapping is visible.
@@ -200,7 +202,10 @@ describe('ReviewView graded answering', () => {
     });
 
     expect(html).toContain('data-testid="review-graded-revealed"');
-    expect(html).toContain('<em>对</em>');
+    // The revealed answer is a card face and lives in the frame, not in the parent's markup.
+    expect(html).toContain('data-testid="review-graded-answer"');
+    expect(html).toContain('data-card-frame');
+    expect(html).not.toContain('<em>对</em>');
     expect(html).toContain('data-testid="review-graded-give-up"');
     expect(html).toContain('记为重来并继续');
     expect(html).not.toContain('data-testid="review-graded-submit"');
@@ -291,9 +296,10 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
         initialEditHref: '/decks/5/notes/21',
       },
     });
-    // The card face is HTML sanitized by the render endpoint; the raw field text no longer appears.
-    expect(html).toContain('<strong>Sanitized</strong> front');
-    expect(html).toContain('<em>Sanitized</em> back');
+    // Both faces are rendered by the frame, so the parent markup carries one frame per face and no face HTML of its own.
+    expect((html.match(/data-card-frame/g) ?? [])).toHaveLength(2);
+    expect(html).not.toContain('<strong>Sanitized</strong> front');
+    expect(html).not.toContain('<em>Sanitized</em> back');
     expect(html).not.toContain('RAW-FRONT-TEXT');
     expect(html).not.toContain('RAW-BACK-TEXT');
     // After flipping, the four self-ratings are still there.
@@ -320,7 +326,9 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
       },
     });
     expect(html).toContain('data-testid="review-graded-prompt"');
-    expect(html).toContain('<code>prompt</code>');
+    // The prompt is a card face and is rendered by the frame; the raw prompt text never reaches the parent.
+    expect(html).toContain('data-card-frame');
+    expect(html).not.toContain('<code>prompt</code>');
     expect(html).not.toContain('RAW-PROMPT');
     // The input control and the submit button are still there.
     expect(html).toContain('data-testid="review-graded-input"');

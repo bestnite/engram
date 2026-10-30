@@ -203,9 +203,15 @@ change.
 - `frontend/src/lib/views/` holds one view per page, `frontend/src/lib/components/` the shared
   components, and `frontend/src/lib/api/` the typed client for the JSON endpoints.
 - Vite has two entries: `frontend/index.html` (the SPA shell) and `frontend/card-frame.html`
-  (the card frame document). `frontend/src/cardframe/` is the frame runtime: it is framework-free,
-  reads no cookie, renders the content sent by the parent page into `#qa`, re-executes the content
-  scripts, and posts height, keys, answers and links back to the parent.
+  (the card frame document). `frontend/src/cardframe/` is the frame runtime: it holds no Svelte component
+  and reads no cookie; it writes the content sent by the parent page into `#qa`, re-executes the content
+  scripts, typesets the face, attaches the shortcode controls to it, and posts height, keys, answers
+  and links back to the parent. Its language is the `<html lang>` the server resolved for the request.
+- `frontend/src/lib/components/CardFrame.svelte` is the only way a view embeds a card face: it owns
+  the sandboxed iframe, sends `show` and `theme`, and forwards the frame's key presses to the view.
+  Card-face HTML therefore never enters the parent DOM. The SPA's remaining HTML sinks are the ones
+  the parent still renders (the choice options and the admin mail preview), and
+  `frontend/src/tests/html-sink-allowlist.test.ts` lists each of them with its reason.
 - `frontend/src/lib/format.ts` is the only place numbers, percentages, byte counts, dates and raw field
   values become text; components pass the current locale.
 - UI text comes from `frontend/src/lib/i18n/locales/{zh-CN,en}.ts`. Text produced by the

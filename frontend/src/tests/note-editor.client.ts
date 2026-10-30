@@ -8,6 +8,7 @@ import { apiClient, ApiClientError, type Note, type NotePreviewResponse } from '
 import { seedCardTypes, clearCardTypes } from './card-type-fixture';
 import { typeset } from '../lib/mathjax';
 import { setLocale, formatMessage } from '../lib/i18n';
+import { shownHtmlOnSide } from './card-frame-fixture';
 import { toast } from '../lib/components/ui/toast';
 
 // MathJax is taken over by a module-boundary stand-in: the cases assert "typesetting really ran, and only on the preview container",
@@ -92,8 +93,12 @@ function submitForm(): void {
   form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 }
 
-function previewFront(index = 0): string {
-  return target.querySelector(`[data-testid="note-preview-front-${index}"]`)?.textContent ?? '';
+/**
+ * The front face of one preview card. The editor hands both faces to the frame, so the content is read from what that frame
+ * was asked to show rather than from the parent DOM.
+ */
+async function previewFront(index = 0): Promise<string> {
+  return (await shownHtmlOnSide(target, 'question'))[index] ?? '';
 }
 
 beforeEach(() => {
@@ -146,8 +151,8 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(previewNote).toHaveBeenCalledTimes(1);
-    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'Q' });
-    expect(previewFront()).toContain('rendered Q');
+    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'Q' }, { frame: true });
+    expect(await previewFront()).toContain('rendered Q');
     expect(target.querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
   });
 
@@ -170,7 +175,7 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(previewNote).toHaveBeenCalledTimes(1);
-    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'QR' });
+    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'QR' }, { frame: true });
   });
 
   it('ignores a stale delayed response and keeps the newest preview', async () => {
@@ -194,13 +199,13 @@ describe('unified note editor — create mode', () => {
 
     second.resolve(createResponse([{ front_html: '<p>SECOND</p>', back_html: '' }]));
     await flush();
-    expect(previewFront()).toContain('SECOND');
+    expect(await previewFront()).toContain('SECOND');
 
     // The old request only comes back now: it must be dropped and must not overwrite the newer result.
     first.resolve(createResponse([{ front_html: '<p>FIRST</p>', back_html: '' }]));
     await flush();
-    expect(previewFront()).toContain('SECOND');
-    expect(previewFront()).not.toContain('FIRST');
+    expect(await previewFront()).toContain('SECOND');
+    expect(await previewFront()).not.toContain('FIRST');
   });
 
   it('ignores a stale delayed error after a newer success', async () => {
@@ -221,12 +226,12 @@ describe('unified note editor — create mode', () => {
     await vi.advanceTimersByTimeAsync(500);
     expect(previewNote).toHaveBeenCalledTimes(2);
     await flush();
-    expect(previewFront()).toContain('GOOD');
+    expect(await previewFront()).toContain('GOOD');
 
     // The stale request then fails: it must not turn a ready preview into an error state.
     first.reject(new ApiClientError('HTTP 500', { status: 500, code: 'internal_error' }));
     await flush();
-    expect(previewFront()).toContain('GOOD');
+    expect(await previewFront()).toContain('GOOD');
     expect(target.querySelector('[data-testid="note-preview-error"]')).toBeNull();
   });
 
@@ -279,10 +284,10 @@ describe('unified note editor — create mode', () => {
     await vi.advanceTimersByTimeAsync(500);
     await flush();
 
-    expect(previewNote).toHaveBeenCalledWith('5', 'numeric', { value: 0 });
+    expect(previewNote).toHaveBeenCalledWith('5', 'numeric', { value: 0 }, { frame: true });
   });
 
-  it('typesets only the sanitized preview container through MathJax', async () => {
+  it('renders the preview through the frame instead of typesetting it in the parent', async () => {
     vi.spyOn(apiClient, 'previewNote').mockResolvedValue(
       createResponse([{ front_html: '<p>$x$</p>', back_html: '' }])
     );
@@ -294,23 +299,16 @@ describe('unified note editor — create mode', () => {
     await vi.advanceTimersByTimeAsync(500);
     await flush();
 
-    expect(typesetSpy).toHaveBeenCalled();
-    const container = target.querySelector('[data-testid="note-preview-result"]');
-    expect(container).toBeTruthy();
-    const [nodes] = typesetSpy.mock.calls.at(-1)!;
-    expect(nodes).toEqual([container]);
+    // The preview face is a card face: the frame typesets it, so the parent calls no MathJax on its own DOM.
+    expect(typesetSpy).not.toHaveBeenCalled();
+    expect(await shownHtmlOnSide(target, 'question')).toEqual(['<p>$x$</p>']);
+    expect(target.querySelector('[data-testid="note-preview-front-0"] iframe[data-card-frame]')).not.toBeNull();
   });
 
-  it('enhances the same preview container it typesets with shortcode controls', async () => {
+  it('hands the preview face with its shortcode markup to the frame', async () => {
     const sha = 'a'.repeat(64);
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(
-      createResponse([
-        {
-          front_html: `<p><span class="engram-audio" data-audio-src="/media/${sha}" data-audio-start="12.5">/media/${sha}</span></p>`,
-          back_html: '',
-        },
-      ])
-    );
+    const front = `<p><span class="engram-audio" data-audio-src="/media/${sha}" data-audio-start="12.5">/media/${sha}</span></p>`;
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([{ front_html: front, back_html: '' }]));
 
     mountEditor({ id: '5' });
     await flush();
@@ -319,27 +317,15 @@ describe('unified note editor — create mode', () => {
     await vi.advanceTimersByTimeAsync(500);
     await flush();
 
-    const container = target.querySelector('[data-testid="note-preview-result"]');
-    expect(container).toBeTruthy();
-    // The preview is the one sanitized container in the editor: it is the one that was typeset, and the control
-    // appears inside it rather than anywhere the raw field text lives.
-    const [nodes] = typesetSpy.mock.calls.at(-1)!;
-    expect(nodes).toEqual([container]);
-    expect(container!.querySelector('button[data-shortcode-control="audio"]')).toBeTruthy();
-    expect(container!.textContent).toContain(`/media/${sha}`);
+    // The frame runtime attaches the controls to the face it renders (covered by cardframe.client.ts), so the editor only has
+    // to hand over the sanitized markup with the shortcode attributes intact.
+    expect(await shownHtmlOnSide(target, 'question')).toEqual([front]);
   });
 
-  it('serializes commit and typeset so a delayed typeset only ever sees its own generation', async () => {
-    // The first typesetting round hangs: if "write the new card" and typesetting are not serialized, the second response would replace the container
-    // midway through round one and round one's MathJax would rewrite the DOM round two just committed. Each typesetting call records the container's actual text.
-    const firstTypeset = deferred<void>();
-    const seen: string[] = [];
-    typesetSpy.mockImplementation(async (nodes) => {
-      seen.push((nodes[0] as HTMLElement | null)?.textContent ?? '');
-      if (seen.length === 1) await firstTypeset.promise;
-    });
+  it('sends only the newest preview generation to the frame', async () => {
+    const first = deferred<NotePreviewResponse>();
     vi.spyOn(apiClient, 'previewNote')
-      .mockResolvedValueOnce(createResponse([{ front_html: '<p>FIRST</p>', back_html: '' }]))
+      .mockReturnValueOnce(first.promise)
       .mockResolvedValueOnce(createResponse([{ front_html: '<p>SECOND</p>', back_html: '' }]));
 
     mountEditor({ id: '5' });
@@ -348,28 +334,17 @@ describe('unified note editor — create mode', () => {
     setField('note-field-front', 'A');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
-    await flush();
-    expect(previewFront()).toContain('FIRST');
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toContain('FIRST');
-
     setField('note-field-front', 'B');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
+    expect(await previewFront()).toContain('SECOND');
 
-    // The second response has arrived but the typesetting chain is still held by round one: what is displayed must still be round one's content, and
-    // round two must not have started typesetting yet (otherwise round one's delayed pass would land on round two's container).
-    expect(previewFront()).toContain('FIRST');
-    expect(seen).toHaveLength(1);
-
-    firstTypeset.resolve();
+    // The first request lands late: its content must not replace the newer face in the frame.
+    first.resolve(createResponse([{ front_html: '<p>FIRST</p>', back_html: '' }]));
     await flush();
-
-    // Round two commits and typesets only after round one's typesetting ends: the newest content is shown, and typesetting sees its own generation.
-    expect(previewFront()).toContain('SECOND');
-    expect(seen).toHaveLength(2);
-    expect(seen[1]).toContain('SECOND');
+    expect(await previewFront()).toContain('SECOND');
+    expect(await previewFront()).not.toContain('FIRST');
   });
 
   it('creates a non-basic card and redirects to the deck page only on success', async () => {
@@ -524,8 +499,8 @@ describe('unified note editor — edit mode', () => {
     await vi.advanceTimersByTimeAsync(500);
     await flush();
 
-    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'Q', back: 'A' });
-    expect(previewFront()).toContain('Q');
+    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'Q', back: 'A' }, { frame: true });
+    expect(await previewFront()).toContain('Q');
   });
 
   it('saves in place without redirecting and round-trips unknown fields', async () => {
@@ -644,10 +619,12 @@ describe('unified note editor — lifecycle and routes', () => {
     expect(previewNote).toHaveBeenCalledTimes(1);
 
     unmount(mountedInstances.pop()!);
+    const afterUnmount = target.innerHTML;
     pending.resolve(createResponse([{ front_html: '<p>late</p>', back_html: '' }]));
     await flush();
 
-    // Results landing after unmount must not trigger MathJax typesetting (nor write state).
+    // Results landing after unmount must not write state: the editor's DOM stays exactly as the unmount left it.
+    expect(target.innerHTML).toBe(afterUnmount);
     expect(typesetSpy).not.toHaveBeenCalled();
   });
 
@@ -664,13 +641,15 @@ describe('unified note editor — lifecycle and routes', () => {
     submitForm();
     await flush();
 
-    const typesetCallsBefore = typesetSpy.mock.calls.length;
     unmount(mountedInstances.pop()!);
+    const afterUnmount = target.innerHTML;
+    const typesetCallsBefore = typesetSpy.mock.calls.length;
 
     // The save request lands only after unmount: it must write no state and trigger no typesetting.
     pending.resolve(noteFixture({ fields: { front: 'Q2', back: 'A' } }));
     await flush();
 
+    expect(target.innerHTML).toBe(afterUnmount);
     expect(typesetSpy.mock.calls.length).toBe(typesetCallsBefore);
   });
 
@@ -793,7 +772,7 @@ describe('unified note editor — inserting content', () => {
 
     await vi.advanceTimersByTimeAsync(500);
     await flush();
-    expect(previewNote).toHaveBeenLastCalledWith('5', 'basic', { front: `![](${PREVIEW_URL})` });
+    expect(previewNote).toHaveBeenLastCalledWith('5', 'basic', { front: `![](${PREVIEW_URL})` }, { frame: true });
   });
 
   it('uploads a picture into the field and refuses a non-image in the image dialog', async () => {
@@ -936,7 +915,7 @@ describe('unified note editor — inserting content', () => {
     // One assignment per insertion is enough for the live preview to reschedule.
     await vi.advanceTimersByTimeAsync(500);
     await flush();
-    expect(apiClient.previewNote).toHaveBeenLastCalledWith('5', 'basic', { front: 'Q\n{{tts:x}}', back: 'A' });
+    expect(apiClient.previewNote).toHaveBeenLastCalledWith('5', 'basic', { front: 'Q\n{{tts:x}}', back: 'A' }, { frame: true });
   });
 
   it('writes into the field whose own toolbar was used, not the one holding the caret', async () => {
@@ -1114,7 +1093,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
-    expect(previewFront()).toContain('before');
+    expect(await previewFront()).toContain('before');
 
     const field = target.querySelector('[data-testid="note-field-front"]') as HTMLTextAreaElement;
     openDrawer();
@@ -1133,7 +1112,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
-    expect(previewFront()).toContain('after');
+    expect(await previewFront()).toContain('after');
     expect(panel().querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
 
     // Opening and closing never remounted the form: same textarea node, same unsaved text.
@@ -1202,7 +1181,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
 
     // At lg the two-column grid still holds the preview, typeset and enhanced as before.
     expect(target.querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
-    expect(previewFront()).toContain('desktop');
+    expect(await previewFront()).toContain('desktop');
     expect(panel().className).toContain('max-h-[calc(100vh-3rem)]');
     expect(panel().getAttribute('data-open')).toBeNull();
   });

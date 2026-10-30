@@ -8,8 +8,10 @@
   import { toast } from '../components/ui/toast';
   import { typeset, removeMenuTabStops } from '../mathjax';
   import { enhanceShortcodes, stopShortcodePlayback } from '../shortcodes';
-  import { reviewShortcut, reviewSwipe } from '../review-shortcuts';
+  import { reviewShortcut, reviewSwipe, type ReviewShortcut } from '../review-shortcuts';
   import RadioGroup from '../components/ui/RadioGroup.svelte';
+  import CardFrame, { type CardFrameKey } from '../components/CardFrame.svelte';
+  import { REVIEW_FRONT_CSS, REVIEW_BACK_CSS, REVIEW_ANSWER_CSS } from '../card-frame';
 
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
@@ -140,12 +142,16 @@
   let editHref = $state(initialEditHref);
   let renderToken = 0;
 
-  // The HTML containers returned sanitized by the server: formulas are typeset only on them, never for the whole page.
-  let frontSection = $state<HTMLElement | null>(null);
-  let answerSection = $state<HTMLElement | null>(null);
+  // The HTML containers that stay in the parent page: only the choice options and the grading breakdown. They are the only
+  // ones typeset and enhanced here; the card faces themselves live in the frame and are handled by its runtime.
   let optionsSection = $state<HTMLElement | null>(null);
   let feedbackSection = $state<HTMLElement | null>(null);
-  let revealedSection = $state<HTMLElement | null>(null);
+
+  // The `<base href>` prefix each frame needs for the relative media names in its HTML, one per response that carries a face.
+  // The render response covers the front and the back; the reveal and the graded result carry their own base.
+  let mediaBase = $state('');
+  let revealedMediaBase = $state('');
+  let feedbackMediaBase = $state('');
 
   const current = $derived(cards[0] || null);
 
@@ -291,10 +297,15 @@
    */
   async function loadRender(card: DueCard, token: number): Promise<void> {
     try {
-      const response = await client.renderReviewCard({ card_id: card.card_id, deck: selectedDecks(), tags: selectedTags() });
+      // The card face goes into the frame, so the request asks for frame-ready HTML and its media base.
+      const response = await client.renderReviewCard(
+        { card_id: card.card_id, deck: selectedDecks(), tags: selectedTags() },
+        { frame: true },
+      );
       if (token !== renderToken) return;
       frontHTML = response.front_html;
       backHTML = response.back_html;
+      mediaBase = response.media_base ?? '';
       optionsHTML = response.options_html ?? [];
       optionOrder = response.option_order ?? null;
       editHref = response.edit_href;
@@ -303,16 +314,18 @@
       await tick();
       // The per-blank inputs only appear with the render response, while the auto-focus on a card change runs before that, so it is topped up here.
       if (blanks.length && !feedback && !gradedRevealed) blankInputs[0]?.focus();
-      await typeset([frontSection, answerSection, optionsSection]);
-      // Shortcode controls are attached only to the sanitized DOM of this card face: the module reads data attributes, never the raw fields.
-      enhanceShortcodes([frontSection, answerSection, optionsSection]);
+      // Only the option HTML still lives in the parent: the frame typesets and enhances the card faces itself.
+      await typeset([optionsSection]);
+      // Shortcode controls are attached only to the sanitized DOM that stays here: the module reads data attributes, never the raw fields.
+      enhanceShortcodes([optionsSection]);
       // The option rows are interactive controls, so MathJax's keyboard entry to its context menu must not add a nested
-      // focus stop there; the prompt and answer sections are ordinary content and keep their tab stop.
+      // focus stop there.
       removeMenuTabStops([optionsSection]);
     } catch {
       if (token !== renderToken) return;
       frontHTML = '';
       backHTML = '';
+      mediaBase = '';
       optionsHTML = [];
       optionOrder = null;
       editHref = '';
@@ -325,6 +338,7 @@
     const token = ++renderToken;
     frontHTML = '';
     backHTML = '';
+    mediaBase = '';
     optionsHTML = [];
     optionOrder = null;
     editHref = '';
@@ -439,12 +453,9 @@
     }
   }
 
-  /** Reveal the back of a self-graded card: mount the DOM first, then typeset formulas only on the back container. */
-  async function reveal(): Promise<void> {
+  /** Reveal the back of a self-graded card: the frame mounts the answer face and handles its own typesetting. */
+  function reveal(): void {
     revealed = true;
-    await tick();
-    await typeset([answerSection]);
-    enhanceShortcodes([answerSection]);
   }
 
   /** Submit the raw answer and let the server grade it; the result panel keeps the answered card, and the card only changes when the user presses "continue". */
@@ -459,21 +470,26 @@
     submitting = true;
     error = null;
     try {
-      const response = await client.submitGradedReview({
-        card_id: current.card_id,
-        expected_version: current.version,
-        elapsed_ms: Math.max(0, Date.now() - startedAt),
-        deck: selectedDecks(),
-        tags: selectedTags(),
-        answer: answerValue,
-      });
+      const response = await client.submitGradedReview(
+        {
+          card_id: current.card_id,
+          expected_version: current.version,
+          elapsed_ms: Math.max(0, Date.now() - startedAt),
+          deck: selectedDecks(),
+          tags: selectedTags(),
+          answer: answerValue,
+        },
+        // The graded answer face is rendered by the frame, so this response must carry frame-ready HTML.
+        { frame: true },
+      );
       pendingCards = response.cards;
       remaining = response.remaining;
       newRemaining = countNew(response.cards);
       feedback = response.feedback ?? null;
+      feedbackMediaBase = response.feedback?.media_base ?? mediaBase;
       lastUndo = { cardId: current.card_id, version: response.version, rating: response.feedback?.rating ?? 0 };
       done += 1;
-      // Wait for the result panel to mount into the DOM, then typeset only it with the answer HTML returned by the server.
+      // The answer face goes into the frame; only the per-item breakdown stays here, so it is what gets typeset and enhanced.
       await tick();
       await typeset([feedbackSection]);
       enhanceShortcodes([feedbackSection]);
@@ -490,17 +506,18 @@
     submitting = true;
     error = null;
     try {
-      const response = await client.revealGradedAnswer({
-        card_id: current.card_id,
-        deck: selectedDecks(),
-        tags: selectedTags(),
-      });
+      const response = await client.revealGradedAnswer(
+        {
+          card_id: current.card_id,
+          deck: selectedDecks(),
+          tags: selectedTags(),
+        },
+        // The revealed answer is a card face, so it is rendered by the frame.
+        { frame: true },
+      );
       revealedAnswerHTML = response.answer_html;
+      revealedMediaBase = response.media_base ?? mediaBase;
       gradedRevealed = true;
-      // Typeset the revealed answer HTML once the reveal panel has mounted into the DOM.
-      await tick();
-      await typeset([revealedSection]);
-      enhanceShortcodes([revealedSection]);
     } catch (cause) {
       error = cause;
     } finally {
@@ -714,9 +731,63 @@
     if (!revealed) void reveal();
   }
 
+  /**
+   * Maps one key decision onto the page's side effects. The key can come from the window (focus anywhere in the parent page:
+   * options, buttons, dialogs) or from the frame (focus inside the card face); only the flags describing the focus differ, the
+   * decision itself stays in review-shortcuts.ts. The decision is returned so the window handler can prevent the browser
+   * default of a key the page handled.
+   */
+  function handleShortcut(
+    key: string,
+    modifiers: { alt: boolean; ctrl: boolean; meta: boolean },
+    focus: { typing: boolean; choosing: boolean; composing: boolean; repeat: boolean },
+  ): ReviewShortcut {
+    const action = reviewShortcut(key, modifiers, {
+      ...focus,
+      feedback: feedback !== null,
+      gradedKind,
+      gradedRevealed,
+      revealed,
+      canUndo: lastUndo !== null,
+    });
+    switch (action.kind) {
+      case 'ignore':
+        return action;
+      case 'swallow':
+        // On a graded card awaiting an answer, 1–4 are disabled but the key is still swallowed, so the browser does not treat the digit as a hotkey.
+        return action;
+      case 'continue':
+        continueNext();
+        return action;
+      case 'reveal':
+        applyReveal();
+        return action;
+      case 'submit':
+        void submitGraded();
+        return action;
+      case 'give_up':
+        void giveUp();
+        return action;
+      case 'rate':
+        void rate(action.rating);
+        return action;
+      case 'bury':
+        void bury();
+        return action;
+      case 'suspend':
+        void suspend();
+        return action;
+      case 'edit':
+        gotoEdit();
+        return action;
+      case 'undo':
+        void undo();
+        return action;
+    }
+  }
+
   function onKeydown(event: KeyboardEvent): void {
-    // The key mapping is a pure function (review-shortcuts.ts); this only maps the decision onto side effects.
-    const action = reviewShortcut(
+    const action = handleShortcut(
       event.key,
       { alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey },
       {
@@ -725,57 +796,22 @@
         // keyCode 229 is the fallback signal in some browsers that do not set isComposing during composition.
         composing: event.isComposing || event.keyCode === 229,
         repeat: event.repeat,
-        feedback: feedback !== null,
-        gradedKind,
-        gradedRevealed,
-        revealed,
-        canUndo: lastUndo !== null,
       },
     );
-    switch (action.kind) {
-      case 'ignore':
-        return;
-      case 'swallow':
-        // On a graded card awaiting an answer, 1–4 are disabled but the key is still swallowed, so the browser does not treat the digit as a hotkey.
-        event.preventDefault();
-        return;
-      case 'continue':
-        event.preventDefault();
-        continueNext();
-        return;
-      case 'reveal':
-        event.preventDefault();
-        applyReveal();
-        return;
-      case 'submit':
-        event.preventDefault();
-        void submitGraded();
-        return;
-      case 'give_up':
-        event.preventDefault();
-        void giveUp();
-        return;
-      case 'rate':
-        event.preventDefault();
-        void rate(action.rating);
-        return;
-      case 'bury':
-        event.preventDefault();
-        void bury();
-        return;
-      case 'suspend':
-        event.preventDefault();
-        void suspend();
-        return;
-      case 'edit':
-        event.preventDefault();
-        gotoEdit();
-        return;
-      case 'undo':
-        event.preventDefault();
-        void undo();
-        return;
-    }
+    // Every decision but `ignore` says the page took the key, so its browser default must not also run.
+    if (action.kind !== 'ignore') event.preventDefault();
+  }
+
+  /**
+   * A key pressed inside the card face. The frame already withholds keys typed into an input, a textarea or a contenteditable
+   * element, and the choice options stay in the parent, so no focus flag applies here.
+   */
+  function onFrameKey(message: CardFrameKey): void {
+    handleShortcut(
+      message.key,
+      { alt: message.alt, ctrl: message.ctrl, meta: message.meta },
+      { typing: false, choosing: false, composing: false, repeat: false },
+    );
   }
 
   // Phone swipe: when the touch lands on an input control/button/link it is not treated as a swipe.
@@ -983,11 +1019,21 @@
           <!-- Metadata not ready (still loading or the fetch failed): render the loading state, do not guess fields and do not print machine vocabulary. -->
           <Skeleton testId="review-meta-loading" label={$t('common.loading')} lines={3} />
         {:else if selfAssessable}
-          <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed" data-testid="review-front">
+          <div class="min-h-28" data-testid="review-front">
             {#if frontHTML}
-              {@html frontHTML}
+              <CardFrame
+                html={frontHTML}
+                css={REVIEW_FRONT_CSS}
+                bodyClass=""
+                side="question"
+                mediaBase={mediaBase}
+                title={$t('note_preview.front')}
+                onkey={onFrameKey}
+              />
             {:else}
-              {#each front as [label, value] (label)}<div><span class="sr-only">{label}</span>{value}</div>{/each}
+              <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">
+                {#each front as [label, value] (label)}<div><span class="sr-only">{label}</span>{value}</div>{/each}
+              </div>
             {/if}
           </div>
           {#if revealed}
@@ -999,22 +1045,42 @@
                   <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">{essayText}</div>
                 </div>
               {/if}
-              <div bind:this={answerSection} class="border-t border-input pt-5 text-lg whitespace-pre-wrap break-words leading-relaxed" data-testid="review-answer">
+              <div class="border-t border-input pt-5" data-testid="review-answer">
                 <div class="text-xs text-zinc-500 mb-1">{$t('review.essay.reference')}</div>
                 {#if backHTML}
-                  {@html backHTML}
+                  <CardFrame
+                    html={backHTML}
+                    css={REVIEW_BACK_CSS}
+                    bodyClass=""
+                    side="answer"
+                    mediaBase={mediaBase}
+                    title={$t('note_preview.back')}
+                    onkey={onFrameKey}
+                  />
                 {:else if answer.length}
-                  {#each answer as [label, value] (label)}<div>{value}</div>{/each}
+                  <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">
+                    {#each answer as [label, value] (label)}<div>{value}</div>{/each}
+                  </div>
                 {:else}
                   <p class="text-sm text-muted-foreground" data-testid="review-essay-no-reference">{$t('review.essay.no_reference')}</p>
                 {/if}
               </div>
             {:else}
-              <div bind:this={answerSection} class="border-t border-input pt-6 text-lg whitespace-pre-wrap break-words leading-relaxed" data-testid="review-answer">
+              <div class="border-t border-input pt-6" data-testid="review-answer">
                 {#if backHTML}
-                  {@html backHTML}
+                  <CardFrame
+                    html={backHTML}
+                    css={REVIEW_BACK_CSS}
+                    bodyClass=""
+                    side="answer"
+                    mediaBase={mediaBase}
+                    title={$t('note_preview.back')}
+                    onkey={onFrameKey}
+                  />
                 {:else}
-                  {#each answer as [label, value] (label)}<div><span class="text-xs text-zinc-500 block">{label}</span>{value}</div>{/each}
+                  <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">
+                    {#each answer as [label, value] (label)}<div><span class="text-xs text-zinc-500 block">{label}</span>{value}</div>{/each}
+                  </div>
                 {/if}
               </div>
             {/if}
@@ -1061,8 +1127,20 @@
           <!-- The answer card's prompt stays on top in all three states — answering, answer revealed, grading result — with the answer below
                behind a divider, so the learner does not have to recall the original question while reading the answer. -->
           <div class="space-y-5">
-            <div bind:this={frontSection} class="min-h-28 text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed" data-testid="review-graded-prompt">
-              {#if frontHTML}{@html frontHTML}{:else}{gradedPrompt($cardTypes, current)}{/if}
+            <div class="min-h-28" data-testid="review-graded-prompt">
+              {#if frontHTML}
+                <CardFrame
+                  html={frontHTML}
+                  css={REVIEW_FRONT_CSS}
+                  bodyClass=""
+                  side="question"
+                  mediaBase={mediaBase}
+                  title={$t('note_preview.front')}
+                  onkey={onFrameKey}
+                />
+              {:else}
+                <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">{gradedPrompt($cardTypes, current)}</div>
+              {/if}
             </div>
             {#if feedback}
               <div bind:this={feedbackSection} class="space-y-5 border-t border-input pt-5" data-testid="review-graded-result">
@@ -1098,7 +1176,17 @@
                       {/each}
                     </ul>
                   {:else}
-                    <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html feedback.answer_html}</div>
+                    <div data-testid="review-graded-answer">
+                      <CardFrame
+                        html={feedback.answer_html}
+                        css={REVIEW_ANSWER_CSS}
+                        bodyClass=""
+                        side="answer"
+                        mediaBase={feedbackMediaBase}
+                        title={$t('note_preview.back')}
+                        onkey={onFrameKey}
+                      />
+                    </div>
                   {/if}
                 </div>
                 {#if feedback.given}
@@ -1114,10 +1202,20 @@
                 </div>
               </div>
             {:else if gradedRevealed}
-              <div bind:this={revealedSection} class="space-y-5 border-t border-input pt-5" data-testid="review-graded-revealed">
+              <div class="space-y-5 border-t border-input pt-5" data-testid="review-graded-revealed">
                 <div data-testid="review-graded-revealed-answer">
                   <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
-                  <div class="text-lg whitespace-pre-wrap break-words font-medium" data-testid="review-graded-answer">{@html revealedAnswerHTML}</div>
+                  <div data-testid="review-graded-answer">
+                    <CardFrame
+                      html={revealedAnswerHTML}
+                      css={REVIEW_ANSWER_CSS}
+                      bodyClass=""
+                      side="answer"
+                      mediaBase={revealedMediaBase}
+                      title={$t('note_preview.back')}
+                      onkey={onFrameKey}
+                    />
+                  </div>
                 </div>
                 <button type="button" disabled={submitting} class="w-full min-h-12 rounded-xl border border-rose-300 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-medium disabled:opacity-50 transition-colors cursor-pointer" onclick={() => void giveUp()} data-testid="review-graded-give-up">{$t('review.graded.give_up')}</button>
               </div>

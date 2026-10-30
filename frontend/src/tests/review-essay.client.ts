@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { shownHtmlOnSide } from './card-frame-fixture';
 
 /**
  * Essay cards: write first, compare after. Before flipping there is a multi-line input;
@@ -76,7 +77,8 @@ describe('ReviewView short answer', () => {
     // The answer is plain text: angle brackets display as-is and are not treated as HTML.
     expect(given?.textContent).toContain('因为<b>月球</b>绕地球转');
     expect(given?.querySelector('b')).toBeNull();
-    expect(target.querySelector('[data-testid="review-answer"]')?.textContent).toContain('太阳照亮月球的一半。');
+    // The reference answer is a card face, so it is the frame that renders it.
+    expect((await shownHtmlOnSide(target, 'answer')).join('')).toContain('太阳照亮月球的一半。');
     (target.querySelector('[data-rating="3"]') as HTMLElement).click();
     await flush();
     expect(submitSelfReview.mock.calls[0]![0]).toMatchObject({ card_id: 's1', rating: 3, answer: '因为<b>月球</b>绕地球转' });

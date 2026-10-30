@@ -4,45 +4,17 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { shownHtmlOnSide } from './card-frame-fixture';
 
 /**
- * The review page is one of the two places that enhance server-sanitized card HTML. These cases mount the real view
- * and assert that the container `typeset` was called on is also the container that gains shortcode controls — the
- * prompt face and the self-graded answer face.
+ * The review page hands its card faces to the frame, and the frame runtime attaches the shortcode controls (covered by
+ * cardframe.client.ts). These cases mount the real view and assert that both faces — the prompt and the self-graded answer —
+ * reach the frame with the shortcode markup intact, so the controls can be built there.
  */
 
 const SHA = 'a'.repeat(64);
 const TTS_HTML = '<p><span class="engram-tts" data-tts-text="こんにちは" data-tts-lang="ja-JP">こんにちは</span></p>';
 const AUDIO_HTML = `<p><span class="engram-audio" data-audio-src="/media/${SHA}" data-audio-start="12.5" data-audio-end="15">/media/${SHA}</span></p>`;
-
-interface FakeUtterance {
-  text: string;
-  lang: string;
-  rate: number;
-  voice: unknown;
-  onend: (() => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-}
-
-function installSpeech() {
-  const utteranceConstructor = class implements FakeUtterance {
-    text: string;
-    lang = '';
-    rate = 1;
-    voice: unknown = null;
-    onend: (() => void) | null = null;
-    onerror: ((event: { error: string }) => void) | null = null;
-    constructor(text: string) {
-      this.text = text;
-    }
-  };
-  vi.stubGlobal('speechSynthesis', {
-    cancel: vi.fn(),
-    speak: vi.fn(),
-    getVoices: vi.fn(() => [{ lang: 'ja-JP', name: 'voice-ja', default: true, localService: true, voiceURI: 'voice-ja' }]),
-  });
-  vi.stubGlobal('SpeechSynthesisUtterance', utteranceConstructor);
-}
 
 const card: DueCard = {
   card_id: 'c1',
@@ -66,7 +38,6 @@ describe('ReviewView shortcode controls', () => {
     instance = null;
     document.body.innerHTML = '';
     clearCardTypes();
-    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -98,20 +69,14 @@ describe('ReviewView shortcode controls', () => {
     return target;
   }
 
-  it('enhances the prompt face that was typeset', async () => {
-    installSpeech();
+  it('hands the prompt face with its TTS shortcode to the frame', async () => {
     const target = await mountView();
 
-    const front = target.querySelector('[data-testid="review-front"]');
-    expect(front).toBeTruthy();
-    const button = front!.querySelector('button[data-shortcode-control="tts"]');
-    expect(button).toBeTruthy();
-    expect(button!.getAttribute('aria-label')).toBe('Read aloud');
-    expect(front!.textContent).toContain('こんにちは');
+    expect(target.querySelector('[data-testid="review-front"] iframe[data-card-frame]')).not.toBeNull();
+    expect(await shownHtmlOnSide(target, 'question')).toEqual([TTS_HTML]);
   });
 
-  it('enhances the answer face after it is revealed and typeset', async () => {
-    installSpeech();
+  it('hands the revealed answer face with its audio shortcode to the frame', async () => {
     const target = await mountView();
 
     const reveal = target.querySelector<HTMLElement>('[data-testid="review-reveal"]');
@@ -119,21 +84,7 @@ describe('ReviewView shortcode controls', () => {
     reveal!.click();
     await flush();
 
-    const answer = target.querySelector('[data-testid="review-answer"]');
-    expect(answer).toBeTruthy();
-    const button = answer!.querySelector('button[data-shortcode-control="audio"]');
-    expect(button).toBeTruthy();
-    expect(answer!.textContent).toContain(`/media/${SHA}`);
-    // The call site gets the progress track beside the button as well, not just the module in isolation.
-    const track = answer!.querySelector<HTMLInputElement>('input[data-shortcode-progress]');
-    expect(track).toBeTruthy();
-    expect(track!.getAttribute('aria-label')).toBe('Audio progress');
-    expect(track!.disabled).toBe(true);
-    // The same call site also gets the seek pair and the position readout that the module builds in one group.
-    expect(answer!.querySelectorAll('button[data-shortcode-seek]')).toHaveLength(2);
-    const time = answer!.querySelector('[data-shortcode-time]');
-    expect(time).toBeTruthy();
-    expect(time!.textContent).toBe('0:00 / --:--');
-    expect(time!.getAttribute('aria-hidden')).toBe('true');
+    // The answer face is one frame on the answer side; the module that turns the markup into controls runs in the frame.
+    expect(await shownHtmlOnSide(target, 'answer')).toEqual([AUDIO_HTML]);
   });
 });

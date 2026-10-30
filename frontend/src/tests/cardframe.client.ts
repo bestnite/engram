@@ -174,6 +174,32 @@ describe('card frame show sequence', () => {
     expect(replay).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the frame document stylesheet and attaches the shortcode controls inside the frame', async () => {
+    document.head.innerHTML = '<link rel="stylesheet" href="/assets/card-frame.css" />';
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    await runtime.handleMessage(
+      showMessage({
+        html: '<p><span class="engram-audio" data-audio-src="/fm/token/clip.mp3">clip.mp3</span></p>',
+        css: '#qa{font-size:1.25rem}',
+      }),
+    );
+
+    // The runtime bundle's own stylesheet must survive a show: it carries the tokens and utility classes the controls use.
+    expect(document.head.querySelector('link[rel="stylesheet"]')).not.toBeNull();
+    const style = document.head.querySelector('style[data-card-css]');
+    expect(style?.textContent).toBe('#qa{font-size:1.25rem}');
+    expect(document.querySelector('#qa button[data-shortcode-control]')).not.toBeNull();
+  });
+
+  it('rewrites one card stylesheet element instead of adding one per show', async () => {
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    await runtime.handleMessage(showMessage({ css: '#qa{color:red}' }));
+    await runtime.handleMessage(showMessage({ css: '#qa{color:blue}' }));
+
+    expect(document.head.querySelectorAll('style')).toHaveLength(1);
+    expect(document.head.querySelector('style')?.textContent).toBe('#qa{color:blue}');
+  });
+
   it('does nothing for a malformed show message', async () => {
     runtime = createRuntime({ parent: parent as unknown as Window });
     await runtime.handleMessage(showMessage({ autoplay: 'yes' }));

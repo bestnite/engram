@@ -4,8 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"git.nite07.com/nite/engram/internal/store"
 )
 
 // TestCardFrameServesExactHeaders pins the frame route's headers. The frame is an opaque-origin sandbox that renders card
@@ -69,6 +72,58 @@ func TestCardFrameServesExactHeaders(t *testing.T) {
 		if strings.Contains(body, forbidden) {
 			t.Errorf("frame document must not contain %q: %s", forbidden, snippet(body))
 		}
+	}
+}
+
+// TestCardFrameCarriesRequestLocale pins the frame document's <html lang>. The frame attaches the shortcode controls, whose
+// labels come from the translation catalog, so the document must carry the language the request resolved to - the same source
+// as the SPA entry. The ETag is computed from the written body, so two languages cannot share a cached response.
+func TestCardFrameCarriesRequestLocale(t *testing.T) {
+	srv, db, ownerID, cookies, _ := newNotesServer(t)
+
+	if err := db.Model(&store.User{}).Where("id = ?", ownerID).Update("locale", "zh-CN").Error; err != nil {
+		t.Fatalf("set owner locale: %v", err)
+	}
+
+	zh := getWithCookies(t, srv, "/card-frame/20261031", cookies)
+	if zh.Code != http.StatusOK {
+		t.Fatalf("GET /card-frame/<version> status = %d, want 200; body %s", zh.Code, snippet(zh.Body.String()))
+	}
+	body := zh.Body.String()
+	if !strings.Contains(body, `<html lang="zh-CN">`) {
+		t.Errorf("frame document does not carry the resolved language: %s", snippet(body))
+	}
+	// The ETag names the body actually written, so a language switch revalidates instead of hitting a stale 304.
+	wantETag := `"` + indexHashOf([]byte(body)) + `"`
+	if got := zh.Header().Get("ETag"); got != wantETag {
+		t.Errorf("frame ETag = %q, want %q (hash of the written body)", got, wantETag)
+	}
+
+	// The same document for another language is a different body, and therefore a different ETag.
+	en := getWithCookies(t, srv, "/card-frame/20261031?lang=en", cookies)
+	if en.Code != http.StatusOK {
+		t.Fatalf("GET /card-frame/<version>?lang=en status = %d, want 200; body %s", en.Code, snippet(en.Body.String()))
+	}
+	if !strings.Contains(en.Body.String(), `<html lang="en">`) {
+		t.Errorf("frame document does not carry the overridden language: %s", snippet(en.Body.String()))
+	}
+	if en.Header().Get("ETag") == zh.Header().Get("ETag") {
+		t.Error("frame ETag is the same for two languages, so a language switch would be served from cache")
+	}
+	if en.Body.String() == body {
+		t.Error("frame body is unchanged by the language, so the runtime cannot pick the catalog")
+	}
+
+	// A matching If-None-Match still answers 304 for the body that was written.
+	req := httptest.NewRequest(http.MethodGet, "/card-frame/20261031", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	req.Header.Set("If-None-Match", zh.Header().Get("ETag"))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotModified {
+		t.Errorf("conditional GET with the current ETag = %d, want 304", rec.Code)
 	}
 }
 

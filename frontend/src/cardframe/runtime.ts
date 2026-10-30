@@ -1,11 +1,14 @@
+import { isSupportedLocale, setLocale } from '../lib/i18n';
+import { enhanceShortcodes } from '../lib/shortcodes';
 import { readMathJaxURL, typesetCard } from './mathjax';
 
 /**
  * The card frame runtime.
  *
  * The frame document is deliberately tiny: the parent page sends it card content with `postMessage`, the runtime writes that
- * content into `<div id="qa">`, re-executes its scripts, and reports height, keys, answers and links back. It is framework-free
- * and reads no cookie: the sandboxed iframe has an opaque origin, and everything it needs arrives in the messages.
+ * content into `<div id="qa">`, re-executes its scripts, typesets the face, attaches the shortcode controls and reports
+ * height, keys, answers and links back. It renders no Svelte component and reads no cookie: the sandboxed iframe has an opaque
+ * origin, and everything it needs arrives in the messages or the frame document's own `<html lang>`.
  *
  * Every message is accepted only from the embedding page (`event.source` must be the parent window) and every field is
  * type-checked, because the frame renders untrusted card content.
@@ -77,7 +80,15 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   if (typeof win.onUpdateHook !== 'function') win.onUpdateHook = () => {};
   if (typeof win.onShownHook !== 'function') win.onShownHook = () => {};
 
-  // Captured before the first show replaces <head>, which removes the injected meta.
+  // The frame document carries the request's resolved language on <html lang>, exactly like the SPA entry: the server knows
+  // the user's profile setting, the runtime does not and reads no cookie. Adopting it before the first face is shown makes
+  // the shortcode controls label themselves from the user's catalog; without a supported lang the module's browser-language
+  // detection stays in charge.
+  const documentLang = doc.documentElement.lang.trim();
+  if (documentLang !== '' && isSupportedLocale(documentLang)) setLocale(documentLang);
+
+  // The URL comes from the meta the server injects into the frame entry; reading it at boot keeps it independent of any later
+  // head change.
   const mathjaxURL = readMathJaxURL(doc);
 
   let dark = false;
@@ -85,6 +96,8 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   let autoplay = false;
   let lastHeight = -1;
   let observer: ResizeObserver | null = null;
+  let styleElement: HTMLStyleElement | null = null;
+  let baseElement: HTMLBaseElement | null = null;
 
   function post(message: Record<string, unknown>): void {
     parent?.postMessage(message, '*');
@@ -129,16 +142,24 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   }
 
   function resetHead(css: string, mediaBase: string): void {
-    const head = doc.head;
-    head.replaceChildren();
-    if (mediaBase) {
-      const base = doc.createElement('base');
-      base.href = mediaBase;
-      head.appendChild(base);
+    // The frame document's own stylesheet belongs to the runtime bundle and must survive a show: card CSS is written into a
+    // dedicated style element instead, and only that element is rewritten.
+    if (!styleElement) {
+      styleElement = doc.createElement('style');
+      styleElement.setAttribute('data-card-css', '');
+      doc.head.appendChild(styleElement);
     }
-    const style = doc.createElement('style');
-    style.textContent = css;
-    head.appendChild(style);
+    styleElement.textContent = css;
+    if (mediaBase) {
+      if (!baseElement) {
+        baseElement = doc.createElement('base');
+        doc.head.insertBefore(baseElement, doc.head.firstChild);
+      }
+      baseElement.href = mediaBase;
+    } else if (baseElement) {
+      baseElement.remove();
+      baseElement = null;
+    }
   }
 
   function scrollToAnswer(): void {
@@ -170,6 +191,9 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     if (containsMath(message.html)) {
       await typesetCard(win, doc, mathjaxURL, root);
     }
+    // The shortcode controls are part of the face, so they are attached here, after the content and its typesetting: a card
+    // face leaving the parent DOM must not lose its audio or TTS controls.
+    enhanceShortcodes([root]);
     win.onShownHook?.();
 
     if (message.side === 'answer') scrollToAnswer();
