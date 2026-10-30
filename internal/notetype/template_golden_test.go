@@ -22,10 +22,12 @@ type templateGolden struct {
 }
 
 type templateGoldenNote struct {
-	GUID         string               `json:"guid"`
-	NoteTypeName string               `json:"notetype_name"`
-	Fields       map[string]string    `json:"fields"`
-	Cards        []templateGoldenCard `json:"cards"`
+	GUID                    string               `json:"guid"`
+	NoteTypeName            string               `json:"notetype_name"`
+	Fields                  map[string]string    `json:"fields"`
+	ClozeNumbers            []int                `json:"cloze_numbers"`
+	CardgenExpectedOrdinals []int                `json:"cardgen_expected_ordinals"`
+	Cards                   []templateGoldenCard `json:"cards"`
 }
 
 type templateGoldenCard struct {
@@ -57,7 +59,7 @@ func loadTemplateGolden(t *testing.T, fixture string) templateGolden {
 // TestRenderGolden renders every card of the stock, syntax and filter fixtures
 // and compares the result with Anki's recorded output byte for byte.
 func TestRenderGolden(t *testing.T) {
-	for _, fixture := range []string{"stock", "template-syntax", "template-filters"} {
+	for _, fixture := range []string{"stock", "template-syntax", "template-filters", "cloze"} {
 		t.Run(fixture, func(t *testing.T) {
 			golden := loadTemplateGolden(t, fixture)
 			configs := make(map[string]Config, len(golden.NoteTypes))

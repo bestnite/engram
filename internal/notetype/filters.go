@@ -169,14 +169,42 @@ func decodeEntities(text string) string {
 	return strings.ReplaceAll(html.UnescapeString(text), "\u00a0", " ")
 }
 
-// encodeAttribute escapes a value for a double-quoted HTML attribute.
+// encodeAttribute escapes a value for a double-quoted HTML attribute the way
+// Anki's htmlescape dependency does: the five minimal entities, then every other
+// ASCII character that is not a letter or digit and every character in the
+// Latin-1 range as an upper-case hex reference. The oracle fixtures pin the
+// exact form, for example a space becomes "&#x20;" and "|" becomes "&#x7C;".
 func encodeAttribute(text string) string {
-	replacer := strings.NewReplacer(
-		"&", "&amp;",
-		"<", "&lt;",
-		">", "&gt;",
-		`"`, "&quot;",
-		"'", "&#39;",
-	)
-	return replacer.Replace(text)
+	var b strings.Builder
+	b.Grow(len(text))
+	for _, r := range text {
+		switch r {
+		case '"':
+			b.WriteString("&quot;")
+		case '&':
+			b.WriteString("&amp;")
+		case '\'':
+			b.WriteString("&#x27;")
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		default:
+			if r < 256 && (r > 127 || !isASCIIAlnum(r)) {
+				b.WriteString("&#x")
+				b.WriteByte(upperHex[byte(r)>>4])
+				b.WriteByte(upperHex[byte(r)&0x0f])
+				b.WriteByte(';')
+				continue
+			}
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+const upperHex = "0123456789ABCDEF"
+
+func isASCIIAlnum(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9'
 }

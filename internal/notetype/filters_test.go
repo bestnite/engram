@@ -266,11 +266,13 @@ func TestClozeFilters(t *testing.T) {
 			wantClozeOnly: "hint",
 		},
 		{
-			name:          "text is escaped in the cloze attribute",
-			text:          `{{c1::<b>"one"</b>}}`,
-			ordinal:       1,
-			onFront:       true,
-			want:          `<span class="cloze" data-cloze="&lt;b&gt;&quot;one&quot;&lt;/b&gt;" data-ordinal="1">[...]</span>`,
+			name:    "text is escaped in the cloze attribute",
+			text:    `{{c1::<b>"one"</b>}}`,
+			ordinal: 1,
+			onFront: true,
+			// htmlescape escapes every non-alphanumeric ASCII character, so the
+			// closing slash is a reference too.
+			want:          `<span class="cloze" data-cloze="&lt;b&gt;&quot;one&quot;&lt;&#x2F;b&gt;" data-ordinal="1">[...]</span>`,
 			wantClozeOnly: "...",
 		},
 		{
@@ -389,24 +391,24 @@ func TestParseImageCloze(t *testing.T) {
 		name       string
 		text       string
 		shape      string
-		properties []imageOcclusionProperty
+		properties []ImageOcclusionProperty
 	}{
 		{
 			name:  "rect",
 			text:  "rect:left=0.1:top=0.2",
 			shape: "rect",
-			properties: []imageOcclusionProperty{
-				{name: "left", value: "0.1"},
-				{name: "top", value: "0.2"},
+			properties: []ImageOcclusionProperty{
+				{Name: "left", Value: "0.1"},
+				{Name: "top", Value: "0.2"},
 			},
 		},
 		{
 			name:  "escaped colon",
 			text:  `rect:left=0.1:text=a\:b`,
 			shape: "rect",
-			properties: []imageOcclusionProperty{
-				{name: "left", value: "0.1"},
-				{name: "text", value: "a:b"},
+			properties: []ImageOcclusionProperty{
+				{Name: "left", Value: "0.1"},
+				{Name: "text", Value: "a:b"},
 			},
 		},
 		{
@@ -554,4 +556,27 @@ func patternBytes(length int) []byte {
 		input[i] = byte(i % 251)
 	}
 	return input
+}
+
+// TestEncodeAttribute pins Anki's htmlescape attribute encoding: the five
+// minimal entities, then a hex reference for every other non-alphanumeric ASCII
+// character and for the Latin-1 range, while everything above U+00FF stays as
+// it is.
+func TestEncodeAttribute(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"plain 1", "plain&#x20;1"},
+		{`<b>"x" & 'y'</b>`, "&lt;b&gt;&quot;x&quot;&#x20;&amp;&#x20;&#x27;y&#x27;&lt;&#x2F;b&gt;"},
+		{"left|right", "left&#x7C;right"},
+		{"a-b=c/d", "a&#x2D;b&#x3D;c&#x2F;d"},
+		{"héllo", "h&#xE9;llo"},
+		{"日本語", "日本語"},
+	}
+	for _, test := range tests {
+		if got := encodeAttribute(test.in); got != test.want {
+			t.Errorf("encodeAttribute(%q) = %q, want %q", test.in, got, test.want)
+		}
+	}
 }

@@ -3,19 +3,23 @@
 //
 // Ported from rslib/src/cloze.rs at tag 26.09.3 of ankitects/anki, together
 // with the image-occlusion data helpers from rslib/src/image_occlusion/imageocclusion.rs
-// at the same tag. Only the parts the template renderer needs are ported here:
-// cloze detection, the front/back reveal of a single cloze number, the
-// cloze/cloze-only filters and the markup of an image-occlusion shape.
+// and the LaTeX detector from rslib/src/latex.rs at the same tag.
 //
-// The full port continues in the cloze note type work: nested clozes, LaTeX
-// expansion, cloze-number collection for card generation and the whole
-// cloze.golden.json fixture still have to be completed there. The functions
-// below keep their signatures so that work extends this file instead of
-// replacing the filter-facing surface.
+// The port covers the whole file: the tokenizer, the front/back reveal of one
+// cloze number (including nesting and image occlusions), the cloze and
+// cloze-only filters, the cloze-number set of a note's fields, the text a
+// type-in cloze answer is compared against, the LaTeX expansion used before
+// LaTeX is extracted, and the structured shapes the image-occlusion editor
+// reads.
+//
+// `|` needs no special handling: Anki's tokenizer only recognises "{{c",
+// "::" and "}}" inside a cloze, so a pipe is ordinary text and the attribute
+// escaping later turns it into "&#x7C;" on the question side.
 
 package notetype
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -400,21 +404,36 @@ func ordinalsText(ordinals []int) string {
 	return strings.Join(parts, ",")
 }
 
-// imageOcclusionProperty is one "name=value" pair of an image-occlusion shape.
-type imageOcclusionProperty struct {
-	name  string
-	value string
+// ImageOcclusionProperty is one "name=value" pair of an image-occlusion shape,
+// for example {"left", "0.1"}.
+type ImageOcclusionProperty struct {
+	Name  string
+	Value string
+}
+
+// ImageOcclusionShape is one shape of an image-occlusion cloze: its kind
+// ("rect", "ellipse", "polygon" or "text") and its attributes.
+type ImageOcclusionShape struct {
+	Shape      string
+	Properties []ImageOcclusionProperty
+}
+
+// ImageOcclusion holds every shape that belongs to one cloze number, which is
+// how the image-occlusion editor addresses a shape.
+type ImageOcclusion struct {
+	Ordinal int
+	Shapes  []ImageOcclusionShape
 }
 
 // parseImageCloze splits "rect:left=0.1:top=0.2" into the shape name and its
 // properties. A value may escape ":" and "\" with a backslash, and a shape
 // without a ":" separator is not an image occlusion at all.
-func parseImageCloze(text string) (string, []imageOcclusionProperty, bool) {
+func parseImageCloze(text string) (string, []ImageOcclusionProperty, bool) {
 	shape, _, found := strings.Cut(text, ":")
 	if !found {
 		return "", nil, false
 	}
-	var properties []imageOcclusionProperty
+	var properties []ImageOcclusionProperty
 	index := len(shape)
 	for index < len(text) && text[index] == ':' {
 		nameStart := index + 1
@@ -445,7 +464,7 @@ func parseImageCloze(text string) (string, []imageOcclusionProperty, bool) {
 			value.WriteByte(c)
 			index++
 		}
-		properties = append(properties, imageOcclusionProperty{name: name, value: value.String()})
+		properties = append(properties, ImageOcclusionProperty{Name: name, Value: value.String()})
 	}
 	return shape, properties, true
 }
@@ -465,19 +484,19 @@ func imageClozeData(text string) string {
 		b.WriteString(`data-shape="` + shape + `" `)
 	}
 	for _, property := range properties {
-		switch property.name {
+		switch property.Name {
 		case "left", "top", "angle", "fill":
-			if property.value != "" {
-				b.WriteString(`data-` + property.name + `="` + property.value + `" `)
+			if property.Value != "" {
+				b.WriteString(`data-` + property.Name + `="` + property.Value + `" `)
 			}
 		case "width", "height", "rx", "ry", "scale":
-			if !emptyOrZero(property.value) {
-				b.WriteString(`data-` + property.name + `="` + property.value + `" `)
+			if !emptyOrZero(property.Value) {
+				b.WriteString(`data-` + property.Name + `="` + property.Value + `" `)
 			}
 		case "points":
-			if property.value != "" {
+			if property.Value != "" {
 				var points []string
-				for _, pair := range strings.Split(property.value, " ") {
+				for _, pair := range strings.Split(property.Value, " ") {
 					x, y, found := strings.Cut(pair, ",")
 					if !found {
 						continue
@@ -489,16 +508,16 @@ func imageClozeData(text string) string {
 				}
 			}
 		case "oi":
-			if property.value != "" {
-				b.WriteString(`data-occludeInactive="` + property.value + `" `)
+			if property.Value != "" {
+				b.WriteString(`data-occludeInactive="` + property.Value + `" `)
 			}
 		case "text":
-			if property.value != "" {
-				b.WriteString(`data-text="` + encodeAttribute(property.value) + `" `)
+			if property.Value != "" {
+				b.WriteString(`data-text="` + encodeAttribute(property.Value) + `" `)
 			}
 		case "fs":
-			if property.value != "" {
-				b.WriteString(`data-font-size="` + property.value + `" `)
+			if property.Value != "" {
+				b.WriteString(`data-font-size="` + property.Value + `" `)
 			}
 		}
 	}
@@ -507,4 +526,143 @@ func imageClozeData(text string) string {
 
 func emptyOrZero(value string) bool {
 	return value == "" || value == "0"
+}
+
+// containsCloze reports whether text holds a cloze deletion numbered above
+// zero. A number zero is an image-occlusion placeholder, which is not a card,
+// so a field holding only that is not a cloze field.
+func containsCloze(text string) bool {
+	for _, node := range parseClozes(text) {
+		if node.cloze == nil {
+			continue
+		}
+		for _, ordinal := range node.cloze.ordinals {
+			if ordinal != 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// clozeNumbersInFields returns the cloze numbers found in any of the fields, in
+// ascending order. Card generation uses it to create one card per number; zero
+// is excluded because it names no card.
+func clozeNumbersInFields(fields []string) []int {
+	numbers := make(map[int]bool)
+	for _, field := range fields {
+		for ordinal := range clozeNumbersIn(field) {
+			numbers[ordinal] = true
+		}
+	}
+	sorted := make([]int, 0, len(numbers))
+	for ordinal := range numbers {
+		sorted = append(sorted, ordinal)
+	}
+	sort.Ints(sorted)
+	return sorted
+}
+
+// extractClozeForTyping returns the text a user has to type for one cloze
+// number: the revealed text of every deletion carrying that number, joined
+// with ", ". Identical matches collapse to a single entry, and a number that
+// occurs nowhere yields the empty string. The `type:cloze` control compares its
+// input against this text.
+func extractClozeForTyping(text string, ordinal int) string {
+	var parts []string
+	for _, node := range parseClozes(text) {
+		collectClozeText(node, ordinal, false, &parts)
+	}
+	switch {
+	case len(parts) == 0:
+		return ""
+	case allEqual(parts):
+		return parts[len(parts)-1]
+	default:
+		return strings.Join(parts, ", ")
+	}
+}
+
+func allEqual(values []string) bool {
+	for _, value := range values[1:] {
+		if value != values[0] {
+			return false
+		}
+	}
+	return true
+}
+
+// clozePattern matches one whole cloze deletion, used by stripClozes.
+var clozePattern = regexp.MustCompile(`(?s)\{\{c[\d,]+::(.*?)(::.*?)?\}\}`)
+
+// stripClozes removes every cloze marker and its hint, keeping the text. Search
+// and sorting use the stripped text so a card matches the words it shows.
+func stripClozes(text string) string {
+	return clozePattern.ReplaceAllString(text, "$1")
+}
+
+// latexPattern matches the three LaTeX forms Anki recognises: a [latex] block,
+// an inline [$]...[/$] and a display [$$]...[/$$].
+var latexPattern = regexp.MustCompile(`(?is)\[latex\](.+?)\[/latex\]|\[\$\](.+?)\[/\$\]|\[\$\$\](.+?)\[/\$\$\]`)
+
+// containsLatex reports whether text holds a LaTeX element. The text that
+// precedes actually generating LaTeX images lives in latex.go; this predicate
+// only decides whether the expansion below has work to do.
+func containsLatex(text string) bool {
+	return latexPattern.MatchString(text)
+}
+
+// expandClozesToRevealLatex renders every cloze number twice, hidden and
+// revealed, so that LaTeX inside a deletion is extracted for each side. Without
+// LaTeX in any deletion it returns the empty string. Concatenating the sides
+// reproduces the text every card of the note would show, which is what Anki
+// hands to its LaTeX extractor.
+func expandClozesToRevealLatex(text string) string {
+	if !containsLatex(text) {
+		return ""
+	}
+	var b strings.Builder
+	for _, ordinal := range clozeNumbersInFields([]string{text}) {
+		b.WriteString(revealClozeText(text, ordinal, true))
+		b.WriteString(revealClozeText(text, ordinal, false))
+	}
+	return b.String()
+}
+
+// ParseImageOcclusions returns the shapes of the image-occlusion clozes in
+// text, one entry per cloze number, ordered by number. A shape written as
+// "image-occlusion:<shape>:<attributes>" can be addressed by several numbers,
+// and then it appears under each of them. Nested image occlusions are not
+// walked, because Anki only reads the top-level deletions.
+func ParseImageOcclusions(text string) []ImageOcclusion {
+	shapes := make(map[int][]ImageOcclusionShape)
+	for _, node := range parseClozes(text) {
+		if node.cloze == nil {
+			continue
+		}
+		shapeText, isImage := node.cloze.imageOcclusionText()
+		if !isImage {
+			continue
+		}
+		shape, properties, ok := parseImageCloze(shapeText)
+		if !ok {
+			continue
+		}
+		for _, ordinal := range node.cloze.ordinals {
+			// Each entry owns its properties so a caller that edits one shape
+			// cannot change the shape of another number.
+			own := append([]ImageOcclusionProperty(nil), properties...)
+			shapes[ordinal] = append(shapes[ordinal], ImageOcclusionShape{Shape: shape, Properties: own})
+		}
+	}
+	ordinals := make([]int, 0, len(shapes))
+	for ordinal := range shapes {
+		ordinals = append(ordinals, ordinal)
+	}
+	sort.Ints(ordinals)
+	occlusions := make([]ImageOcclusion, len(ordinals))
+	for i, ordinal := range ordinals {
+		occlusions[i] = ImageOcclusion{Ordinal: ordinal, Shapes: shapes[ordinal]}
+	}
+	return occlusions
 }
