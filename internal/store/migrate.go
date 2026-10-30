@@ -95,7 +95,25 @@ var BuiltinMigrations = []Migration{
 		Name: "0011_backfill_note_search_text",
 		Up:   backfillNoteSearchText,
 	},
+	{
+		// Note content moves from the kind-based model to note types: one engram stock note type per (deck, kind), every field value
+		// converted from Markdown to HTML with the audio/TTS/media rewrites, and source_url / extra moved to their own columns.
+		// It refuses to run while an array item contains a newline, because the joined HTML cannot keep one item on one line.
+		Name: "0012_convert_notes_to_note_types",
+		Up:   convertNotesToNoteTypes,
+	},
+	{
+		// The converted notes all have a note type, so notes.note_type_id becomes NOT NULL and notes.kind is dropped. Column
+		// nullability and a column drop are outside AutoMigrate's additive scope and need an explicit migration.
+		Name: "0013_notes_note_type_not_null",
+		Up:   notesNoteTypeNotNull,
+	},
 }
+
+// notesKindDroppedAt is the 1-based position of the migration that drops notes.kind in BuiltinMigrations. AutoMigrate reads it to
+// stop managing that column once the migration has run: the Note model still carries Kind until the server paths stop using it,
+// and AutoMigrate would otherwise re-add the column the migration just dropped.
+const notesKindDroppedAt = 13
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).
 // Rows are read in primary-key batches, so memory use is independent of the note count. A note whose fields fail to parse gets an
@@ -472,6 +490,16 @@ type additiveUserSchema struct {
 
 func (additiveUserSchema) TableName() string { return "users" }
 
+// additiveNoteSchema is the notes shape AutoMigrate sees after migration 0013 has dropped notes.kind. The outer Kind field
+// shadows the embedded Note.Kind and is hidden from the schema manager (-:migration), so AutoMigrate neither creates nor
+// re-adds the column; normal reads and writes still use the field until the note write path moves to note types.
+type additiveNoteSchema struct {
+	Note
+	Kind string `gorm:"column:kind;-:migration"`
+}
+
+func (additiveNoteSchema) TableName() string { return "notes" }
+
 // nullableDayCutoff only relaxes the column constraint and converts no existing value: the old 0 now explicitly means midnight, and the old 4 stays as it is.
 func nullableDayCutoff(tx *gorm.DB) error {
 	if !tx.Migrator().HasTable("users") || !tx.Migrator().HasColumn("users", "day_cutoff_hour") {
@@ -508,9 +536,23 @@ func nullableDayCutoff(tx *gorm.DB) error {
 // so they were merged back into one.
 func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 	models := AllModels()
+	// Migration 0013 drops notes.kind, but the Note model still carries Kind until the server paths stop reading it. Once the
+	// migration has run, AutoMigrate must not add the column back; the masked shape keeps the model usable while hiding the
+	// column from the schema manager. Before 0013 the mask stays off, because 0012 still reads the column.
+	maskNoteKind := false
+	if db.Migrator().HasTable("schema_version") {
+		if version, err := CurrentVersion(ctx, db); err == nil && version >= notesKindDroppedAt {
+			maskNoteKind = true
+		}
+	}
 	for i, model := range models {
-		if _, ok := model.(*User); ok {
+		switch model.(type) {
+		case *User:
 			models[i] = &additiveUserSchema{}
+		case *Note:
+			if maskNoteKind {
+				models[i] = &additiveNoteSchema{}
+			}
 		}
 	}
 	if err := db.WithContext(ctx).AutoMigrate(models...); err != nil {

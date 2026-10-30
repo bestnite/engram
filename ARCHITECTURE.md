@@ -12,7 +12,7 @@ fix this file in the same change that notices the disagreement.
 ## 1. Shape of the system
 
 - **One Go binary.** `cmd/engram` is the only entry point. Its subcommands are `serve`,
-  `schema`, `export`, `import`, and `version`. Every dependency is constructed and wired by hand
+  `schema`, `check-migration`, `export`, `import`, and `version`. Every dependency is constructed and wired by hand
   in `cmd/engram/main.go`; there is no dependency-injection framework.
 - **One single-page frontend.** `frontend/` is a Svelte 5 application built by Vite into
   `frontend/dist`. `frontend/embed.go` embeds that directory into the binary with `go:embed`, and
@@ -159,8 +159,13 @@ change.
   overwriting a newer edit. A note type still used by a note that is not soft-deleted cannot be
   deleted (`ErrNoteTypeInUse`).
 - **Notes and note types.** `notes` carries `note_type_id`, `source_url` and `extra_json`.
-  `note_type_id` is nullable in this schema version: `AutoMigrate` only adds columns, existing rows
-  have no note type yet, and a later migration makes it NOT NULL and drops `notes.kind`.
+  Migration 0012 creates one engram stock note type per (deck, kind) and rewrites every note's
+  field values from Markdown to HTML, moving `source_url` and `extra` to their columns. Migration
+  0013 then makes `note_type_id` NOT NULL and drops `notes.kind`. The Go model still carries
+  `Kind` until the note write path moves to note types; AutoMigrate masks that column once 0013
+  has run, so it does not add the dropped column back. `cmd/engram check-migration` runs the
+  same read-only pre-flight check migration 0012 enforces and reports blocking and warning notes
+  without writing.
   `source_url` and `extra_json` are nullable TEXT.
 - **Cards and subdecks.** `cards.deck_path` is a nullable TEXT path relative to the imported root
   deck (for example `Lesson 1::Verbs`); a card without it sits directly in the note's deck. A

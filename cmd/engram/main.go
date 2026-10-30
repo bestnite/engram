@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -102,6 +103,8 @@ func run(ctx context.Context, args []string) error {
 		return runServe(ctx)
 	case "schema":
 		return runSchema(ctx, args[1:])
+	case "check-migration":
+		return runCheckMigration(ctx)
 	case "export":
 		return runExport(args[1:])
 	case "import":
@@ -113,7 +116,7 @@ func run(ctx context.Context, args []string) error {
 		printUsage()
 		return nil
 	default:
-		return fmt.Errorf("unknown subcommand %q: valid values are serve, schema sync, export, import, version", args[0])
+		return fmt.Errorf("unknown subcommand %q: valid values are serve, schema sync, check-migration, export, import, version", args[0])
 	}
 }
 
@@ -121,6 +124,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "usage: engram <command>")
 	fmt.Fprintln(os.Stderr, "  serve           start the HTTP server (default)")
 	fmt.Fprintln(os.Stderr, "  schema sync     run AutoMigrate and the registered destructive migrations")
+	fmt.Fprintln(os.Stderr, "  check-migration report notes that block or warn the note conversion, without writing")
 	fmt.Fprintln(os.Stderr, "  export          export a deck package: --deck N --package out.edeck [--user N]")
 	fmt.Fprintln(os.Stderr, "  import          import a deck package: --package in.edeck --user <id|username> [--target ...] [--dry-run]")
 	fmt.Fprintln(os.Stderr, "  version         print the version string")
@@ -428,6 +432,45 @@ func runSchema(ctx context.Context, args []string) error {
 	}
 	logger.Info("schema synchronized", "migrations_applied", applied, "schema_version", version)
 	return nil
+}
+
+// runCheckMigration performs the read-only pre-flight check for the note conversion. It opens the database exactly like
+// serve does but runs no migration, so an operator can see the blocking notes before AutoMigrate is allowed to start.
+// A blocking note makes the command exit non-zero; a warning keeps the exit status zero.
+func runCheckMigration(ctx context.Context) error {
+	cfg, err := config.Load(os.LookupEnv, nil)
+	if err != nil {
+		return err
+	}
+	db, err := store.Open(cfg.Get(config.KeyDBDriver).Value, cfg.Get(config.KeyDBDSN).Value)
+	if err != nil {
+		return err
+	}
+	report, err := store.CheckNotesMigration(ctx, db)
+	if err != nil {
+		return err
+	}
+	blocked := printMigrationReport(os.Stdout, report)
+	if blocked > 0 {
+		return fmt.Errorf("%d note(s) block the migration; the database was not changed", blocked)
+	}
+	return nil
+}
+
+// printMigrationReport writes the pre-flight findings and returns the number of blocking notes. The report contains no
+// user-facing catalog keys: it is an operator diagnostic, so English is its only form.
+func printMigrationReport(w io.Writer, report store.MigrationReport) int {
+	if len(report.Blocking) == 0 && len(report.Warnings) == 0 {
+		fmt.Fprintln(w, "no notes need attention: the migration can run")
+		return 0
+	}
+	for _, issue := range report.Blocking {
+		fmt.Fprintf(w, "BLOCKING deck=%s note=%s field=%s: %s\n", issue.DeckID, issue.NoteID, issue.Field, issue.Reason)
+	}
+	for _, issue := range report.Warnings {
+		fmt.Fprintf(w, "WARNING deck=%s note=%s field=%s: %s\n", issue.DeckID, issue.NoteID, issue.Field, issue.Reason)
+	}
+	return len(report.Blocking)
 }
 
 // parseBool accepts common spellings like "1"/"true"/"yes"; unparseable values are treated as false.
