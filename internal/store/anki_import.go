@@ -870,6 +870,18 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 
 	// Cards are the package's cards, not a regeneration: every entry of the package becomes (or
 	// updates) exactly one row, and an existing row keeps its id and progress.
+	//
+	// The note index is built once, before the card loop: resolving a card through a scan of
+	// pkg.Notes costs cards × notes, which a package of tens of thousands of notes and cards
+	// turns into billions of comparisons. When two notes share an id, the earlier one wins, so
+	// the lookup resolves the same note a scan from the start of the slice would have found.
+	notesByID := make(map[int64]*anki.Note, len(pkg.Notes))
+	for i := range pkg.Notes {
+		if _, ok := notesByID[pkg.Notes[i].ID]; ok {
+			continue
+		}
+		notesByID[pkg.Notes[i].ID] = &pkg.Notes[i]
+	}
 	existingCards := map[uint64]map[int]Card{}
 	for _, card := range pkg.Cards {
 		noteID, ok := noteIDs[card.NoteID]
@@ -884,13 +896,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 			continue
 		}
 		// Resolve the note's own target through the package note it belongs to.
-		var packageNote *anki.Note
-		for i := range pkg.Notes {
-			if pkg.Notes[i].ID == card.NoteID {
-				packageNote = &pkg.Notes[i]
-				break
-			}
-		}
+		packageNote := notesByID[card.NoteID]
 		if packageNote == nil {
 			report.Errors = append(report.Errors, PackageImportError{
 				Entry:  fmt.Sprintf("cards[%d]", card.ID),
