@@ -213,8 +213,8 @@ change.
   templates, CSS, LaTeX and Anki origin); the store marshals and unmarshals it, so both databases
   see the same string. The name and config are validated before a write, and an update names the
   version it read and increments it, so a stale writer gets `ErrVersionConflict` instead of
-  overwriting a newer edit. A note type still used by a note that is not soft-deleted cannot be
-  deleted (`ErrNoteTypeInUse`).
+  overwriting a newer edit. A note type still used by any note, soft-deleted ones included, cannot be
+  deleted (`ErrNoteTypeInUse`): a soft-deleted note is restorable content.
 - **Notes and note types.** `notes` carries `note_type_id`, `fields_json`, `source_url` and
   `extra_json`, and no kind column: every read and write path works through the note type.
   `fields_json` maps a field id to that field's HTML value, and `search_text` is derived from the

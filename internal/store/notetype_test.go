@@ -440,9 +440,21 @@ func TestNoteTypeUpdateRemovalFollowsDeclaredTemplates(t *testing.T) {
 	}
 }
 
-// TestNoteTypeDelete covers the refused delete: a note that is not soft-deleted blocks it, a soft-deleted note does not,
-// and the type is gone once no live note references it.
+// TestNoteTypeDelete covers the refused delete. Any note that references the type blocks it, a soft-deleted note
+// included, because a soft-deleted note can be restored into a type that no longer exists; the type is deletable only
+// once no note of any state references it.
 func TestNoteTypeDelete(t *testing.T) {
+	cases := []struct {
+		name string
+		// noteState is how the type's single note is stored: "live", "soft-deleted", or "" for a type with no note at all.
+		noteState string
+		wantGone  bool
+	}{
+		{name: "live note blocks the delete", noteState: "live"},
+		{name: "soft-deleted note blocks the delete", noteState: "soft-deleted"},
+		{name: "no note allows the delete", wantGone: true},
+	}
+
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			if err := db.AutoMigrate(AllModels()...); err != nil {
@@ -452,43 +464,58 @@ func TestNoteTypeDelete(t *testing.T) {
 			owner := seedUsers(t, db, "note_type_delete_owner")[0]
 			deckID := seedDeck(t, db, owner)
 			types := NewNoteTypeStore(db)
-			nt := seedNoteType(t, db, deckID, "Used Type")
 
-			now := time.Now().UTC()
-			note := Note{DeckID: deckID, NoteTypeID: &nt.ID,
-				FieldsJSON: `{"f-front":"q","f-back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
-			if err := db.Create(&note).Error; err != nil {
-				t.Fatalf("create note: %v", err)
-			}
+			var deletedID uint64
+			for _, test := range cases {
+				t.Run(test.name, func(t *testing.T) {
+					nt := seedNoteType(t, db, deckID, test.name)
+					if test.noteState != "" {
+						now := time.Now().UTC()
+						note := Note{DeckID: deckID, NoteTypeID: &nt.ID,
+							FieldsJSON: `{"f-front":"q","f-back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+						if err := db.Create(&note).Error; err != nil {
+							t.Fatalf("create note: %v", err)
+						}
+						if test.noteState == "soft-deleted" {
+							if err := db.Delete(&Note{}, note.ID).Error; err != nil {
+								t.Fatalf("soft delete note: %v", err)
+							}
+							// The fixture is only meaningful if the note really left the default scope: that is the
+							// state whose restore must not be orphaned by this delete.
+							var live int64
+							if err := db.Model(&Note{}).Where("id = ?", note.ID).Count(&live).Error; err != nil {
+								t.Fatalf("count visible notes: %v", err)
+							}
+							if live != 0 {
+								t.Fatalf("note still visible after soft delete: %d row(s)", live)
+							}
+						}
+					}
 
-			// A live note blocks the delete with the typed sentinel.
-			if err := types.Delete(ctx, nt.ID); !errors.Is(err, ErrNoteTypeInUse) {
-				t.Fatalf("Delete() error = %v, want ErrNoteTypeInUse", err)
-			}
-			if _, err := types.ByID(ctx, nt.ID); err != nil {
-				t.Fatalf("note type missing after refused delete: %v", err)
-			}
+					err := types.Delete(ctx, nt.ID)
+					if test.wantGone {
+						if err != nil {
+							t.Fatalf("Delete(no note) error = %v, want nil", err)
+						}
+					} else if !errors.Is(err, ErrNoteTypeInUse) {
+						t.Fatalf("Delete() error = %v, want ErrNoteTypeInUse", err)
+					}
 
-			// A type that no note uses is deletable. A note without a type cannot exist, because the
-			// column is NOT NULL, so there is no second "unused" case to cover.
-			unused := seedNoteType(t, db, deckID, "Unused Type")
-			if err := types.Delete(ctx, unused.ID); err != nil {
-				t.Errorf("Delete(unused) error = %v, want nil", err)
-			}
-
-			// Soft-deleting the note releases the type: a deleted note no longer counts as content.
-			if err := db.Delete(&Note{}, note.ID).Error; err != nil {
-				t.Fatalf("soft delete note: %v", err)
-			}
-			if err := types.Delete(ctx, nt.ID); err != nil {
-				t.Fatalf("Delete() after note soft delete error = %v, want nil", err)
-			}
-			if _, err := types.ByID(ctx, nt.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
-				t.Errorf("ByID() after delete error = %v, want gorm.ErrRecordNotFound", err)
+					// A refused delete leaves the type in place; a permitted one removes it.
+					_, getErr := types.ByID(ctx, nt.ID)
+					if test.wantGone {
+						deletedID = nt.ID
+						if !errors.Is(getErr, gorm.ErrRecordNotFound) {
+							t.Errorf("ByID() after delete error = %v, want gorm.ErrRecordNotFound", getErr)
+						}
+					} else if getErr != nil {
+						t.Fatalf("note type missing after refused delete: %v", getErr)
+					}
+				})
 			}
 
 			// Deleting an absent type reports not found.
-			if err := types.Delete(ctx, nt.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := types.Delete(ctx, deletedID); !errors.Is(err, gorm.ErrRecordNotFound) {
 				t.Errorf("Delete(absent) error = %v, want gorm.ErrRecordNotFound", err)
 			}
 		})

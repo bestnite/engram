@@ -14,7 +14,8 @@ import (
 )
 
 var (
-	// ErrNoteTypeInUse means a note type still backs at least one non-deleted note, so deleting it would orphan content.
+	// ErrNoteTypeInUse means a note type still backs at least one note, soft-deleted ones included: a soft-deleted note
+	// can be restored and would then lack the field and template definitions its content relies on.
 	ErrNoteTypeInUse = errors.New("note type is in use by one or more notes")
 	// ErrVersionConflict means the version the caller read no longer matches the stored row: another writer committed
 	// in between. Callers should map it to HTTP 409. It is the one optimistic-lock sentinel of the repository;
@@ -258,15 +259,18 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 	return impact, nil
 }
 
-// Delete removes a note type. It refuses with ErrNoteTypeInUse while any note that is not soft-deleted references it:
-// deleting then would leave notes without the field and template definitions their content relies on.
+// Delete removes a note type. It refuses with ErrNoteTypeInUse while any note references it, soft-deleted notes
+// included: a soft-deleted note can be restored, and it kept its note type through the soft delete for that reason.
+// Deleting the type would leave a restored note without the field and template definitions its content relies on.
 //
 // The reference count and the delete share one transaction, so a note inserted mid-delete cannot slip past the check
 // within the transaction's isolation on either database.
 func (s *NoteTypeStore) Delete(ctx context.Context, id uint64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var using int64
-		if err := tx.Model(&Note{}).Where("note_type_id = ?", id).Count(&using).Error; err != nil {
+		// Unscoped keeps soft-deleted notes in the count: they are restorable content, not gone content. Every other
+		// condition is unchanged.
+		if err := tx.Unscoped().Model(&Note{}).Where("note_type_id = ?", id).Count(&using).Error; err != nil {
 			return fmt.Errorf("check note type %d usage: %w", id, err)
 		}
 		if using > 0 {
