@@ -33,7 +33,7 @@ const (
 // appended by StaticShellURLs).
 // Only static assets, no review data or API endpoints at all (acceptance: no API responses in the cache).
 var pwaShellAssets = []string{
-	"js/mathjax/tex-svg.js",
+	"js/mathjax/tex-chtml-full.js",
 	"icons/icon.svg",
 	"icons/icon-maskable.svg",
 	"icons/apple-touch-icon.png",

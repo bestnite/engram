@@ -4,12 +4,11 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
-import { shownHtmlOnSide } from './card-frame-fixture';
+import { shownHtmlOnSide, postAnswerFromFrame } from './card-frame-fixture';
 
 /**
- * Per-item answering for list cards: the number of inputs comes from the render response
- * and the labels read "item N"; when the grading feedback carries a breakdown, each
- * remembered and each missed item is marked individually instead of the whole answer block.
+ * Per-item answering for list cards: the input markup lives in the frame and the frame posts one string per item. The
+ * parent submits that array and renders the per-item grading breakdown from the server's feedback.
  */
 describe('ReviewView list items', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -82,23 +81,9 @@ describe('ReviewView list items', () => {
     return { target, submitGradedReview };
   }
 
-  it('shows one input per item labelled by item number', async () => {
-    const { target } = await setup();
-    const inputs = target.querySelectorAll('[data-testid="review-graded-blank"]');
-    expect(inputs).toHaveLength(3);
-    const labels = target.querySelector('[data-testid="review-graded-blanks"]')?.textContent ?? '';
-    expect(labels).toContain('第 3 项');
-    expect(labels).not.toContain('空');
-  });
-
   it('submits the items and marks each one right or wrong in the feedback', async () => {
     const { target, submitGradedReview } = await setup();
-    const inputs = Array.from(target.querySelectorAll<HTMLInputElement>('[data-testid="review-graded-blank"]'));
-    inputs[0]!.value = 'red';
-    inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }));
-    inputs[2]!.value = 'blue';
-    inputs[2]!.dispatchEvent(new Event('input', { bubbles: true }));
-    await flush();
+    await postAnswerFromFrame(target, 'question', ['red', '', 'blue']);
     (target.querySelector('[data-testid="review-graded-submit"]') as HTMLElement).click();
     await flush();
     expect(submitGradedReview.mock.calls[0]![0]).toMatchObject({ card_id: 'l1', answer: ['red', '', 'blue'] });

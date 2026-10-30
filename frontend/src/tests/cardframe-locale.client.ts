@@ -24,6 +24,7 @@ function showAudio(): MessageEvent {
     side: 'question',
     mediaBase: '/fm/token/',
     autoplay: false,
+    ordinal: 0,
   });
 }
 

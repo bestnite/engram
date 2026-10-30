@@ -4,7 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
-import { shownFaces } from './card-frame-fixture';
+import { shownFaces, postAnswerFromFrame } from './card-frame-fixture';
 
 /**
  * The review page's card faces leave the parent DOM: every face — the question, the revealed answer and a graded result's
@@ -126,10 +126,8 @@ describe('ReviewView card faces in the frame', () => {
       submitGradedReview,
     });
 
-    const input = target.querySelector('[data-testid="review-graded-input"]') as HTMLInputElement;
-    input.value = 'Paris';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await flush();
+    // The answer control lives in the frame and posts its value; the parent submits what arrived.
+    await postAnswerFromFrame(target, 'question', 'Paris');
     (target.querySelector('[data-testid="review-graded-submit"]') as HTMLElement).click();
     await flush();
 

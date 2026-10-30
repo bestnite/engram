@@ -62,7 +62,7 @@ func TestCardFrameServesExactHeaders(t *testing.T) {
 		t.Errorf("frame document does not reference the built frame entry: %s", snippet(body))
 	}
 	// The MathJax meta is injected into the frame entry too, so the runtime can load the self-hosted script.
-	if want := srv.assets.URL("js/mathjax/tex-svg.js"); want != "" {
+	if want := srv.assets.URL("js/mathjax/tex-chtml-full.js"); want != "" {
 		if !strings.Contains(body, `<meta name="`+mathjaxMetaName+`" content="`+want+`" />`) {
 			t.Errorf("frame document is missing the MathJax meta %q: %s", want, snippet(body))
 		}

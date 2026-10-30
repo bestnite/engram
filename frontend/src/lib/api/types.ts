@@ -635,6 +635,11 @@ export interface RevealAnswerResponse {
  */
 export interface ReviewRenderResponse {
   card_id: string;
+  /**
+   * The card's zero-based template ordinal. The frame writes it as the body class `card` + ordinal + 1, which is the
+   * `cardN` Anki's reviewer uses.
+   */
+  ordinal?: number;
   front_html: string;
   back_html: string;
   /**

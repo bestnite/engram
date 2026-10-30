@@ -39,7 +39,8 @@ describe('ReviewView graded answering', () => {
     });
 
     expect(html).toContain('data-testid="review-graded-prompt"');
-    expect(html).toContain('data-testid="review-graded-input"');
+    // The answer control is part of the frame's front face now; the parent keeps only the submit/reveal buttons.
+    expect(html).not.toContain('data-testid="review-graded-input"');
     expect(html).toContain('data-testid="review-graded-submit"');
     expect(html).toContain('data-testid="review-graded-reveal"');
     // The question must not leak the correct answer, and the four self-rating buttons must not appear.
@@ -50,112 +51,23 @@ describe('ReviewView graded answering', () => {
     expect(html).not.toContain('重来');
   });
 
-  it('renders selectable options for choice_single and choice_multi', () => {
+  it('keeps choice options and true/false radios out of the parent DOM', () => {
     const single = gradedCard('choice_single', { question: '2+2=?', options: ['3', '4', '5'], answer: 1 });
     const singleHtml = render(ReviewView, { props: { initialLoading: false, initialCards: [single] } }).html;
-    expect(singleHtml).toContain('data-testid="review-graded-options"');
-    expect(singleHtml).toContain('2+2=?');
-    expect(singleHtml).toContain('4');
-    // The radio group comes from the component library: rendered as button + role="radio" (no longer a native input[type=radio]).
-    expect(singleHtml).toContain('role="radio"');
+    expect(singleHtml).toContain('data-testid="review-graded-prompt"');
+    expect(singleHtml).not.toContain('role="radio"');
+    expect(singleHtml).not.toContain('data-testid="review-graded-option"');
+    expect(singleHtml).not.toContain('data-testid="review-graded-options"');
 
     const multi = gradedCard('choice_multi', { question: '偶数？', options: ['1', '2', '3', '4'], answers: [1, 3] });
     const multiHtml = render(ReviewView, { props: { initialLoading: false, initialCards: [multi] } }).html;
-    expect(multiHtml).toContain('role="checkbox"');
-    expect(multiHtml).toContain('偶数？');
-  });
+    expect(multiHtml).not.toContain('role="checkbox"');
+    expect(multiHtml).not.toContain('data-testid="review-graded-option-row"');
 
-  it('renders server-sanitized option HTML in the controls and never the raw option text', () => {
-    const single = gradedCard('choice_single', { question: '公式？', options: ['原始一', '原始二'], answer: 0 });
-    const singleHtml = render(ReviewView, {
-      props: {
-        initialLoading: false,
-        initialCards: [single],
-        initialOptionsHTML: ['<p>公式 \\(x^2\\)</p>', '<p>选项二</p>'],
-      },
-    }).html;
-    expect(singleHtml).toContain('<p>公式 \\(x^2\\)</p>');
-    expect(singleHtml).not.toContain('原始一');
-
-    const multi = gradedCard('choice_multi', { question: '公式？', options: ['原始一', '原始二'], answers: [0] });
-    const multiHtml = render(ReviewView, {
-      props: {
-        initialLoading: false,
-        initialCards: [multi],
-        initialOptionsHTML: ['<p>公式 \\(x^2\\)</p>', '<p>选项二</p>'],
-      },
-    }).html;
-    expect(multiHtml).toContain('<p>公式 \\(x^2\\)</p>');
-    // The raw option text must not leak anywhere, including into an accessible name.
-    expect(multiHtml.replace(/<[^>]*>/g, '')).not.toContain('原始一');
-  });
-
-  it('names each multi-choice checkbox from its rendered option text', () => {
-    const multi = gradedCard('choice_multi', { question: '公式？', options: ['原始一', '原始二'], answers: [0] });
-    const { html } = render(ReviewView, {
-      props: {
-        initialLoading: false,
-        initialCards: [multi],
-        initialOptionsHTML: ['<p>公式 \\(x^2\\)</p>', '<p>选项二</p>'],
-      },
-    });
-
-    // The checkbox takes its accessible name from the element that shows the rendered option, so a screen reader hears the
-    // typeset formula instead of the raw TeX source.
-    const checkboxTag = html.match(/<[^>]*data-testid="review-graded-option"[^>]*>/)?.[0];
-    expect(checkboxTag).toBeTruthy();
-    const labelledBy = /aria-labelledby="([^"]+)"/.exec(checkboxTag!)?.[1];
-    expect(labelledBy).toBeTruthy();
-    expect(checkboxTag).not.toContain('aria-label=');
-
-    const labelledSpan = new RegExp(`<span id="${labelledBy}"[^>]*>([\\s\\S]*?)</span>`).exec(html);
-    expect(labelledSpan?.[1]).toContain('<p>公式 \\(x^2\\)</p>');
-    expect(html).not.toContain('aria-label="原始一"');
-  });
-
-  it('names each single-choice radio from its rendered option text', () => {
-    const single = gradedCard('choice_single', { question: '公式？', options: ['原始一', '原始二'], answer: 0 });
-    const { html } = render(ReviewView, {
-      props: {
-        initialLoading: false,
-        initialCards: [single],
-        initialOptionsHTML: ['<p>\\(x^2\\)</p>', '<p>选项二</p>'],
-      },
-    });
-
-    // Chromium's name-from-content for a button drops a typeset formula's text alternative, so a formula-only option would
-    // have no accessible name; each item must point at the element that renders its content instead.
-    const radioTags = [...html.matchAll(/<[^>]*data-testid="review-graded-option"[^>]*>/g)].map((match) => match[0]);
-    expect(radioTags).toHaveLength(2);
-    const labelledBy = /aria-labelledby="([^"]+)"/.exec(radioTags[0]!)?.[1];
-    expect(labelledBy).toBeTruthy();
-    const labelledSpan = new RegExp(`<span id="${labelledBy}"[^>]*>([\\s\\S]*?)</span>`).exec(html);
-    expect(labelledSpan?.[1]).toContain('<p>\\(x^2\\)</p>');
-
-    // The group is an options group, not a rating group: it must not announce itself as a recall rating.
-    const groupTag = html.match(/<[^>]*data-testid="review-graded-options"[^>]*>/)?.[0];
-    expect(groupTag).toContain('aria-label="选项"');
-    expect(html).not.toContain('选择回忆评分');
-  });
-
-  it('names the true/false radios through their translated label spans', () => {
-    const card = gradedCard('true_false', { statement: '地球是圆的', answer: true });
-    const { html } = render(ReviewView, { props: { initialLoading: false, initialCards: [card] } });
-
-    const groupTag = html.match(/<[^>]*data-testid="review-graded-options"[^>]*>/)?.[0];
-    expect(groupTag).toContain('aria-label="选项"');
-    expect(html).not.toContain('选择回忆评分');
-
-    const radioTags = [...html.matchAll(/<[^>]*data-testid="review-graded-option"[^>]*>/g)].map((match) => match[0]);
-    expect(radioTags).toHaveLength(2);
-    const names = radioTags.map((tag) => {
-      const id = /aria-labelledby="([^"]+)"/.exec(tag)?.[1];
-      expect(id).toBeTruthy();
-      const span = new RegExp(`<span id="${id}"[^>]*>([\\s\\S]*?)</span>`).exec(html);
-      return span?.[1];
-    });
-    expect(names[0]).toContain('对');
-    expect(names[1]).toContain('错');
+    const bool = gradedCard('true_false', { statement: '地球是圆的', answer: true });
+    const boolHtml = render(ReviewView, { props: { initialLoading: false, initialCards: [bool] } }).html;
+    expect(boolHtml).not.toContain('role="radio"');
+    expect(boolHtml).toContain('data-testid="review-graded-submit"');
   });
 
   it('renders the result panel from the server feedback, including sanitized answer HTML and rating mapping', () => {
@@ -223,62 +135,6 @@ describe('ReviewView graded answering', () => {
   });
 });
 
-describe('ReviewView choice option display order', () => {
-  beforeEach(() => {
-    setLocale('zh-CN');
-  });
-
-  it('renders single-choice radios in display-slot order with stored-index values', () => {
-    const card = gradedCard('choice_single', { question: '问？', options: ['ALPHA', 'BETA', 'GAMMA'], answer: 0 });
-    const { html } = render(ReviewView, {
-      props: {
-        initialLoading: false,
-        initialCards: [card],
-        initialOptionsHTML: ['<p>ALPHA</p>', '<p>BETA</p>', '<p>GAMMA</p>'],
-        initialOptionOrder: [2, 0, 1],
-      },
-    });
-
-    // The rows are in display order while each radio's value is the stored index, so a submitted answer stays a stored index.
-    const radioTags = [...html.matchAll(/<[^>]*data-testid="review-graded-option"[^>]*>/g)].map((match) => match[0]);
-    expect(radioTags).toHaveLength(3);
-    expect(radioTags.map((tag) => /data-value="([^"]+)"/.exec(tag)?.[1])).toEqual(['2', '0', '1']);
-
-    // Each row's accessible name points at the slot's own label element, whose content follows the same display order.
-    const labelled = radioTags.map((tag) => {
-      const id = /aria-labelledby="([^"]+)"/.exec(tag)?.[1];
-      expect(id).toBeTruthy();
-      return new RegExp(`<span id="${id}"[^>]*>([\\s\\S]*?)</span>`).exec(html)?.[1];
-    });
-    expect(labelled[0]).toContain('GAMMA');
-    expect(labelled[1]).toContain('ALPHA');
-    expect(labelled[2]).toContain('BETA');
-  });
-
-  it('renders multi-choice rows in display-slot order with slot-keyed labels', () => {
-    const card = gradedCard('choice_multi', { question: '问？', options: ['ALPHA', 'BETA', 'GAMMA'], answers: [0] });
-    const { html } = render(ReviewView, {
-      props: {
-        initialLoading: false,
-        initialCards: [card],
-        initialOptionsHTML: ['<p>ALPHA</p>', '<p>BETA</p>', '<p>GAMMA</p>'],
-        initialOptionOrder: [2, 0, 1],
-      },
-    });
-
-    // Every row id is keyed by its display slot, so two orders never collide, and the label content follows display order.
-    const spans = [...html.matchAll(/<span id="([^"]*-option-(\d+))"[^>]*>([\s\S]*?)<\/span>/g)].map((match) => ({
-      slot: match[2],
-      content: match[3],
-    }));
-    expect(spans).toHaveLength(3);
-    expect(spans.map((span) => span.slot)).toEqual(['0', '1', '2']);
-    expect(spans[0]!.content).toContain('GAMMA');
-    expect(spans[1]!.content).toContain('ALPHA');
-    expect(spans[2]!.content).toContain('BETA');
-  });
-});
-
 describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
   beforeEach(() => {
     setLocale('zh-CN');
@@ -330,8 +186,7 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     expect(html).toContain('data-card-frame');
     expect(html).not.toContain('<code>prompt</code>');
     expect(html).not.toContain('RAW-PROMPT');
-    // The input control and the submit button are still there.
-    expect(html).toContain('data-testid="review-graded-input"');
+    // The front face, including its input control, is rendered by the frame; the submit button stays here.
     expect(html).toContain('data-testid="review-graded-submit"');
   });
 
@@ -471,15 +326,14 @@ describe('ReviewView card sides and controls come from the server metadata', () 
     expect(revealed).toContain('data-rating="1"');
   });
 
-  it('renders a decimal input for the numeric answer control', () => {
+  it('renders the numeric answer control in the frame, not in the parent', () => {
     const card = gradedCard('numeric', { prompt: '光速（m/s）？', value: 299792458, unit: 'm/s' });
     const { html } = render(ReviewView, {
       props: { initialLoading: false, initialCards: [card] },
     });
     expect(html).toContain('data-testid="review-graded-prompt"');
-    expect(html).toContain('光速（m/s）？');
-    expect(html).toContain('data-testid="review-graded-input"');
-    expect(html).toContain('inputmode="decimal"');
+    expect(html).not.toContain('data-testid="review-graded-input"');
+    expect(html).not.toContain('inputmode="decimal"');
     // The question must not leak the numeric answer.
     expect(html).not.toContain('299792458');
   });

@@ -133,7 +133,7 @@ func TestNewErrorsOnEmptyOrMissingIndex(t *testing.T) {
 // needing no inline script and therefore no CSP widening.
 func TestIndexInjectsSelfHostedMathJaxURL(t *testing.T) {
 	srv := newRenderServer(t, nil)
-	want := srv.assets.URL("js/mathjax/tex-svg.js")
+	want := srv.assets.URL("js/mathjax/tex-chtml-full.js")
 	if want == "" {
 		t.Fatal("mathjax asset is not embedded")
 	}
@@ -179,7 +179,7 @@ func TestIndexMathJaxMetaFollowsSetURL(t *testing.T) {
 		t.Errorf("fresh SPA index should not carry a MathJax meta")
 	}
 
-	url := "/static/v/abcd1234/js/mathjax/tex-svg.js"
+	url := "/static/v/abcd1234/js/mathjax/tex-chtml-full.js"
 	shell.SetMathJaxURL(url)
 	got := string(shell.IndexHTML())
 	meta := `<meta name="engram-mathjax" content="` + url + `" />`

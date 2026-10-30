@@ -63,7 +63,7 @@ const HARNESS_HTML = `<!doctype html>
       window.__frameReady = false;
       window.__showCard = function (html) {
         document.getElementById('frame').contentWindow.postMessage(
-          { type: 'show', html: html, css: '', bodyClass: '', side: 'front', mediaBase: '', autoplay: false },
+          { type: 'show', html: html, css: '', bodyClass: '', side: 'front', mediaBase: '', autoplay: false, ordinal: 0 },
           '*',
         );
       };

@@ -1,6 +1,16 @@
 import { isSupportedLocale, setLocale } from '../lib/i18n';
 import { enhanceShortcodes } from '../lib/shortcodes';
 import { readMathJaxURL, typesetCard } from './mathjax';
+import {
+  applyBrowserClasses,
+  attachAnswerControls,
+  bodyClassName,
+  enhanceSoundTags,
+  installReviewerGlobals,
+  playSound,
+  type AnswerReader,
+  type FrameAnswerValue,
+} from './reviewer';
 
 /**
  * The card frame runtime.
@@ -29,6 +39,8 @@ export interface ShowMessage {
   side: string;
   mediaBase: string;
   autoplay: boolean;
+  /** The card's zero-based template ordinal; the body class is `card` + ordinal + 1, as Anki writes it. */
+  ordinal: number;
 }
 
 export interface FrameRuntime {
@@ -53,18 +65,20 @@ function isString(value: unknown): value is string {
 }
 
 function parseShow(data: Record<string, unknown>): ShowMessage | null {
-  const { html, css, bodyClass, side, mediaBase, autoplay } = data;
+  const { html, css, bodyClass, side, mediaBase, autoplay, ordinal } = data;
   if (
     !isString(html) ||
     !isString(css) ||
     !isString(bodyClass) ||
     !isString(side) ||
     !isString(mediaBase) ||
-    typeof autoplay !== 'boolean'
+    typeof autoplay !== 'boolean' ||
+    typeof ordinal !== 'number' ||
+    !Number.isFinite(ordinal)
   ) {
     return null;
   }
-  return { type: 'show', html, css, bodyClass, side, mediaBase, autoplay };
+  return { type: 'show', html, css, bodyClass, side, mediaBase, autoplay, ordinal };
 }
 
 function containsMath(html: string): boolean {
@@ -91,6 +105,10 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   // head change.
   const mathjaxURL = readMathJaxURL(doc);
 
+  // The browser and platform classes are written once at boot: the user agent does not change during the frame's life,
+  // and Anki's `addBrowserClasses` runs in the same place (before any card renders).
+  applyBrowserClasses(doc.documentElement, win.navigator.userAgent);
+
   let dark = false;
   // Stored for the autoplay phase; this phase deliberately does nothing with it.
   let autoplay = false;
@@ -98,6 +116,11 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   let observer: ResizeObserver | null = null;
   let styleElement: HTMLStyleElement | null = null;
   let baseElement: HTMLBaseElement | null = null;
+  // The face's body class recipe and the state the global helpers read.
+  let bodyBase = 'card';
+  let cardOrdinal = 0;
+  let side = 'question';
+  let sounds: HTMLElement[] = [];
 
   function post(message: Record<string, unknown>): void {
     parent?.postMessage(message, '*');
@@ -111,6 +134,33 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     doc.body?.appendChild(created);
     return created;
   }
+
+  function applyBodyClass(): void {
+    if (doc.body) doc.body.className = bodyClassName(bodyBase, cardOrdinal, dark);
+  }
+
+  function emitAnswer(value: FrameAnswerValue): void {
+    post({ type: 'answer', value });
+  }
+
+  const root = contentRoot();
+  // The answer controls live in the same content root for the frame's whole life; one delegated listener pair is enough
+  // and re-attaching it per show would post every value twice.
+  const answerReader: AnswerReader | null = root ? attachAnswerControls(root, emitAnswer) : null;
+
+  installReviewerGlobals(win, {
+    answer: () => answerReader?.currentAnswer(),
+    emitAnswer,
+    typedAnswer: () => answerReader?.typedAnswer() ?? '',
+    play: (requested, index) => {
+      // The frame holds one side of the card. A command for the other side has nothing to play here and is ignored;
+      // the answer frame receives `play:a:N` and the question frame `play:q:N`.
+      const expected = side === 'answer' ? 'a' : 'q';
+      if (requested === expected && Number.isInteger(index) && index >= 0) {
+        playSound(sounds, index);
+      }
+    },
+  });
 
   function runScripts(root: Element): Promise<void> {
     // innerHTML never executes scripts, so each one is replaced by a fresh element. External scripts are awaited one at a time,
@@ -177,32 +227,49 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     autoplay = message.autoplay;
     void autoplay;
 
+    side = message.side;
+    bodyBase = message.bodyClass;
+    cardOrdinal = message.ordinal;
     resetHead(message.css, message.mediaBase);
-    doc.documentElement.className = dark ? 'dark' : '';
-    if (doc.body) doc.body.className = message.bodyClass;
+    // The browser and platform classes were written at boot; the show must not wipe them, so only the theme class changes.
+    doc.documentElement.classList.toggle('dark', dark);
+    doc.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    applyBodyClass();
 
-    const root = contentRoot();
-    if (!root) return;
-    root.innerHTML = message.html;
+    const nextRoot = contentRoot();
+    if (!nextRoot) return;
+    nextRoot.innerHTML = message.html;
 
-    await runScripts(root);
+    await runScripts(nextRoot);
 
     win.onUpdateHook?.();
     if (containsMath(message.html)) {
-      await typesetCard(win, doc, mathjaxURL, root);
+      await typesetCard(win, doc, mathjaxURL, nextRoot);
     }
+    // `[sound:]` tags become audio-control sources before the shortcode enhancer runs, so every tag gets engram's
+    // play/pause, seek, ±5 s and time controls. The order is the tag order Anki's `play:N` commands address.
+    sounds = enhanceSoundTags(doc, nextRoot);
     // The shortcode controls are part of the face, so they are attached here, after the content and its typesetting: a card
     // face leaving the parent DOM must not lose its audio or TTS controls.
-    enhanceShortcodes([root]);
+    enhanceShortcodes([nextRoot]);
+    if (message.side === 'question') focusAnswer(nextRoot);
     win.onShownHook?.();
 
     if (message.side === 'answer') scrollToAnswer();
+  }
+
+  /** Puts the caret in the answer input a question face shows, as Anki's reviewer does on a type-in card. */
+  function focusAnswer(node: Element): void {
+    const input = node.querySelector<HTMLElement>('input.answer-input[type=text], textarea.answer-input');
+    if (!input || typeof input.focus !== 'function') return;
+    input.focus();
   }
 
   function applyTheme(nextDark: boolean): void {
     dark = nextDark;
     doc.documentElement.classList.toggle('dark', dark);
     doc.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    applyBodyClass();
   }
 
   async function handleMessage(event: MessageEvent): Promise<void> {
@@ -220,19 +287,15 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
         if (typeof data.dark === 'boolean') applyTheme(data.dark);
         return;
       case 'replay':
-        doc.dispatchEvent(new CustomEvent('engram:replay'));
+        // Replay starts the first tag in the face's own order; the tag's own control does the playback.
+        playSound(sounds, 0);
         return;
       default:
         return;
     }
   }
 
-  function onKeyDown(event: KeyboardEvent): void {
-    const active = doc.activeElement;
-    if (active instanceof HTMLElement) {
-      const tag = active.tagName.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || active.isContentEditable) return;
-    }
+  function postKey(event: KeyboardEvent): void {
     post({
       type: 'key',
       key: event.key,
@@ -242,6 +305,27 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
       shift: event.shiftKey,
       meta: event.metaKey,
     });
+  }
+
+  function onKeyDown(event: KeyboardEvent): void {
+    const active = doc.activeElement;
+    if (active instanceof HTMLElement) {
+      // Enter in a single-line answer input is the graded card's submit key, so it is forwarded even though the
+      // control owns the rest of the keyboard. A textarea keeps Enter for a newline (the short-answer card).
+      const submitFromInput =
+        active instanceof HTMLInputElement &&
+        active.classList.contains('answer-input') &&
+        event.key === 'Enter' &&
+        !event.isComposing &&
+        event.keyCode !== 229;
+      if (submitFromInput) {
+        postKey(event);
+        return;
+      }
+      const tag = active.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || active.isContentEditable) return;
+    }
+    postKey(event);
   }
 
   function onClick(event: MouseEvent): void {
@@ -263,7 +347,6 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   doc.addEventListener('click', onClick);
   win.addEventListener('message', onMessage);
 
-  const root = contentRoot();
   const ResizeObserverCtor = (win as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
   if (root && typeof ResizeObserverCtor === 'function') {
     observer = new ResizeObserverCtor((entries) => {

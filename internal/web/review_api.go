@@ -312,6 +312,7 @@ func (s *Server) reviewRender(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"card_id":      card.PublicID,
+		"ordinal":      view.Ordinal,
 		"front":        view.Front,
 		"back":         view.Back,
 		"front_html":   view.FrontHTML,

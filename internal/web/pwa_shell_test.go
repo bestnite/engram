@@ -206,7 +206,7 @@ func TestShellComposesWithMathJax(t *testing.T) {
 		t.Fatalf("NewShell() error = %v", err)
 	}
 
-	shell.SetMathJaxURL("/static/v/abcd1234/js/mathjax/tex-svg.js")
+	shell.SetMathJaxURL("/static/v/abcd1234/js/mathjax/tex-chtml-full.js")
 	shell.SetShell(ShellHTML{
 		ManifestURL:    manifestPath,
 		ThemeColor:     "#18181b",
@@ -218,7 +218,7 @@ func TestShellComposesWithMathJax(t *testing.T) {
 	got := string(shell.IndexHTML())
 	headEnd := strings.Index(got, "</head>")
 	for _, want := range []string{
-		`<meta name="` + mathjaxMetaName + `" content="/static/v/abcd1234/js/mathjax/tex-svg.js" />`,
+		`<meta name="` + mathjaxMetaName + `" content="/static/v/abcd1234/js/mathjax/tex-chtml-full.js" />`,
 		`<meta name="` + versionMetaName + `" content="v0.1.4" />`,
 		`<link rel="manifest" href="` + manifestPath + `"/>`,
 		`<script src="` + pwaScriptPath + `"></script>`,

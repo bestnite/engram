@@ -6,14 +6,12 @@
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
   import { toast } from '../components/ui/toast';
-  import { typeset, removeMenuTabStops } from '../mathjax';
+  import { typeset } from '../mathjax';
   import { enhanceShortcodes, stopShortcodePlayback } from '../shortcodes';
   import { reviewShortcut, reviewSwipe, type ReviewShortcut } from '../review-shortcuts';
-  import RadioGroup from '../components/ui/RadioGroup.svelte';
   import CardFrame, { type CardFrameKey } from '../components/CardFrame.svelte';
   import { REVIEW_FRONT_CSS, REVIEW_BACK_CSS, REVIEW_ANSWER_CSS } from '../card-frame';
 
-  import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
@@ -34,16 +32,6 @@
     // initial values are kept so the DOM-less server-side rendering tests can pin "only sanitized HTML reaches the HTML sink".
     initialFrontHTML?: string;
     initialBackHTML?: string;
-    /**
-     * The server-sanitized HTML of each choice option, in option order (null/empty for card types without options). In production it arrives
-     * with the render response; the initial value lets the DOM-less server-side rendering tests pin the option HTML sink.
-     */
-    initialOptionsHTML?: string[];
-    /**
-     * Display order of the choice options: display slot -> stored option index. In production it arrives with the render
-     * response; the initial value lets the DOM-less server-side rendering tests pin a non-identity order.
-     */
-    initialOptionOrder?: number[];
     initialEditHref?: string;
     /** Whether the self-graded card is already flipped (flipped by reveal() in production; the initial value overrides it in tests). */
     initialRevealed?: boolean;
@@ -60,16 +48,10 @@
     initialRevealedAnswerHTML = '',
     initialFrontHTML = '',
     initialBackHTML = '',
-    initialOptionsHTML = [],
-    initialOptionOrder,
     initialEditHref = '',
     initialRevealed = false,
     initialLastUndo = null,
   }: Props = $props();
-
-  // A per-instance id prefix for elements that labels point at with aria-labelledby. Two mounted review views (or a client-side
-  // remount) must not produce the same id, otherwise a checkbox could take its accessible name from the other view's option.
-  const uid = $props.id();
 
   // Self-graded card types render four rating buttons; answer-type card types render an input control and are graded by the server.
   // Which card type belongs to which class is decided by the server's self-description (graded / answer_control); the frontend no longer maintains a list.
@@ -99,16 +81,11 @@
   const reviewRemaining = $derived(remaining - newRemaining);
   let startedAt = Date.now();
 
-  // Answer and feedback state of answer-type card types; the grading result comes from the server, the client does not choose a rating.
-  let answerText = $state('');
-  let singleChoice = $state<number | null>(null);
-  let multiChoice = $state<number[]>([]);
-  let boolChoice = $state<boolean | null>(null);
-  // Per-blank answer cards: blanks are the per-blank prompts given by the server (they decide the number of inputs), and blankAnswers corresponds to them one to one.
-  let blanks = $state<string[]>([]);
-  let blankAnswers = $state<string[]>([]);
-  let blankInputs = $state<(HTMLInputElement | null)[]>([]);
-  // Short-answer cards: the answer written before self-grading. After flipping it is compared against the reference answer and archived together with the self-grade when scoring.
+  // Answer state of answer-type card types; the control lives in the frame and posts its value, the server grades it.
+  // frameAnswer is the last value the frame posted; undefined means the learner has not answered yet.
+  let frameAnswer = $state<GradedAnswer | undefined>(undefined);
+  // Short-answer cards: the answer written before self-grading. The frame posts it as the control's value; after flipping
+  // it is compared against the reference answer and archived together with the self-grade when scoring.
   let essayText = $state('');
   // svelte-ignore state_referenced_locally
   let feedback = $state<GradedFeedback | null>(initialFeedback);
@@ -130,21 +107,13 @@
   let frontHTML = $state(initialFrontHTML);
   // svelte-ignore state_referenced_locally
   let backHTML = $state(initialBackHTML);
-  // The server-sanitized HTML of each choice option, in option order. The answer controls inject these fragments instead of the raw option
-  // text, which would print TeX delimiters literally; the raw field text never reaches an HTML sink.
-  // svelte-ignore state_referenced_locally
-  let optionsHTML = $state<string[]>(initialOptionsHTML);
-  // The server's display order for the current card's options: display slot -> stored option index. An empty/absent value means
-  // the stored order; the derived list below validates it before use, so a stale or malformed value can never hide an option.
-  // svelte-ignore state_referenced_locally
-  let optionOrder = $state<number[] | null>(initialOptionOrder ?? null);
+  // The current card's zero-based template ordinal, used for the frame body class `cardN` (N = ordinal + 1).
+  let cardOrdinal = $state(0);
   // svelte-ignore state_referenced_locally
   let editHref = $state(initialEditHref);
   let renderToken = 0;
 
-  // The HTML containers that stay in the parent page: only the choice options and the grading breakdown. They are the only
-  // ones typeset and enhanced here; the card faces themselves live in the frame and are handled by its runtime.
-  let optionsSection = $state<HTMLElement | null>(null);
+  // The grading breakdown stays in the parent page: it is the only HTML container left here, so it is what gets typeset and enhanced.
   let feedbackSection = $state<HTMLElement | null>(null);
 
   // The `<base href>` prefix each frame needs for the relative media names in its HTML, one per response that carries a face.
@@ -154,32 +123,6 @@
   let feedbackMediaBase = $state('');
 
   const current = $derived(cards[0] || null);
-
-  type OptionSlot = { slot: number; stored: number; text: string; html: string | undefined };
-
-  /**
-   * The choice options in display order. `slot` is the screen row, `stored` is the option's index in the stored list; the
-   * server's option_order maps one to the other. A missing, null, or malformed order (not a permutation of the option count)
-   * falls back to the stored order, so every option is still rendered exactly once.
-   */
-  const optionSlots = $derived.by<OptionSlot[]>(() => {
-    const options = current ? gradedOptions($cardTypes, current) : [];
-    const count = options.length;
-    const identity = options.map((_, index) => index);
-    const order = optionOrder;
-    let resolved = identity;
-    if (order && order.length === count) {
-      const seen = new Set(order);
-      const valid = seen.size === count && order.every((stored) => Number.isInteger(stored) && stored >= 0 && stored < count);
-      if (valid) resolved = order;
-    }
-    return resolved.map((stored, slot) => ({
-      slot,
-      stored,
-      text: options[stored] ?? '',
-      html: optionsHTML[stored],
-    }));
-  });
 
   // "One more round": when the queue is empty and the review scope happens to be a single deck, read today's new card quota; if there are still new cards beyond today's quota
   // the completion page offers an append entry. The daily new card cap is a study goal rather than a hard limit, and appending only applies to today and only to yourself.
@@ -234,41 +177,32 @@
     return value === undefined || value === null ? '' : String(value);
   }
 
-  /** The option text of a multiple-choice question: the field name comes from the metadata's options_field; only the options are read, the answer field is never rendered. */
-  function gradedOptions(catalog: CardTypeCatalog | null, card: DueCard): string[] {
-    const description = descriptionOf(catalog, card.kind);
-    const raw = description && description.options_field ? (card.fields || {})[description.options_field] : undefined;
-    return Array.isArray(raw) ? raw.map((option) => String(option)) : [];
-  }
-
   function resetAnswerState(): void {
-    answerText = '';
-    singleChoice = null;
-    multiChoice = [];
-    boolChoice = null;
-    blankAnswers = blanks.map(() => '');
+    frameAnswer = undefined;
+    essayText = '';
     needAnswer = false;
   }
 
-  /** Assemble the current card's raw answer; an unanswered multiple-choice question returns undefined (blocked before submission). The control type comes from the metadata. */
+  /**
+   * The last value the frame posted for the answer control. The frame posts the same shapes the SPA used to submit
+   * (a string, an option index, an index array, a boolean, or one string per blank/item), so this is exactly the
+   * payload internal/answer decodes.
+   */
   function currentAnswer(): GradedAnswer | undefined {
-    switch (answerControl) {
-      case 'text':
-      case 'number':
-        return answerText;
-      case 'single':
-        return singleChoice ?? undefined;
-      case 'multi':
-        return multiChoice;
-      case 'bool':
-        return boolChoice ?? undefined;
-      case 'blanks':
-      case 'items':
-        // The number of inputs comes from the render response; without it there is no way to answer, so it is blocked as unanswered instead of submitting an empty array that is bound to be wrong.
-        return blanks.length ? blankAnswers.slice(0, blanks.length) : undefined;
-      default:
-        return undefined;
+    return frameAnswer;
+  }
+
+  /**
+   * Receives one `answer {value}` message from a card frame. The short-answer card's written answer is kept for the
+   * reveal and the self-grade; every other control's value is what submission sends.
+   */
+  function onFrameAnswer(value: GradedAnswer): void {
+    if (answerControl === 'essay') {
+      essayText = typeof value === 'string' ? value : '';
+      return;
     }
+    frameAnswer = value;
+    needAnswer = false;
   }
 
   function selectedDecks(): string[] | undefined {
@@ -306,28 +240,14 @@
       frontHTML = response.front_html;
       backHTML = response.back_html;
       mediaBase = response.media_base ?? '';
-      optionsHTML = response.options_html ?? [];
-      optionOrder = response.option_order ?? null;
+      cardOrdinal = response.ordinal ?? 0;
       editHref = response.edit_href;
-      blanks = response.blanks ?? [];
-      blankAnswers = blanks.map(() => '');
-      await tick();
-      // The per-blank inputs only appear with the render response, while the auto-focus on a card change runs before that, so it is topped up here.
-      if (blanks.length && !feedback && !gradedRevealed) blankInputs[0]?.focus();
-      // Only the option HTML still lives in the parent: the frame typesets and enhances the card faces itself.
-      await typeset([optionsSection]);
-      // Shortcode controls are attached only to the sanitized DOM that stays here: the module reads data attributes, never the raw fields.
-      enhanceShortcodes([optionsSection]);
-      // The option rows are interactive controls, so MathJax's keyboard entry to its context menu must not add a nested
-      // focus stop there.
-      removeMenuTabStops([optionsSection]);
     } catch {
       if (token !== renderToken) return;
       frontHTML = '';
       backHTML = '';
       mediaBase = '';
-      optionsHTML = [];
-      optionOrder = null;
+      cardOrdinal = 0;
       editHref = '';
     }
   }
@@ -339,12 +259,10 @@
     frontHTML = '';
     backHTML = '';
     mediaBase = '';
-    optionsHTML = [];
-    optionOrder = null;
+    cardOrdinal = 0;
     editHref = '';
-    blanks = [];
-    blankAnswers = [];
     essayText = '';
+    frameAnswer = undefined;
     if (card) void loadRender(card, token);
   });
 
@@ -671,16 +589,6 @@
     }
   }
 
-  let inputElement = $state<HTMLInputElement | null>(null);
-
-  $effect(() => {
-    if (current && gradedKind && !feedback && !gradedRevealed) {
-      tick().then(() => {
-        inputElement?.focus();
-      });
-    }
-  });
-
   function verdictVariant(verdict: GradedFeedback['verdict']): 'success' | 'warning' | 'danger' {
     switch (verdict) {
       case 'correct':
@@ -715,11 +623,10 @@
     );
   }
 
-  /** Whether focus is on a graded card's options (rendered by bits-ui as role=radio/checkbox buttons). */
-  function isChoiceTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) return false;
-    const role = target.getAttribute('role');
-    return role === 'radio' || role === 'checkbox';
+  /** Whether focus is on a graded card's options. The choice options moved into the frame with the front face, so no
+   * parent element can be a choice control and the answer is always "no". */
+  function isChoiceTarget(_target: EventTarget | null): boolean {
+    return false;
   }
 
   /** The action shared by space/enter and swipe: a graded card requests the answer reveal, a self-graded card flips. */
@@ -803,8 +710,9 @@
   }
 
   /**
-   * A key pressed inside the card face. The frame already withholds keys typed into an input, a textarea or a contenteditable
-   * element, and the choice options stay in the parent, so no focus flag applies here.
+   * A key pressed inside the card face. The frame withholds keys typed into an answer control, except Enter in a
+   * single-line input, which it forwards as the graded card's submit key. Choice options now live in the frame too, so
+   * no parent-side focus flag applies here.
    */
   function onFrameKey(message: CardFrameKey): void {
     handleShortcut(
@@ -1024,11 +932,13 @@
               <CardFrame
                 html={frontHTML}
                 css={REVIEW_FRONT_CSS}
-                bodyClass=""
+                bodyClass="card"
                 side="question"
                 mediaBase={mediaBase}
+                ordinal={cardOrdinal}
                 title={$t('note_preview.front')}
                 onkey={onFrameKey}
+                onanswer={onFrameAnswer}
               />
             {:else}
               <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">
@@ -1051,7 +961,8 @@
                   <CardFrame
                     html={backHTML}
                     css={REVIEW_BACK_CSS}
-                    bodyClass=""
+                    bodyClass="card"
+                    ordinal={cardOrdinal}
                     side="answer"
                     mediaBase={mediaBase}
                     title={$t('note_preview.back')}
@@ -1071,7 +982,8 @@
                   <CardFrame
                     html={backHTML}
                     css={REVIEW_BACK_CSS}
-                    bodyClass=""
+                    bodyClass="card"
+                    ordinal={cardOrdinal}
                     side="answer"
                     mediaBase={mediaBase}
                     title={$t('note_preview.back')}
@@ -1103,16 +1015,6 @@
               {/each}
             </div>
           {:else}
-            {#if answerControl === 'essay'}
-              <textarea
-                bind:value={essayText}
-                rows="4"
-                placeholder={$t('review.essay.placeholder')}
-                aria-label={$t('review.graded.given')}
-                data-testid="review-essay-input"
-                class="field-input w-full text-base"
-              ></textarea>
-            {/if}
             <button
               type="button"
               data-testid="review-reveal"
@@ -1132,11 +1034,13 @@
                 <CardFrame
                   html={frontHTML}
                   css={REVIEW_FRONT_CSS}
-                  bodyClass=""
+                  bodyClass="card"
+                  ordinal={cardOrdinal}
                   side="question"
                   mediaBase={mediaBase}
                   title={$t('note_preview.front')}
                   onkey={onFrameKey}
+                  onanswer={onFrameAnswer}
                 />
               {:else}
                 <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">{gradedPrompt($cardTypes, current)}</div>
@@ -1180,7 +1084,8 @@
                       <CardFrame
                         html={feedback.answer_html}
                         css={REVIEW_ANSWER_CSS}
-                        bodyClass=""
+                        bodyClass="card"
+                        ordinal={cardOrdinal}
                         side="answer"
                         mediaBase={feedbackMediaBase}
                         title={$t('note_preview.back')}
@@ -1209,7 +1114,8 @@
                     <CardFrame
                       html={revealedAnswerHTML}
                       css={REVIEW_ANSWER_CSS}
-                      bodyClass=""
+                      bodyClass="card"
+                      ordinal={cardOrdinal}
                       side="answer"
                       mediaBase={revealedMediaBase}
                       title={$t('note_preview.back')}
@@ -1221,88 +1127,8 @@
               </div>
             {:else}
               <div class="space-y-5">
-                {#if answerControl === 'text' || answerControl === 'number'}
-                  <input
-                    bind:this={inputElement}
-                    type="text"
-                    inputmode={answerControl === 'number' ? 'decimal' : undefined}
-                    bind:value={answerText}
-                    placeholder={answerControl === 'number' ? $t('review.graded.placeholder_number') : $t('review.graded.placeholder')}
-                    aria-label={$t('review.graded.placeholder')}
-                    data-testid="review-graded-input"
-                    class="field-input text-sm w-full min-h-12 text-lg"
-                  />
-                {:else if answerControl === 'single'}
-                  <div bind:this={optionsSection}>
-                    <RadioGroup
-                      testId="review-graded-options"
-                      itemTestId="review-graded-option"
-                      itemClass="min-h-12"
-                      name="graded-single"
-                      ariaLabel={$t('review.graded.options')}
-                      value={singleChoice === null ? '' : String(singleChoice)}
-                      onValueChange={(value) => (singleChoice = value === '' ? null : Number(value))}
-                      options={optionSlots.map((option) => ({
-                        value: String(option.stored),
-                        label: option.text,
-                        html: option.html || undefined,
-                      }))}
-                    />
-                  </div>
-                {:else if answerControl === 'multi'}
-                  <div bind:this={optionsSection} class="space-y-2" data-testid="review-graded-options">
-                    {#each optionSlots as option (option.slot)}
-                      <!-- The whole row is a label: clicking the option text toggles the checkbox too, consistent with the single-choice row being clickable; the selected style matches single choice. -->
-                      <label
-                        class="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-zinc-300 px-4 text-sm text-zinc-700 transition-colors hover:border-zinc-400 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-50 data-[state=checked]:font-medium data-[state=checked]:text-blue-700 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500 dark:data-[state=checked]:border-blue-600 dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-300"
-                        data-state={multiChoice.includes(option.stored) ? 'checked' : 'unchecked'}
-                        data-testid="review-graded-option-row"
-                      >
-                        <Checkbox
-                          testId="review-graded-option"
-                          checked={multiChoice.includes(option.stored)}
-                          onCheckedChange={(checked) =>
-                            (multiChoice = checked
-                              ? [...multiChoice, option.stored]
-                              : multiChoice.filter((item) => item !== option.stored))}
-                          labelledBy={`${uid}-option-${option.slot}`}
-                        />
-                        <span id={`${uid}-option-${option.slot}`}>{#if option.html}{@html option.html}{:else}{option.text}{/if}</span>
-                      </label>
-                    {/each}
-                  </div>
-                {:else if answerControl === 'blanks' || answerControl === 'items'}
-                  <div class="space-y-3" data-testid="review-graded-blanks">
-                    {#each blanks as hint, index (index)}
-                      <label class="block">
-                        <span class="mb-1 block text-xs text-zinc-500">{$t(answerControl === 'items' ? 'review.graded.item' : 'review.graded.blank', { index: index + 1 })}</span>
-                        <input
-                          bind:this={blankInputs[index]}
-                          type="text"
-                          bind:value={blankAnswers[index]}
-                          placeholder={hint || $t('review.graded.placeholder')}
-                          data-testid="review-graded-blank"
-                          class="field-input text-sm w-full min-h-12 text-lg"
-                        />
-                      </label>
-                    {/each}
-                  </div>
-                {:else if answerControl === 'bool'}
-                  <RadioGroup
-                    testId="review-graded-options"
-                    itemTestId="review-graded-option"
-                    class="grid grid-cols-2 gap-3"
-                    itemClass="min-h-12 justify-center font-medium"
-                    name="graded-bool"
-                    ariaLabel={$t('review.graded.options')}
-                    value={boolChoice === null ? '' : String(boolChoice)}
-                    onValueChange={(value) => (boolChoice = value === '' ? null : value === 'true')}
-                    options={[
-                      { value: 'true', label: $t('review.graded.true') },
-                      { value: 'false', label: $t('review.graded.false') },
-                    ]}
-                  />
-                {/if}
+                <!-- The answer control itself is part of the frame's front face: its markup comes from the server and it posts `answer {value}`.
+                     The submit and reveal buttons stay here so the graded flow and its shortcuts keep one owner. -->
                 {#if needAnswer}
                   <p class="text-sm text-rose-700 dark:text-rose-300" data-testid="review-graded-need-answer">{$t('review.graded.need_answer')}</p>
                 {/if}

@@ -78,6 +78,7 @@ describe('CardFrame outbound messages', () => {
       side: 'question',
       mediaBase: '/fm/token/',
       autoplay: false,
+      ordinal: 0,
     });
 
     (target.querySelector('[data-testid="harness-next"]') as HTMLButtonElement).click();

@@ -30,6 +30,7 @@ function showMessage(overrides: Record<string, unknown> = {}): MessageEvent {
     side: 'question',
     mediaBase: '',
     autoplay: false,
+    ordinal: 0,
     ...overrides,
   });
 }
@@ -157,21 +158,16 @@ describe('card frame show sequence', () => {
     expect(document.head.querySelectorAll('style')).toHaveLength(1);
     expect(document.head.querySelector('style')?.textContent).toBe('.card{color:red}');
     expect(document.head.querySelector('base')?.getAttribute('href')).toBe('/fm/tok123/');
-    expect(document.body.className).toBe('card card-answer');
+    expect(document.body.className).toBe('card card-answer card1');
     expect(document.getElementById('qa')?.innerHTML).toContain('id="answer"');
   });
 
-  it('toggles dark and replays through a document event', async () => {
+  it('toggles dark on the frame document', async () => {
     runtime = createRuntime({ parent: parent as unknown as Window });
 
     await runtime.handleMessage(fromParent({ type: 'theme', dark: true }));
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe('dark');
-
-    const replay = vi.fn();
-    document.addEventListener('engram:replay', replay);
-    await runtime.handleMessage(fromParent({ type: 'replay' }));
-    expect(replay).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the frame document stylesheet and attaches the shortcode controls inside the frame', async () => {
@@ -210,7 +206,7 @@ describe('card frame show sequence', () => {
 describe('card frame message origin', () => {
   it('ignores a show whose source is not the parent window', async () => {
     runtime = createRuntime({ parent: parent as unknown as Window });
-    await runtime.handleMessage(fromParent({ type: 'show', html: '<p>spoofed</p>', css: '', bodyClass: '', side: 'question', mediaBase: '', autoplay: false }, window));
+    await runtime.handleMessage(fromParent({ type: 'show', html: '<p>spoofed</p>', css: '', bodyClass: '', side: 'question', mediaBase: '', autoplay: false, ordinal: 0 }, window));
 
     expect(document.getElementById('qa')?.innerHTML).toBe('');
     expect(document.head.querySelector('style')).toBeNull();

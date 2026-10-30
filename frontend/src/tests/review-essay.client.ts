@@ -4,13 +4,12 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
-import { shownHtmlOnSide } from './card-frame-fixture';
+import { shownHtmlOnSide, postAnswerFromFrame } from './card-frame-fixture';
 
 /**
- * Essay cards: write first, compare after. Before flipping there is a multi-line input;
- * after flipping the user's own answer comes first, then the reference answer; when
- * grading, the answer is submitted with the self-rating. Nothing written means no answer
- * field; no reference answer means a hint rather than blank space.
+ * Essay cards: write first, compare after. The textarea lives in the frame and posts its text; after flipping the
+ * user's own answer comes first, then the reference answer; when grading, the answer is submitted with the self-rating.
+ * Nothing written means no answer field; no reference answer means a hint rather than blank space.
  */
 describe('ReviewView short answer', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -66,13 +65,8 @@ describe('ReviewView short answer', () => {
 
   it('shows the written answer above the reference and submits it with the rating', async () => {
     const { target, submitSelfReview } = await setup('<p>太阳照亮月球的一半。</p>');
-    const input = target.querySelector('[data-testid="review-essay-input"]') as HTMLTextAreaElement;
-    expect(input).not.toBeNull();
-    input.value = '因为<b>月球</b>绕地球转';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await flush();
+    await postAnswerFromFrame(target, 'question', '因为<b>月球</b>绕地球转');
     await reveal(target);
-    expect(target.querySelector('[data-testid="review-essay-input"]')).toBeNull();
     const given = target.querySelector('[data-testid="review-essay-given"]');
     // The answer is plain text: angle brackets display as-is and are not treated as HTML.
     expect(given?.textContent).toContain('因为<b>月球</b>绕地球转');

@@ -105,6 +105,32 @@ func (a *Assets) URL(logical string) string {
 	return ""
 }
 
+// ServeTree serves a whole embedded directory at a stable URL, without the content-hashed prefix. It exists for a script
+// that loads sibling files by a relative URL (MathJax requests its CHTML web fonts under the script's directory): those
+// requests cannot carry each font's own content hash, so the tree is served from one stable path instead. A path outside
+// the embedded tree is 404.
+func (a *Assets) ServeTree(prefix string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		logical := prefix + strings.TrimPrefix(c.Param("filepath"), "/")
+		f, ok := a.files[logical]
+		if !ok {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		contentType := mime.TypeByExtension(path.Ext(logical))
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		c.Header("ETag", `"`+f.hash+`"`)
+		// The card frame is sandboxed without allow-same-origin, so its document has an opaque origin and a web font
+		// request from it is cross-origin. The tree is public, immutable content, so a wildcard lets those fonts load
+		// without exposing anything a plain GET would not.
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Data(http.StatusOK, contentType, f.data)
+	}
+}
+
 // Serve handles /static/v/:hash/*filepath: a hash that does not match the current content returns 404, preventing an old URL
 // from hitting new content and scrambling caches; on a hit it is served as an immutable asset, which browsers may cache long-term.
 func (a *Assets) Serve(c *gin.Context) {

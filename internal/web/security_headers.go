@@ -39,7 +39,7 @@ var cspScriptHash = func() string {
 //     go:embed'ed into the binary; the frontend output (the /assets/index-*.js and index-*.css Vite produces) is likewise
 //     embedded and served from same-origin paths.
 //   - script-src 'self' <theme bootstrap hash>: external scripts are only the three same-origin kinds — bundle output
-//     (/assets/index-*.js), static scripts (/pwa.js, tex-svg.js of the self-hosted MathJax), and the service worker Go generates
+//     (/assets/index-*.js), static scripts (/pwa.js, tex-chtml-full.js of the self-hosted MathJax), and the service worker Go generates
 //     on the fly (/sw.js), so 'self' is enough. The only inline <script> block on a page is the first-paint
 //     theme bootstrap (themeBootstrapJS), allowed precisely by its SHA-256, which is why script-src does not carry
 //     'unsafe-inline'. Nor 'unsafe-eval': none of the shipped scripts compiles JS at runtime, and the guard test

@@ -91,19 +91,63 @@ func inputListMarkup(ctx RenderContext, control string, count int) string {
 
 // choiceMarkup renders one radio or checkbox per option. The value is the
 // zero-based stored index, and every control in the group shares the element
-// id as its name.
+// id as its name. A valid OptionOrder decides the display order while the value
+// stays a stored index, so the frame shows the order the learner saw and the
+// submitted answer is still a stored option.
+//
+// The options field is HTML: the label shows the stored fragment of the option
+// line, so bold text, media and TeX delimiters reach the frame intact. The
+// parsed lines stay the grading form and the fallback when the display
+// fragments cannot be lined up with them.
 func choiceMarkup(ctx RenderContext, control string, options []string, inputType string) string {
 	id := elementID(ctx)
+	order := ctx.OptionOrder
+	if !isPermutation(order, len(options)) {
+		order = make([]int, len(options))
+		for i := range order {
+			order[i] = i
+		}
+	}
+	display := optionFragments(ctx.Bindings["options"], len(options))
 	var b strings.Builder
 	b.WriteString(`<div class="answer-choices" data-control="` + escapeAttribute(control) + `">`)
-	for i, option := range options {
+	for _, stored := range order {
+		label := escapeHTML(options[stored])
+		if len(display) == len(options) {
+			label = display[stored]
+		}
 		b.WriteString(`<label class="answer-choice"><input type="` + inputType +
-			`" name="` + escapeAttribute(id) + `" value="` + fmt.Sprintf("%d", i) +
+			`" name="` + escapeAttribute(id) + `" value="` + fmt.Sprintf("%d", stored) +
 			`" data-control="` + escapeAttribute(control) + `"` + styleAttribute(ctx) + `> ` +
-			escapeHTML(option) + `</label>`)
+			label + `</label>`)
 	}
 	b.WriteString(`</div>`)
 	return b.String()
+}
+
+// optionFragments returns the display HTML of every option line, split at the
+// same line breaks ParseLines uses and dropping the same empty lines, so index
+// i is the fragment of parsed line i. A different count means the two
+// splitters disagree; the caller then renders the parsed text for every option
+// rather than pairing fragments with the wrong lines, which would change the
+// stored index a submitted answer refers to.
+func optionFragments(binding Binding, count int) []string {
+	if binding.HTML == "" {
+		return nil
+	}
+	segments := lineBreakPattern.Split(binding.HTML, -1)
+	fragments := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		fragment := strings.TrimSpace(segment)
+		if ParseText(fragment) == "" {
+			continue
+		}
+		fragments = append(fragments, fragment)
+	}
+	if len(fragments) != count {
+		return nil
+	}
+	return fragments
 }
 
 // boundaryMarkup wraps a plain-text breakdown in the common result element.

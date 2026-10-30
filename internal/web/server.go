@@ -209,7 +209,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	// Injects the content-hashed URL of the self-hosted MathJax into the SPA entry, for the frontend loader to bring in as a same-origin external script
 	// (CSP script-src 'self' already allows it, no inline script needed). When the resource is missing the
 	// URL is empty, nothing is injected, and the frontend loader skips loading it.
-	shell.SetMathJaxURL(assets.URL("js/mathjax/tex-svg.js"))
+	shell.SetMathJaxURL(assets.URL("js/mathjax/tex-chtml-full.js"))
 	// PWA shell: manifest, theme-color, icons, registration script and theme bootstrap are all injected into the
 	// SPA entry <head>. Icons use content-hashed URLs; the theme bootstrap uses the compile-time constant themeBootstrap, the same source as the CSP's
 	// script-src hash allowlist, so changing it requires changing the policy in step. The manifest and /pwa.js are stable URLs
@@ -327,6 +327,9 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET("/healthz", s.healthz)
 	router.GET("/", s.homeRoute)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
+	// MathJax loads its CHTML web fonts by a path relative to the script URL; the fonts cannot carry one shared content
+	// hash, so the whole MathJax tree is also served at this stable path (configured as MathJax's fontURL).
+	router.GET("/static/mathjax/*filepath", s.assets.ServeTree("js/mathjax/"))
 	router.GET("/assets/*filepath", s.shell.ServeAsset)
 	// The review iframe page: a separate, minimal document owned by the frame runtime, not the SPA shell. Its version segment only
 	// busts the iframe cache; see registerCardFrameRoutes.

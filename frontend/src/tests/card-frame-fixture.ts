@@ -18,6 +18,7 @@ export interface ShownFace {
   side: string;
   mediaBase: string;
   autoplay: boolean;
+  ordinal: number;
 }
 
 interface Recorder {
@@ -83,4 +84,16 @@ export async function shownHtmlOnSide(root: ParentNode, side: string): Promise<s
   return frames(root).flatMap((frame, index) =>
     frame.getAttribute('data-side') === side ? [faces[index]?.html ?? ''] : [],
   );
+}
+
+/**
+ * Delivers one `answer {value}` message from the frame of the given side, the way the runtime posts it after the
+ * learner edits an answer control. The frames must have received `show` first, so this waits for the recording.
+ */
+export async function postAnswerFromFrame(root: ParentNode, side: string, value: unknown): Promise<void> {
+  await shownFaces(root);
+  const frame = frames(root).find((candidate) => candidate.getAttribute('data-side') === side);
+  if (!frame) throw new Error(`no card frame on side ${side}`);
+  window.dispatchEvent(new MessageEvent('message', { data: { type: 'answer', value }, source: frame.contentWindow }));
+  await drain();
 }

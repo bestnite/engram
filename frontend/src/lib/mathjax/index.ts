@@ -1,7 +1,7 @@
 /**
  * MathJax loading and typesetting on the SPA side.
  *
- * MathJax 3 is a self-hosted static asset (`internal/web/static/js/mathjax/tex-svg.js`, embedded with go:embed into
+ * MathJax 3 is a self-hosted static asset (`internal/web/static/js/mathjax/tex-chtml-full.js`, embedded with go:embed into
  * the binary, no public CDN). Its content-hashed URL is unknown at Vite build time, so on the Go side, into the SPA entry
  * `index.html`'s <head>, `<meta name="engram-mathjax" content="...">` is injected to hand the URL to the frontend;
  * this module reads that meta and loads it with a dynamic `<script src>`. The CSP's `script-src 'self'` already allows same-origin
@@ -22,12 +22,17 @@ interface MathJaxGlobal {
 /**
  * MathJax v3 startup config. `startup.typeset: false` turns off whole-page auto typesetting: SPA content arrives asynchronously, so it should
  * only be typeset explicitly on server-sanitized nodes. Delimiters keep the bundled build's defaults - inline `\(…\)` and block
- * `\[…\]` (keeping `$$…$$` as well), matching SSR page behavior.
+ * `\[…\]` (keeping `$$…$$` as well), matching SSR page behavior. The bundle is `tex-chtml-full`, shared with the card frame; the
+ * frame replaces this object with Anki's reviewer configuration before it loads the same script.
  */
 export const MATHJAX_CONFIG = {
   tex: {
     inlineMath: [['\\(', '\\)']],
     displayMath: [['$$', '$$'], ['\\[', '\\]']],
+  },
+  // The CHTML web fonts are served from a stable path, because a font request cannot carry its own content hash.
+  chtml: {
+    fontURL: '/static/mathjax/output/chtml/fonts/woff-v2',
   },
   startup: { typeset: false },
 };

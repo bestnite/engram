@@ -4,12 +4,12 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
-import { shownHtmlOnSide } from './card-frame-fixture';
+import { shownHtmlOnSide, postAnswerFromFrame } from './card-frame-fixture';
 
 /**
- * Per-blank answering for cloze cards: the number of inputs and their hints come from the
- * render response's blanks, and on submit each blank's answer is handed to the server as a
- * string array in order of appearance; if render gives no blank count, nothing is submitted.
+ * Per-blank answering for cloze cards: the input markup comes from the server's answer control and lives in the frame,
+ * which posts one string per blank in order. The parent submits that array unchanged; without a posted answer the submit
+ * is blocked instead of sending an empty array.
  */
 describe('ReviewView cloze blanks', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -41,7 +41,9 @@ describe('ReviewView cloze blanks', () => {
     version: 0,
   };
 
-  function fakeClient(blanks: string[] | null) {
+  async function setup() {
+    setLocale('zh-CN');
+    seedCardTypes();
     const submitGradedReview = vi.fn().mockResolvedValue({
       card_id: 'c1',
       state: 'learning',
@@ -56,48 +58,23 @@ describe('ReviewView cloze blanks', () => {
         card_id: 'c1',
         front_html: '<p><span class="cloze">[…]</span> and <span class="cloze">[city]</span></p>',
         back_html: '<p>Paris and Rome</p>',
-        blanks,
+        blanks: ['', 'city'],
         edit_href: '/decks/d1/notes/n1',
       }),
       getCardTypes: vi.fn(),
       revealGradedAnswer: vi.fn().mockResolvedValue({ revealed: true, card_id: 'c1', answer_html: '<p>Paris and Rome</p>' }),
       submitGradedReview,
     } as unknown as ApiClient;
-    return { client, submitGradedReview };
-  }
-
-  async function setup(blanks: string[] | null) {
-    setLocale('zh-CN');
-    seedCardTypes();
-    const fake = fakeClient(blanks);
     const target = document.createElement('div');
     document.body.appendChild(target);
-    instance = mount(ReviewView, { target, props: { client: fake.client } });
+    instance = mount(ReviewView, { target, props: { client } });
     await flush();
-    return { target, ...fake };
+    return { target, submitGradedReview };
   }
 
-  function blankInputs(target: HTMLElement): HTMLInputElement[] {
-    return Array.from(target.querySelectorAll<HTMLInputElement>('[data-testid="review-graded-blank"]'));
-  }
-
-  it('renders one labelled input per blank with the hint as placeholder', async () => {
-    const { target } = await setup(['', 'city']);
-    const inputs = blankInputs(target);
-    expect(inputs).toHaveLength(2);
-    expect(inputs[0]!.placeholder).toBe('输入你的答案');
-    expect(inputs[1]!.placeholder).toBe('city');
-    expect(target.querySelector('[data-testid="review-graded-blanks"]')?.textContent).toContain('第 2 空');
-  });
-
-  it('submits the blanks in order as an array of strings', async () => {
-    const { target, submitGradedReview } = await setup(['', 'city']);
-    const inputs = blankInputs(target);
-    inputs[0]!.value = 'Paris';
-    inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }));
-    inputs[1]!.value = 'Milan';
-    inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }));
-    await flush();
+  it('submits the blanks the frame posted, in order, and shows the verdict', async () => {
+    const { target, submitGradedReview } = await setup();
+    await postAnswerFromFrame(target, 'question', ['Paris', 'Milan']);
     (target.querySelector('[data-testid="review-graded-submit"]') as HTMLElement).click();
     await flush();
     expect(submitGradedReview).toHaveBeenCalledTimes(1);
@@ -105,24 +82,16 @@ describe('ReviewView cloze blanks', () => {
     expect(target.querySelector('[data-testid="review-graded-verdict"]')).not.toBeNull();
   });
 
-  it('keeps the prompt above the revealed answer, separated by one rule', async () => {
-    const { target } = await setup(['', 'city']);
+  it('keeps the stem above the revealed answer, both rendered by the frame', async () => {
+    const { target } = await setup();
     (target.querySelector('[data-testid="review-graded-reveal"]') as HTMLElement).click();
     await flush();
-    // After revealing the answer the stem stays above, and the answer panel is separated from it by its own top rule; the answer block itself draws no rule, so the two lines do not stack.
     expect((await shownHtmlOnSide(target, 'question')).join('')).toContain('city');
-    const panel = target.querySelector('[data-testid="review-graded-revealed"]') as HTMLElement;
-    expect(panel.className).toContain('border-t');
-    const answer = target.querySelector('[data-testid="review-graded-revealed-answer"]') as HTMLElement;
-    // Both faces are rendered by the frame, so the answer text is read from what the answer frame was given.
     expect((await shownHtmlOnSide(target, 'answer')).join('')).toContain('Paris and Rome');
-    expect(answer.className).not.toContain('border-t');
-    expect(target.querySelector('[data-testid="review-graded-blanks"]')).toBeNull();
   });
 
-  it('does not submit when the render response gave no blanks', async () => {
-    const { target, submitGradedReview } = await setup(null);
-    expect(blankInputs(target)).toHaveLength(0);
+  it('does not submit before the frame posts an answer', async () => {
+    const { target, submitGradedReview } = await setup();
     (target.querySelector('[data-testid="review-graded-submit"]') as HTMLElement).click();
     await flush();
     expect(submitGradedReview).not.toHaveBeenCalled();

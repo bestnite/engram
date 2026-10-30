@@ -1,0 +1,94 @@
+/**
+ * The reviewer face's own skin.
+ *
+ * The frame document already loads `app.css`, so design tokens and the utility classes the shortcode controls use are
+ * available. The answer control markup itself carries only the semantic classes from `internal/answer/markup.go`, so it
+ * is styled here: the same skin as the review page's fields, in both themes. Anki's card CSS may target `body.card`,
+ * `body.cardN`, `body.nightMode` or `body.night_mode`; those classes are written by the runtime and leave the frame's
+ * own colours alone.
+ */
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  padding: 0.125rem 0.25rem;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body.nightMode,
+body.night_mode {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.answer-input {
+  display: block;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--input);
+  border-radius: 0.6rem;
+}
+
+.answer-input:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+
+textarea.answer-input {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.answer-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.answer-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.answer-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  cursor: pointer;
+}
+
+.answer-choice:hover {
+  border-color: var(--input);
+}
+
+.answer-choice:has(input:checked) {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.answer-choice input {
+  accent-color: var(--brand);
+}
+
+.answer-breakdown {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+/* A sound tag keeps its text in a visually hidden wrapper once its control exists; the wrapper must not widen the line. */
+.engram-sound [data-shortcode-fallback] {
+  position: absolute;
+}

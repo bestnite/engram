@@ -16,7 +16,7 @@ func TestLoadAssetsBuildsContentHashedURLs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAssets() error = %v", err)
 	}
-	for _, logical := range []string{"js/mathjax/tex-svg.js", "js/pwa.js", "icons/icon.svg"} {
+	for _, logical := range []string{"js/mathjax/tex-chtml-full.js", "js/pwa.js", "icons/icon.svg"} {
 		if !assets.Has(logical) {
 			t.Fatalf("asset %q is not embedded", logical)
 		}
@@ -48,6 +48,38 @@ func TestAssetHashChangesWithContent(t *testing.T) {
 	}
 	if first.url == changed.url {
 		t.Errorf("hashed URL did not change when content changed: both %q", first.url)
+	}
+}
+
+// TestServeTreeServesAFontUnderAStablePath pins the second MathJax route: a CHTML font is reachable without the
+// content hash of the script that requests it, and a path outside the embedded MathJax tree is 404.
+func TestServeTreeServesAFontUnderAStablePath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	assets, err := LoadAssets()
+	if err != nil {
+		t.Fatalf("LoadAssets() error = %v", err)
+	}
+	router := gin.New()
+	router.GET("/static/mathjax/*filepath", assets.ServeTree("js/mathjax/"))
+
+	font := "js/mathjax/output/chtml/fonts/woff-v2/MathJax_Main-Regular.woff"
+	want, err := staticFS.ReadFile("static/" + font)
+	if err != nil {
+		t.Fatalf("read embedded MathJax font: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/static/mathjax/output/chtml/fonts/woff-v2/MathJax_Main-Regular.woff", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !bytes.Equal(rec.Body.Bytes(), want) {
+		t.Error("served font does not match the embedded asset")
+	}
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/static/mathjax/../pwa.js", nil))
+	if rec.Code != http.StatusNotFound && rec.Code != http.StatusMovedPermanently {
+		t.Errorf("path escape status = %d, want 404 or a redirect that leaves the tree", rec.Code)
 	}
 }
 

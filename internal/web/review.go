@@ -121,6 +121,9 @@ type ReviewCardView struct {
 	// ExpectedVersion is the optimistic-lock version carried on submit ("0" for a new card).
 	ExpectedVersion string
 	Template        string
+	// Ordinal is the card's zero-based position among the note's templates, the value Anki's reviewer turns into the
+	// body class `cardN` with N = Ordinal + 1. It is zero for a single-template note and for a cloze card.
+	Ordinal int
 	// Front and Back are the card faces: HTML, CSS, body class, side and media base.
 	Front CardFace
 	Back  CardFace
@@ -213,12 +216,13 @@ func (s *Server) renderCard(ctx context.Context, card *store.Card, submitted jso
 
 // faces renders both sides into the card-view shape.
 //
-// The front side never shows the answer control's input markup: the frame runtime draws the input, and the transitional
-// SPA draws its own controls from options_html and blanks. The back side substitutes the control's
-// breakdown for the marker, so the correct answer is visible with or without a submitted answer.
+// For a frame request the front side substitutes the answer control's input markup for the type marker, so the frame
+// draws the control and posts its value. A non-frame request keeps the marker stripped: the transitional SPA draws its
+// own controls from options_html and blanks. The back side substitutes the control's breakdown for the marker, so the
+// correct answer is visible with or without a submitted answer.
 func (s *Server) faces(ctx context.Context, user *store.User, item *cardFace, submitted json.RawMessage, result *answer.GradeResult, forFrame bool, optionOrder []int) (CardFace, CardFace) {
 	mediaBase := s.frameMediaBase(ctx, user.ID, item.note.DeckID)
-	frontHTML := typeMarkerPattern.ReplaceAllString(item.front, "")
+	frontHTML := frontFaceHTML(item, optionOrder, forFrame)
 	backHTML := backFaceHTML(item, submitted, result, optionOrder)
 	if !forFrame || mediaBase == "" {
 		frontHTML = absoluteMediaRefs(frontHTML)
@@ -238,6 +242,34 @@ func (s *Server) faces(ctx context.Context, user *store.User, item *cardFace, su
 		Side:      notetype.SideBack.String(),
 		MediaBase: mediaBase,
 	}
+}
+
+// frontFaceHTML renders the front side. A frame request replaces the type marker with the answer control's input
+// markup; every other request strips the marker, because the transitional SPA draws its own control.
+func frontFaceHTML(item *cardFace, optionOrder []int, forFrame bool) string {
+	marker := typeMarkerPattern.FindString(item.front)
+	if !forFrame || item.spec == nil || marker == "" {
+		return typeMarkerPattern.ReplaceAllString(item.front, "")
+	}
+	control, ok := answer.Lookup(item.spec.Control)
+	if !ok {
+		return typeMarkerPattern.ReplaceAllString(item.front, "")
+	}
+	bindings, err := answer.ResolveBindings(*item.spec, item.values)
+	if err != nil {
+		return typeMarkerPattern.ReplaceAllString(item.front, "")
+	}
+	rendered, err := answer.RenderSide(control, answer.RenderContext{
+		Marker:       marker,
+		Side:         notetype.SideFront,
+		Bindings:     bindings,
+		ClozeOrdinal: item.ordinal,
+		OptionOrder:  optionOrder,
+	}, item.front)
+	if err != nil {
+		return typeMarkerPattern.ReplaceAllString(item.front, "")
+	}
+	return rendered
 }
 
 // backFaceHTML replaces the back side's type marker with the answer control's breakdown when a control exists, and
@@ -380,6 +412,7 @@ func (s *Server) cardViewWithAnswer(ctx context.Context, user *store.User, item 
 		DeckID:          rendered.deck.PublicID,
 		ExpectedVersion: strconv.Itoa(version),
 		Template:        card.Template,
+		Ordinal:         card.Ordinal,
 		Front:           front,
 		Back:            back,
 		FrontHTML:       front.HTML,

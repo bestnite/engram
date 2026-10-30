@@ -119,19 +119,24 @@ change.
   file name (`<sha256>.<ext>`), which is what the frame resolves against `media_base`
   (`/fm/<token>/`), the document's `<base href>`. A card-face response to a request without the
   `X-Engram-Frame: 1` header rewrites those names into the absolute `/media/<sha256>` URLs the
-  SPA needs, because the SPA has no base element. Choice options are always absolute: they remain
-  in the parent page in this phase.
+  SPA needs, because the SPA has no base element. The self-hosted MathJax script is referenced by
+  its content-hashed `/static/v/<hash>/js/mathjax/tex-chtml-full.js` URL, and its CHTML web fonts
+  are served from the stable `/static/mathjax/` path because a font request cannot carry the
+  script's hash; that tree is public and sends `Access-Control-Allow-Origin: *`, because the
+  sandboxed frame has an opaque origin.
 - **Card view.** A card-face response carries one `{html, css, body_class, side, media_base}`
-  object per side (`front` and `back`). The HTML is the note type's template rendered against the
-  note's field values. The back side substitutes the answer control's breakdown for the
-  `[[type:...]]` marker once a graded answer result exists; the front side has the marker
-  stripped, because the input markup is the frame runtime's job. Until the SPA reads the two
-  objects, `front_html`/`back_html` repeat their HTML and `options_html`, `option_order` and
-  `blanks` describe the answer controls the old review page draws itself. Those flat fields, and
-  the card-kind vocabulary the note response still carries (`kind`, the transitional description
-  catalog in `internal/api/card_catalog.go`), are removed when the rich-text editor and the frame
-  runtime land. A note write already uses the permanent payload: `note_type` plus `fields` keyed by
-  field name with HTML values.
+  object per side (`front` and `back`), plus the card's template `ordinal`. The HTML is the note
+  type's template rendered against the note's field values. The back side substitutes the answer
+  control's breakdown for the `[[type:...]]` marker once a graded answer result exists. A
+  frame-output request (`X-Engram-Frame: 1`) substitutes the control's `RenderFront` input markup
+  for the same marker on the front, so the frame draws the control and posts its value; every
+  other request strips the marker. Until the SPA reads the two objects, `front_html`/`back_html`
+  repeat their HTML and `options_html`, `option_order` and `blanks` remain in the payload, though
+  the review page no longer renders controls from them. Those flat fields, and the card-kind
+  vocabulary the note response still carries (`kind` as a transitional alias, the description
+  catalog in `internal/api/card_catalog.go`), are removed with the rich-text editor. A note write
+  already uses the permanent payload: `note_type` plus `fields` keyed by field name with HTML
+  values.
 - **Note write and review.** `NoteStore.Save` resolves the note type (deck and note type id),
   rejects a field name the config does not declare and names it, converts the payload values to
   HTML keyed by field id, recomputes `search_text` from the plain text of every field not marked
@@ -272,11 +277,16 @@ change.
   and reads no cookie; it writes the content sent by the parent page into `#qa`, re-executes the content
   scripts, typesets the face, attaches the shortcode controls to it, and posts height, keys, answers
   and links back to the parent. Its language is the `<html lang>` the server resolved for the request.
+  It also supplies the Anki reviewer environment a shared template expects: the body classes
+  `card cardN` and `nightMode night_mode`, the browser and platform classes ported from Anki's
+  `browser_selector.ts`, the `$`, `jQuery`, `getTypedAnswer`, `pycmd` and `bridgeCommand` globals, the
+  answer controls' posted values, and engram's audio controls on every `[sound:]` tag.
 - `frontend/src/lib/components/CardFrame.svelte` is the only way a view embeds a card face: it owns
-  the sandboxed iframe, sends `show` and `theme`, and forwards the frame's key presses to the view.
-  Card-face HTML therefore never enters the parent DOM. The SPA's remaining HTML sinks are the ones
-  the parent still renders (the choice options and the admin mail preview), and
-  `frontend/src/tests/html-sink-allowlist.test.ts` lists each of them with its reason.
+  the sandboxed iframe, sends `show` (with the card ordinal, side and media base) and `theme`, and
+  forwards the frame's key presses and `answer {value}` messages to the view. Card-face HTML therefore
+  never enters the parent DOM. The SPA's remaining HTML sinks are the per-item grading breakdown and
+  the admin mail preview, and `frontend/src/tests/html-sink-allowlist.test.ts` lists each of them with
+  its reason.
 - `frontend/src/lib/format.ts` is the only place numbers, percentages, byte counts, dates and raw field
   values become text; components pass the current locale.
 - UI text comes from `frontend/src/lib/i18n/locales/{zh-CN,en}.ts`. Text produced by the

@@ -27,13 +27,6 @@ interface HtmlSink {
 const ALLOWLIST: HtmlSink[] = [
   {
     file: 'lib/views/ReviewView.svelte',
-    expression: '{@html option.html}',
-    reason:
-      'Multiple-choice option labels render the server-sanitised option HTML. The choice options stay in the parent page ' +
-      'until the answer controls move into the frame.',
-  },
-  {
-    file: 'lib/views/ReviewView.svelte',
     expression: '{@html item.answer_html}',
     reason:
       'The per-item grading breakdown renders the server-sanitised answer of each option of a list card. That is option ' +
