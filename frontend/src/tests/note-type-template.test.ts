@@ -34,6 +34,26 @@ describe('field rename rewrites template references', () => {
   it('keeps surrounding whitespace inside the braces', () => {
     expect(rewriteFieldReferences('{{ Old }}', 'Old', 'New')).toBe('{{ New }}');
   });
+
+  // A field name may contain `$`, and a replacement string would interpret `$&`, `` $` ``, `$'` and
+  // `$$` as substitution patterns instead of writing them literally.
+  const dollarNewNames = ['A$&B', 'A$`B', "A$'B", 'A$$B'];
+
+  it.each(dollarNewNames)('writes %s verbatim in every reference form', (newName) => {
+    const cases: Array<[string, string]> = [
+      ['{{Old}}', `{{${newName}}}`],
+      ['{{#Old}}', `{{#${newName}}}`],
+      ['{{/Old}}', `{{/${newName}}}`],
+      ['{{text:Old}}', `{{text:${newName}}}`],
+    ];
+    for (const [from, to] of cases) {
+      expect(rewriteFieldReferences(from, 'Old', newName)).toBe(to);
+      // The same form must survive inside larger template text.
+      expect(rewriteFieldReferences(`before ${from} after`, 'Old', newName)).toBe(
+        `before ${to} after`,
+      );
+    }
+  });
 });
 
 describe('live template preview', () => {
