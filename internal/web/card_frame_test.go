@@ -150,7 +150,7 @@ func TestOtherRoutesKeepSiteCSPAndAllowAutoplay(t *testing.T) {
 		"img-src 'self' https:; " +
 		"connect-src 'self'; " +
 		"object-src 'none'; " +
-		"frame-src 'none'; " +
+		"frame-src 'self'; " +
 		"base-uri 'self'; " +
 		"form-action 'self'; " +
 		"frame-ancestors 'none'"

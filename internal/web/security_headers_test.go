@@ -137,7 +137,7 @@ func TestSecurityHeadersCSPMatchesPageResources(t *testing.T) {
 		"img-src 'self' https:",            // https external images allowed by /media and the card face
 		"connect-src 'self'",
 		"object-src 'none'",
-		"frame-src 'none'",
+		"frame-src 'self'", // The card frame iframe is same-origin; a third-party frame stays refused
 		"base-uri 'self'",
 		"form-action 'self'",
 		"frame-ancestors 'none'",

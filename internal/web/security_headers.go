@@ -51,7 +51,9 @@ var cspScriptHash = func() string {
 //   - img-src 'self' https:: images come from /media (self); the card-face sanitizing allowlist permits https external images
 //     (imgSrcPattern in internal/render), hence https is allowed; otherwise external images in card faces would be blocked.
 //   - connect-src 'self': the SPA's XHR/fetch (API, uploads, service worker registration) are all same-origin.
-//   - object-src 'none' / frame-src 'none': no <object>/<embed>/<iframe> in the shipped pages.
+//   - object-src 'none' / frame-src 'self': no <object> or <embed> appears in the shipped pages, and the only <iframe>
+//     is the same-origin card frame (/card-frame/<version>) that renders card faces in a sandbox. A third-party frame
+//     is still refused, and the frame document's own CSP carries the sandbox.
 //   - base-uri 'self' / form-action 'self': no <base> injection surface; forms are submitted by the SPA
 //     (onsubmit prevents the default and goes to the same-origin JSON endpoints instead), with no third-party submit target.
 //   - frame-ancestors 'none': every page is a standalone application page with no need to be embedded by third parties,
@@ -62,7 +64,7 @@ var cspPolicy = "default-src 'self'; " +
 	"img-src 'self' https:; " +
 	"connect-src 'self'; " +
 	"object-src 'none'; " +
-	"frame-src 'none'; " +
+	"frame-src 'self'; " +
 	"base-uri 'self'; " +
 	"form-action 'self'; " +
 	"frame-ancestors 'none'"
