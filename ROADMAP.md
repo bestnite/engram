@@ -471,31 +471,6 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
 
 **Phase 6–9 — remaining capabilities**
 
-- [ ] **M17-25 Audio, video and TTS** — complete playback.
-  *Depends on:* M17-17.
-  *Files:* `frontend/src/cardframe/`; `internal/store/models.go` (the deck column `autoplay`, a `*bool`
-  defaulting to true per `AGENTS.md` 2.3 item 9); the deck settings view; the locale catalogs (append
-  a block with the prefix `deck.autoplay.`).
-  *Work:*
-  - The question side autoplays its tags in order. The answer side plays only the tags the answer
-    adds, so audio brought in by `{{FrontSide}}` is not replayed. Both follow the deck's `autoplay`
-    setting.
-  - `r` and `F5` replay.
-  - `[sound:]` with mp4 or webm plays in an inline `<video>`.
-  - TTS uses `speechSynthesis`:
-    - `lang` maps `xx_YY` to `xx-YY`;
-    - `voices` matches by name, falling back to the language default;
-    - `speed` maps to `rate`;
-    - `cloze_blank` is honoured.
-  - `span.engram-sound` applies `data-start`, `data-end`, `data-rate` and `data-loop`.
-  - The rich-text editor's "insert audio" dialog sets these four attributes.
-
-  *Acceptance:*
-  - Client tests: playback order per side, the `FrontSide` exclusion, segment and loop timing on a
-    mocked media element, and the voice fallback.
-  - The UG check from M17-24 also shows the same audio list per face.
-
-  *Verify:* `npm --prefix frontend run test:client && go test ./internal/store/...`.
 - [ ] **M17-26 Type-in in the frame** — Anki's `{{type:F}}` without an answer spec.
   *Depends on:* M17-17.
   *Files:* `frontend/src/cardframe/`; `internal/web/review_api.go`.
@@ -510,29 +485,9 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
   - A client test covers Enter posting `answer`.
 
   *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run test:client`.
-- [ ] **M17-27 Note type management** — edit a deck's note types.
-  *Depends on:* M17-18.
-  *Files:* a new view under `frontend/src/lib/views/` (single-writer hotspot); `frontend/src/lib/router`;
-  the locale catalogs (append a block with the prefix `notetype.`).
-  *Work:*
-  - Create a note type from a stock definition (Anki's six and engram's ten) or by copying one.
-  - Fields: add, rename, delete, reorder and options. A rename rewrites the template references, as
-    Anki does.
-  - Templates: add, rename, delete and reorder. The front, back and styling editors have a live frame
-    preview. The editor also covers browser templates and the answer spec (control and field
-    bindings).
-  - A change that adds or removes cards lists the affected card count and review count before
-    saving.
-
-  *Acceptance:*
-  - Client tests: a rename rewrites `{{Old}}`, `{{#Old}}` and `{{text:Old}}`.
-  - The impact prompt shows the counts that the server returns.
-  - Handler tests: a reader cannot save, and a stale version returns `409`.
-
-  *Verify:* `npm --prefix frontend run check && npm --prefix frontend run test:client && go test ./internal/api/...`.
 - [ ] **M17-28 Empty-card cleanup and note type change** — Anki's "Empty Cards" and "Change Note
   Type".
-  *Depends on:* M17-27, M17-45.
+  *Depends on:* M17-45.
   *Files:* `internal/api/` (service methods and routes); `internal/store/`; the note type view.
   *Work:*
   - Cleanup lists the cards whose front renders empty (M17-9) and deletes them after confirmation,
@@ -572,7 +527,7 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
 
   *Verify:* `npm --prefix frontend run test:client`.
 - [ ] **M17-31 Image occlusion editor** — create and edit occlusion notes.
-  *Depends on:* M17-27, M17-30.
+  *Depends on:* M17-30.
   *Files:* a new editor component; `frontend/package.json` (dependency `fabric`. Reason: Anki's mask
   editor is built on it, and using the same library keeps the stored shape data identical).
   *Work:*
@@ -692,6 +647,8 @@ bluemonday-sanitised `internal/render` are gone.
 | Review of any note type (M17-34, M17-41) | The due-card payload carries `answer_control`, `machine_graded` and `field_order`, and the review page chooses the self-rating, essay or machine-graded flow from them instead of the card-kind catalog, so a note type that matches no stock kind reviews normally. A note type write (REST create/update, package import, stock creation, migration) now validates every template's answer spec: the control must be registered, every required role bound, and every binding must name a declared field; a bad REST write returns 400 naming the template and role, and a bad package is `package_bad_format` with no rows written. | No — three fields added to the due-card response; previously accepted invalid note types are now rejected |
 | Anki `.apkg` import (M17-23, M17-24) | `internal/anki` reads all three Anki package layouts (legacy `collection.anki2`, `collection.anki21`, and zstd-compressed `collection.anki21b` with protobuf note type/deck configuration) under the deck package's entry, per-file and total caps. The import page, `POST` package import, upload tickets and the MCP `import_deck` accept `.apkg`: the top-level package deck becomes one engram deck, subdecks fill `cards.deck_path`, note types arrive unchanged with no answer spec, notes carry `external_ref = "anki:<guid>"`, media is registered by name, and the package's cards are created as they exist. Re-importing into the same deck matches notes by guid and note types by `anki_origin.notetype_id`, keeping cards and progress; an equal field/template structure is overwritten in place, a changed one creates a new note type and moves the notes. The report lists missing media, unplayable video, external scripts/stylesheets and missing LaTeX images. | No — a new input format is accepted and the import report gains four lists |
 | Editor on note types (M17-35, M17-40) | The note editor lists the deck's note types, builds the form from the selected type's fields in config order (field options included) and saves `{note_type, fields}` without a kind; the preview renders the stored type's own templates and CSS and answers 404 for a type of another deck. A note type update regenerates the cards of every live note of the type in one transaction: an added template creates the missing cards, a removed template soft-deletes their cards while `card_states` and `reviews` stay. The edit body takes `dry_run` and `confirm_card_removal`; a removal without confirmation is 409 `card_removal_unconfirmed` with the three counts, a kind change is 400, and a successful update writes one audit row with the counts. | Yes — the note preview request takes `note_type` instead of `kind`; the note type update response gains four fields and a new 409 code |
+| Audio, video and TTS playback (M17-25) | The review frame plays the server's AV tag list: the question side autoplays its tags in order, the answer side plays only the tags it adds (audio inserted by `{{FrontSide}}` is not replayed), and both follow the deck's new `autoplay` setting (default on, owner-only). `r` and `F5` replay; an mp4 or webm `[sound:]` plays in an inline video; TTS maps `lang`, `voices`, `speed` and `cloze_blank` onto `speechSynthesis`; `span.engram-sound` start/end/rate/loop reach the player, and the editor's insert-audio dialog sets them. | No — a deck field is added and the card-face payload gains `av_tags` and `autoplay` |
+| Note type management (M17-27) | A deck page lists, creates (from a stock definition or by copying) and edits note types: fields with options and Anki-style template-reference rewriting, templates with browser variants, CSS, the answer-spec control and its field bindings, and live sandboxed previews. A save previews the card impact with `dry_run` and asks before removing cards. Stock definitions and answer controls come from two additive read endpoints. | No — a page and two read endpoints are added |
 | Deck progress | The deck list, the home deck list and the deck detail header show how many of the deck's cards the user has studied and how many new cards are left, as `Studied N · Left M`. On the home deck list each deck gets a second line of numbers: today's new and review counts as badges, which turn grey at zero, and a progress bar beside the studied and remaining text, which turns to the success colour once no new card is left. The counts are per user, so a shared deck never shows another member's progress, and they ignore the daily limits. A suspended new card is not counted as left; a suspended studied card still counts as studied. | No — two fields added to a session-only response |
 | Deck pause | A user pauses a deck for themselves from the deck list (a toggle beside delete or leave) or the deck detail header; the owner and every member, readers included, decide alone. A paused deck keeps a `Paused` badge on the deck list and disappears from the home deck list and the sidebar. It stays out of the default review queue, the home due count, the unfiltered forecast, the weekly digest and the reminder mail, while naming it (`/review?deck=…`, batch review, a stats deck filter) still studies or shows it. Progress is kept and cards keep falling due. Pausing and resuming write the audit actions `deck.pause` and `deck.resume`. | No — additive route, tool, table and field; nothing changes until a user pauses a deck |
 | Note search on field text | Note search (`GET /api/v1/decks/:id/notes?q=`, `search_notes` and the card list) matches the text of the fields instead of their JSON encoding. A field key such as `front` no longer matches every note; `<`, `>`, `&`, quotes and text across a line break can be found; case folding of non-ASCII letters is the same on SQLite and PostgreSQL. A query is split on whitespace and every term must occur, in any order. | No — results change, the request and response shapes do not |
