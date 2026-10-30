@@ -6,6 +6,9 @@
   import type {
     AnswerControl,
     AnswerControlRole,
+    ChangeNoteTypeResult,
+    EmptyCard,
+    EmptyCardCleanupResult,
     NoteType,
     NoteTypeConfig,
     NoteTypeField,
@@ -83,6 +86,26 @@
   let impact = $state<NoteTypeImpact | null>(null);
   let impactOpen = $state(false);
 
+  // Deck-level empty-card cleanup. The list is read when the dialog opens; the dry run reports the
+  // counts and the confirmation removes exactly those cards.
+  let emptyOpen = $state(false);
+  let emptyLoading = $state(false);
+  let emptyError = $state('');
+  let emptyCards = $state<EmptyCard[]>([]);
+  let emptyImpact = $state<EmptyCardCleanupResult | null>(null);
+  let emptyRemoving = $state(false);
+
+  // Change-note-type flow for the open type. The field map is keyed by target field id and holds a
+  // source field id; the template map is keyed by source template id and holds a target template id.
+  let changeOpen = $state(false);
+  let changeRunning = $state(false);
+  let changeError = $state('');
+  let changeTargetId = $state('');
+  let changeFieldMap = $state<Record<string, string>>({});
+  let changeTemplateMap = $state<Record<string, string>>({});
+  let changeImpact = $state<ChangeNoteTypeResult | null>(null);
+  let changeConfirmOpen = $state(false);
+
   // Create dialog: a stock definition, or a copy of one of the deck's existing types.
   let createOpen = $state(false);
   let createMode = $state<'stock' | 'copy'>('stock');
@@ -112,6 +135,23 @@
     { value: '', label: $t('notetype.answer.none') },
     ...answerControls.map((control) => ({ value: control.name, label: control.name })),
   ]);
+
+  // A change stays inside one deck and one kind: the store refuses a cross-deck target and a kind
+  // change, so the picker never offers one.
+  const changeTargets = $derived(
+    noteTypes.filter(
+      (entry) => entry.id !== draft?.id && entry.config.kind === draft?.config.kind,
+    ),
+  );
+  const changeTarget = $derived(noteTypes.find((entry) => entry.id === changeTargetId) ?? null);
+  const changeTargetFields = $derived(changeTarget?.config.fields ?? []);
+  const changeTargetTemplates = $derived(changeTarget?.config.templates ?? []);
+  const changeTargetOptions = $derived(
+    changeTargets.map((entry) => ({ value: entry.id, label: entry.name })),
+  );
+  const changeTemplateRows = $derived(
+    draft?.config.kind === 'normal' ? (draft?.config.templates ?? []) : [],
+  );
 
   // Preview values are the field names themselves: the preview shows the layout without inventing
   // card content. The rendered HTML goes only into the sandboxed frame, never into this page.
@@ -481,6 +521,294 @@
     }
   }
 
+  /** Reload the deck's types after a content operation, keeping the open type selected when it still exists. */
+  async function reloadTypes(): Promise<void> {
+    if (!deckId) return;
+    try {
+      const types = await apiClient.listNoteTypes(deckId);
+      noteTypes = types.note_types;
+      const open = draft ? noteTypes.find((entry) => entry.id === draft?.id) : undefined;
+      if (open) selectType(open);
+      else {
+        draft = null;
+        const first = noteTypes[0];
+        if (first) selectType(first);
+      }
+    } catch {
+      saveError = 'notetype.error.failed';
+    }
+  }
+
+  /** The display name of a note type id, falling back to the id when the row is gone. */
+  function noteTypeName(id: string): string {
+    return noteTypes.find((entry) => entry.id === id)?.name ?? id;
+  }
+
+  /** The display name of a template of one note type, falling back to the template id. */
+  function templateName(noteTypeId: string, templateId: string): string {
+    const type = noteTypes.find((entry) => entry.id === noteTypeId);
+    return type?.config.templates.find((template) => template.id === templateId)?.name ?? templateId;
+  }
+
+  function emptyErrorKey(err: unknown): string {
+    if (err instanceof ApiClientError && err.isForbidden) return 'notetype.error.forbidden';
+    return 'notetype.empty.cleanup.error';
+  }
+
+  /** Open the deck-level cleanup and read the list it acts on. */
+  async function openEmptyCards(): Promise<void> {
+    emptyOpen = true;
+    emptyLoading = true;
+    emptyError = '';
+    emptyImpact = null;
+    emptyCards = [];
+    try {
+      const listed = await apiClient.listEmptyCards(deckId);
+      emptyCards = listed.cards;
+    } catch (err) {
+      emptyError = emptyErrorKey(err);
+    } finally {
+      emptyLoading = false;
+    }
+  }
+
+  /** Report what the cleanup would remove without writing. */
+  async function previewEmptyCards(): Promise<void> {
+    if (emptyLoading) return;
+    emptyError = '';
+    try {
+      emptyImpact = await apiClient.cleanupEmptyCards(deckId, { dry_run: true });
+    } catch (err) {
+      emptyError = emptyErrorKey(err);
+    }
+  }
+
+  /** Remove the listed cards, then refresh the type list the deck page shows. */
+  async function confirmEmptyCards(): Promise<void> {
+    if (emptyRemoving) return;
+    emptyRemoving = true;
+    emptyError = '';
+    try {
+      emptyImpact = await apiClient.cleanupEmptyCards(deckId, { confirm_card_removal: true });
+      emptyCards = [];
+      toast.success($t('notetype.empty.cleanup.done'));
+      await reloadTypes();
+    } catch (err) {
+      emptyError = emptyErrorKey(err);
+    } finally {
+      emptyRemoving = false;
+    }
+  }
+
+  /** Open the change dialog on the first eligible target, with mappings prefilled by field and template name. */
+  function openChange(): void {
+    if (!draft) return;
+    changeOpen = true;
+    changeError = '';
+    changeImpact = null;
+    changeConfirmOpen = false;
+    chooseChangeTarget(changeTargets[0]?.id ?? '');
+  }
+
+  /** Select the target type and rebuild the mapping from names the two types share. */
+  function chooseChangeTarget(targetId: string): void {
+    changeTargetId = targetId;
+    changeFieldMap = {};
+    changeTemplateMap = {};
+    changeImpact = null;
+    const target = noteTypes.find((entry) => entry.id === targetId);
+    if (!target || !draft) return;
+    const used = new Set<string>();
+    for (const field of target.config.fields) {
+      const source = draft.config.fields.find(
+        (entry) => entry.name === field.name && !used.has(entry.id),
+      );
+      if (!source) continue;
+      used.add(source.id);
+      changeFieldMap = { ...changeFieldMap, [field.id]: source.id };
+    }
+    if (draft.config.kind !== 'normal') return;
+    for (const template of draft.config.templates) {
+      const match = target.config.templates.find((entry) => entry.name === template.name);
+      if (match) changeTemplateMap = { ...changeTemplateMap, [template.id]: match.id };
+    }
+  }
+
+  /** Assign the source field that fills one target field, or clear the mapping. */
+  function setChangeField(targetFieldId: string, sourceFieldId: string): void {
+    const next = { ...changeFieldMap };
+    if (sourceFieldId === '') delete next[targetFieldId];
+    else next[targetFieldId] = sourceFieldId;
+    changeFieldMap = next;
+    changeImpact = null;
+  }
+
+  /** Send one source template's cards to a target template, or clear the mapping so they are removed. */
+  function setChangeTemplate(sourceTemplateId: string, targetTemplateId: string): void {
+    const next = { ...changeTemplateMap };
+    if (targetTemplateId === '') delete next[sourceTemplateId];
+    else next[sourceTemplateId] = targetTemplateId;
+    changeTemplateMap = next;
+    changeImpact = null;
+  }
+
+  /** Source fields offered to one target field; a field already feeding another target stays out of the list. */
+  function sourceFieldOptions(targetFieldId: string): Array<{ value: string; label: string }> {
+    const used = new Set(
+      Object.entries(changeFieldMap)
+        .filter(([target]) => target !== targetFieldId)
+        .map(([, source]) => source),
+    );
+    return [
+      { value: '', label: $t('notetype.change.no_source') },
+      ...(draft?.config.fields ?? [])
+        .filter((field) => !used.has(field.id))
+        .map((field) => ({ value: field.id, label: field.name })),
+    ];
+  }
+
+  /** Target templates offered to one source template; a target already taken by another source stays out. */
+  function targetTemplateOptions(sourceTemplateId: string): Array<{ value: string; label: string }> {
+    const used = new Set(
+      Object.entries(changeTemplateMap)
+        .filter(([source]) => source !== sourceTemplateId)
+        .map(([, target]) => target),
+    );
+    return [
+      { value: '', label: $t('notetype.change.no_template') },
+      ...changeTargetTemplates
+        .filter((template) => !used.has(template.id))
+        .map((template) => ({ value: template.id, label: template.name })),
+    ];
+  }
+
+  /** Build the request body. The server reads the field map source-to-target, so the target-keyed map is inverted. */
+  function changeRequestBody(dryRun: boolean, confirmRemoval: boolean) {
+    const fieldMapping: Record<string, string> = {};
+    for (const [targetField, sourceField] of Object.entries(changeFieldMap)) {
+      if (sourceField) fieldMapping[sourceField] = targetField;
+    }
+    return {
+      target_note_type: changeTargetId,
+      field_mapping: fieldMapping,
+      template_mapping: draft?.config.kind === 'normal' ? { ...changeTemplateMap } : {},
+      dry_run: dryRun,
+      confirm_card_removal: confirmRemoval,
+    };
+  }
+
+  function changeErrorKey(err: unknown): string {
+    if (err instanceof ApiClientError) {
+      if (err.isForbidden) return 'notetype.error.forbidden';
+      if (err.code === 'invalid_request') return 'notetype.change.invalid';
+      if (err.isNotFound) return 'notetype.change.not_found';
+    }
+    return 'notetype.change.error';
+  }
+
+  /** The counts of a 409 card_removal_unconfirmed body; the client keeps the whole body in details. */
+  function changeImpactFromError(err: ApiClientError): ChangeNoteTypeResult | null {
+    const body = err.details as Partial<ChangeNoteTypeResult> | undefined;
+    if (
+      !body ||
+      typeof body.notes_moved !== 'number' ||
+      typeof body.cards_moved !== 'number' ||
+      typeof body.cards_removed !== 'number' ||
+      typeof body.reviews_on_removed_cards !== 'number'
+    ) {
+      return null;
+    }
+    return {
+      dry_run: false,
+      notes_moved: body.notes_moved,
+      cards_moved: body.cards_moved,
+      cards_removed: body.cards_removed,
+      reviews_on_removed_cards: body.reviews_on_removed_cards,
+    };
+  }
+
+  /** Report the impact without writing. */
+  async function previewChange(): Promise<void> {
+    if (!draft || !changeTarget) {
+      changeError = 'notetype.change.no_targets';
+      return;
+    }
+    changeRunning = true;
+    changeError = '';
+    try {
+      changeImpact = await apiClient.changeNoteType(deckId, draft.id, changeRequestBody(true, false));
+    } catch (err) {
+      changeError = changeErrorKey(err);
+    } finally {
+      changeRunning = false;
+    }
+  }
+
+  /**
+   * Run the dry run that gates the write, then either ask for the extra confirmation or commit.
+   * A change that removes cards always needs the second confirmation before anything is written.
+   */
+  async function requestChange(): Promise<void> {
+    if (!draft || !changeTarget) {
+      changeError = 'notetype.change.no_targets';
+      return;
+    }
+    changeRunning = true;
+    changeError = '';
+    try {
+      const preview =
+        changeImpact ?? (await apiClient.changeNoteType(deckId, draft.id, changeRequestBody(true, false)));
+      changeImpact = preview;
+      if (preview.cards_removed > 0) {
+        changeConfirmOpen = true;
+        return;
+      }
+      await commitChange(false);
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'card_removal_unconfirmed') {
+        const counts = changeImpactFromError(err);
+        if (counts) {
+          changeImpact = counts;
+          changeConfirmOpen = true;
+          return;
+        }
+      }
+      changeError = changeErrorKey(err);
+    } finally {
+      changeRunning = false;
+    }
+  }
+
+  /** Write the change. confirmRemoval is required exactly when cards would be removed. */
+  async function commitChange(confirmRemoval: boolean): Promise<void> {
+    if (!draft || !changeTarget) return;
+    changeRunning = true;
+    changeError = '';
+    try {
+      changeImpact = await apiClient.changeNoteType(
+        deckId,
+        draft.id,
+        changeRequestBody(false, confirmRemoval),
+      );
+      changeConfirmOpen = false;
+      changeOpen = false;
+      toast.success($t('notetype.change.done'));
+      await reloadTypes();
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'card_removal_unconfirmed') {
+        const counts = changeImpactFromError(err);
+        if (counts) {
+          changeImpact = counts;
+          changeConfirmOpen = true;
+          return;
+        }
+      }
+      changeError = changeErrorKey(err);
+    } finally {
+      changeRunning = false;
+    }
+  }
+
   function openCreate(): void {
     createOpen = true;
     createMode = 'stock';
@@ -566,6 +894,9 @@
     back={{ href: `/decks/${encodeURIComponent(deckId)}`, label: $t('notetype.back'), testId: 'notetype-back' }}
   >
     {#snippet actions()}
+      <Button variant="outline" size="lg" onclick={() => void openEmptyCards()} testId="notetype-empty-open">
+        <span>{$t('notetype.empty.cleanup.action')}</span>
+      </Button>
       <Button variant="outline" size="lg" onclick={openCreate} testId="notetype-create-open">
         <Plus class="size-4" aria-hidden="true" />
         <span>{$t('notetype.create')}</span>
@@ -633,6 +964,9 @@
               </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onclick={openChange} disabled={changeTargets.length === 0} testId="notetype-change-open">
+                <span>{$t('notetype.change.action')}</span>
+              </Button>
               <Button variant="danger-outline" onclick={() => { deleteError = ''; deleteOpen = true; }} testId="notetype-delete-open">
                 <Trash2 class="size-4" aria-hidden="true" />
                 <span>{$t('notetype.type.delete')}</span>
@@ -971,6 +1305,204 @@
       {/if}
     </div>
   {/if}
+
+  <!-- Deck-level empty-card cleanup: list, dry run, confirmed removal. -->
+  <Dialog
+    open={emptyOpen}
+    onOpenChange={(open) => { if (!open) emptyOpen = false; }}
+    title={$t('notetype.empty.cleanup.title')}
+    description={$t('notetype.empty.cleanup.description')}
+    size="lg"
+    testId="notetype-empty-dialog"
+  >
+    {#if emptyError}
+      <p role="alert" data-testid="notetype-empty-error" class="mb-3 text-sm text-destructive-foreground">{$t(emptyError)}</p>
+    {/if}
+    {#if emptyLoading}
+      <p data-testid="notetype-empty-loading" class="text-sm text-muted-foreground">{$t('common.loading')}</p>
+    {:else if emptyCards.length > 0}
+      <p data-testid="notetype-empty-count" class="text-sm font-medium text-foreground">
+        {$t('notetype.empty.cleanup.count', { count: emptyCards.length })}
+      </p>
+      <ul data-testid="notetype-empty-list" class="mt-2 max-h-64 space-y-1 overflow-y-auto text-sm text-muted-foreground">
+        {#each emptyCards as card (card.id)}
+          <li data-testid={`notetype-empty-card-${card.id}`} class="truncate">
+            {$t('notetype.empty.cleanup.entry', {
+              note_type: noteTypeName(card.note_type_id),
+              template: templateName(card.note_type_id, card.template),
+            })}
+          </li>
+        {/each}
+      </ul>
+    {:else if !emptyImpact}
+      <p data-testid="notetype-empty-none" class="text-sm text-muted-foreground">{$t('notetype.empty.cleanup.none')}</p>
+    {/if}
+    {#if emptyImpact}
+      <dl data-testid="notetype-empty-impact" class="mt-3 space-y-1 border-t border-border pt-3 text-sm">
+        <div class="flex items-center justify-between gap-4">
+          <dt class="text-muted-foreground">{$t('notetype.empty.cleanup.cards_removed')}</dt>
+          <dd data-testid="notetype-empty-removed" class="font-semibold tabular-nums text-foreground">{emptyImpact.cards_removed}</dd>
+        </div>
+        <div class="flex items-center justify-between gap-4">
+          <dt class="text-muted-foreground">{$t('notetype.empty.cleanup.reviews_kept')}</dt>
+          <dd data-testid="notetype-empty-reviews" class="font-semibold tabular-nums text-foreground">{emptyImpact.reviews_on_removed_cards}</dd>
+        </div>
+      </dl>
+    {/if}
+    <div class="mt-5 flex justify-end gap-2">
+      <Button variant="outline" onclick={() => (emptyOpen = false)} testId="notetype-empty-cancel">
+        <span>{$t('notetype.change.cancel')}</span>
+      </Button>
+      <Button
+        variant="outline"
+        onclick={() => void previewEmptyCards()}
+        disabled={emptyCards.length === 0 || emptyLoading}
+        testId="notetype-empty-preview"
+      >
+        <span>{$t('notetype.empty.cleanup.preview')}</span>
+      </Button>
+      <Button
+        variant="danger"
+        onclick={() => void confirmEmptyCards()}
+        disabled={!emptyImpact || emptyImpact.cards_removed === 0}
+        loading={emptyRemoving}
+        testId="notetype-empty-confirm"
+      >
+        <span>{$t('notetype.empty.cleanup.confirm')}</span>
+      </Button>
+    </div>
+  </Dialog>
+
+  <!-- Change note type: target of the same deck, field and template mapping, dry run before the write. -->
+  <Dialog
+    open={changeOpen}
+    onOpenChange={(open) => { if (!open) changeOpen = false; }}
+    title={$t('notetype.change.title')}
+    description={$t('notetype.change.description')}
+    size="lg"
+    testId="notetype-change-dialog"
+  >
+    {#if changeError}
+      <p role="alert" data-testid="notetype-change-error" class="mb-3 text-sm text-destructive-foreground">{$t(changeError)}</p>
+    {/if}
+    {#if changeTargets.length === 0}
+      <p data-testid="notetype-change-no-targets" class="text-sm text-muted-foreground">{$t('notetype.change.no_targets')}</p>
+    {:else}
+      <div>
+        <span class="text-sm font-medium text-foreground">{$t('notetype.change.target')}</span>
+        <Select
+          class="mt-1"
+          testId="notetype-change-target"
+          value={changeTargetId}
+          onValueChange={chooseChangeTarget}
+          options={changeTargetOptions}
+          ariaLabel={$t('notetype.change.target')}
+        />
+      </div>
+
+      {#if changeTarget}
+        <section data-testid="notetype-change-fields" class="mt-4">
+          <h3 class="text-sm font-semibold text-foreground">{$t('notetype.change.fields')}</h3>
+          <p class="mt-0.5 text-xs text-muted-foreground">{$t('notetype.change.field_hint')}</p>
+          <div class="mt-2 space-y-2">
+            {#each changeTargetFields as field (field.id)}
+              <div class="grid items-center gap-2 sm:grid-cols-[10rem_minmax(0,1fr)]">
+                <span class="text-sm text-foreground">{field.name}</span>
+                <Select
+                  testId={`notetype-change-field-${field.id}`}
+                  value={changeFieldMap[field.id] ?? ''}
+                  onValueChange={(sourceId) => setChangeField(field.id, sourceId)}
+                  options={sourceFieldOptions(field.id)}
+                  ariaLabel={$t('notetype.change.field_for', { field: field.name })}
+                />
+              </div>
+            {/each}
+          </div>
+        </section>
+
+        {#if changeTemplateRows.length > 0}
+          <section data-testid="notetype-change-templates" class="mt-4">
+            <h3 class="text-sm font-semibold text-foreground">{$t('notetype.change.templates')}</h3>
+            <p class="mt-0.5 text-xs text-muted-foreground">{$t('notetype.change.template_hint')}</p>
+            <div class="mt-2 space-y-2">
+              {#each changeTemplateRows as template (template.id)}
+                <div class="grid items-center gap-2 sm:grid-cols-[10rem_minmax(0,1fr)]">
+                  <span class="text-sm text-foreground">{template.name}</span>
+                  <Select
+                    testId={`notetype-change-template-${template.id}`}
+                    value={changeTemplateMap[template.id] ?? ''}
+                    onValueChange={(targetId) => setChangeTemplate(template.id, targetId)}
+                    options={targetTemplateOptions(template.id)}
+                    ariaLabel={$t('notetype.change.template_for', { template: template.name })}
+                  />
+                </div>
+              {/each}
+            </div>
+          </section>
+        {/if}
+
+        {#if changeImpact}
+          <dl data-testid="notetype-change-impact" class="mt-4 space-y-1 border-t border-border pt-3 text-sm">
+            <div class="flex items-center justify-between gap-4">
+              <dt class="text-muted-foreground">{$t('notetype.change.notes_moved')}</dt>
+              <dd data-testid="notetype-change-notes" class="font-semibold tabular-nums text-foreground">{changeImpact.notes_moved}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <dt class="text-muted-foreground">{$t('notetype.change.cards_moved')}</dt>
+              <dd data-testid="notetype-change-moved" class="font-semibold tabular-nums text-foreground">{changeImpact.cards_moved}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <dt class="text-muted-foreground">{$t('notetype.change.cards_removed')}</dt>
+              <dd data-testid="notetype-change-removed" class="font-semibold tabular-nums text-foreground">{changeImpact.cards_removed}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <dt class="text-muted-foreground">{$t('notetype.change.reviews')}</dt>
+              <dd data-testid="notetype-change-reviews" class="font-semibold tabular-nums text-foreground">{changeImpact.reviews_on_removed_cards}</dd>
+            </div>
+          </dl>
+        {/if}
+      {/if}
+    {/if}
+    <div class="mt-5 flex justify-end gap-2">
+      <Button variant="outline" onclick={() => (changeOpen = false)} testId="notetype-change-cancel">
+        <span>{$t('notetype.change.cancel')}</span>
+      </Button>
+      <Button
+        variant="outline"
+        onclick={() => void previewChange()}
+        disabled={!changeTarget || changeRunning}
+        testId="notetype-change-preview"
+      >
+        <span>{$t('notetype.change.preview')}</span>
+      </Button>
+      <Button
+        onclick={() => void requestChange()}
+        disabled={!changeTarget}
+        loading={changeRunning}
+        testId="notetype-change-submit"
+      >
+        <span>{$t('notetype.change.confirm')}</span>
+      </Button>
+    </div>
+  </Dialog>
+
+  <!-- Extra confirmation: a change that removes cards must be confirmed once more after the dry run. -->
+  <Dialog
+    open={changeConfirmOpen}
+    onOpenChange={(open) => { if (!open) changeConfirmOpen = false; }}
+    title={$t('notetype.change.removal_title')}
+    description={$t('notetype.change.removal_description', { cards: changeImpact?.cards_removed ?? 0 })}
+    testId="notetype-change-confirm-dialog"
+  >
+    <div class="mt-4 flex justify-end gap-2">
+      <Button variant="outline" onclick={() => (changeConfirmOpen = false)} testId="notetype-change-confirm-cancel">
+        <span>{$t('notetype.change.cancel')}</span>
+      </Button>
+      <Button variant="danger" onclick={() => void commitChange(true)} loading={changeRunning} testId="notetype-change-confirm-removal">
+        <span>{$t('notetype.change.removal_confirm')}</span>
+      </Button>
+    </div>
+  </Dialog>
 
   <!-- Create: a stock definition or a copy of an existing type. -->
   <Dialog

@@ -34,6 +34,11 @@ const (
 	ActionNoteTypeCreate = "note_type.create"
 	ActionNoteTypeUpdate = "note_type.update"
 	ActionNoteTypeDelete = "note_type.delete"
+	// ActionNoteTypeChange records moving a set of notes from one note type to another, with the counts the move
+	// reported. ActionCardEmptyCleanup records the explicit empty-card cleanup; both change content the user
+	// cannot reconstruct, so both are recorded at the note type write tier.
+	ActionNoteTypeChange   = "note_type.change"
+	ActionCardEmptyCleanup = "card.empty_cleanup"
 	// uploading media.
 	ActionMediaUpload = "media.upload"
 

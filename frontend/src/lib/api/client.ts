@@ -83,6 +83,11 @@ import {
   type UpdateNoteTypeRequest,
   type UpdateNoteTypeResponse,
   type NoteType,
+  type EmptyCardListResponse,
+  type CleanupEmptyCardsRequest,
+  type EmptyCardCleanupResult,
+  type ChangeNoteTypeRequest,
+  type ChangeNoteTypeResult,
   type IdentitiesResponse,
   type BindIdentityResponse,
 } from './types';
@@ -442,6 +447,51 @@ export class ApiClient {
     const type = encodeURIComponent(String(typeId));
     await this.notifying('cards', this.request<void>(`/api/v1/decks/${id}/note-types/${type}`, {
       method: 'DELETE',
+    }));
+  }
+
+  /**
+   * List the cards of a deck whose front renders empty (GET /api/v1/decks/:id/empty-cards, editor role).
+   * Read-only: the cleanup that follows is a separate request.
+   */
+  async listEmptyCards(deckId: string): Promise<EmptyCardListResponse> {
+    const id = encodeURIComponent(String(deckId));
+    return this.request<EmptyCardListResponse>(`/api/v1/decks/${id}/empty-cards`);
+  }
+
+  /**
+   * Clean up a deck's empty cards (POST /api/v1/decks/:id/empty-cards, editor role).
+   * A dry_run reports the counts without writing. Without confirm_card_removal the server answers
+   * 409 card_removal_unconfirmed and keeps the counts in the response body.
+   */
+  async cleanupEmptyCards(
+    deckId: string,
+    input: CleanupEmptyCardsRequest,
+  ): Promise<EmptyCardCleanupResult> {
+    if (!this.csrfToken) await this.getSession();
+    const id = encodeURIComponent(String(deckId));
+    return this.notifying('cards', this.request<EmptyCardCleanupResult>(`/api/v1/decks/${id}/empty-cards`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }));
+  }
+
+  /**
+   * Move one note type's notes to another type of the same deck (POST /api/v1/decks/:id/note-types/:type_id/change).
+   * A dry_run reports the impact without writing. A 409 card_removal_unconfirmed error carries the same counts in
+   * its response body, so the caller can ask for the extra confirmation before resending.
+   */
+  async changeNoteType(
+    deckId: string,
+    typeId: string,
+    input: ChangeNoteTypeRequest,
+  ): Promise<ChangeNoteTypeResult> {
+    if (!this.csrfToken) await this.getSession();
+    const id = encodeURIComponent(String(deckId));
+    const type = encodeURIComponent(String(typeId));
+    return this.notifying('cards', this.request<ChangeNoteTypeResult>(`/api/v1/decks/${id}/note-types/${type}/change`, {
+      method: 'POST',
+      body: JSON.stringify(input),
     }));
   }
 

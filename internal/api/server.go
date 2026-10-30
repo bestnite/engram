@@ -187,6 +187,11 @@ func (a *API) Register(r gin.IRouter) {
 	v1.POST("/decks/:id/note-types", a.authn.RequireScope(store.ScopeWrite), a.createNoteType)
 	v1.PATCH("/decks/:id/note-types/:type_id", a.authn.RequireScope(store.ScopeWrite), a.updateNoteType)
 	v1.DELETE("/decks/:id/note-types/:type_id", a.authn.RequireScope(store.ScopeWrite), a.deleteNoteType)
+	// Change a note type's notes in place, and the explicit empty-card cleanup. Both change content a user cannot
+	// reconstruct, so both are editor-only and both take a dry_run plus a confirmation flag.
+	v1.POST("/decks/:id/note-types/:type_id/change", a.authn.RequireScope(store.ScopeWrite), a.changeNoteType)
+	v1.GET("/decks/:id/empty-cards", a.authn.RequireScope(store.ScopeRead), a.listEmptyCards)
+	v1.POST("/decks/:id/empty-cards", a.authn.RequireScope(store.ScopeWrite), a.cleanupEmptyCards)
 	// "One more batch": read today's new-card allowance, add to the caller's allowance for today; touches only personal progress and sits under review like reviewing.
 	v1.GET("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.getExtraNew)
 	v1.POST("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.postExtraNew)

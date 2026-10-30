@@ -452,6 +452,64 @@ export interface UpdateNoteTypeResponse extends NoteType, NoteTypeImpact {
   dry_run: boolean;
 }
 
+/** One card the empty-card cleanup found (Go internal/api.EmptyCardJSON). */
+export interface EmptyCard {
+  /** Public card id. */
+  id: string;
+  /** Public id of the card's note. */
+  note_id: string;
+  /** Public id of the card's note type. */
+  note_type_id: string;
+  /** Template id the card currently holds. */
+  template: string;
+  ordinal: number;
+}
+
+/** GET /api/v1/decks/:id/empty-cards response; count repeats len(cards) for callers that only show the number. */
+export interface EmptyCardListResponse {
+  cards: EmptyCard[];
+  count: number;
+}
+
+/** POST /api/v1/decks/:id/empty-cards body. */
+export interface CleanupEmptyCardsRequest {
+  /** Report the counts without writing. */
+  dry_run?: boolean;
+  /** Allow the cleanup to soft-delete the cards it found. */
+  confirm_card_removal?: boolean;
+}
+
+/** The effect of one empty-card cleanup; reviews_on_removed_cards counts the log rows the cards keep. */
+export interface EmptyCardCleanupResult {
+  dry_run: boolean;
+  cards_removed: number;
+  reviews_on_removed_cards: number;
+}
+
+/**
+ * POST /api/v1/decks/:id/note-types/:type_id/change body.
+ *
+ * field_mapping maps a source field id to a target field id; template_mapping maps a source template id to a target
+ * template id. An unmapped target field receives an empty value, and a card of an unmapped source template is removed,
+ * which needs confirm_card_removal.
+ */
+export interface ChangeNoteTypeRequest {
+  target_note_type: string;
+  field_mapping: Record<string, string>;
+  template_mapping: Record<string, string>;
+  dry_run?: boolean;
+  confirm_card_removal?: boolean;
+}
+
+/** The effect of one change-note-type operation, reported by a dry run and the real change alike. */
+export interface ChangeNoteTypeResult {
+  dry_run: boolean;
+  notes_moved: number;
+  cards_moved: number;
+  cards_removed: number;
+  reviews_on_removed_cards: number;
+}
+
 /**
  * One item of GET /api/v1/media (aligned with Go internal/api.MediaItem).
  * url is built from sha256 as /media/<sha256> and can be used directly in <img src> and for inserting Markdown references.
