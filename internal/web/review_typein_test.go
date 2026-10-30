@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -154,6 +155,89 @@ func TestReviewRenderTypeInComparisonVariants(t *testing.T) {
 	}
 }
 
+// TestReviewRenderTypeInClozeComparesOwnDeletion pins that {{type:cloze:F}} compares the deletion the card shows.
+//
+// CardTemplate returns the 1-based cloze number of a cloze card, and renderCard hands that same number to the
+// renderer, so the type-in comparison must use it unchanged. A comparison that adds one reads the next deletion
+// instead - the empty string when no such deletion exists - and marks a correct answer wrong.
+func TestReviewRenderTypeInClozeComparesOwnDeletion(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "Cloze type-in deck")
+	note := seedClozeTypeInNote(t, db, deck, "{{c1::Paris}} {{c2::Rome}}")
+
+	for _, test := range []struct {
+		clozeNumber int
+		typed       string
+		// nextDeletion is the text a comparison offset by one would use: the following cloze number's deletion, or
+		// the empty string when the note has no further deletion.
+		nextDeletion string
+	}{
+		{clozeNumber: 1, typed: "Paris", nextDeletion: "Rome"},
+		{clozeNumber: 2, typed: "Rome"},
+	} {
+		test := test
+		t.Run("cloze:"+strconv.Itoa(test.clozeNumber), func(t *testing.T) {
+			card := cardOfNoteTemplate(t, db, note.ID, "cloze:"+strconv.Itoa(test.clozeNumber))
+			out := renderTypeInCard(t, srv, cookies, csrf, card.PublicID, deck.PublicID, test.typed)
+
+			if !out.TypeIn {
+				t.Fatal("type_in = false, want true for a cloze template with a type:cloze placeholder")
+			}
+			want := notetype.CompareAnswer(test.typed, test.typed, true)
+			if !strings.Contains(out.Back.HTML, want) {
+				t.Errorf("back does not show Anki's comparison for the card's own deletion %q:\n got %s\nwant %s",
+					test.typed, out.Back.HTML, want)
+			}
+			if wrong := notetype.CompareAnswer(test.nextDeletion, test.typed, true); strings.Contains(out.Back.HTML, wrong) {
+				t.Errorf("back shows the comparison for another deletion %q instead of the card's own:\n got %s\nwant no %s",
+					test.nextDeletion, out.Back.HTML, wrong)
+			}
+		})
+	}
+}
+
+// renderTypeInCard renders one card as frame output with a typed value, which is the request shape that shows the
+// type-in comparison on the answer face.
+func renderTypeInCard(t *testing.T, srv *Server, cookies []*http.Cookie, csrf, cardPublicID, deckPublicID, typed string) typeInRenderBody {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"card_id": cardPublicID,
+		"deck":    []string{deckPublicID},
+		"answer":  typed,
+	})
+	if err != nil {
+		t.Fatalf("encode request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/review/render", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(auth.CSRFHeaderName, csrf)
+	req.Header.Set(frameOutputHeader, "1")
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	var out typeInRenderBody
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode render response: %v (body %s)", err, rec.Body.String())
+	}
+	return out
+}
+
+// cardOfNoteTemplate returns the card under a note whose stored template is the given value, so a cloze test can pick
+// the card for one cloze number.
+func cardOfNoteTemplate(t *testing.T, db *gorm.DB, noteID uint64, template string) *store.Card {
+	t.Helper()
+	var card store.Card
+	if err := db.Where("note_id = ? AND template = ?", noteID, template).First(&card).Error; err != nil {
+		t.Fatalf("load card %q for note %d: %v", template, noteID, err)
+	}
+	return &card
+}
+
 // typeInRenderBody is the subset of the render response these cases read.
 type typeInRenderBody struct {
 	Front struct {
@@ -215,6 +299,34 @@ func seedTypeInNote(t *testing.T, db *gorm.DB, deck *store.Deck, placeholder, ba
 	note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID)}
 	if _, err := store.NewNoteStore(db).Create(t.Context(), note, map[string]any{"Front": "Question", "Back": back}); err != nil {
 		t.Fatalf("create type-in note: %v", err)
+	}
+	return note
+}
+
+// seedClozeTypeInNote stores a cloze note type whose single template shows the card's deletion and carries a
+// type:cloze placeholder, plus one note whose Text field holds the given cloze markup. The note gets one card per
+// cloze number in the field.
+func seedClozeTypeInNote(t *testing.T, db *gorm.DB, deck *store.Deck, text string) *store.Note {
+	t.Helper()
+	cfg := notetype.Config{
+		Kind: notetype.KindCloze,
+		Fields: []notetype.Field{
+			{ID: "f-text", Name: "Text", Font: "Arial", FontSize: 20},
+		},
+		Templates: []notetype.Template{{
+			ID:      "t-cloze-typein",
+			Name:    "Cloze",
+			QFormat: "{{cloze:Text}}\n\n{{type:cloze:Text}}",
+			AFormat: "{{cloze:Text}}\n\n<hr id=answer>\n\n{{type:cloze:Text}}",
+		}},
+	}
+	noteType := &store.NoteType{DeckID: deck.ID, Name: "Cloze typed answer"}
+	if err := store.NewNoteTypeStore(db).Create(t.Context(), noteType, cfg); err != nil {
+		t.Fatalf("create cloze type-in note type: %v", err)
+	}
+	note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID)}
+	if _, err := store.NewNoteStore(db).Create(t.Context(), note, map[string]any{"Text": text}); err != nil {
+		t.Fatalf("create cloze type-in note: %v", err)
 	}
 	return note
 }

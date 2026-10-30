@@ -488,13 +488,16 @@ func (item *cardFace) fieldValue(name string) (string, bool) {
 
 // typeInExpected is the text the comparison uses for one placeholder. A cloze placeholder compares the deletion the
 // card shows, not the whole field; every other form compares the field.
+//
+// item.ordinal is already the card's 1-based cloze number: CardTemplate returns it in that form, and the renderer uses
+// the same value for {{cloze:...}}. Passing it on unchanged is what makes a card compare its own deletion.
 func (item *cardFace) typeInExpected(parsed typeInMarker) (string, bool) {
 	value, ok := item.fieldValue(parsed.field)
 	if !ok {
 		return "", false
 	}
 	if parsed.cloze {
-		return notetype.ExtractClozeForTyping(value, item.ordinal+1), true
+		return notetype.ExtractClozeForTyping(value, item.ordinal), true
 	}
 	return value, true
 }
