@@ -62,6 +62,21 @@ func ExtractClozeForTyping(field string, clozeNumber int) string {
 	return extractClozeForTyping(field, clozeNumber)
 }
 
+// ExtractClozeBlanks returns the text of every deletion carrying clozeNumber,
+// in order of appearance, with a repeated number kept as one entry per
+// occurrence. ExtractClozeForTyping is its collapsed form: it collapses
+// identical deletions to one and joins the rest with ", ", which is the text a
+// single type-in box compares against. A card that shows one input per blank
+// needs the separate entries, so the grader can compare each answer with its
+// own deletion.
+func ExtractClozeBlanks(field string, clozeNumber int) []string {
+	var parts []string
+	for _, node := range parseClozes(field) {
+		collectClozeText(node, clozeNumber, false, &parts)
+	}
+	return parts
+}
+
 // typeAnswerLinebreaks matches the markup Anki turns into one space before the
 // expected text is stripped, so a line break separates words instead of joining
 // them.

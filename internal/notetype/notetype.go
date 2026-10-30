@@ -109,6 +109,9 @@ const (
 	RuleDuplicateTemplateName Rule = "duplicate_template_name"
 	RuleClozeTemplateCount    Rule = "cloze_template_count"
 	RuleUnknownField          Rule = "unknown_field"
+	// RuleAnswerTypePlaceholder reports a template that carries an answer spec
+	// but does not have exactly one type placeholder on its front.
+	RuleAnswerTypePlaceholder Rule = "answer_type_placeholder"
 )
 
 // ValidationError reports the first rule a note type violates. Detail is English
@@ -199,7 +202,44 @@ func (c Config) Validate() error {
 		}
 	}
 
+	// A template that grades an answer needs exactly one place to put the input
+	// control. The count is taken from the front template text, not from the
+	// rendered output, because a template that never renders the placeholder
+	// must be rejected before any card is generated.
+	for _, template := range c.Templates {
+		if template.Answer == nil {
+			continue
+		}
+		if count := typePlaceholderCount(template.QFormat); count != 1 {
+			return validationError(RuleAnswerTypePlaceholder,
+				"template %q front has %d type placeholders; exactly one is required",
+				template.Name, count)
+		}
+	}
+
 	return nil
+}
+
+// typePlaceholderCount counts the type-in placeholders in a front template.
+// A placeholder is a replacement whose filter chain contains the type filter,
+// so all three written forms count: {{type:Field}}, {{cloze:type:Field}} and
+// {{type-nc:Field}}. The filter chains are read with the same splitting the
+// renderer uses, which keeps the count in step with what actually renders.
+func typePlaceholderCount(template string) int {
+	count := 0
+	for _, token := range lexTemplate(template) {
+		if token.kind != tokenReplacement {
+			continue
+		}
+		_, filters := splitReplacement(token.body)
+		for _, filter := range filters {
+			if filter == "type" || filter == "type-nc" || filter == "type-cloze" {
+				count++
+				break
+			}
+		}
+	}
+	return count
 }
 
 // specialFields are template names Anki fills from the card or its context. They
