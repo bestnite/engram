@@ -43,10 +43,20 @@ func (s *Server) notePreview(c *gin.Context) {
 		return
 	}
 	result := make([]gin.H, 0, len(cards))
+	// Preview renders the same card faces as the review path. The base travels on every response; the relative media
+	// names are handed out only when the caller declares the HTML is for the frame, because without the frame's <base> a
+	// relative name would resolve against the SPA page.
+	mediaBase := s.frameMediaBase(c.Request.Context(), user.ID, deck.ID)
+	forFrame := frameOutputRequested(c) && mediaBase != ""
 	for _, card := range cards {
-		result = append(result, gin.H{"front_html": card.FrontHTML, "back_html": card.BackHTML})
+		frontHTML, backHTML := card.FrontHTML, card.BackHTML
+		if forFrame {
+			frontHTML = rewriteFrameMediaRefs(frontHTML)
+			backHTML = rewriteFrameMediaRefs(backHTML)
+		}
+		result = append(result, gin.H{"front_html": frontHTML, "back_html": backHTML})
 	}
-	c.JSON(http.StatusOK, gin.H{"cards": result})
+	c.JSON(http.StatusOK, gin.H{"cards": result, "media_base": mediaBase})
 }
 
 func writeRenderError(c *gin.Context, status int, code string) {

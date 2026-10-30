@@ -134,6 +134,10 @@ type Server struct {
 	media          *media.Store
 	// secrets lets the admin panel write sensitive settings; when empty, writes are refused and only the status is shown.
 	secrets *store.SecretCodec
+	// frameMediaKeyMu/frameMediaKey cache the HMAC key of the frame media tokens after the first (lazily created) read,
+	// so issuing a token on every card render does not hit the settings table. The mutex serialises first-use creation.
+	frameMediaKeyMu sync.Mutex
+	frameMediaKey   []byte
 	// mediaSizeMu/mediaSize is the sampled cache of media usage for the health page: it avoids a full recursive scan on every request.
 	mediaSizeMu sync.Mutex
 	mediaSize   *mediaSizeSample
@@ -327,6 +331,8 @@ func New(addr string, deps Deps) (*Server, error) {
 	// The review iframe page: a separate, minimal document owned by the frame runtime, not the SPA shell. Its version segment only
 	// busts the iframe cache; see registerCardFrameRoutes.
 	s.registerCardFrameRoutes(router)
+	// Frame media: the sandboxed frame has no session, so it loads media through HMAC-signed /fm/<token>/<name> URLs.
+	s.registerFrameMediaRoutes(router)
 	if deps.Sessions != nil && deps.Users != nil {
 		// The SPA profile API is only registered when the session dependencies are complete, and writes stay protected by the session CSRF middleware.
 		profile := router.Group("/api/v1")

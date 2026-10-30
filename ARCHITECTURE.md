@@ -110,6 +110,17 @@ change.
   ignored. The route replaces the site headers with the frame's own sandbox CSP, sends
   `Referrer-Policy: no-referrer`, and drops `X-Frame-Options`; the parent page embeds the document
   in a sandboxed iframe and communicates with it only through `postMessage`.
+- **Frame media.** `GET /fm/<token>/<name>` (`internal/web/frame_media.go`) serves media to the
+  sandboxed frame, which has no session cookie. The token is an HMAC over `(user_id, deck_id,
+  expiry)`; its key lives in the encrypted settings channel under `frame_media_key` and is
+  created on first use. Each request checks the signature, the expiry, the token user's current
+  status, the user's current read access to the token's deck and the media readability rule, and
+  every failure is the same bare 404. Tokens live six hours. A card-face endpoint that is asked
+  for frame output with the request header `X-Engram-Frame: 1` renders its front and back HTML
+  with relative media names; the response also carries `media_base` (`/fm/<token>/`), which the
+  frame document sets as its `<base href>`. A request without that header keeps the absolute
+  `/media/<sha256>` URLs, because the SPA has no base element to resolve a relative name against.
+  Choice options stay absolute in both cases: they remain in the parent page in this phase.
 - **REST clients.** `/api/v1` (`internal/api`) accepts either the session channel or a bearer API
   key. An API key carries scopes, and each route declares the scope it requires.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on

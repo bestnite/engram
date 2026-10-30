@@ -122,6 +122,11 @@ type ReviewCardView struct {
 	Blanks []string
 	// EditHref points at the edit page of that note, for the e-key jump.
 	EditHref string
+	// MediaBase is the frame document's <base href> ("/fm/<token>/") for this user and this card's deck. It is set on every
+	// card-face response so a frame consumer can resolve the relative media names; only a request carrying the
+	// X-Engram-Frame: 1 header receives those relative names, and every other request keeps the absolute /media/ URLs.
+	// Empty when the frame media feature is unavailable (secrets not wired).
+	MediaBase string
 }
 
 // cardView renders both sides of a card and fetches the optimistic-lock version.
@@ -187,6 +192,10 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 		blanks = b.BlankHints(ct)
 	}
 	deckPublic := s.deckPublicID(ctx, note.DeckID)
+	// The card faces keep their absolute /media/ URLs: only a caller that declares the HTML is for the frame rewrites
+	// them, because the parent SPA has no <base> and a relative name would 404 there. MediaBase still travels with every
+	// card-face response so the frame consumer has the token route at hand.
+	mediaBase := s.frameMediaBase(ctx, user.ID, note.DeckID)
 	return &ReviewCardView{
 		CardID:          card.PublicID,
 		NoteID:          note.PublicID,
@@ -199,6 +208,7 @@ func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.Q
 		OptionOrder:     ct.OptionOrder,
 		Blanks:          blanks,
 		EditHref:        "/decks/" + deckPublic + "/notes/" + note.PublicID,
+		MediaBase:       mediaBase,
 	}, nil
 }
 
