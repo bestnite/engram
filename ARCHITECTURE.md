@@ -54,6 +54,7 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/config` | Startup configuration. Precedence is environment variable, then the `settings` table, then the built-in default; every accessor can report which source won. |
 | `internal/store` | GORM models (`AllModels` in `models.go`) and the concrete stores that wrap database access, including deck package import and export. `MediaStore.Put` is the single content-addressed media write (`<sha256[:2]>/<sha256>.<ext>`, temp file + rename, dedup-hit rules) used by both upload and import. `NoteStore` is the one note write path: it resolves the note type, converts the payload field map to field-id keyed HTML, derives `search_text` from the searchable fields' plain text, regenerates the note's cards, and rebuilds the media mapping. `migrate_markdown.go` holds the temporary goldmark step the note type migration needs. |
 | `internal/answer` | The answer-control registry and one file per control: the input markup a card face shows at its type placeholder, the result breakdown on the back, the four field-value parses, and the grading rules with their `grade_detail_json` shape. A control declares the roles its answer spec binds and registers itself, so the registry needs no change when one is added. It also owns the score-to-rating mapping a preset stores. |
+| `internal/anki` | Leaf reader for Anki's three `.apkg` layouts: legacy `collection.anki2`/`collection.anki21` (schema 11, note types and decks as JSON) and modern `collection.anki21b` (zstd, schema 18, protobuf configurations decoded by field number). It enforces the deck package reader's entry, per-file and total caps, rejects unsafe entry names, and returns one in-memory model of note types, decks, notes, cards and media. |
 | `internal/notetype` | The note type data model, validation and the definitions of Anki's stock note types and engram's ten stock note types, plus the template engine that renders one side of a card (template syntax and special fields, the built-in filters, the cloze and image-occlusion markup), card generation (which cards a note requires and which stored cards are now empty), the audio/TTS, LaTeX and plain-text transforms, and type-in answer comparison. |
 | `internal/reviewday` | Leaf package with the single definition of a user's review day: timezone resolution (unknown names fall back to UTC), the day cutoff hour, the review-day boundaries, and the `YYYY-MM-DD` day string written to `reviews.review_day`. Grading, burying, budgets, statistics, reminders and digests all read it. |
 | `internal/schedule` | The go-fsrs wrapper: card state machine, queue builder, daily budgets, review submission, and undo. |
@@ -94,7 +95,7 @@ media      → mediatype, store
 store      → answer, mailstyle, mediatype, notetype, reviewday, texmath
 answer     → notetype
 retention  → worker
-config, i18n, mediatype, notetype, reviewday, texmath, urlfetch, worker, pgtest → (no internal imports)
+anki, config, i18n, mediatype, notetype, reviewday, texmath, urlfetch, worker, pgtest → (no internal imports)
 ```
 
 Regenerate it with
