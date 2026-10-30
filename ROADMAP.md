@@ -132,6 +132,320 @@ it.
   the single breaking release of M17 (HTTP API, MCP, database schema and file format). The
   remaining M17 tasks are additive and land on `main` directly.
 
+**Phase 3 follow-up — defects found in the review of the P3 merge (on `main`)**
+
+These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly. M17-33,
+M17-34, M17-35, M17-41 and M17-44 must land before M17-24, because every imported Anki note type
+is a note type whose shape matches no engram stock kind.
+
+- [ ] **M17-32 Keep `notes.note_type_id` NOT NULL** — the constraint that migration 0013 adds must
+  survive every later start.
+  *Files:* `internal/store/models.go` (single-writer hotspot); `internal/store/migrate.go`;
+  `internal/store/migrate_notes.go`; `internal/store/migrate_notes_test.go`; `ARCHITECTURE.md`.
+  *Problem:* `Sync` runs AutoMigrate again after the versioned migrations. The model declares
+  `NoteTypeID *uint64` without `not null`, so GORM sees a NOT NULL column against a nullable model
+  field and alters the column back to nullable. Measured on SQLite: after `Sync` reaches version 14,
+  the `notes` DDL reads `note_type_id integer` with no NOT NULL. GORM never tightens a column in the
+  other direction, so a database that is already at version 14 keeps the nullable column even after
+  the model changes.
+  *Work:*
+  - The `Note` model declares `note_type_id` with `not null`.
+  - The first AutoMigrate pass of `Sync` must not add `note_type_id` as NOT NULL to a `notes` table
+    that already holds rows, because SQLite and PostgreSQL both refuse that. While the stored schema
+    version is below 13, that pass migrates `notes` from a pre-0013 model shape in which
+    `note_type_id` is nullable. From version 13 on, it migrates the real `Note` model.
+  - Append a new versioned migration that applies the same change as 0013 (NOT NULL on
+    `note_type_id`; drop `kind` when it still exists). It repairs databases that reached version 14
+    with the nullable column. Migration 0013 itself stays unchanged.
+  - Correct the test comment in `migrate_notes_test.go` that claims a NOT NULL check the test does
+    not make.
+
+  *Acceptance:*
+  - A table-driven SQLite test runs `Sync` on three databases: a fresh one, one with the pre-M17
+    schema and notes, and one at version 14 with a nullable column. After `Sync`, and again after a
+    second `Sync`, `note_type_id` is NOT NULL. The test reads the nullability from the database
+    catalog (`PRAGMA table_info` on SQLite, `information_schema.columns` on PostgreSQL), not from the
+    model.
+  - The same test passes with `TEST_PG_DSN` set, run by hand.
+  - Inserting a note without a note type fails at the database level.
+
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+- [ ] **M17-33 Card faces carry the note type's CSS and body class** — the review page and the note
+  preview send the server's per-side face objects to the frame.
+  *Files:* `frontend/src/lib/views/ReviewView.svelte` and `frontend/src/lib/views/NoteEditView.svelte`
+  (single-writer hotspot); `frontend/src/lib/card-frame.ts`; `frontend/src/lib/api/`.
+  *Problem:* the server returns `front` and `back` objects `{html, css, body_class, side,
+  media_base}`. The SPA reads only `front_html` and `back_html`, and passes the fixed
+  `REVIEW_FRONT_CSS`, `REVIEW_BACK_CSS` or `REVIEW_ANSWER_CSS` constant and `bodyClass="card"` to every
+  `CardFrame`. No note type's CSS ever reaches a frame.
+  *Work:*
+  - Every `CardFrame` in the review page and in the note preview takes `html`, `body_class` and
+    `media_base` from the matching `front` or `back` object.
+  - The frame's style is the engram face constant followed by the object's `css`, in that order, so
+    a note type rule overrides the engram default.
+
+  *Acceptance:*
+  - A client test: a note type whose CSS contains `.card { color: rgb(1, 2, 3); }` renders that colour
+    in the review frame and in the preview frame.
+  - A client test: the frame `<body>` carries the class list that the server returned.
+
+  *Verify:* `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
+- [ ] **M17-34 The review page works for any note type** — the review page stops reading the
+  card-kind catalog.
+  *Depends on:* M17-33.
+  *Files:* `frontend/src/lib/views/ReviewView.svelte` (single-writer hotspot);
+  `frontend/src/lib/review-shortcuts.ts`; `internal/web/review.go`; `internal/web/review_api.go`;
+  `internal/api/service.go` (`DueCard`).
+  *Problem:* the review page derives `desc` from `descriptionOf($cardTypes, current.kind)` and shows
+  the loading skeleton while `desc` is null. A note type whose shape matches no engram stock kind
+  gives `kind = ""`, so its cards stay on the skeleton forever. Such note types can already be
+  created through `POST /api/v1/decks/:id/note-types`.
+  *Work:*
+  - The review card response carries `answer_control`, which is the control name of the card's
+    template answer spec, or null when the template has none. It also carries `machine_graded`, a
+    boolean computed by the same rule the submit path uses.
+  - The review page decides between self-rating, the essay flow and machine grading from those two
+    fields only. It reads no card-kind description.
+  - The plain-text fallback that is shown when the card face fails to load lists the note's field
+    values in the order of the note type's fields.
+
+  *Acceptance:*
+  - A handler test: a card of a note type created through the API, with a shape that matches no
+    stock kind, returns `answer_control: null` and `machine_graded: false`.
+  - A client test: that card reaches reveal and rating with no catalog loaded.
+  - Client tests: one machine-graded card and one `short_answer` card behave as before.
+
+  *Verify:* `go test ./internal/web/... ./internal/api/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
+- [ ] **M17-35 The note editor works on note types** — create, edit and preview a note of any note
+  type of the deck.
+  *Depends on:* M17-33.
+  *Files:* `frontend/src/lib/views/NoteEditView.svelte` (single-writer hotspot);
+  `frontend/src/lib/components/NoteFieldsForm.svelte`; `frontend/src/lib/api/`;
+  `internal/web/note_preview.go`; the locale catalogs (append a block with the prefix `note_edit.type.`).
+  *Problem:* the editor picks a card kind from the `card-types` catalog, builds its fields from that
+  kind and saves with `kind`. The preview endpoint renders the stock definition of the posted `kind`,
+  not the deck's note type. A note of a note type that matches no stock kind cannot be edited, and a
+  customised note type is previewed with stock templates.
+  *Work:*
+  - The editor lists the deck's note types from `GET /api/v1/decks/:id/note-types`. When a new note is
+    created, the selector starts at the first note type in the order the server returns.
+  - The fields are the selected note type's fields, in config order. Each field uses its name as the
+    label and applies its options (sticky, collapsed, plain text, RTL, font and size).
+  - Saving sends `note_type` and `fields` keyed by field name. The editor never sends `kind`.
+  - `POST /api/v1/decks/:id/notes/preview` takes `note_type` instead of `kind` and renders the stored note
+    type with its CSS.
+
+  *Acceptance:*
+  - A client test: a note of a note type that matches no stock kind loads, edits and saves, and the
+    save request carries `note_type`.
+  - A handler test: the preview of a note type whose template differs from the stock template renders
+    the stored template.
+  - A handler test: a preview naming a note type of another deck returns 404.
+  - The two locale catalogs keep identical key sets.
+
+  *Verify:* `go test ./internal/web/... ./internal/i18n/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
+- [ ] **M17-36 Remove the transitional card-kind layer** — delete every payload field and endpoint
+  that exists only for the old SPA.
+  *Depends on:* M17-34, M17-35.
+  *Files:* `internal/api/card_types.go`; `internal/api/card_catalog.go`; `internal/api/notes.go`;
+  `internal/api/note_view.go`; `internal/api/service.go`; `internal/api/server.go`;
+  `internal/web/review.go`; `internal/store/note.go`; `frontend/src/lib/card-types.ts` and its
+  callers; `ARCHITECTURE.md`.
+  *Work:*
+  - Delete `GET /api/v1/card-types`, the description catalog, and the `kind` field of the note request
+    and response, of `DueCard` and of `ExportRow`.
+  - Delete `front_html`, `back_html`, `options_html`, `option_order`, `blanks` and the top-level
+    `media_base` from the review and preview responses. The `front` and `back` objects remain.
+  - Delete `NoteStore.EnsureStockNoteType`, `NoteStore.KindOf` and the API's kind-to-note-type
+    resolution. Migration 0012 keeps its own stock lookup.
+  - Rewrite the request-path section of `ARCHITECTURE.md` that describes these fields as transitional.
+
+  *Acceptance:*
+  - `grep -rn "card-types\|EnsureStockNoteType\|front_html" internal frontend/src` prints nothing.
+  - A handler test: a note write that carries `kind` and no `note_type` returns 400 `invalid_request`.
+  - The REST and MCP tests pass.
+
+  *Verify:* `go test ./internal/api/... ./internal/web/... ./internal/mcp/... ./internal/store/...`; `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
+- [ ] **M17-37 A kind alias never moves a note to another note type** — keep a note on its note type
+  while the transitional `kind` field still exists.
+  *Files:* `internal/api/service.go` (`UpdateNote`); `internal/api/notes_test.go`.
+  *Problem:* `UpdateNote` resolves a posted `kind` with `ensureStockNoteType`, which returns the first
+  note type of the deck whose field ids and template ids match the stock shape. When a deck holds two
+  note types of that shape (one of them a copy with different CSS or templates), saving a note of the
+  second one through the SPA moves the note to the first one.
+  *Work:* when the request carries no `note_type`, and the posted `kind` equals the stock kind of the
+  note's current note type, the note keeps its current note type.
+  *Acceptance:* a handler test with two note types of the `basic` shape in one deck: updating a note of
+  the second type with `kind: "basic"` keeps `note_type_id` unchanged.
+  *Verify:* `go test ./internal/api/... && go vet ./internal/api/...`.
+- [ ] **M17-38 Convert the `{{ruby:…}}` shortcode** — existing notes show raw ruby source since
+  migration 0012.
+  *Files:* `internal/store/migrate.go` (a new versioned migration appended at the end);
+  `internal/store/migrate_notes.go`; `internal/store/migrate_notes_test.go`.
+  *Problem:* the old renderer expanded `{{ruby:base|reading}}` to `<ruby>base<rt>reading</rt></ruby>`.
+  Migration 0012 converts `{{tts:…}}` and `{{audio:…}}` only, and the pre-flight check does not report
+  ruby, so every ruby annotation became literal text. A `{{tts:…}}` that wraps a ruby was also left
+  literal, because its parameter split stops inside the nested shortcode.
+  *Work:* the new migration rewrites every note field, soft-deleted notes included:
+  - `{{ruby:B|R}}` becomes `<ruby>B<rt>R</rt></ruby>`, with `R` HTML-escaped.
+  - The old rule for a literal ruby still applies, and a ruby that matches it stays unchanged: an
+    empty base, an empty reading, a reading containing `=`, `|` or `{{`, or a base containing another
+    shortcode.
+  - A `{{tts:…}}` whose body contains a ruby is converted with the 0012 TTS rule after the ruby inside
+    it is converted. The visible copy keeps the `<ruby>` markup. The text inside
+    `[anki:tts …]…[/anki:tts]` is the base `B` alone, because the old speech text left the reading out.
+  - `search_text` is recomputed for every changed note.
+
+  *Acceptance:*
+  - A table-driven test covers: a plain ruby, a ruby inside a TTS, each literal case, and a note
+    without ruby that is left byte-for-byte unchanged.
+  - The test runs once with `TEST_PG_DSN`.
+
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+- [ ] **M17-39 Delete the dead shortcode UI and the stale sanitising comments** — remove what still
+  describes the old renderer.
+  *Files:* `frontend/src/lib/components/ShortcodeInsert.svelte`; `frontend/src/lib/shortcode-source.ts`;
+  `frontend/src/tests/shortcode-source.test.ts`; `frontend/src/tests/shortcode-insert.client.ts`; the
+  locale catalogs; `frontend/src/lib/api/types.ts`; `frontend/src/lib/components/CardFrame.svelte`;
+  `frontend/src/lib/views/ReviewView.svelte` (single-writer hotspot); `frontend/src/lib/card-frame.ts`;
+  `internal/web/card_frame.go`; `internal/web/review.go`.
+  *Work:*
+  - Delete the shortcode inserter, its source builder, their tests, and every catalog key that only
+    they used. Keep the two catalogs' key sets identical.
+  - Fix every comment that says that card-face HTML is sanitised, that names goldmark or bluemonday as
+    the card-face renderer, or that names shortcode controls in the frame. The list includes
+    `types.ts` ("sanitized by goldmark + bluemonday"), the `html` prop of `CardFrame.svelte`, the
+    "server-sanitized" comments in `ReviewView.svelte`, `card-frame.ts` and `card_frame.go`.
+  - Fix the comment on `ReviewCardView.Ordinal`: a cloze card's ordinal is its cloze number minus
+    one, not zero.
+
+  *Acceptance:* `grep -rn -i "sanitiz\|bluemonday\|shortcode" frontend/src internal --include=*.ts --include=*.svelte --include=*.go`
+  prints only lines in `internal/store/migrate_*.go`, `internal/mailstyle/` and their tests.
+  *Verify:* `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client && go vet ./internal/web/... && go test ./internal/i18n/...`.
+- [ ] **M17-40 Updating a note type keeps its cards consistent** — a template change adds and removes
+  cards as Anki does, behind an impact check.
+  *Files:* `internal/api/note_types.go`; `internal/store/notetype.go`; `internal/store/card.go`;
+  `internal/i18n/locales/` (append a block with the prefix `note_type.update.`).
+  *Problem:* `UpdateNoteType` rewrites the config and touches no card. An added template generates no
+  card for the existing notes. A removed template leaves cards whose template id no longer exists:
+  rendering them returns 500, and submitting a rating for them returns 500, so they stay in the queue.
+  *Work:*
+  - The kind (`normal` or `cloze`) of a note type cannot change. An update that changes it returns
+    400 `invalid_request`.
+  - In one transaction, an update regenerates the cards of every note of the note type with
+    `notetype.GenerateCards`. A card that the new config generates and the note lacks is created.
+  - A card whose template id the new config no longer declares is soft-deleted. Its `card_states` and
+    `reviews` rows stay.
+  - The update body accepts `dry_run`. A dry run writes nothing and returns `cards_added`,
+    `cards_removed` and `reviews_on_removed_cards`.
+  - An update that would remove at least one card requires `confirm_card_removal: true`. Without it
+    the update writes nothing and returns 409 with the code `card_removal_unconfirmed` and the same
+    three counts.
+  - The update writes one audit row that records the three counts.
+
+  *Acceptance:* handler tests:
+  - adding a template creates one card per note whose new front is not empty;
+  - a dry run reports the counts and writes nothing;
+  - removing a template without the confirmation returns 409;
+  - removing a template with the confirmation soft-deletes those cards and keeps their reviews;
+  - a kind change returns 400;
+  - a reader is refused, and a stale version returns 409.
+
+  *Verify:* `go test ./internal/api/... ./internal/store/... && go vet ./internal/api/... ./internal/store/...`.
+- [ ] **M17-41 Validate answer specs on every note type write** — one validation for the API, package
+  import and migration.
+  *Files:* `internal/store/notetype.go` (`NoteType.SetConfig`); `internal/store/note.go`;
+  `internal/store/migrate_notes.go`; `internal/store/package_import.go`; `internal/answer/answer.go`.
+  *Problem:* only migration 0012 and `ensureStockNoteType` call `answer.ValidateSpec`. A note type
+  created or updated through REST, or imported from an `.edeck`, can name a registered control and
+  bind a role to a field that does not exist. Submitting a rating for such a card returns 500 from
+  `ResolveBindings`, so the card cannot be rated.
+  *Work:*
+  - `NoteType.SetConfig` validates every template's answer spec. The control must be registered, every
+    required role must be bound, and every bound field id must be declared by the config.
+  - Remove the now-duplicate `ValidateSpec` calls from `ensureStockNoteType` and migration 0012.
+
+  *Acceptance:* tests with three cases: an unknown control, a missing required role, and a role bound to
+  an undeclared field id.
+  - Through REST create and update, each case returns 400, and the message names the template and the
+    role.
+  - Through `.edeck` import, each case is rejected with `package_bad_format`, and no row is written.
+
+  *Verify:* `go test ./internal/store/... ./internal/api/... ./internal/answer/...`.
+- [ ] **M17-42 The editing frame runs no inline script** — a field value cannot execute code in the
+  editor.
+  *Files:* `internal/web/edit_frame.go`; `internal/web/card_frame.go`; `internal/web/*_test.go`;
+  `frontend/e2e/browser-isolation.spec.ts`; `ARCHITECTURE.md` (the editing-frame paragraph says that
+  the frame carries the card frame's exact isolation).
+  *Problem:* the editing frame uses the card frame's CSP, including `script-src 'unsafe-inline'
+  'unsafe-eval'`. The runtime writes the field value with `innerHTML`, so an event handler attribute in
+  a shared deck's field (for example `<img src=x onerror=…>`) runs inside the editing frame. That code
+  can post `upload` messages, and the parent page uploads the posted files under the editing user's
+  session. The editing frame needs neither keyword: its runtime is a same-origin module and it only
+  inserts MathJax delimiters, it does not typeset them.
+  *Work:* the editing frame sends the card frame's CSP with `script-src <origin>` only. Every other
+  directive stays identical to the card frame's.
+  *Acceptance:*
+  - A handler test asserts the exact editing-frame CSP.
+  - A browser-isolation case: an `onerror` handler in a loaded field value does not run.
+  - The editor's client tests still pass.
+
+  *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run test:client && npm --prefix frontend run test:e2e`.
+- [ ] **M17-43 A note type used only by deleted notes cannot be deleted** — deletion must not orphan a
+  restorable note.
+  *Files:* `internal/store/notetype.go` (`NoteTypeStore.Delete`); `internal/store/notetype_test.go`.
+  *Problem:* the usage count skips soft-deleted notes, but a soft-deleted note can be restored, and
+  migration 0012 gives soft-deleted notes a note type for exactly that reason.
+  *Work:* the usage count includes soft-deleted notes.
+  *Acceptance:* a store test: a note type whose only note is soft-deleted returns `ErrNoteTypeInUse`.
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+- [ ] **M17-44 `{{Deck}}` and `{{Subdeck}}` follow the card's subdeck path** — the special fields
+  render as they do in Anki.
+  *Files:* `internal/web/review.go` (`renderCard`); `internal/web/note_preview.go`; the tests beside them.
+  *Problem:* `renderCard` sets both `DeckName` and `SubdeckName` to the deck name and ignores
+  `cards.deck_path`.
+  *Work:*
+  - `DeckName` is the deck name when `deck_path` is null. Otherwise it is the deck name, then `::`,
+    then `deck_path`.
+  - `SubdeckName` is the last `::`-separated component of `DeckName`.
+
+  *Acceptance:* a handler test with `deck_path = "Lesson 1::Verbs"` renders `{{Deck}}` as
+  `<deck>::Lesson 1::Verbs` and `{{Subdeck}}` as `Verbs`. A card without `deck_path` renders both as the
+  deck name.
+  *Verify:* `go test ./internal/web/... && go vet ./internal/web/...`.
+- [ ] **M17-45 A note write keeps cards that became empty** — Anki's rule: editing a note adds cards
+  and never removes one.
+  *Files:* `internal/store/card.go` (`syncCards`); `internal/web/review.go`; `internal/store/*_test.go`;
+  `internal/web/*_test.go`; `internal/i18n/locales/` (append a block with the prefix
+  `review.empty_card.`).
+  *Problem:* `syncCards` soft-deletes every card the note no longer generates, for example the reverse
+  card after its field is cleared, or the `c2` card after `{{c2::…}}` is removed. Anki keeps such
+  cards as empty cards until the user runs Empty Cards, and M17-28 is written on that premise.
+  *Work:*
+  - A note write creates the cards that `GenerateCards` requires and restores a soft-deleted card that
+    it requires again. It soft-deletes no card.
+  - Cards that an earlier version soft-deleted stay soft-deleted until the note requires them again.
+  - When `notetype.EmptyExistingCards` reports a card as empty, the review and preview responses
+    replace its front HTML with a localised notice. The notice says that the card is empty and that
+    the empty-card cleanup removes it.
+
+  *Acceptance:*
+  - Store tests: clearing the reverse field of a `basic_optional_reversed` note keeps the reverse card
+    and its `card_states`; removing `c2` keeps the `cloze:2` card.
+  - A handler test: the empty card returns the notice in both locales.
+
+  *Verify:* `go test ./internal/store/... ./internal/web/... ./internal/i18n/...`.
+- [ ] **M17-46 `check-migration` reads a database without public ids** — the pre-flight check must
+  not fail on the schema it inspects.
+  *Files:* `internal/store/migrate_notes.go` (`deckPublicIDs`); `internal/store/migrate_notes_test.go`.
+  *Problem:* the check selects `decks.public_id`. On a database older than migration 0004 that column
+  does not exist, and `check-migration` exits with an SQL error instead of a report.
+  *Work:* when `decks.public_id` is missing, the report names decks by their numeric id, as it already
+  does for a deck without a public id.
+  *Acceptance:* a test runs the check on a database whose `decks` table has no `public_id` column and
+  gets a report.
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+
 **Phase 4 — media (on `main`, after the integration merge)**
 
 - [ ] **M17-22 Media by file name and by any type** — resolve media through `media_names`, accept
@@ -155,7 +469,9 @@ it.
   - an SVG containing `<script>` served from `/media/<sha>` with the sandbox CSP;
   - a JS file served as an attachment;
   - a `_font.woff2` referenced only from CSS that survives garbage collection;
-  - the clash rename.
+  - the clash rename;
+  - a frame media request for a sha that the token user can read in another deck, but that no
+    `media_names` row of the token's deck names, returns 404.
 
   *Verify:* `go test ./internal/mediatype/... ./internal/media/... ./internal/store/... ./internal/web/...`.
 
@@ -179,7 +495,7 @@ it.
 
   *Verify:* `go test ./internal/anki/... && go vet ./internal/anki/...`.
 - [ ] **M17-24 `.apkg` import into a deck** — map the decoded package onto the data model.
-  *Depends on:* M17-23.
+  *Depends on:* M17-23, M17-33, M17-34, M17-35, M17-41, M17-44.
   *Files:* `internal/anki/import.go`; `internal/api/package*.go`; `internal/mcp/mcp.go`;
   `frontend/src/lib/views/ImportView.svelte`; the locale catalogs (append a block with the prefix
   `import.apkg.`).
@@ -253,11 +569,11 @@ it.
 
   *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run test:client`.
 - [ ] **M17-27 Note type management** — edit a deck's note types.
-  *Depends on:* M17-18.
+  *Depends on:* M17-18, M17-35, M17-40.
   *Files:* a new view under `frontend/src/lib/views/` (single-writer hotspot); `frontend/src/lib/router`;
   the locale catalogs (append a block with the prefix `notetype.`).
   *Work:*
-  - Create a note type from a stock definition (Anki's six and engram's eight) or by copying one.
+  - Create a note type from a stock definition (Anki's six and engram's ten) or by copying one.
   - Fields: add, rename, delete, reorder and options. A rename rewrites the template references, as
     Anki does.
   - Templates: add, rename, delete and reorder. The front, back and styling editors have a live frame
@@ -274,7 +590,7 @@ it.
   *Verify:* `npm --prefix frontend run check && npm --prefix frontend run test:client && go test ./internal/api/...`.
 - [ ] **M17-28 Empty-card cleanup and note type change** — Anki's "Empty Cards" and "Change Note
   Type".
-  *Depends on:* M17-27.
+  *Depends on:* M17-27, M17-45.
   *Files:* `internal/api/` (service methods and routes); `internal/store/`; the note type view.
   *Work:*
   - Cleanup lists the cards whose front renders empty (M17-9) and deletes them after confirmation,
