@@ -93,7 +93,7 @@ func seedPresetCards(t *testing.T, db *gorm.DB, ownerID uint64, n int) (uint64, 
 	now := time.Now().UTC()
 	ids := make([]uint64, 0, n)
 	for i := 0; i < n; i++ {
-		note := Note{DeckID: deckID, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+		note := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deckID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 		if err := db.Create(&note).Error; err != nil {
 			t.Fatalf("create note: %v", err)
 		}

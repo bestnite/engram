@@ -91,8 +91,12 @@ func seedUserWithDueCard(t *testing.T, db *gorm.DB, name, email, locale, tz stri
 	if err := db.Create(&deck).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
+	noteType, err := store.NewNoteStore(db).EnsureStockNoteType(context.Background(), deck.ID, "basic")
+	if err != nil {
+		t.Fatalf("ensure note type: %v", err)
+	}
 	note := store.Note{
-		DeckID: deck.ID, FieldsJSON: `{"front":"q","back":"a"}`,
+		DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID), FieldsJSON: `{"front":"q","back":"a"}`,
 		TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
 	}
 	if err := db.Create(&note).Error; err != nil {

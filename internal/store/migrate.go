@@ -124,6 +124,14 @@ var BuiltinMigrations = []Migration{
 		Name: "0015_backfill_note_type_media",
 		Up:   backfillNoteTypeMedia,
 	},
+	{
+		// 0013 tightened notes.note_type_id, but the additive pass of a later start could loosen it again: the model
+		// declared the column nullable while the database had it NOT NULL, and AutoMigrate alters a NOT NULL column to
+		// nullable to match. This repeats 0013 for a database that took that path, because the model change alone never
+		// tightens an existing column (AutoMigrate does not alter a nullable column to NOT NULL).
+		Name: "0016_notes_note_type_not_null_repair",
+		Up:   notesNoteTypeNotNullRepair,
+	},
 }
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).
@@ -602,14 +610,39 @@ func nullableDayCutoff(tx *gorm.DB) error {
 	}
 }
 
+// preNoteTypeNotNullNote is the notes shape the first AutoMigrate pass of Sync uses while the stored
+// schema version is below 0013. note_type_id is nullable there: a database below 0013 still holds
+// notes without a type, and both databases refuse to add a NOT NULL column to a table that already
+// holds rows. Migration 0013 fills every note's type in and tightens the column afterwards.
+type preNoteTypeNotNullNote struct {
+	Note
+	NoteTypeID *uint64 `gorm:"column:note_type_id;index" json:"note_type_id,omitempty"`
+}
+
+func (preNoteTypeNotNullNote) TableName() string { return "notes" }
+
+// noteTypeNotNullVersion is the version of the migration that makes notes.note_type_id NOT NULL.
+// Versions are the position in BuiltinMigrations, and published entries are never reordered, so this
+// constant names that migration for the one place that needs to know it: the first AutoMigrate pass.
+const noteTypeNotNullVersion = 13
+
 // AutoMigrate makes only additive changes (add table/column/index).
 // The model list exists in one place only: AllModels(). This used to merge the two TOTP tables in separately, and two lists necessarily diverge,
 // so they were merged back into one.
 func AutoMigrate(ctx context.Context, db *gorm.DB) error {
+	return autoMigrate(ctx, db, &Note{})
+}
+
+// autoMigrate is AutoMigrate with noteModel in place of Note. Sync substitutes the pre-0013 notes
+// shape while the database is below noteTypeNotNullVersion; every other caller migrates the real model.
+func autoMigrate(ctx context.Context, db *gorm.DB, noteModel any) error {
 	models := AllModels()
 	for i, model := range models {
-		if _, ok := model.(*User); ok {
+		switch model.(type) {
+		case *User:
 			models[i] = &additiveUserSchema{}
+		case *Note:
+			models[i] = noteModel
 		}
 	}
 	if err := db.WithContext(ctx).AutoMigrate(models...); err != nil {
@@ -626,7 +659,18 @@ func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 
 // Sync first runs the additive AutoMigrate, then applies the registered destructive migrations by schema version, returning the number of migrations run this time.
 func Sync(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error) {
-	if err := AutoMigrate(ctx, db); err != nil {
+	version, err := storedVersion(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+	// While the database is below 0013 the notes table holds rows without a note type, so the first
+	// pass must not add note_type_id as NOT NULL. From 0013 on the column already carries its
+	// constraint and the real model applies; a nullable column there is repaired by migration 0016.
+	noteModel := any(&Note{})
+	if version < noteTypeNotNullVersion {
+		noteModel = &preNoteTypeNotNullNote{}
+	}
+	if err := autoMigrate(ctx, db, noteModel); err != nil {
 		return 0, err
 	}
 	applied, err := Apply(ctx, db, migrations)
@@ -640,6 +684,15 @@ func Sync(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error)
 		return applied, err
 	}
 	return applied, nil
+}
+
+// storedVersion returns the applied schema version; a database with no schema_version table yet is version 0.
+// CurrentVersion alone cannot answer that: it queries the table, which does not exist before the first migration.
+func storedVersion(ctx context.Context, db *gorm.DB) (int, error) {
+	if !db.Migrator().HasTable(&SchemaVersion{}) {
+		return 0, nil
+	}
+	return CurrentVersion(ctx, db)
 }
 
 // Apply validates the migration list and runs the entries not yet applied. Each migration commits together with its version number in one transaction,

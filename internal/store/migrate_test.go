@@ -335,7 +335,8 @@ func TestBuiltinBackfillMediaNotesMigration(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			ctx := context.Background()
-			if err := AutoMigrate(ctx, db); err != nil {
+			// The fixture writes notes before note types existed, so the column must be nullable here.
+			if err := autoMigrate(ctx, db, &preNoteTypeNotNullNote{}); err != nil {
 				t.Fatalf("AutoMigrate() error = %v", err)
 			}
 			// treat the first four migrations as applied, verifying only this one.
@@ -469,7 +470,8 @@ func TestBuiltinPerUserSuspensionMigration(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			ctx := context.Background()
-			if err := AutoMigrate(ctx, db); err != nil {
+			// The fixture writes notes before note types existed, so the column must be nullable here.
+			if err := autoMigrate(ctx, db, &preNoteTypeNotNullNote{}); err != nil {
 				t.Fatalf("AutoMigrate() error = %v", err)
 			}
 			if err := setVersion(db, 6); err != nil {

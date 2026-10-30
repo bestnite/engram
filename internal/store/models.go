@@ -139,10 +139,11 @@ type Note struct {
 	PublicID string `gorm:"column:public_id;uniqueIndex" json:"id"`
 	DeckID   uint64 `gorm:"not null;uniqueIndex:idx_notes_deck_external_ref" json:"deck_id"`
 	// NoteTypeID names the note type that defines this note's fields and templates, and its field ids are the keys of FieldsJSON.
-	// It stays a pointer in the Go model because AutoMigrate runs before the versioned migrations: it adds the column to an
-	// existing table, which cannot be NOT NULL while rows exist. Migration 0013 makes it NOT NULL afterwards, and the write path
-	// rejects a note that names no type.
-	NoteTypeID *uint64 `gorm:"column:note_type_id;index" json:"note_type_id,omitempty"`
+	// It stays a pointer because a note may be built before its type is resolved, but the column is NOT NULL: migration 0013
+	// gives every existing note a type and tightens it, and the write path rejects a note that names no type. The first
+	// AutoMigrate pass of Sync cannot use this shape while the database is below that migration, so it substitutes a
+	// nullable one (see preNoteTypeNotNullNote in migrate.go).
+	NoteTypeID *uint64 `gorm:"column:note_type_id;not null;index" json:"note_type_id,omitempty"`
 	// FieldsJSON maps a field id to that field's HTML value; internal/notetype.Config declares the ids.
 	FieldsJSON string `gorm:"column:fields_json;not null" json:"fields_json"`
 	TagsJSON   string `gorm:"column:tags_json;not null" json:"tags_json"`

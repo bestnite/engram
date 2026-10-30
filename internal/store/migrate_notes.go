@@ -705,6 +705,24 @@ func notesNoteTypeNotNull(tx *gorm.DB) error {
 	}
 }
 
+// notesNoteTypeNotNullRepair is migration 0016: it repeats the change of
+// migration 0013 for a database whose column was loosened afterwards. A later
+// start used to run the additive pass with a model that declared
+// notes.note_type_id nullable, and AutoMigrate alters a NOT NULL column to
+// nullable to match; the model alone never tightens it back, because
+// AutoMigrate only relaxes constraints.
+//
+// The steps are the same as 0013's, so they are called rather than copied: the
+// SQLite table rebuild and its index restore have one definition. The function
+// is safe on a fresh database and on a second run. The null count is zero, the
+// kind column is already gone, PostgreSQL accepts SET NOT NULL on a NOT NULL
+// column, and the SQLite rebuild writes the same definition back. A database
+// that still holds a note without a type is refused, as 0013 refuses it: no
+// note type can be invented for that row without changing content.
+func notesNoteTypeNotNullRepair(tx *gorm.DB) error {
+	return notesNoteTypeNotNull(tx)
+}
+
 // noteTypeNotNullColumn is the column shape migration 0013 writes: the same
 // table, with note_type_id carrying NOT NULL. It exists only for the SQLite
 // table rebuild.

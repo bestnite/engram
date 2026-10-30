@@ -239,12 +239,9 @@ func TestNoteTypeDelete(t *testing.T) {
 				t.Fatalf("note type missing after refused delete: %v", err)
 			}
 
-			// A note without a note type does not block anything.
+			// A type that no note uses is deletable. A note without a type cannot exist, because the
+			// column is NOT NULL, so there is no second "unused" case to cover.
 			unused := seedNoteType(t, db, deckID, "Unused Type")
-			plain := Note{DeckID: deckID, FieldsJSON: "{}", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
-			if err := db.Create(&plain).Error; err != nil {
-				t.Fatalf("create note without note type: %v", err)
-			}
 			if err := types.Delete(ctx, unused.ID); err != nil {
 				t.Errorf("Delete(unused) error = %v, want nil", err)
 			}

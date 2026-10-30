@@ -206,9 +206,11 @@ change.
   plain text of the fields not marked `exclude_from_search`. Migration 0012 creates one engram
   stock note type per (deck, kind) and rewrites every note's field values from Markdown to HTML,
   moving `source_url` and `extra` to their columns; migration 0013 makes `note_type_id` NOT NULL
-  and drops `notes.kind`. The Go model keeps `note_type_id` nullable because AutoMigrate adds the
-  column before the versioned migration runs, and the write path rejects a note that names no
-  type. `cmd/engram check-migration` runs the same read-only pre-flight check migration 0012
+  and drops `notes.kind`, and migration 0016 repeats the NOT NULL change for a database whose
+  column AutoMigrate had loosened again. The model declares `note_type_id` NOT NULL; the first
+  additive pass of `Sync` migrates a database below 0013 through a nullable copy of the notes
+  shape, and the write path rejects a note that names no type.
+  `cmd/engram check-migration` runs the same read-only pre-flight check migration 0012
   enforces and reports blocking and warning notes without writing. `source_url` and `extra_json`
   are nullable TEXT.
 - **Field values are HTML.** A field value is an HTML string; nothing else is stored. The note

@@ -39,8 +39,9 @@ func seedStatsFixture(t *testing.T, db *gorm.DB) statsFixture {
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
-	n1 := Note{DeckID: d.ID, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `["go","fsrs"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
-	n2 := Note{DeckID: d.ID, FieldsJSON: `{"front":"q2","back":"a2"}`, TagsJSON: `["go"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+	noteTypeID := stockNoteTypeID(t, db, d.ID, "basic")
+	n1 := Note{DeckID: d.ID, NoteTypeID: Ptr(noteTypeID), FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `["go","fsrs"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+	n2 := Note{DeckID: d.ID, NoteTypeID: Ptr(noteTypeID), FieldsJSON: `{"front":"q2","back":"a2"}`, TagsJSON: `["go"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
 	if err := db.Create(&n1).Error; err != nil {
 		t.Fatalf("create note1: %v", err)
 	}
@@ -409,7 +410,7 @@ func seedStreakDays(t *testing.T, db *gorm.DB, days ...string) {
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
-	n := Note{DeckID: d.ID, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `[]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+	n := Note{DeckID: d.ID, NoteTypeID: Ptr(stockNoteTypeID(t, db, d.ID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `[]`, CreatedAt: statsNow, UpdatedAt: statsNow}
 	if err := db.Create(&n).Error; err != nil {
 		t.Fatalf("create note: %v", err)
 	}
@@ -542,7 +543,7 @@ func seedForeignDeck(t *testing.T, db *gorm.DB, owner uint64, name string, cards
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck %s: %v", name, err)
 	}
-	n := Note{DeckID: d.ID, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `[]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+	n := Note{DeckID: d.ID, NoteTypeID: Ptr(stockNoteTypeID(t, db, d.ID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `[]`, CreatedAt: statsNow, UpdatedAt: statsNow}
 	if err := db.Create(&n).Error; err != nil {
 		t.Fatalf("create note in %s: %v", name, err)
 	}
@@ -648,7 +649,7 @@ func seedTaggedDeck(t *testing.T, db *gorm.DB, owner uint64, name, tag string, c
 	if err := db.Create(&d).Error; err != nil {
 		t.Fatalf("create deck %s: %v", name, err)
 	}
-	n := Note{DeckID: d.ID, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `["` + tag + `"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
+	n := Note{DeckID: d.ID, NoteTypeID: Ptr(stockNoteTypeID(t, db, d.ID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: `["` + tag + `"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
 	if err := db.Create(&n).Error; err != nil {
 		t.Fatalf("create note in %s: %v", name, err)
 	}
@@ -766,9 +767,10 @@ func TestStatsTagBreakdownCountsOnlyReviewedNotes(t *testing.T) {
 			if err := db.Create(&d).Error; err != nil {
 				t.Fatalf("create deck: %v", err)
 			}
-			reviewed := Note{DeckID: d.ID, FieldsJSON: `{"front":"q","back":"a"}`,
+			noteTypeID := stockNoteTypeID(t, db, d.ID, "basic")
+			reviewed := Note{DeckID: d.ID, NoteTypeID: Ptr(noteTypeID), FieldsJSON: `{"front":"q","back":"a"}`,
 				TagsJSON: `["studied"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
-			untouched := Note{DeckID: d.ID, FieldsJSON: `{"front":"q2","back":"a2"}`,
+			untouched := Note{DeckID: d.ID, NoteTypeID: Ptr(noteTypeID), FieldsJSON: `{"front":"q2","back":"a2"}`,
 				TagsJSON: `["never-reviewed"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
 			if err := db.Create(&reviewed).Error; err != nil {
 				t.Fatalf("create reviewed note: %v", err)
@@ -835,7 +837,7 @@ func TestStatsTrueRetentionIgnoresLearningSteps(t *testing.T) {
 					if err := db.Create(&d).Error; err != nil {
 						t.Fatalf("create deck: %v", err)
 					}
-					n := Note{DeckID: d.ID, FieldsJSON: `{"front":"q","back":"a"}`,
+					n := Note{DeckID: d.ID, NoteTypeID: Ptr(stockNoteTypeID(t, db, d.ID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`,
 						TagsJSON: `["topic"]`, CreatedAt: statsNow, UpdatedAt: statsNow}
 					if err := db.Create(&n).Error; err != nil {
 						t.Fatalf("create note: %v", err)

@@ -92,7 +92,7 @@ func seedFixture(t *testing.T, db *gorm.DB) fixture {
 		t.Fatalf("create deck: %v", err)
 	}
 	ref := "ref-1"
-	note := Note{DeckID: deck.ID, FieldsJSON: `{"front":"q","back":"a"}`,
+	note := Note{DeckID: deck.ID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deck.ID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`,
 		TagsJSON: "[]", ExternalRef: &ref, CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(&note).Error; err != nil {
 		t.Fatalf("create note: %v", err)
@@ -111,7 +111,7 @@ func TestUniqueConstraints(t *testing.T) {
 
 			t.Run("notes(deck_id, external_ref)", func(t *testing.T) {
 				ref := "dup-ref"
-				first := Note{DeckID: fx.deckID, FieldsJSON: "{}", TagsJSON: "[]",
+				first := Note{DeckID: fx.deckID, NoteTypeID: Ptr(stockNoteTypeID(t, db, fx.deckID, "basic")), FieldsJSON: "{}", TagsJSON: "[]",
 					ExternalRef: &ref, CreatedAt: now, UpdatedAt: now}
 				if err := db.Create(&first).Error; err != nil {
 					t.Fatalf("first insert: %v", err)

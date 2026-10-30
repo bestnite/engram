@@ -39,8 +39,9 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	}
 
 	// u1's note: references both m1 (twice) and m2 as /media/<sha>.
+	noteTypeID := stockNoteTypeID(t, db, deckID, "basic")
 	noteU1 := Note{
-		DeckID: deckID, TagsJSON: "[]",
+		DeckID: deckID, NoteTypeID: Ptr(noteTypeID), TagsJSON: "[]",
 		FieldsJSON: fmt.Sprintf(`{"front":"<img src=\"%s.png\"> <img src=\"%s.png\">","back":"<img src=\"%s.png\">"}`,
 			sha1, sha1, sha2),
 		CreatedBy: &u1, CreatedAt: now, UpdatedAt: now,
@@ -51,7 +52,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	mapNote(t, db, &noteU1)
 	// u2's note: references only m1 (a cross-user duplicate reference must not affect u1's usage).
 	noteU2 := Note{
-		DeckID: deckID, TagsJSON: "[]",
+		DeckID: deckID, NoteTypeID: Ptr(noteTypeID), TagsJSON: "[]",
 		FieldsJSON: fmt.Sprintf(`{"front":"<img src=\"%s.png\">"}`, sha1),
 		CreatedBy:  &u2, CreatedAt: now, UpdatedAt: now,
 	}
@@ -80,7 +81,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 
 	// deck-package form references are recognized too: add u1 a sha-form note that references only m2 → still only +500.
 	pkgNote := Note{
-		DeckID: deckID, TagsJSON: "[]",
+		DeckID: deckID, NoteTypeID: Ptr(noteTypeID), TagsJSON: "[]",
 		FieldsJSON: fmt.Sprintf(`{"front":"<img src=\"%s.png\">"}`, sha2),
 		CreatedBy:  &u1, CreatedAt: now, UpdatedAt: now,
 	}
@@ -158,7 +159,7 @@ func TestUserMediaUsageCountsPendingUploads(t *testing.T) {
 		t.Fatalf("pending upload: uploader usage = %d, want 700", got)
 	}
 
-	ref := Note{DeckID: deckID, TagsJSON: "[]", CreatedBy: &referrer, CreatedAt: now, UpdatedAt: now,
+	ref := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deckID, "basic")), TagsJSON: "[]", CreatedBy: &referrer, CreatedAt: now, UpdatedAt: now,
 		FieldsJSON: fmt.Sprintf(`{"front":"<img src=\"%s.png\">","back":"x"}`, sha)}
 	if err := db.Create(&ref).Error; err != nil {
 		t.Fatalf("create referencing note: %v", err)

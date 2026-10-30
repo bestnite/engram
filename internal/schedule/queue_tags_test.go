@@ -15,7 +15,7 @@ import (
 // seedTaggedCard creates a tagged basic note and one of its cards, returning the card id.
 func seedTaggedCard(t *testing.T, db *gorm.DB, deckID uint64, tags []string, createdAt time.Time) uint64 {
 	t.Helper()
-	n := store.Note{DeckID: deckID, FieldsJSON: `{"front":"q","back":"a"}`,
+	n := store.Note{DeckID: deckID, NoteTypeID: store.Ptr(seedNoteType(t, db, deckID)), FieldsJSON: `{"front":"q","back":"a"}`,
 		TagsJSON: store.TagsJSON(tags), CreatedAt: createdAt, UpdatedAt: createdAt}
 	if err := db.Create(&n).Error; err != nil {
 		t.Fatalf("create note: %v", err)

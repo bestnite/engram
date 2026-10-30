@@ -31,7 +31,7 @@ func TestDeleteUserCleansEverythingAndKeepsSharedMedia(t *testing.T) {
 
 			// The victim's own deck, shared with reader and studied there.
 			victimDeck := seedDeck(t, db, victim)
-			ownNote := Note{DeckID: victimDeck, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedBy: &victim, CreatedAt: now, UpdatedAt: now}
+			ownNote := Note{DeckID: victimDeck, NoteTypeID: Ptr(stockNoteTypeID(t, db, victimDeck, "basic")), FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedBy: &victim, CreatedAt: now, UpdatedAt: now}
 			mustCreate(&ownNote)
 			ownCard := Card{NoteID: ownNote.ID, Template: "forward", CreatedAt: now}
 			mustCreate(&ownCard)
@@ -45,7 +45,7 @@ func TestDeleteUserCleansEverythingAndKeepsSharedMedia(t *testing.T) {
 			if err := RecordMediaUploader(ctx, db, sha, victim); err != nil {
 				t.Fatalf("record uploader: %v", err)
 			}
-			guestNote := Note{DeckID: ownerDeck, FieldsJSON: `{"front":"![](/media/` + sha + `)","back":"a"}`, TagsJSON: "[]", CreatedBy: &victim, CreatedAt: now, UpdatedAt: now}
+			guestNote := Note{DeckID: ownerDeck, NoteTypeID: Ptr(stockNoteTypeID(t, db, ownerDeck, "basic")), FieldsJSON: `{"front":"![](/media/` + sha + `)","back":"a"}`, TagsJSON: "[]", CreatedBy: &victim, CreatedAt: now, UpdatedAt: now}
 			mustCreate(&guestNote)
 			mustCreate(&MediaNote{MediaSha: sha, NoteID: guestNote.ID, CreatedAt: now})
 			mustCreate(&DeckGrant{DeckID: ownerDeck, UserID: victim, Role: RoleEditor, CreatedBy: &owner, CreatedAt: now})

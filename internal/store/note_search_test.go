@@ -157,7 +157,7 @@ func TestBackfillNoteSearchText(t *testing.T) {
 			deckID := seedDeck(t, db, owner)
 			byID := seedSearchNotes(t, db, deckID)
 
-			corrupt := Note{DeckID: deckID, FieldsJSON: "{not json", TagsJSON: "[]"}
+			corrupt := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deckID, "basic")), FieldsJSON: "{not json", TagsJSON: "[]"}
 			if err := db.Create(&corrupt).Error; err != nil {
 				t.Fatalf("create corrupt note: %v", err)
 			}

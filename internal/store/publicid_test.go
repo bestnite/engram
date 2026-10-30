@@ -133,7 +133,7 @@ func TestStoreByPublicID(t *testing.T) {
 	if err := db.Create(&deck).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
-	note := Note{DeckID: deck.ID, FieldsJSON: "{}", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+	note := Note{DeckID: deck.ID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deck.ID, "basic")), FieldsJSON: "{}", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(&note).Error; err != nil {
 		t.Fatalf("create note: %v", err)
 	}

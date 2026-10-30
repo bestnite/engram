@@ -18,6 +18,16 @@ import (
 	"git.nite07.com/nite/engram/internal/notetype"
 )
 
+// autoMigratePreNoteTypeNotNull builds the schema with notes.note_type_id nullable, the shape a
+// database has before migration 0013. The current model declares the column NOT NULL, and the
+// fixtures in this file must insert a note that has no type yet.
+func autoMigratePreNoteTypeNotNull(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	if err := autoMigrate(context.Background(), db, &preNoteTypeNotNullNote{}); err != nil {
+		t.Fatalf("auto migrate pre-0013 notes shape: %v", err)
+	}
+}
+
 // openMigrationDB opens a fresh SQLite database for one migration case.
 func openMigrationDB(t *testing.T) *gorm.DB {
 	t.Helper()
@@ -124,9 +134,7 @@ func assertBlocksMigration(t *testing.T, db *gorm.DB) {
 func TestCheckNotesMigrationReportsBlockersAndWarnings(t *testing.T) {
 	for driver, db := range migrationDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
-			if err := db.AutoMigrate(AllModels()...); err != nil {
-				t.Fatalf("AutoMigrate() error = %v", err)
-			}
+			autoMigratePreNoteTypeNotNull(t, db)
 			ctx := context.Background()
 			owner := seedUsers(t, db, "migration_preflight_owner")[0]
 			deckID := seedDeck(t, db, owner)
@@ -185,9 +193,7 @@ func TestCheckNotesMigrationReportsBlockersAndWarnings(t *testing.T) {
 func TestMigrationConvertsNotesToNoteTypes(t *testing.T) {
 	for driver, db := range migrationDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
-			if err := db.AutoMigrate(AllModels()...); err != nil {
-				t.Fatalf("AutoMigrate() error = %v", err)
-			}
+			autoMigratePreNoteTypeNotNull(t, db)
 			ctx := context.Background()
 			owner := seedUsers(t, db, "migration_owner")[0]
 			deckID := seedDeck(t, db, owner)
@@ -284,7 +290,8 @@ func TestMigrationConvertsNotesToNoteTypes(t *testing.T) {
 				t.Fatalf("Sync() error = %v", err)
 			}
 
-			// The final schema shape: note_type_id is NOT NULL and kind is gone.
+			// The final schema shape: kind is gone and note_type_id exists. The column's NOT NULL
+			// constraint is read from the database catalog by TestSyncKeepsNoteTypeIDNotNull.
 			if db.Migrator().HasColumn("notes", "kind") {
 				t.Error("notes.kind still exists after migration 0013")
 			}
@@ -588,9 +595,7 @@ func TestMigrationConvertsNotesToNoteTypes(t *testing.T) {
 func TestMigrationPreservesCardPlainText(t *testing.T) {
 	for driver, db := range migrationDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
-			if err := db.AutoMigrate(AllModels()...); err != nil {
-				t.Fatalf("AutoMigrate() error = %v", err)
-			}
+			autoMigratePreNoteTypeNotNull(t, db)
 			ctx := context.Background()
 			owner := seedUsers(t, db, "migration_text_owner")[0]
 			deckID := seedDeck(t, db, owner)
@@ -789,6 +794,136 @@ func stockTemplate(cfg notetype.Config, id string) (notetype.Template, bool) {
 
 // typeMarkerRE finds the exact type placeholder the template renderer emitted.
 var typeMarkerRE = regexp.MustCompile(`\[\[type:[^\]]+\]\]`)
+
+// TestSyncKeepsNoteTypeIDNotNull covers the three states a start can find and reads the constraint
+// from the database catalog, not from the model: a fresh database, a database that still holds
+// notes without a type (below migration 0013), and a database at version 14 whose column was
+// loosened to nullable by a later additive pass. After the first Sync and after a second one,
+// notes.note_type_id is NOT NULL in all three, and the database itself rejects a note without a
+// type.
+func TestSyncKeepsNoteTypeIDNotNull(t *testing.T) {
+	cases := []struct {
+		name  string
+		build func(t *testing.T, db *gorm.DB)
+	}{
+		{
+			name:  "fresh",
+			build: func(t *testing.T, db *gorm.DB) {},
+		},
+		{
+			name: "pre_note_types",
+			build: func(t *testing.T, db *gorm.DB) {
+				autoMigratePreNoteTypeNotNull(t, db)
+				owner := seedUsers(t, db, "note_type_not_null_legacy")[0]
+				deckID := seedDeck(t, db, owner)
+				seedOldNote(t, db, deckID, "basic", map[string]any{"front": "q", "back": "a"})
+			},
+		},
+		{
+			name: "version_14_nullable",
+			build: func(t *testing.T, db *gorm.DB) {
+				autoMigratePreNoteTypeNotNull(t, db)
+				owner := seedUsers(t, db, "note_type_not_null_14")[0]
+				deckID := seedDeck(t, db, owner)
+				noteType := seedNoteType(t, db, deckID, "Basic")
+				now := time.Now().UTC()
+				note := Note{
+					DeckID: deckID, NoteTypeID: Ptr(noteType.ID),
+					FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]",
+					CreatedAt: now, UpdatedAt: now,
+				}
+				if err := db.Create(&note).Error; err != nil {
+					t.Fatalf("seed note at version 14: %v", err)
+				}
+				if err := setVersion(db, 14); err != nil {
+					t.Fatalf("set version 14: %v", err)
+				}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for driver, db := range testDatabases(t) {
+				t.Run(driver, func(t *testing.T) {
+					tc.build(t, db)
+					ctx := context.Background()
+					if _, err := Sync(ctx, db, BuiltinMigrations); err != nil {
+						t.Fatalf("Sync() error = %v", err)
+					}
+					assertNoteTypeIDNotNull(t, db)
+					if _, err := Sync(ctx, db, BuiltinMigrations); err != nil {
+						t.Fatalf("second Sync() error = %v", err)
+					}
+					assertNoteTypeIDNotNull(t, db)
+					// The repair must also be safe on a table it already repaired: a rerun of the
+					// migration (or a second start that re-executes it) cannot fail.
+					if err := notesNoteTypeNotNullRepair(db); err != nil {
+						t.Fatalf("repair migration on an already repaired table: %v", err)
+					}
+					assertNoteTypeIDNotNull(t, db)
+					assertNoteWithoutTypeRejected(t, db)
+				})
+			}
+		})
+	}
+}
+
+// assertNoteTypeIDNotNull reads notes.note_type_id nullability from the database catalog, which is
+// what the running database enforces. The GORM model states the intent and is deliberately not
+// consulted: a model tag that never reached the column is exactly the regression under test.
+func assertNoteTypeIDNotNull(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	switch db.Dialector.Name() {
+	case "sqlite":
+		var columns []struct {
+			Name    string
+			NotNull int `gorm:"column:notnull"`
+		}
+		if err := db.Raw("PRAGMA table_info(notes)").Scan(&columns).Error; err != nil {
+			t.Fatalf("read notes columns: %v", err)
+		}
+		for _, column := range columns {
+			if column.Name != "note_type_id" {
+				continue
+			}
+			if column.NotNull != 1 {
+				t.Fatal("notes.note_type_id is nullable in PRAGMA table_info, want NOT NULL")
+			}
+			return
+		}
+		t.Fatal("notes.note_type_id is missing from PRAGMA table_info")
+	case "postgres":
+		var rows []struct {
+			IsNullable string `gorm:"column:is_nullable"`
+		}
+		if err := db.Raw(`SELECT is_nullable FROM information_schema.columns
+			WHERE table_schema = current_schema() AND table_name = 'notes' AND column_name = 'note_type_id'`).
+			Scan(&rows).Error; err != nil {
+			t.Fatalf("read notes.note_type_id from information_schema: %v", err)
+		}
+		if len(rows) != 1 {
+			t.Fatalf("information_schema has %d rows for notes.note_type_id, want 1", len(rows))
+		}
+		if rows[0].IsNullable != "NO" {
+			t.Fatalf("notes.note_type_id is is_nullable=%q, want NO", rows[0].IsNullable)
+		}
+	default:
+		t.Fatalf("unsupported dialect %q", db.Dialector.Name())
+	}
+}
+
+// assertNoteWithoutTypeRejected proves the constraint is enforced, not only declared: a raw insert
+// that omits note_type_id must fail. The note needs no deck row, because note_type_id is a plain
+// column with no foreign key.
+func assertNoteWithoutTypeRejected(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	now := time.Now().UTC()
+	err := db.Exec(`INSERT INTO notes (public_id, deck_id, fields_json, tags_json, created_at, updated_at)
+		VALUES (?, ?, '{}', '[]', ?, ?)`, NewPublicID(), 1, now, now).Error
+	if err == nil {
+		t.Fatal("a note without a note type was inserted, want a NOT NULL violation")
+	}
+}
 
 // renderAnswerControl replaces the type placeholder on the back with the control's answer breakdown. A template
 // without a placeholder (the cloze back) has no control markup to substitute.

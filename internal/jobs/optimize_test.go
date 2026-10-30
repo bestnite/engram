@@ -27,8 +27,12 @@ func seedPresetDeckCards(t *testing.T, db *gorm.DB, ownerID, presetID uint64, n 
 		t.Fatalf("create deck: %v", err)
 	}
 	ids := make([]uint64, 0, n)
+	noteType, err := store.NewNoteStore(db).EnsureStockNoteType(context.Background(), deck.ID, "basic")
+	if err != nil {
+		t.Fatalf("ensure note type: %v", err)
+	}
 	for i := 0; i < n; i++ {
-		note := store.Note{DeckID: deck.ID, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+		note := store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID), FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 		if err := db.Create(&note).Error; err != nil {
 			t.Fatalf("create note: %v", err)
 		}

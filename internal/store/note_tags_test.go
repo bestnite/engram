@@ -47,7 +47,7 @@ func TestWhereNoteTagsAny(t *testing.T) {
 			now := time.Now().UTC()
 			ids := map[uint64]string{}
 			for name, tags := range tagSets {
-				n := Note{DeckID: deckID, FieldsJSON: `{"front":"q","back":"a"}`,
+				n := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deckID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`,
 					TagsJSON: TagsJSON(tags), CreatedAt: now, UpdatedAt: now}
 				if err := db.Create(&n).Error; err != nil {
 					t.Fatalf("create note: %v", err)
@@ -92,7 +92,7 @@ func TestDeckTagCounts(t *testing.T) {
 			now := time.Now().UTC()
 			mk := func(deck uint64, raw string) Note {
 				t.Helper()
-				n := Note{DeckID: deck, FieldsJSON: `{"front":"q","back":"a"}`,
+				n := Note{DeckID: deck, NoteTypeID: Ptr(stockNoteTypeID(t, db, deck, "basic")), FieldsJSON: `{"front":"q","back":"a"}`,
 					TagsJSON: raw, CreatedAt: now, UpdatedAt: now}
 				if err := db.Create(&n).Error; err != nil {
 					t.Fatalf("create note: %v", err)

@@ -30,7 +30,7 @@ func seedReminderUser(t *testing.T, db *gorm.DB, name, email string, dueAt time.
 	if err := db.Create(&deck).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
-	note := Note{DeckID: deck.ID, FieldsJSON: `{"front":"q","back":"a"}`,
+	note := Note{DeckID: deck.ID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deck.ID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`,
 		TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(&note).Error; err != nil {
 		t.Fatalf("create note: %v", err)

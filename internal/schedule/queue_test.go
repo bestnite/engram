@@ -41,10 +41,21 @@ func seedDeck(t *testing.T, db *gorm.DB, now time.Time) uint64 {
 	return d.ID
 }
 
+// seedNoteType returns the deck's basic stock note type, creating it on first use. notes.note_type_id
+// is NOT NULL, so every note fixture must name a type.
+func seedNoteType(t *testing.T, db *gorm.DB, deckID uint64) uint64 {
+	t.Helper()
+	nt, err := store.NewNoteStore(db).EnsureStockNoteType(context.Background(), deckID, "basic")
+	if err != nil {
+		t.Fatalf("ensure note type: %v", err)
+	}
+	return nt.ID
+}
+
 // seedCard creates a basic note and one of its cards, returning the card id.
 func seedCard(t *testing.T, db *gorm.DB, deckID uint64, template string, createdAt time.Time) uint64 {
 	t.Helper()
-	n := store.Note{DeckID: deckID, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: createdAt, UpdatedAt: createdAt}
+	n := store.Note{DeckID: deckID, NoteTypeID: store.Ptr(seedNoteType(t, db, deckID)), FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: createdAt, UpdatedAt: createdAt}
 	if err := db.Create(&n).Error; err != nil {
 		t.Fatalf("create note: %v", err)
 	}
