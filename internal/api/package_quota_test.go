@@ -33,12 +33,13 @@ func apiMediaPackageZip(t *testing.T, body []byte) (raw []byte, sha string) {
 	sha = hex.EncodeToString(sum[:])
 	mediaPath := "media/" + sha + ".png"
 	files := map[string]string{
-		"manifest.json": `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":true,"include_reviews":false,"counts":{"notes":1,"cards":0,"media":1}}`,
-		"notes.json":    fmt.Sprintf(`[{"kind":"basic","fields":{"front":"q","back":"%s"}}]`, mediaPath),
-		"cards.json":    `[]`,
-		"preset.json":   `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
-		"media.json":    fmt.Sprintf(`{"%s":{"path":"%s","mime":"image/png"}}`, sha, mediaPath),
-		mediaPath:       string(body),
+		"manifest.json":   `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":true,"include_reviews":false,"counts":{"notes":1,"cards":0,"media":1}}`,
+		"note_types.json": packageTestNoteTypesJSON,
+		"notes.json":      fmt.Sprintf(`[{"note_type":"nt-1","fields":{"front":"q","back":"%s"}}]`, mediaPath),
+		"cards.json":      `[]`,
+		"preset.json":     `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
+		"media.json":      fmt.Sprintf(`{"%s":{"path":"%s","mime":"image/png"}}`, sha, mediaPath),
+		mediaPath:         string(body),
 	}
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)

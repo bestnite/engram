@@ -3,8 +3,11 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"testing"
 
 	"gorm.io/gorm"
@@ -12,7 +15,9 @@ import (
 
 // ---- import: round-trip fidelity / idempotency / safety / progress ownership ----
 
-// TestImportRoundTripIdentical asserts that after exporting and importing into an empty database the note count/fields/tags match exactly, and a second import creates no duplicate cards.
+// TestImportRoundTripIdentical asserts that after exporting and importing into an empty database the notes
+// (fields, tags, source_url, extra), cards (template, ordinal, deck_path), note types (name, config) and media
+// names match exactly, and a second import creates no duplicate notes or cards.
 // It runs once on SQLite and once on PostgreSQL, with fresh instances as both source and target.
 func TestImportRoundTripIdentical(t *testing.T) {
 	srcs := packageDatabases(t)
@@ -20,17 +25,52 @@ func TestImportRoundTripIdentical(t *testing.T) {
 	for driver, src := range srcs {
 		dst := dsts[driver]
 		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
 			owner := seedUsers(t, src, "pkg_rt_owner")[0]
 			deckID, _ := seedPackageDeck(t, src, owner)
-			raw := exportZip(t, src, owner, deckID, PackageOptions{IncludeMedia: false})
+
+			// One named media reference: the note's HTML uses "diagram.png", so the name must travel in
+			// media.json and be registered in the target deck for the import to resolve it.
+			srcRoot := t.TempDir()
+			mediaRaw := append([]byte("\x89PNG\r\n\x1a\n"), []byte("round-trip-named-media")...)
+			m, err := NewMediaStore(src).SaveBytes(ctx, srcRoot, "image/png", mediaRaw, Ptr(owner))
+			if err != nil {
+				t.Fatalf("SaveBytes: %v", err)
+			}
+			if err := NewMediaNameStore(src).Upsert(ctx, deckID, "diagram.png", m.Sha256); err != nil {
+				t.Fatalf("register media name: %v", err)
+			}
+			mediaNote := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, src, deckID, "basic")), TagsJSON: "[]", CreatedBy: Ptr(owner)}
+			if _, err := NewNoteStore(src).Create(ctx, &mediaNote, map[string]any{
+				"front": "media?", "back": `<img src="diagram.png">`,
+			}); err != nil {
+				t.Fatalf("create media note: %v", err)
+			}
+
+			raw := exportZip(t, src, owner, deckID, PackageOptions{IncludeMedia: true, MediaRoot: srcRoot})
 
 			importer := seedUsers(t, dst, "pkg_rt_importer")[0]
-			report, err := NewDeckStore(dst).ImportPackage(context.Background(), importer, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck})
+			dstRoot := t.TempDir()
+			report, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(raw), PackageImportOptions{
+				Target: PackageTargetNewDeck, MediaRoot: dstRoot,
+			})
 			if err != nil {
 				t.Fatalf("ImportPackage: %v", err)
 			}
-			if report.NotesCreated != 4 {
-				t.Fatalf("notes_created = %d, want 4", report.NotesCreated)
+			if report.NotesCreated != 5 {
+				t.Fatalf("notes_created = %d, want 5", report.NotesCreated)
+			}
+
+			// Note types: same names and configs, independent of the assigned ids.
+			srcTypes := noteTypeSnapshot(t, src, deckID)
+			dstTypes := noteTypeSnapshot(t, dst, report.DeckID)
+			if len(srcTypes) != len(dstTypes) {
+				t.Fatalf("note type count: dst=%d src=%d", len(dstTypes), len(srcTypes))
+			}
+			for i := range srcTypes {
+				if srcTypes[i] != dstTypes[i] {
+					t.Fatalf("note type %d differs:\n src=%s\n dst=%s", i, srcTypes[i], dstTypes[i])
+				}
 			}
 
 			var srcNotes, dstNotes []Note
@@ -39,16 +79,24 @@ func TestImportRoundTripIdentical(t *testing.T) {
 			if len(srcNotes) != len(dstNotes) {
 				t.Fatalf("note count: dst=%d src=%d", len(dstNotes), len(srcNotes))
 			}
-			srcStore, dstStore := NewNoteStore(src), NewNoteStore(dst)
 			for i := range srcNotes {
-				if srcKind, dstKind := srcStore.KindOf(context.Background(), &srcNotes[i]), dstStore.KindOf(context.Background(), &dstNotes[i]); srcKind != dstKind {
-					t.Fatalf("note %d kind: %q != %q", i, dstKind, srcKind)
+				if srcNotes[i].DeckID == deckID && srcNotes[i].NoteTypeID == nil {
+					t.Fatalf("source note %d has no note type", srcNotes[i].ID)
 				}
 				if CanonicalFieldsJSON(srcNotes[i].FieldsJSON) != CanonicalFieldsJSON(dstNotes[i].FieldsJSON) {
 					t.Fatalf("note %d fields differ:\n src=%s\n dst=%s", i, srcNotes[i].FieldsJSON, dstNotes[i].FieldsJSON)
 				}
 				if srcNotes[i].TagsJSON != dstNotes[i].TagsJSON {
 					t.Fatalf("note %d tags: %q != %q", i, dstNotes[i].TagsJSON, srcNotes[i].TagsJSON)
+				}
+				if ptrText(srcNotes[i].SourceURL) != ptrText(dstNotes[i].SourceURL) {
+					t.Fatalf("note %d source_url: %q != %q", i, ptrText(dstNotes[i].SourceURL), ptrText(srcNotes[i].SourceURL))
+				}
+				if ptrText(srcNotes[i].ExtraJSON) != ptrText(dstNotes[i].ExtraJSON) {
+					t.Fatalf("note %d extra: %q != %q", i, ptrText(dstNotes[i].ExtraJSON), ptrText(srcNotes[i].ExtraJSON))
+				}
+				if srcCards, dstCards := cardSnapshot(t, src, srcNotes[i].ID), cardSnapshot(t, dst, dstNotes[i].ID); srcCards != dstCards {
+					t.Fatalf("note %d cards differ:\n src=%s\n dst=%s", i, dstCards, srcCards)
 				}
 			}
 			var formula Note
@@ -59,10 +107,30 @@ func TestImportRoundTripIdentical(t *testing.T) {
 				t.Fatalf("formula not preserved: %s", formula.FieldsJSON)
 			}
 
-			// Importing the same package a second time creates no duplicate cards (the default update matches on the fingerprint).
+			// Media names: the target deck resolves the same file name to the same content.
+			srcNames, err := NewMediaNameStore(src).ListByDeck(ctx, deckID)
+			if err != nil {
+				t.Fatalf("list source media names: %v", err)
+			}
+			dstNames, err := NewMediaNameStore(dst).ListByDeck(ctx, report.DeckID)
+			if err != nil {
+				t.Fatalf("list imported media names: %v", err)
+			}
+			if len(srcNames) != len(dstNames) {
+				t.Fatalf("media name count: dst=%v src=%v", dstNames, srcNames)
+			}
+			for i := range srcNames {
+				if srcNames[i].Name != dstNames[i].Name || srcNames[i].Sha256 != dstNames[i].Sha256 {
+					t.Fatalf("media name %d: %+v != %+v", i, dstNames[i], srcNames[i])
+				}
+			}
+
+			// Importing the same package a second time creates no duplicate notes or cards (the default update matches on the fingerprint).
 			var cardsBefore int64
 			dst.Model(&Card{}).Where("note_id IN (SELECT id FROM notes WHERE deck_id = ?)", report.DeckID).Count(&cardsBefore)
-			report2, err := NewDeckStore(dst).ImportPackage(context.Background(), importer, bytes.NewReader(raw), PackageImportOptions{Target: fmt.Sprintf("into_deck:%d", report.DeckID)})
+			report2, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(raw), PackageImportOptions{
+				Target: fmt.Sprintf("into_deck:%d", report.DeckID), MediaRoot: dstRoot,
+			})
 			if err != nil {
 				t.Fatalf("second ImportPackage: %v", err)
 			}
@@ -76,6 +144,52 @@ func TestImportRoundTripIdentical(t *testing.T) {
 			}
 		})
 	}
+}
+
+// noteTypeSnapshot returns a comparable "name + config" line per note type of a deck, sorted, so a
+// round trip can compare the definitions without comparing their database ids.
+func noteTypeSnapshot(t *testing.T, db *gorm.DB, deckID uint64) []string {
+	t.Helper()
+	types, err := NewNoteTypeStore(db).ListByDeck(context.Background(), deckID)
+	if err != nil {
+		t.Fatalf("list note types of deck %d: %v", deckID, err)
+	}
+	out := make([]string, 0, len(types))
+	for i := range types {
+		cfg, err := types[i].Config()
+		if err != nil {
+			t.Fatalf("decode note type %d: %v", types[i].ID, err)
+		}
+		raw, err := json.Marshal(cfg)
+		if err != nil {
+			t.Fatalf("encode note type %d: %v", types[i].ID, err)
+		}
+		out = append(out, types[i].Name+"\n"+string(raw))
+	}
+	sort.Strings(out)
+	return out
+}
+
+// cardSnapshot returns a comparable "template/ordinal/deck_path" line per card of a note, sorted.
+func cardSnapshot(t *testing.T, db *gorm.DB, noteID uint64) string {
+	t.Helper()
+	var cards []Card
+	if err := db.Where("note_id = ?", noteID).Order("template ASC, ordinal ASC").Find(&cards).Error; err != nil {
+		t.Fatalf("list cards of note %d: %v", noteID, err)
+	}
+	lines := make([]string, 0, len(cards))
+	for i := range cards {
+		lines = append(lines, fmt.Sprintf("%s/%d/%s", cards[i].Template, cards[i].Ordinal, ptrText(cards[i].DeckPath)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ptrText returns the pointed-to text, or the empty string for nil.
+func ptrText(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // TestImportRejectsUnsafeArchive asserts a package containing path traversal / symlinks is rejected
@@ -119,13 +233,15 @@ func TestReadPackageArchiveRejectsBomb(t *testing.T) {
 	}
 }
 
-// TestImportUnknownKindListsEntries asserts an unknown kind errors and lists the offending entries one by one
-func TestImportUnknownKindListsEntries(t *testing.T) {
+// TestImportUnknownNoteTypeListsEntries asserts a note naming a note type the package does not declare errors
+// and lists the offending entries one by one.
+func TestImportUnknownNoteTypeListsEntries(t *testing.T) {
 	raw := buildZip(t, map[string]string{
-		"manifest.json": `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":2,"cards":0}}`,
-		"notes.json":    `[{"kind":"basic","fields":{"front":"a","back":"b"}},{"kind":"bogus_type","fields":{"x":"y"}}]`,
-		"cards.json":    `[]`,
-		"preset.json":   `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
+		"manifest.json":   `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":2,"cards":0}}`,
+		"note_types.json": testNoteTypesJSON(),
+		"notes.json":      `[{"note_type":"nt-1","fields":{"front":"a","back":"b"}},{"note_type":"nt-9","fields":{"x":"y"}}]`,
+		"cards.json":      `[]`,
+		"preset.json":     testPresetJSON,
 	})
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -134,8 +250,31 @@ func TestImportUnknownKindListsEntries(t *testing.T) {
 			if !errors.As(err, &pe) || pe.Code != CodePackageUnknownKind {
 				t.Fatalf("error = %v, want PackageError code %s", err, CodePackageUnknownKind)
 			}
-			if len(pe.Entries) != 1 || pe.Entries[0] != "notes[1] kind=bogus_type" {
-				t.Fatalf("entries = %v, want [notes[1] kind=bogus_type]", pe.Entries)
+			if len(pe.Entries) != 1 || pe.Entries[0] != "notes[1] note_type=nt-9" {
+				t.Fatalf("entries = %v, want [notes[1] note_type=nt-9]", pe.Entries)
+			}
+		})
+	}
+}
+
+// TestImportRejectsFormat1 asserts a format-1 package is rejected with the stable obsolete-format code,
+// and the message tells the user to import it with an older release and export it again.
+func TestImportRejectsFormat1(t *testing.T) {
+	raw := buildZip(t, map[string]string{
+		"manifest.json": `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":0}}`,
+		"notes.json":    `[{"kind":"basic","fields":{"front":"a","back":"b"}}]`,
+		"cards.json":    `[]`,
+		"preset.json":   testPresetJSON,
+	})
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			_, err := NewDeckStore(db).ImportPackage(context.Background(), 1, bytes.NewReader(raw), PackageImportOptions{})
+			var pe *PackageError
+			if !errors.As(err, &pe) || pe.Code != CodePackageFormatObsolete {
+				t.Fatalf("error = %v, want PackageError code %s", err, CodePackageFormatObsolete)
+			}
+			if !strings.Contains(pe.Message, "older engram release") || !strings.Contains(pe.Message, "export it again") {
+				t.Fatalf("message = %q, want guidance to use an older release and export again", pe.Message)
 			}
 		})
 	}
@@ -184,14 +323,15 @@ func TestImportDiscardsOthersProgress(t *testing.T) {
 // presetImportZip builds a minimal package whose preset.json carries presetName verbatim, the way an export of a deck on the default preset does.
 func presetImportZip(t *testing.T, deckName, presetName string) []byte {
 	t.Helper()
-	manifest := `{"format_version":1,"exported_at":"2026-10-06T00:00:00Z","app_version":"test",` +
+	manifest := `{"format_version":2,"exported_at":"2026-10-06T00:00:00Z","app_version":"test",` +
 		`"deck":{"name":` + jsonQuote(t, deckName) + `},` +
 		`"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":0,"cards":0}}`
 	return buildZip(t, map[string]string{
-		"manifest.json": manifest,
-		"notes.json":    `[]`,
-		"cards.json":    `[]`,
-		"preset.json":   `{"name":` + jsonQuote(t, presetName) + `,"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":false,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
+		"manifest.json":   manifest,
+		"note_types.json": `[]`,
+		"notes.json":      `[]`,
+		"cards.json":      `[]`,
+		"preset.json":     `{"name":` + jsonQuote(t, presetName) + `,"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":false,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
 	})
 }
 

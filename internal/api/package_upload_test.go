@@ -56,8 +56,9 @@ func putUpload(t *testing.T, env *testEnv, uploadURL string, body []byte) *httpt
 // minimalPackageDocument is the JSON document form of minimalPackageZip (the output form of export_deck).
 func minimalPackageDocument() []byte {
 	return []byte(`{
-  "manifest.json": {"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"from-json"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":1}},
-  "notes.json": [{"kind":"basic","fields":{"front":"q","back":"a"}}],
+  "manifest.json": {"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"from-json"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":1}},
+  "note_types.json": [{"ref":"nt-1","name":"Basic","config":{"kind":"normal","fields":[{"id":"front","name":"front"},{"id":"back","name":"back"}],"templates":[{"id":"t-forward","name":"Forward","qfmt":"{{front}}","afmt":"{{front}}<hr>{{back}}"}]}}],
+  "notes.json": [{"note_type":"nt-1","fields":{"front":"q","back":"a"}}],
   "cards.json": [],
   "preset.json": {"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}
 }`)

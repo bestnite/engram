@@ -20,7 +20,7 @@ Engram 实例。包里只有卡组内容——导出者本人的复习进度与�
 | [`平方数与常用幂.edeck`](./zh-CN/平方数与常用幂.edeck) | 平方数与常用幂 | 速算心算调用：完全平方数 11²–30²、常用增长率幂 \\((1+r)^{n}\\)（r 取 1–10% 与 15–50%）与五个常用开方 | 89 | 89 | `平方数` `常用幂` `开方` |
 | [`花生十三高频成语 1000 词.edeck`](./zh-CN/花生十三高频成语%201000%20词.edeck) | 花生十三高频成语 1000 词 | 花生十三《高频成语 1000 词》讲义里的 993 条高频成语与实词，按讲义自己的大类与小类名打标签 | 993 | 993 | 291 个，如 `中华文明传统文化`、`搭档配合`、`需要积累的其他词语` |
 
-上面每份卡组入库前都过了两道校验：四个 JSON 条目按
+上面每份卡组入库前都过了两道校验：五个 JSON 条目按
 [`schema/deck-package.schema.json`](../schema/deck-package.schema.json) 校验，再在本机实例里
 用 `--dry-run` 真导一遍，报告里的 `errors` 必须为空。
 
@@ -69,18 +69,22 @@ engram import --package decks/zh-CN/百化分.edeck --user <id|用户名>
 
 ## 包内结构
 
-`.edeck` 是一个 zip 归档，四个条目为必填：
+`.edeck` 是一个 zip 归档，当前格式版本为 2，五个条目为必填：
 
 | 条目 | 内容 |
 | :--- | :--- |
-| `manifest.json` | 格式版本、导出时间、卡组名与描述、`include_*` 开关、条目计数 |
-| `notes.json` | 笔记内容，与批量导入笔记的请求同构 |
-| `cards.json` | 每张卡一条：`note_index`、`template`、`ordinal` |
+| `manifest.json` | 格式版本（`2`）、导出时间、卡组名与描述、`include_*` 开关、条目计数 |
+| `note_types.json` | 卡组中的全部笔记类型：包内引用、类型名，以及声明字段与卡片模板的配置 |
+| `notes.json` | 笔记内容：每条笔记用 `note_type` 指向笔记类型，`fields` 是字段 id 到该字段 HTML 值的映射 |
+| `cards.json` | 每张卡一条：`note_index`、`template`、`ordinal`，以及可选的 `deck_path` 子卡组路径 |
 | `preset.json` | 调度参数；`weights: null` 表示使用 FSRS 库默认权重 |
 
 `progress.json`（导出者本人的调度状态）与 `media.json` 加 `media/…` 二进制条目是可选
-项，只有导出时包含才会出现。因此「单一题型、无图片、不带进度」的包解压出来正好是那四个
-必填文件。
+项，只有导出时包含才会出现。`media.json` 同时记录每个 `sha256` 对应的卡组内文件名，
+因此字段 HTML 里的媒体引用在导入后仍指向同一份内容。「单一题型、无图片、不带进度」的包
+解压出来正好是那五个必填文件。
+
+格式版本为 1 的旧包会被拒绝：请用更早的 Engram 版本导入后重新导出，得到格式版本 2 的包。
 
 格式说明与校验方法见 [`schema/README.md`](../schema/README.md) 与
 [`schema/deck-package.schema.json`](../schema/deck-package.schema.json)。

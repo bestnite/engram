@@ -6,19 +6,17 @@ import (
 	"git.nite07.com/nite/engram/internal/answer"
 )
 
-// This file translates stored field values back into the typed shapes of the format-1 deck package and the legacy
-// note payloads.
+// This file translates stored field values back into the typed shapes of the legacy note payloads.
 //
-// A field value is an HTML string in the current model, but the format-1 package document and the old REST/MCP payload
-// describe the same content as a string array (options, items, accepted wordings), a boolean (ignore_case, ordered,
-// true/false answers), a number (tolerances, numeric value) or an option index. Until the format-2 package replaces format
-// 1, an export has to write those shapes again, and an import or a client reads them back. The table below is the one
-// place that mapping lives.
+// A field value is an HTML string in the current model, but the old REST/MCP note payload describes the same content as
+// a string array (options, items, accepted wordings), a boolean (ignore_case, ordered, true/false answers), a number
+// (tolerances, numeric value) or an option index. The note response keeps writing those shapes until the rich-text
+// editor replaces the card-kind editor, and a client reads them back. The table below is the one place that mapping lives.
 //
 // A field whose stored value is empty is left out: the old payload omitted a field the note did not fill, and an empty
 // string would not satisfy the schema's type for a boolean or a number.
 
-// fieldShape is how a field's stored HTML is presented in the format-1 package.
+// fieldShape is how a field's stored HTML is presented in the legacy note payload.
 type fieldShape int
 
 const (
@@ -30,7 +28,7 @@ const (
 	shapeIndexes
 )
 
-// shapeFor reports the format-1 shape of one field of an engram stock kind.
+// shapeFor reports the legacy payload shape of one field of an engram stock kind.
 func shapeFor(kind, fieldID string) fieldShape {
 	switch kind {
 	case "typed":
@@ -74,7 +72,7 @@ func shapeFor(kind, fieldID string) fieldShape {
 	return shapeText
 }
 
-// LegacyNoteFields presents stored field values in the format-1 package shapes. An unknown kind keeps every value as
+// LegacyNoteFields presents stored field values in the legacy note payload shapes. An unknown kind keeps every value as
 // the stored string.
 func LegacyNoteFields(kind string, values map[string]string) map[string]any {
 	out := make(map[string]any, len(values))

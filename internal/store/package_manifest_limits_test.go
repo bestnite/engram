@@ -32,14 +32,15 @@ func jsonQuote(t *testing.T, s string) string {
 // manifestZip builds a minimal but complete deck package zip; deck.name/description go into manifest.json verbatim.
 func manifestZip(t *testing.T, name, description string) []byte {
 	t.Helper()
-	manifest := `{"format_version":1,"exported_at":"2026-10-06T00:00:00Z","app_version":"test",` +
+	manifest := `{"format_version":2,"exported_at":"2026-10-06T00:00:00Z","app_version":"test",` +
 		`"deck":{"name":` + jsonQuote(t, name) + `,"description":` + jsonQuote(t, description) + `},` +
 		`"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":0,"cards":0}}`
 	return buildZip(t, map[string]string{
-		"manifest.json": manifest,
-		"notes.json":    `[]`,
-		"cards.json":    `[]`,
-		"preset.json":   `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":false,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
+		"manifest.json":   manifest,
+		"note_types.json": `[]`,
+		"notes.json":      `[]`,
+		"cards.json":      `[]`,
+		"preset.json":     testPresetJSON,
 	})
 }
 
@@ -216,14 +217,15 @@ func TestImportManifestDeckControlCharacters(t *testing.T) {
 // into U+FFFD silently ("not an error"), and looking only at the decoded string never catches it, so one must first validate
 // the raw bytes of manifest.json.
 func TestImportManifestRejectsInvalidUTF8(t *testing.T) {
-	manifest := "{\"format_version\":1,\"exported_at\":\"2026-10-06T00:00:00Z\"," +
+	manifest := "{\"format_version\":2,\"exported_at\":\"2026-10-06T00:00:00Z\"," +
 		"\"deck\":{\"name\":\"bad\xffname\",\"description\":\"\"}," +
 		"\"include_progress\":false,\"include_media\":false,\"include_reviews\":false,\"counts\":{\"notes\":0,\"cards\":0}}"
 	raw := buildZip(t, map[string]string{
-		"manifest.json": manifest,
-		"notes.json":    `[]`,
-		"cards.json":    `[]`,
-		"preset.json":   `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":false,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
+		"manifest.json":   manifest,
+		"note_types.json": `[]`,
+		"notes.json":      `[]`,
+		"cards.json":      `[]`,
+		"preset.json":     testPresetJSON,
 	})
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

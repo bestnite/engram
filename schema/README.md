@@ -94,10 +94,18 @@ whose properties are the package's entry names, and defines each file under `$de
 
 - `manifest.json` (required) — `format_version`, export time, application version,
   deck metadata, the `include_*` flags and the entry counts.
-- `notes.json` (required) — the note content in the format-1 shape: each note carries
-  a `kind` and the typed `fields` that shape defines. The import endpoint's `note_type` /
-  HTML-map shape is not used by format 1; format 2 (M17-20) replaces it.
-- `cards.json` (required) — one entry per card: `note_index`, `template`, `ordinal`.
+- `note_types.json` (required) — every note type of the deck: a package-local `ref`,
+  the type's `name` and its `config` (generation kind, fields, templates, CSS).
+  Note types are content, so they travel with the package; the importer creates a row
+  for each one in the target deck, or reuses an existing row with the same name and
+  config.
+- `notes.json` (required) — the note content. Each note names its type with `note_type`
+  (a `ref` from `note_types.json`) and sends `fields` as a map from field id to that
+  field's HTML value. `source_url` and `extra` are the note's own columns, not fields,
+  unless the note type declares fields of those names.
+- `cards.json` (required) — one entry per card: `note_index`, `template` (the note
+  type's template id, or `cloze:<n>`), `ordinal` and the optional `deck_path` subdeck
+  path.
 - `preset.json` (required) — scheduling parameters. The 21 FSRS weights are exported
   only when `include_weights` is requested, because they are fitted to the exporting
   user's own review log; otherwise `weights`, `weights_optimized_at` and
@@ -106,7 +114,9 @@ whose properties are the package's entry names, and defines each file under `$de
   `apply_weights` is requested.
 - `progress.json` (optional) — the exporting user's own `card_states` and optional
   `reviews`.
-- `media.json` (optional) — a map from `sha256` to `path`, `mime` and dimensions.
+- `media.json` (optional) — a map from `sha256` to `path`, `mime`, dimensions and
+  `names`: the deck-scoped file names that resolve to that sha. A field's HTML refers
+  to media by name, so the importer registers the names for the target deck.
 - `media/<sha256>.<ext>` entries — the media binaries themselves.
 
 Field limits: `manifest.deck.name` is at most 200 Unicode characters (counted as runes,
@@ -116,15 +126,22 @@ so a name that can be created can always be exported and imported unchanged.
 
 ## Version policy
 
-- `manifest.json` carries `format_version`, currently `1`. An importer must support at
-  least `N-1`; this schema file describes version 1. When version 2 ships, add a branch
-  (or a new schema file) and keep accepting version 1.
+- `manifest.json` carries `format_version`, currently `2`. This schema file describes
+  version 2, and this release writes and accepts exactly version 2.
+- **One-time exception to the N-1 rule.** Version 2 replaced the note model: format 1
+  stored a note as a `kind` plus typed field values, while a note is now a reference to
+  a note type plus field-id keyed HTML. No faithful conversion from format 1 exists
+  without the migration generation that this release no longer ships, so format 1 is
+  not kept readable. A format-1 package is rejected with
+  `package_format_obsolete`, and the message tells the user to import it with an older
+  engram release and export it again. This is the only version that was dropped instead
+  of supported alongside its successor; every later version follows the N-1 rule again.
 - Unknown fields inside any object are ignored, never fatal.
 - Unknown extra entries in the package itself are ignored, so a newer package can still
   be read by an older importer.
-- In a format-1 deck package, an unknown note `kind` is an error. It matches none of the
-  `oneOf` branches, and the importer must list every offending entry instead of dropping
-  it silently. In an import request, an unknown `note_type` or field name is a row error
+- A note that names a `note_type` reference `note_types.json` does not declare is an
+  error, and the importer must list every offending entry instead of dropping it
+  silently. In an import request, an unknown `note_type` or field name is a row error
   naming the offending id or field.
 - `manifest.app_version` is informational and never used for compatibility decisions.
 
@@ -157,8 +174,9 @@ a syntax-only fallback is `python3 -m json.tool <file>`.
 - `examples/note-import.example.json` — a valid bulk import request exercising five note
   types, with `fields` as a map from field name to HTML string.
 - `examples/note-bulk.example.json` — a valid bulk tag action on three notes.
-- `examples/deck-package.example.json` — a valid package with a manifest, two notes,
-  their cards, a preset and one media entry.
+- `examples/deck-package.example.json` — a valid format-2 package with a manifest, two
+  note types, two notes, their cards (one with a subdeck path), a preset and one named
+  media entry.
 
 Both examples are sanitised: they use `example.com`, a neutral `example-system` source
 namespace and a placeholder `example-agent`. No real domain, host name, address,

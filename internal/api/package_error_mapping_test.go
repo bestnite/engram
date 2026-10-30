@@ -19,6 +19,7 @@ func TestPackageErrorMappingPreservesCodeAndStatus(t *testing.T) {
 		{store.CodePackageTooLarge, http.StatusBadRequest},
 		{store.CodePackageUnsafeEntry, http.StatusBadRequest},
 		{store.CodePackageUnknownKind, http.StatusBadRequest},
+		{store.CodePackageFormatObsolete, http.StatusBadRequest},
 		{store.CodePackageUnsafeMedia, http.StatusBadRequest},
 		{store.CodePackageDeckMetaInvalid, http.StatusBadRequest},
 		{store.CodePackageMediaForbidden, http.StatusForbidden},

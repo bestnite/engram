@@ -35,10 +35,11 @@ func mcpMinimalPackageZip(t *testing.T) []byte {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	entries := map[string]string{
-		"manifest.json": `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":1}}`,
-		"notes.json":    `[{"kind":"basic","fields":{"front":"q","back":"a"}}]`,
-		"cards.json":    `[]`,
-		"preset.json":   `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
+		"manifest.json":   `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":1}}`,
+		"note_types.json": `[{"ref":"nt-1","name":"Basic","config":{"kind":"normal","fields":[{"id":"front","name":"front"},{"id":"back","name":"back"}],"templates":[{"id":"t-forward","name":"Forward","qfmt":"{{front}}","afmt":"{{front}}<hr>{{back}}"}]}}]`,
+		"notes.json":      `[{"note_type":"nt-1","fields":{"front":"q","back":"a"}}]`,
+		"cards.json":      `[]`,
+		"preset.json":     `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
 	}
 	for name, body := range entries {
 		w, err := zw.Create(name)

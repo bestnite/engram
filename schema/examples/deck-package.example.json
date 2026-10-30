@@ -1,8 +1,8 @@
 {
   "manifest.json": {
-    "format_version": 1,
+    "format_version": 2,
     "exported_at": "2026-10-02T00:00:00Z",
-    "app_version": "0.1.0",
+    "app_version": "0.3.0",
     "deck": {
       "name": "Example Geography and Biology Deck",
       "description": "Sample deck used to document the .edeck package format."
@@ -17,10 +17,63 @@
       "media": 1
     }
   },
+  "note_types.json": [
+    {
+      "ref": "nt-1",
+      "name": "Basic",
+      "config": {
+        "kind": "normal",
+        "fields": [
+          { "id": "front", "name": "front" },
+          { "id": "back", "name": "back" }
+        ],
+        "templates": [
+          {
+            "id": "t-forward",
+            "name": "Forward",
+            "qfmt": "{{front}}",
+            "afmt": "{{front}}<hr>{{back}}"
+          }
+        ],
+        "css": ".card { font-family: arial; font-size: 20px; text-align: center; }",
+        "sort_field_id": "front",
+        "latex_pre": "",
+        "latex_post": "",
+        "latex_svg": false,
+        "original_stock_kind": null,
+        "anki_origin": null
+      }
+    },
+    {
+      "ref": "nt-2",
+      "name": "Cloze",
+      "config": {
+        "kind": "cloze",
+        "fields": [
+          { "id": "text", "name": "text" },
+          { "id": "image", "name": "image" }
+        ],
+        "templates": [
+          {
+            "id": "t-cloze",
+            "name": "Cloze",
+            "qfmt": "{{cloze:text}}",
+            "afmt": "{{cloze:text}}"
+          }
+        ],
+        "css": ".card { font-family: arial; font-size: 20px; text-align: center; }",
+        "sort_field_id": "text",
+        "latex_pre": "",
+        "latex_post": "",
+        "latex_svg": false,
+        "original_stock_kind": null,
+        "anki_origin": null
+      }
+    }
+  ],
   "notes.json": [
     {
-      "external_ref": "example-system:doc-1:block-2",
-      "kind": "basic",
+      "note_type": "nt-1",
       "fields": {
         "front": "What is the capital of France?",
         "back": "Paris."
@@ -29,24 +82,26 @@
       "source_url": "https://example.com/notes/geography#france"
     },
     {
-      "kind": "cloze",
+      "note_type": "nt-2",
       "fields": {
         "text": "The {{c1::mitochondrion}} is the powerhouse of the cell.",
-        "image": "media/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png"
+        "image": "<img src=\"diagram.png\">"
       },
-      "tags": ["biology"]
+      "tags": ["biology"],
+      "extra": { "licence": "example" }
     }
   ],
   "cards.json": [
     {
       "note_index": 0,
-      "template": "forward",
+      "template": "t-forward",
       "ordinal": 0
     },
     {
       "note_index": 1,
       "template": "cloze:1",
-      "ordinal": 0
+      "ordinal": 0,
+      "deck_path": "Lesson 1::Verbs"
     }
   ],
   "preset.json": {
@@ -66,7 +121,8 @@
       "mime": "image/png",
       "bytes": 68,
       "width": 1,
-      "height": 1
+      "height": 1,
+      "names": ["diagram.png"]
     }
   },
   "media/ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="

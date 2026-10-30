@@ -23,7 +23,7 @@ its cards are Japanese; a general-knowledge deck written in English sits under `
 | [`平方数与常用幂.edeck`](./zh-CN/平方数与常用幂.edeck) | 平方数与常用幂 | Speed-arithmetic recall: perfect squares 11²–30², the growth powers \\((1+r)^{n}\\) for r = 1–10% and 15–50%, and five common square roots | 89 | 89 | `平方数` `常用幂` `开方` |
 | [`花生十三高频成语 1000 词.edeck`](./zh-CN/花生十三高频成语%201000%20词.edeck) | 花生十三高频成语 1000 词 | 993 high-frequency idioms and content words from the 花生十三 lecture handout, tagged by the handout's own category and sub-category names | 993 | 993 | 291 tags, e.g. `中华文明传统文化`, `搭档配合`, `需要积累的其他词语` |
 
-Every deck above is validated twice before it is committed: the four JSON entries are
+Every deck above is validated twice before it is committed: the five JSON entries are
 checked against [`schema/deck-package.schema.json`](../schema/deck-package.schema.json),
 and the package is imported with `--dry-run` into a local instance, which must report
 zero errors.
@@ -80,19 +80,25 @@ base64-encoded archive) and returns the same import report.
 
 ## What is inside a package
 
-An `.edeck` file is a zip archive. Four entries are required:
+An `.edeck` file is a zip archive in format 2. Five entries are required:
 
 | Entry | Contents |
 | :--- | :--- |
-| `manifest.json` | format version, export time, deck name and description, the `include_*` flags and the entry counts |
-| `notes.json` | the note content, in the same shape as the bulk note import request |
-| `cards.json` | one entry per card: `note_index`, `template`, `ordinal` |
+| `manifest.json` | format version (`2`), export time, deck name and description, the `include_*` flags and the entry counts |
+| `note_types.json` | every note type of the deck: a package-local reference, the type name and the config that declares its fields and card templates |
+| `notes.json` | the note content: each note names its `note_type` reference, and `fields` maps a field id to that field's HTML value |
+| `cards.json` | one entry per card: `note_index`, `template`, `ordinal` and the optional `deck_path` subdeck path |
 | `preset.json` | scheduling parameters; `weights: null` means the FSRS library defaults are used |
 
 `progress.json` (the exporting user's own scheduling state) and `media.json` plus the
-`media/…` binaries are optional, and are present only when the export included them. A
-package that shipped one note type with no images and no progress therefore unzips to
-exactly the four required files.
+`media/…` binaries are optional, and are present only when the export included them.
+`media.json` also carries the deck-scoped file names that resolve to each `sha256`, so a
+field's HTML keeps referring to the same media after import. A package that shipped one
+note type with no images and no progress therefore unzips to exactly the five required
+files.
+
+A format-1 package (the previous entry layout) is rejected. Import it with an older
+Engram release and export it again to get a format-2 package.
 
 The format is described, with validation instructions, in
 [`schema/README.md`](../schema/README.md) and

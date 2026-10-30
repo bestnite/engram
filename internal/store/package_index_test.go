@@ -47,10 +47,11 @@ func zipWithEntries(t *testing.T, entries [][2]string) []byte {
 // mediaPath serves both as the note's reference and as the path in media.json; sha is the key declared in media.json.
 func indexPackageEntries(mediaPath, sha, mime string) [][2]string {
 	return [][2]string{
-		{"manifest.json", `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":true,"include_reviews":false,"counts":{"notes":1,"cards":0,"media":1}}`},
-		{"notes.json", fmt.Sprintf(`[{"kind":"basic","fields":{"front":"q","back":"%s"}}]`, mediaPath)},
+		{"manifest.json", `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":true,"include_reviews":false,"counts":{"notes":1,"cards":0,"media":1}}`},
+		{"note_types.json", testNoteTypesJSON()},
+		{"notes.json", fmt.Sprintf(`[{"note_type":"nt-1","fields":{"front":"q","back":"%s"}}]`, mediaPath)},
 		{"cards.json", `[]`},
-		{"preset.json", `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`},
+		{"preset.json", testPresetJSON},
 		{"media.json", fmt.Sprintf(`{"%s":{"path":"%s","mime":"%s"}}`, sha, mediaPath, mime)},
 	}
 }
@@ -171,10 +172,11 @@ func TestImportPackageRejectsMediaEntryNameNotMatchingSha(t *testing.T) {
 			// The sha declared in media.json points at an entry whose basename is unrelated to the sha.
 			path := "media/" + strings.Repeat("b", 64) + ".png"
 			entries := [][2]string{
-				{"manifest.json", `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":true,"include_reviews":false,"counts":{"notes":1,"cards":0,"media":1}}`},
-				{"notes.json", fmt.Sprintf(`[{"kind":"basic","fields":{"front":"q","back":"media/%s.png"}}]`, sha)},
+				{"manifest.json", `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"d"},"include_progress":false,"include_media":true,"include_reviews":false,"counts":{"notes":1,"cards":0,"media":1}}`},
+				{"note_types.json", testNoteTypesJSON()},
+				{"notes.json", fmt.Sprintf(`[{"note_type":"nt-1","fields":{"front":"q","back":"media/%s.png"}}]`, sha)},
 				{"cards.json", `[]`},
-				{"preset.json", `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`},
+				{"preset.json", testPresetJSON},
 				{"media.json", fmt.Sprintf(`{"%s":{"path":"%s","mime":"image/png"}}`, sha, path)},
 				{path, string(body)},
 			}

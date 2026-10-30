@@ -41,27 +41,45 @@ func seedPackageDeck(t *testing.T, db *gorm.DB, owner uint64) (deckID uint64, no
 	}
 	ns := NewNoteStore(db)
 	type seed struct {
-		kind   string
-		fields map[string]any
-		ref    string
-		tags   []string
+		kind      string
+		fields    map[string]any
+		ref       string
+		tags      []string
+		sourceURL string
+		extra     any
+		deckPath  string
 	}
 	seeds := []seed{
-		{"basic", map[string]any{"front": "capital?", "back": `\(E=mc^2\)`}, "ext:1", []string{"geo"}},
-		{"cloze", map[string]any{"text": "The {{c1::mitochondrion}} is the powerhouse."}, "", []string{"bio"}},
-		{"choice_single", map[string]any{"question": "2+2?", "options": []any{"3", "4"}, "answer": float64(1)}, "", nil},
-		{"typed", map[string]any{"prompt": "spell", "answer": "ok"}, "", []string{"lang"}},
+		{"basic", map[string]any{"front": "capital?", "back": `\(E=mc^2\)`}, "ext:1", []string{"geo"}, "https://example.com/notes/1", map[string]any{"licence": "example"}, ""},
+		{"cloze", map[string]any{"text": "The {{c1::mitochondrion}} is the powerhouse."}, "", []string{"bio"}, "", nil, ""},
+		{"choice_single", map[string]any{"question": "2+2?", "options": []any{"3", "4"}, "answer": float64(1)}, "", nil, "", nil, "Lesson 1::Verbs"},
+		{"typed", map[string]any{"prompt": "spell", "answer": "ok"}, "", []string{"lang"}, "", nil, ""},
 	}
 	for _, s := range seeds {
 		n := Note{DeckID: d.ID, NoteTypeID: Ptr(stockNoteTypeID(t, db, d.ID, s.kind)), TagsJSON: TagsJSON(s.tags), CreatedBy: Ptr(owner), Source: Ptr("manual")}
 		if s.ref != "" {
 			n.ExternalRef = Ptr(s.ref)
 		}
+		if s.sourceURL != "" {
+			n.SourceURL = Ptr(s.sourceURL)
+		}
+		if s.extra != nil {
+			raw, err := json.Marshal(s.extra)
+			if err != nil {
+				t.Fatalf("encode extra: %v", err)
+			}
+			n.ExtraJSON = Ptr(string(raw))
+		}
 		cards, err := ns.Create(ctx, &n, s.fields)
 		if err != nil {
 			t.Fatalf("create note %s: %v", s.kind, err)
 		}
 		noteIDs = append(noteIDs, n.ID)
+		if s.deckPath != "" {
+			if err := db.Model(&Card{}).Where("id = ?", cards[0].ID).Update("deck_path", s.deckPath).Error; err != nil {
+				t.Fatalf("seed deck path: %v", err)
+			}
+		}
 		if s.kind == "basic" {
 			if err := db.Create(&CardState{CardID: cards[0].ID, UserID: owner, State: "review", StepIndex: 0, Reps: 3, Version: 2}).Error; err != nil {
 				t.Fatalf("seed card state: %v", err)
@@ -191,6 +209,17 @@ func TestExportMediaOffDeclaresHonestly(t *testing.T) {
 		})
 	}
 }
+
+// ---- format-2 test fixtures ----
+
+// testNoteTypesJSON is the note_types.json of a one-type package used by the hand-built archives:
+// a normal "Basic" type with front/back and one template.
+func testNoteTypesJSON() string {
+	return `[{"ref":"nt-1","name":"Basic","config":{"kind":"normal","fields":[{"id":"front","name":"front"},{"id":"back","name":"back"}],"templates":[{"id":"t-forward","name":"Forward","qfmt":"{{front}}","afmt":"{{front}}<hr>{{back}}"}]}}]`
+}
+
+// testPresetJSON is the minimal valid preset.json shared by the hand-built packages.
+const testPresetJSON = `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`
 
 // ---- zip building and schema validation helpers ----
 

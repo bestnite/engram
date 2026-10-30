@@ -197,8 +197,9 @@ change.
   write path already takes that shape: `fields` maps a field name to an HTML string. The
   transitional `kind` alias still accepts the old typed shapes (a string array for options, a
   boolean, a number), and the note response still returns them in `fields` so the current SPA
-  editor keeps working; the format-1 deck package also writes them. The store converts between the
-  two (`legacy_fields.go`) for as long as those shapes exist.
+  editor keeps working. The store converts between the two (`legacy_fields.go`) for as long as
+  those shapes exist. The deck package format 2 writes the permanent shape only: `note_types.json`
+  plus notes whose `fields` map a field id to HTML.
 - **Cards and subdecks.** `cards.deck_path` is a nullable TEXT path relative to the imported root
   deck (for example `Lesson 1::Verbs`); a card without it sits directly in the note's deck. A
   subdeck is stored only as this path and never as a deck row.

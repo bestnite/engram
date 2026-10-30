@@ -330,17 +330,6 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		return nil, err
 	}
 
-	// An unknown kind must error and be listed entry by entry (silently dropping it would make the user think the import succeeded while cards are missing).
-	var unknown []string
-	for i := range pkg.Notes {
-		if _, ok := notetype.EngramStockByKind(pkg.Notes[i].Kind); !ok {
-			unknown = append(unknown, fmt.Sprintf("notes[%d] kind=%s", i, pkg.Notes[i].Kind))
-		}
-	}
-	if len(unknown) > 0 {
-		return nil, &PackageError{Code: CodePackageUnknownKind, Message: "unknown card type", Entries: unknown}
-	}
-
 	// Media is checked against the allowlist using the real bytes and cross-checked with the declaration; this happens before the transaction, so dry_run and a real import are rejected alike,
 	// and no file has been written yet.
 	if err := validatePackageMedia(pkg); err != nil {
@@ -408,13 +397,14 @@ func (s *DeckStore) cleanupMediaWrites(ctx context.Context, writes []mediaWrite)
 
 // packageModel is the parsed package content.
 type packageModel struct {
-	Manifest PackageManifest
-	Notes    []PackageNote
-	Cards    []PackageCard
-	Preset   PackagePreset
-	Progress *PackageProgress
-	Media    map[string]PackageMediaEntry
-	MediaRaw map[string][]byte
+	Manifest  PackageManifest
+	NoteTypes []PackageNoteType
+	Notes     []PackageNote
+	Cards     []PackageCard
+	Preset    PackagePreset
+	Progress  *PackageProgress
+	Media     map[string]PackageMediaEntry
+	MediaRaw  map[string][]byte
 }
 
 func parseJSONEntry(entries map[string][]byte, name string, out any) error {
@@ -438,15 +428,40 @@ func parsePackage(entries map[string][]byte) (*packageModel, error) {
 	if err := parseJSONEntry(entries, "manifest.json", &pkg.Manifest); err != nil {
 		return nil, err
 	}
+	// This release reads exactly one format. The message names the way out: an older release can still read the
+	// package, and exporting it again from there produces the current format (schema/README.md records this one-time
+	// exception to the N-1 compatibility rule).
+	if pkg.Manifest.FormatVersion != PackageFormatVersion {
+		return nil, &PackageError{
+			Code: CodePackageFormatObsolete,
+			Message: fmt.Sprintf(
+				"format_version %d is not supported; import this package with an older engram release and export it again, then import the new package",
+				pkg.Manifest.FormatVersion),
+		}
+	}
 	// The length and character bounds of deck name/description: validated right after the manifest is parsed, rejecting the whole package before the transaction starts.
 	if err := packageDeckMetaError(deckMetaErrors(pkg.Manifest.Deck.Name, pkg.Manifest.Deck.Description)); err != nil {
 		return nil, err
 	}
-	if pkg.Manifest.FormatVersion < 1 || pkg.Manifest.FormatVersion > PackageFormatVersion {
-		return nil, &PackageError{Code: CodePackageBadFormat, Message: fmt.Sprintf("unsupported format_version %d", pkg.Manifest.FormatVersion)}
+	if err := parseJSONEntry(entries, "note_types.json", &pkg.NoteTypes); err != nil {
+		return nil, err
+	}
+	if err := validatePackageNoteTypes(pkg.NoteTypes); err != nil {
+		return nil, err
 	}
 	if err := parseJSONEntry(entries, "notes.json", &pkg.Notes); err != nil {
 		return nil, err
+	}
+	// Every note must name a note type the package declares. An unknown reference must be listed entry by entry:
+	// silently dropping the note would make the user think the import succeeded while cards are missing.
+	var unknown []string
+	for i := range pkg.Notes {
+		if !pkg.hasNoteType(pkg.Notes[i].NoteType) {
+			unknown = append(unknown, fmt.Sprintf("notes[%d] note_type=%s", i, pkg.Notes[i].NoteType))
+		}
+	}
+	if len(unknown) > 0 {
+		return nil, &PackageError{Code: CodePackageUnknownKind, Message: "unknown note type", Entries: unknown}
 	}
 	if err := parseJSONEntry(entries, "cards.json", &pkg.Cards); err != nil {
 		return nil, err
@@ -491,11 +506,191 @@ func parsePackage(entries map[string][]byte) (*packageModel, error) {
 	return pkg, nil
 }
 
+// hasNoteType reports whether note_types.json declares ref.
+func (pkg *packageModel) hasNoteType(ref string) bool {
+	for i := range pkg.NoteTypes {
+		if pkg.NoteTypes[i].Ref == ref {
+			return true
+		}
+	}
+	return false
+}
+
+// validatePackageNoteTypes rejects a note_types.json whose references are empty or not unique, and whose names or
+// configs the note type rules reject. Both are checked before the transaction opens, so a malformed package has no
+// side effects. The config is decoded by the JSON parser into notetype.Config; Validate is the same rule a note type
+// created through the API runs.
+func validatePackageNoteTypes(types []PackageNoteType) error {
+	seen := make(map[string]bool, len(types))
+	for i := range types {
+		ref := strings.TrimSpace(types[i].Ref)
+		if ref == "" {
+			return &PackageError{Code: CodePackageBadFormat, Message: "note type reference is empty", Entries: []string{fmt.Sprintf("note_types[%d]", i)}}
+		}
+		if seen[ref] {
+			return &PackageError{Code: CodePackageBadFormat, Message: "duplicate note type reference", Entries: []string{fmt.Sprintf("note_types[%d] ref=%s", i, ref)}}
+		}
+		seen[ref] = true
+		if err := notetype.ValidateName(types[i].Name); err != nil {
+			return &PackageError{Code: CodePackageBadFormat, Message: "invalid note type name", Entries: []string{fmt.Sprintf("note_types[%d]: %v", i, err)}}
+		}
+		if err := types[i].Config.Validate(); err != nil {
+			return &PackageError{Code: CodePackageBadFormat, Message: "invalid note type config", Entries: []string{fmt.Sprintf("note_types[%d]: %v", i, err)}}
+		}
+	}
+	return nil
+}
+
+// noteTypeKey identifies a note type by the pair that defines its content: its name and its config.
+// The importer reuses a target-deck note type with the same key instead of adding a duplicate on every import.
+func noteTypeKey(name string, cfg notetype.Config) (string, error) {
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return "", fmt.Errorf("encode note type config: %w", err)
+	}
+	return name + "\n" + string(raw), nil
+}
+
+// resolvePackageNoteTypes maps every package-local reference to a note type row of the target deck.
+//
+// A type the deck already holds with the same name and config is reused; any other type is created. Reuse is what
+// keeps re-importing a package (and importing into a deck that already holds the same type) from piling up duplicates.
+func resolvePackageNoteTypes(ctx context.Context, tx *gorm.DB, deckID uint64, types []PackageNoteType) (map[string]uint64, error) {
+	existing, err := NewNoteTypeStore(tx).ListByDeck(ctx, deckID)
+	if err != nil {
+		return nil, fmt.Errorf("list note types of deck %d: %w", deckID, err)
+	}
+	byKey := make(map[string]uint64, len(existing))
+	for i := range existing {
+		cfg, err := existing[i].Config()
+		if err != nil {
+			continue
+		}
+		key, err := noteTypeKey(existing[i].Name, cfg)
+		if err != nil {
+			continue
+		}
+		byKey[key] = existing[i].ID
+	}
+	out := make(map[string]uint64, len(types))
+	now := time.Now().UTC()
+	for i := range types {
+		entry := &types[i]
+		key, err := noteTypeKey(entry.Name, entry.Config)
+		if err != nil {
+			return nil, err
+		}
+		if id, ok := byKey[key]; ok {
+			out[entry.Ref] = id
+			continue
+		}
+		nt := NoteType{DeckID: deckID}
+		if err := nt.SetConfig(entry.Name, entry.Config); err != nil {
+			return nil, fmt.Errorf("import note type %q: %w", entry.Name, err)
+		}
+		nt.CreatedAt = now
+		nt.UpdatedAt = now
+		if err := tx.WithContext(ctx).Create(&nt).Error; err != nil {
+			return nil, fmt.Errorf("create note type %q: %w", entry.Name, err)
+		}
+		byKey[key] = nt.ID
+		out[entry.Ref] = nt.ID
+	}
+	return out, nil
+}
+
+// noteFromPackage builds the note row from a package entry: the note type row, the tag list and the two optional
+// content columns. source_url and extra are columns, not fields, unless the note type declares fields of those names;
+// the note write path applies that rule.
+func noteFromPackage(pn *PackageNote, deckID, noteTypeID uint64) Note {
+	n := Note{DeckID: deckID, NoteTypeID: Ptr(noteTypeID), TagsJSON: TagsJSON(pn.Tags)}
+	if pn.ExternalRef != "" {
+		n.ExternalRef = Ptr(pn.ExternalRef)
+	}
+	if pn.SourceURL != "" {
+		n.SourceURL = Ptr(pn.SourceURL)
+	}
+	if pn.Extra != nil {
+		if raw, err := json.Marshal(pn.Extra); err == nil && string(raw) != "null" {
+			n.ExtraJSON = Ptr(string(raw))
+		}
+	}
+	return n
+}
+
+// stringFieldsToAny converts the package's field map into the shape the note write path accepts.
+// A string is already the stored HTML value, so no conversion happens beyond the map type.
+func stringFieldsToAny(fields map[string]string) map[string]any {
+	out := make(map[string]any, len(fields))
+	for id, html := range fields {
+		out[id] = html
+	}
+	return out
+}
+
+// registerPackageMediaNames records every deck-scoped name the package declares for a sha, before the note writes
+// resolve those names. An entry without names registers its package file name, so a hand-written package still works.
+func registerPackageMediaNames(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *packageModel) error {
+	for sha, entry := range pkg.Media {
+		names := entry.Names
+		if len(names) == 0 {
+			names = []string{path.Base(entry.Path)}
+		}
+		for _, name := range names {
+			name = normaliseMediaName(name)
+			if name == "" {
+				continue
+			}
+			row := MediaName{DeckID: deckID, Name: name, Sha256: sha}
+			if err := tx.WithContext(ctx).Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "deck_id"}, {Name: "name"}},
+				DoUpdates: clause.AssignmentColumns([]string{"sha256"}),
+			}).Create(&row).Error; err != nil {
+				return fmt.Errorf("register media name %q: %w", name, err)
+			}
+		}
+	}
+	return nil
+}
+
+// packageMediaNameIndex maps every deck-scoped media name the package declares to its sha256.
+// The package file name is also accepted, so a hand-written package without names still resolves.
+func packageMediaNameIndex(pkg *packageModel) map[string]string {
+	idx := make(map[string]string, len(pkg.Media))
+	for sha, entry := range pkg.Media {
+		idx[normaliseMediaName(path.Base(entry.Path))] = sha
+		for _, name := range entry.Names {
+			idx[normaliseMediaName(name)] = sha
+		}
+	}
+	return idx
+}
+
+// packageMediaRefs resolves every media reference in a note's HTML against the package's own name index.
+func packageMediaRefs(idx map[string]string, values map[string]string) map[string]bool {
+	refs := map[string]bool{}
+	for _, html := range values {
+		for _, name := range mediaNamesInHTML(html) {
+			if match := mediaShaNameRE.FindStringSubmatch(name); match != nil {
+				refs[match[1]] = true
+				continue
+			}
+			if sha, ok := idx[name]; ok {
+				refs[sha] = true
+			}
+		}
+	}
+	return refs
+}
+
 // missingMediaRefs finds media referenced in note fields but without bytes in the package.
 func missingMediaRefs(pkg *packageModel) []string {
+	idx := packageMediaNameIndex(pkg)
 	refs := map[string]bool{}
 	for i := range pkg.Notes {
-		collectMediaRefs(pkg.Notes[i].Fields, refs)
+		for sha := range packageMediaRefs(idx, pkg.Notes[i].Fields) {
+			refs[sha] = true
+		}
 	}
 	var missing []string
 	for sha := range refs {
@@ -503,6 +698,7 @@ func missingMediaRefs(pkg *packageModel) []string {
 			missing = append(missing, "media/"+sha)
 		}
 	}
+	sort.Strings(missing)
 	return missing
 }
 
@@ -614,6 +810,29 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		}
 	}
 
+	// The package's note types become rows of the target deck (or reuse an identical existing row), and every note
+	// refers to them through the package-local reference from here on.
+	noteTypeIDs, err := resolvePackageNoteTypes(ctx, tx, deckID, pkg.NoteTypes)
+	if err != nil {
+		return err
+	}
+	typeKeyByRef := make(map[string]string, len(pkg.NoteTypes))
+	for i := range pkg.NoteTypes {
+		key, err := noteTypeKey(pkg.NoteTypes[i].Name, pkg.NoteTypes[i].Config)
+		if err != nil {
+			return err
+		}
+		typeKeyByRef[pkg.NoteTypes[i].Ref] = key
+	}
+	// Media names must exist before the note writes: each write rebuilds its media_notes mapping by resolving
+	// the names in its fields, so an unregistered name would silently contribute no reference.
+	// Without a media root the import stores no bytes, so it registers no name either.
+	if opts.MediaRoot != "" {
+		if err := registerPackageMediaNames(ctx, tx, deckID, pkg); err != nil {
+			return err
+		}
+	}
+
 	// The existing content index: external_ref first, then the content fingerprint (the de-duplication rule).
 	byRef, byFingerprint, err := s.existingNoteIndex(ctx, tx, deckID)
 	if err != nil {
@@ -628,10 +847,19 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 	notesStore := NewNoteStore(s.db)
 	noteIDByIndex := make([]uint64, len(pkg.Notes))
 	createdNote := make([]bool, len(pkg.Notes))
+	// touchedNote marks notes this import wrote (create or update); a skipped note keeps its cards unchanged,
+	// including the deck path, because skip means "leave the existing content alone".
+	touchedNote := make([]bool, len(pkg.Notes))
 
 	for i := range pkg.Notes {
 		pn := &pkg.Notes[i]
-		fp := fingerprintFromFields(pn.Kind, pn.Fields)
+		noteTypeID, ok := noteTypeIDs[pn.NoteType]
+		if !ok {
+			// parsePackage rejects this already; keep the guard so a future caller cannot insert a note without a type.
+			return &PackageError{Code: CodePackageUnknownKind, Message: "unknown note type", Entries: []string{fmt.Sprintf("notes[%d] note_type=%s", i, pn.NoteType)}}
+		}
+		typeKey := typeKeyByRef[pn.NoteType]
+		fp := fingerprintFromFields(typeKey, pn.Fields)
 		var existing *Note
 		if pn.ExternalRef != "" {
 			existing = byRef[pn.ExternalRef]
@@ -639,6 +867,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		if existing == nil {
 			existing = byFingerprint[fp]
 		}
+		fields := stringFieldsToAny(pn.Fields)
 
 		if existing != nil {
 			switch opts.OnConflict {
@@ -651,28 +880,21 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 				continue
 			}
 			// update: keep the card rows and everyone's progress, change the content only (NoteStore.SaveInTx keeps the ids unchanged).
-			noteType, err := ensureStockNoteType(ctx, tx, deckID, pn.Kind)
-			if err != nil {
-				return fmt.Errorf("import note %d: %w", i, err)
-			}
-			n := Note{ID: existing.ID, DeckID: deckID, NoteTypeID: Ptr(noteType.ID), TagsJSON: TagsJSON(pn.Tags)}
-			if _, err := notesStore.SaveInTx(ctx, tx, &n, pn.Fields); err != nil {
+			n := noteFromPackage(pn, deckID, noteTypeID)
+			n.ID = existing.ID
+			if _, err := notesStore.SaveInTx(ctx, tx, &n, fields); err != nil {
 				return fmt.Errorf("import note %d: %w", i, asPackageMediaForbidden(err))
 			}
 			report.NotesUpdated++
 			noteIDByIndex[i] = existing.ID
+			touchedNote[i] = true
 			continue
 		}
 
-		noteType, err := ensureStockNoteType(ctx, tx, deckID, pn.Kind)
-		if err != nil {
-			return fmt.Errorf("import note %d: %w", i, err)
-		}
-		n := Note{DeckID: deckID, NoteTypeID: Ptr(noteType.ID), TagsJSON: TagsJSON(pn.Tags), CreatedBy: Ptr(actorUserID), Source: Ptr("import")}
-		if pn.ExternalRef != "" {
-			n.ExternalRef = Ptr(pn.ExternalRef)
-		}
-		cards, err := notesStore.SaveInTx(ctx, tx, &n, pn.Fields)
+		n := noteFromPackage(pn, deckID, noteTypeID)
+		n.CreatedBy = Ptr(actorUserID)
+		n.Source = Ptr("import")
+		cards, err := notesStore.SaveInTx(ctx, tx, &n, fields)
 		if err != nil {
 			return fmt.Errorf("import note %d: %w", i, asPackageMediaForbidden(err))
 		}
@@ -680,6 +902,7 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		report.CardsCreated += len(cards)
 		noteIDByIndex[i] = n.ID
 		createdNote[i] = true
+		touchedNote[i] = true
 	}
 
 	// cards.json keeps the card set consistent after an import: verify that every template declared in the package was generated.
@@ -700,8 +923,19 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 			continue
 		}
 		m := cardIDByNote[noteIDByIndex[pc.NoteIndex]]
-		if _, ok := m[pc.Template]; !ok {
+		cardID, ok := m[pc.Template]
+		if !ok {
 			report.Errors = append(report.Errors, PackageImportError{fmt.Sprintf("cards[%s]", pc.Template), "declared template was not produced"})
+			continue
+		}
+		// The subdeck path is card state, not note content: the generated card carries no path, so the package's
+		// value is written onto the card that matched by template.
+		if !touchedNote[pc.NoteIndex] {
+			continue
+		}
+		if err := tx.WithContext(ctx).Model(&Card{}).Where("id = ?", cardID).
+			Updates(map[string]any{"deck_path": pc.DeckPath}).Error; err != nil {
+			return fmt.Errorf("import package: set deck path of card %d: %w", cardID, err)
 		}
 	}
 
@@ -918,31 +1152,58 @@ func (s *DeckStore) existingNoteIndex(ctx context.Context, tx *gorm.DB, deckID u
 	}
 	byRef := map[string]*Note{}
 	byFP := map[string]*Note{}
+	ids := make([]uint64, 0, len(notes))
+	for i := range notes {
+		if notes[i].NoteTypeID != nil {
+			ids = append(ids, *notes[i].NoteTypeID)
+		}
+	}
+	types, err := NewNoteTypeStore(tx).ByIDs(ctx, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	typeKeys := make(map[uint64]string, len(types))
+	for id, nt := range types {
+		cfg, err := nt.Config()
+		if err != nil {
+			continue
+		}
+		key, err := noteTypeKey(nt.Name, cfg)
+		if err != nil {
+			continue
+		}
+		typeKeys[id] = key
+	}
 	for i := range notes {
 		n := &notes[i]
 		if n.ExternalRef != nil && *n.ExternalRef != "" {
 			byRef[*n.ExternalRef] = n
 		}
-		if kind := kindOfNote(ctx, tx, n); kind != "" {
-			// The fingerprint compares the format-1 package form of the content, so a note exported from this deck and
-			// imported again matches the row it came from.
-			raw, err := json.Marshal(LegacyNoteFields(kind, NoteFieldValues(n.FieldsJSON)))
-			if err != nil {
-				return nil, nil, fmt.Errorf("encode existing fields of note %d: %w", n.ID, err)
-			}
-			byFP[NoteFingerprint(kind, string(raw))] = n
+		if n.NoteTypeID == nil {
+			continue
 		}
+		key, ok := typeKeys[*n.NoteTypeID]
+		if !ok {
+			continue
+		}
+		// The fingerprint compares the content the package form carries, so a note exported from this deck and
+		// imported again matches the row it came from.
+		raw, err := json.Marshal(NoteFieldValues(n.FieldsJSON))
+		if err != nil {
+			return nil, nil, fmt.Errorf("encode existing fields of note %d: %w", n.ID, err)
+		}
+		byFP[NoteFingerprint(key, string(raw))] = n
 	}
 	return byRef, byFP, nil
 }
 
 // fingerprintFromFields computes the content fingerprint of a note in the package (the same algorithm as NoteFingerprint).
-func fingerprintFromFields(kind string, fields map[string]any) string {
+func fingerprintFromFields(noteTypeKey string, fields map[string]string) string {
 	raw, err := json.Marshal(fields)
 	if err != nil {
 		raw = []byte("{}")
 	}
-	return NoteFingerprint(kind, string(raw))
+	return NoteFingerprint(noteTypeKey, string(raw))
 }
 
 // cardTemplatesTx returns a note's template -> card id mapping (soft-deleted rows included).

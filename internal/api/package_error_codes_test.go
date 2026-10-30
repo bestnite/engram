@@ -102,18 +102,19 @@ func TestImportPackageSurfacesTooLarge(t *testing.T) {
 	}
 }
 
-// TestImportPackageSurfacesUnknownKind asserts an unknown card type inside the package yields the stable code package_unknown_kind,
-// the status is still 400, and the failing notes' indexes are listed one by one (entries are not lost).
+// TestImportPackageSurfacesUnknownKind asserts a note naming an undeclared note type reference yields the stable
+// code package_unknown_kind, the status is still 400, and the failing notes' indexes are listed one by one.
 func TestImportPackageSurfacesUnknownKind(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "pkg_unknown_kind", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 
 	raw := packageZip(t, map[string]string{
-		"manifest.json": `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":0}}`,
-		"notes.json":    `[{"kind":"no_such_kind","fields":{"front":"q","back":"a"}}]`,
-		"cards.json":    `[]`,
-		"preset.json":   presetJSON,
+		"manifest.json":   `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":0}}`,
+		"note_types.json": packageTestNoteTypesJSON,
+		"notes.json":      `[{"note_type":"nt-9","fields":{"front":"q","back":"a"}}]`,
+		"cards.json":      `[]`,
+		"preset.json":     presetJSON,
 	})
 	body, ct := multipartBody(t, "unknown.edeck", raw)
 	rec := postImport(t, env, k.Plaintext, body, ct)
@@ -128,6 +129,34 @@ func TestImportPackageSurfacesUnknownKind(t *testing.T) {
 	// entries are still listed one by one: the message names the failing notes' indexes.
 	if !bytes.Contains([]byte(msg), []byte("notes[0]")) {
 		t.Errorf("unknown-kind message lost the per-note entries: %q", msg)
+	}
+}
+
+// TestImportPackageSurfacesObsoleteFormat asserts a format-1 package yields package_format_obsolete and the
+// message tells the user to import it with an older release and export it again.
+func TestImportPackageSurfacesObsoleteFormat(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "pkg_obsolete_format", store.RoleUser)
+	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
+
+	raw := packageZip(t, map[string]string{
+		"manifest.json": `{"format_version":1,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":0}}`,
+		"notes.json":    `[{"kind":"basic","fields":{"front":"q","back":"a"}}]`,
+		"cards.json":    `[]`,
+		"preset.json":   presetJSON,
+	})
+	body, ct := multipartBody(t, "format1.edeck", raw)
+	rec := postImport(t, env, k.Plaintext, body, ct)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("obsolete-format import status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+	}
+	code, msg := decodePackageErrorCode(t, rec.Body.Bytes())
+	if code != store.CodePackageFormatObsolete {
+		t.Errorf("obsolete-format import code = %q, want %q", code, store.CodePackageFormatObsolete)
+	}
+	if !bytes.Contains([]byte(msg), []byte("older engram release")) {
+		t.Errorf("obsolete-format message = %q, want guidance to use an older release", msg)
 	}
 }
 

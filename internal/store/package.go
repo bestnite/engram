@@ -13,28 +13,38 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"git.nite07.com/nite/engram/internal/notetype"
 )
 
 // Deck package (.edeck) export/import.
 //
-// Format: one zip holding manifest.json / notes.json / cards.json / preset.json,
-// optionally progress.json and media/ + media.json. It turns \"one deck\" into a self-contained file,
+// Format 2: one zip holding manifest.json / note_types.json / notes.json / cards.json / preset.json,
+// optionally progress.json and media/ + media.json. It turns "one deck" into a self-contained file,
 // for backup, migration between instances and offline handover; the semantics match clone (copy within one instance): content travels, progress does not follow.
+//
+// Format 2 stores content in the note type model: notes carry a package-local note type reference and
+// their field values as HTML strings keyed by field id. Format 1 (kind-based typed fields) is no longer
+// read; this is the single deliberate exception to the N-1 compatibility rule, recorded in schema/README.md.
 
-// PackageFormatVersion is the current package format version; the import side is compatible with at least N-1.
-const PackageFormatVersion = 1
+// PackageFormatVersion is the deck package format version this code writes and accepts. Exactly this
+// version is accepted: a package of another version is rejected with CodePackageFormatObsolete.
+const PackageFormatVersion = 2
 
 // Stable import error codes (English identifiers so callers can branch programmatically; AGENTS.md §2.1).
 const (
 	CodePackageUnsafeEntry = "package_unsafe_entry"
 	CodePackageTooLarge    = "package_too_large"
 	CodePackageBadFormat   = "package_bad_format"
-	// CodePackageUnknownKind means the package holds a kind this instance does not know (or has not registered); it must error and list every one.
+	// CodePackageUnknownKind means a note names a note type reference that note_types.json does not declare;
+	// the package must error and list every offending note. The code value is kept for API compatibility.
 	CodePackageUnknownKind = "package_unknown_kind"
+	// CodePackageFormatObsolete means the package uses a format this release cannot read. The message tells the
+	// user to import it with an older release and export it again in the current format.
+	CodePackageFormatObsolete = "package_format_obsolete"
 	// CodePackageUnsafeMedia means the real bytes of package media are not in the allowlist or disagree with the media.json declaration; listed one by one.
 	CodePackageUnsafeMedia = "package_unsafe_media"
 	// CodePackageDeckMetaInvalid means the manifest's deck name/description crosses a bound (length, control characters or invalid UTF-8);
@@ -116,21 +126,35 @@ type PackageCount struct {
 	Media int `json:"media,omitempty"`
 }
 
-// PackageNote is one entry of notes.json; its shape matches the bulk import body.
+// PackageNoteType is one entry of note_types.json: the deck-scoped definition of a note's fields and templates.
+//
+// Ref is a package-local identifier, not a database key: notes.json and the importer use it to tie a note to
+// its type while the target instance assigns its own ids.
+type PackageNoteType struct {
+	Ref    string          `json:"ref"`
+	Name   string          `json:"name"`
+	Config notetype.Config `json:"config"`
+}
+
+// PackageNote is one entry of notes.json.
+//
+// Fields maps a field id of the referenced note type to that field's HTML value. source_url and extra are the
+// note's own columns, not fields, unless the note type declares fields of those names (then they stay in Fields).
 type PackageNote struct {
-	Kind        string         `json:"kind"`
-	Fields      map[string]any `json:"fields"`
-	ExternalRef string         `json:"external_ref,omitempty"`
-	Tags        []string       `json:"tags,omitempty"`
-	Extra       map[string]any `json:"extra,omitempty"`
-	SourceURL   string         `json:"source_url,omitempty"`
+	NoteType    string            `json:"note_type"`
+	Fields      map[string]string `json:"fields"`
+	ExternalRef string            `json:"external_ref,omitempty"`
+	Tags        []string          `json:"tags,omitempty"`
+	Extra       any               `json:"extra,omitempty"`
+	SourceURL   string            `json:"source_url,omitempty"`
 }
 
 // PackageCard uses note_index (an index into notes[]) instead of an ID, so ID semantics do not entangle export and import.
 type PackageCard struct {
-	NoteIndex int    `json:"note_index"`
-	Template  string `json:"template"`
-	Ordinal   int    `json:"ordinal"`
+	NoteIndex int     `json:"note_index"`
+	Template  string  `json:"template"`
+	Ordinal   int     `json:"ordinal"`
+	DeckPath  *string `json:"deck_path,omitempty"`
 }
 
 // PackagePreset is the scheduling parameters that travel with the package; weights are 21 numbers or null (null = use the default weights).
@@ -193,22 +217,27 @@ type PackageReview struct {
 }
 
 // PackageMediaEntry is one entry of media.json: sha256 -> in-package relative path + mime.
+//
+// Names lists the deck-scoped file names that resolve to this sha in the exporting deck (media_names). Field
+// HTML refers to media by these names, so they travel with the bytes and are re-registered for the target deck.
 type PackageMediaEntry struct {
-	Path   string `json:"path"`
-	Mime   string `json:"mime"`
-	Bytes  int64  `json:"bytes,omitempty"`
-	Width  *int   `json:"width,omitempty"`
-	Height *int   `json:"height,omitempty"`
+	Path   string   `json:"path"`
+	Mime   string   `json:"mime"`
+	Bytes  int64    `json:"bytes,omitempty"`
+	Width  *int     `json:"width,omitempty"`
+	Height *int     `json:"height,omitempty"`
+	Names  []string `json:"names,omitempty"`
 }
 
 // DeckPackage is an assembled deck package (in-memory form). Media bytes are indexed by sha256,
 // which makes writing them into the zip on export easy, or rendering the whole package as one JSON document for schema validation.
 type DeckPackage struct {
-	Manifest PackageManifest
-	Notes    []PackageNote
-	Cards    []PackageCard
-	Preset   PackagePreset
-	Progress *PackageProgress
+	Manifest  PackageManifest
+	NoteTypes []PackageNoteType
+	Notes     []PackageNote
+	Cards     []PackageCard
+	Preset    PackagePreset
+	Progress  *PackageProgress
 	// Media is sha256 -> entry; MediaBytes is the same sha256 -> bytes.
 	Media      map[string]PackageMediaEntry
 	MediaBytes map[string][]byte
@@ -222,10 +251,6 @@ var (
 	// ErrPackageMediaMissing means the package references media whose bytes are unavailable.
 	ErrPackageMediaMissing = errors.New("deck package: media bytes are unavailable")
 )
-
-// mediaRefRE matches a media reference inside a note field: the note type model writes the deck-scoped file name
-// <sha256>.<ext>, and the package document's own convention prefixes it with media/. Both forms name the same bytes.
-var mediaRefRE = regexp.MustCompile(`(?:^|[^0-9a-f])(?:media/)?([0-9a-f]{64})\.([A-Za-z0-9]+)`)
 
 // ExportPackage assembles a deck package.
 //
@@ -273,11 +298,35 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 		pkg.MediaBytes = map[string][]byte{}
 	}
 
+	// Note types travel with the package: every type of the deck is exported once, and notes refer to them by
+	// a package-local reference. The reference is derived from the deterministic list order, never from a row id.
+	types, err := NewNoteTypeStore(s.db).ListByDeck(ctx, deckID)
+	if err != nil {
+		return nil, fmt.Errorf("export package: list note types: %w", err)
+	}
+	refByTypeID := make(map[uint64]string, len(types))
+	for i := range types {
+		cfg, err := types[i].Config()
+		if err != nil {
+			return nil, fmt.Errorf("export package: note type %d: %w", types[i].ID, err)
+		}
+		ref := fmt.Sprintf("nt-%d", i+1)
+		refByTypeID[types[i].ID] = ref
+		pkg.NoteTypes = append(pkg.NoteTypes, PackageNoteType{Ref: ref, Name: types[i].Name, Config: cfg})
+	}
+
 	// note_index -> note id, used by the progress mapping.
 	noteIDByIndex := make([]uint64, 0, len(notes))
 	refs := map[string]bool{} // referenced media sha256 -> first appearance
 	for i := range notes {
 		n := &notes[i]
+		if n.NoteTypeID == nil {
+			return nil, fmt.Errorf("export package: note %d has no note type", n.ID)
+		}
+		ref, ok := refByTypeID[*n.NoteTypeID]
+		if !ok {
+			return nil, fmt.Errorf("export package: note %d names note type %d, which is not in this deck", n.ID, *n.NoteTypeID)
+		}
 		values, err := ParseFieldValues(n.FieldsJSON)
 		if err != nil {
 			return nil, fmt.Errorf("export package: note %d: %w", n.ID, err)
@@ -286,21 +335,19 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 		if err != nil {
 			return nil, fmt.Errorf("export package: note %d: %w", n.ID, err)
 		}
-		kind := NewNoteStore(s.db).KindOf(ctx, n)
-		fields := LegacyNoteFields(kind, values)
-		// source_url and extra live in their own columns in the new model; the format-1 document carries them as fields.
-		if n.SourceURL != nil && *n.SourceURL != "" {
-			fields["source_url"] = *n.SourceURL
-		}
-		if n.ExtraJSON != nil {
-			var extra any
-			if err := json.Unmarshal([]byte(*n.ExtraJSON), &extra); err == nil {
-				fields["extra"] = extra
-			}
-		}
-		pn := PackageNote{Kind: kind, Fields: fields, Tags: tags}
+		pn := PackageNote{NoteType: ref, Fields: values, Tags: tags}
 		if n.ExternalRef != nil {
 			pn.ExternalRef = *n.ExternalRef
+		}
+		if n.SourceURL != nil && *n.SourceURL != "" {
+			pn.SourceURL = *n.SourceURL
+		}
+		if n.ExtraJSON != nil && strings.TrimSpace(*n.ExtraJSON) != "" {
+			var extra any
+			if err := json.Unmarshal([]byte(*n.ExtraJSON), &extra); err != nil {
+				return nil, fmt.Errorf("export package: note %d extra: %w", n.ID, err)
+			}
+			pn.Extra = extra
 		}
 		pkg.Notes = append(pkg.Notes, pn)
 		noteIDByIndex = append(noteIDByIndex, n.ID)
@@ -311,15 +358,33 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 			return nil, fmt.Errorf("export package: list cards for note %d: %w", n.ID, err)
 		}
 		for _, c := range cards {
-			pkg.Cards = append(pkg.Cards, PackageCard{NoteIndex: i, Template: c.Template, Ordinal: c.Ordinal})
+			pkg.Cards = append(pkg.Cards, PackageCard{NoteIndex: i, Template: c.Template, Ordinal: c.Ordinal, DeckPath: c.DeckPath})
 		}
 		if opts.IncludeMedia {
-			collectMediaRefs(fields, refs)
+			// Resolve references the same way the note write path does: a name that carries the sha is direct,
+			// every other name resolves through the deck's media_names.
+			noteRefs, err := mediaRefsIn(ctx, s.db, deckID, values)
+			if err != nil {
+				return nil, fmt.Errorf("export package: note %d media: %w", n.ID, err)
+			}
+			for sha := range noteRefs {
+				refs[sha] = true
+			}
 		}
 	}
 
 	// Media: de-duplicated by sha256 and then inlined; the bytes come from the local media root.
+	// Each entry also carries the deck-scoped names that resolve to that sha, because a field refers to
+	// media by name and the target deck must resolve the same names to the same bytes.
 	if opts.IncludeMedia && len(refs) > 0 {
+		namesBySha := map[string][]string{}
+		names, err := NewMediaNameStore(s.db).ListByDeck(ctx, deckID)
+		if err != nil {
+			return nil, fmt.Errorf("export package: list media names: %w", err)
+		}
+		for _, name := range names {
+			namesBySha[name.Sha256] = append(namesBySha[name.Sha256], name.Name)
+		}
 		mstore := NewMediaStore(s.db)
 		for sha := range refs {
 			m, err := mstore.BySha256(ctx, sha)
@@ -335,7 +400,10 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 			if err != nil {
 				return nil, fmt.Errorf("%w: sha256=%s: %v", ErrPackageMediaMissing, sha, err)
 			}
-			pkg.Media[sha] = PackageMediaEntry{Path: rel, Mime: m.Mime, Bytes: m.Bytes, Width: m.Width, Height: m.Height}
+			pkg.Media[sha] = PackageMediaEntry{
+				Path: rel, Mime: m.Mime, Bytes: m.Bytes, Width: m.Width, Height: m.Height,
+				Names: namesBySha[sha],
+			}
 			pkg.MediaBytes[sha] = raw
 		}
 	}
@@ -463,6 +531,9 @@ func (p *DeckPackage) WriteZip(w io.Writer) error {
 	if err := write("manifest.json", p.Manifest); err != nil {
 		return err
 	}
+	if err := write("note_types.json", p.NoteTypes); err != nil {
+		return err
+	}
 	if err := write("notes.json", p.Notes); err != nil {
 		return err
 	}
@@ -504,10 +575,11 @@ func (p *DeckPackage) WriteZip(w io.Writer) error {
 // with a shape matching the logical content described by schema/deck-package.schema.json, for use by schema validation.
 func (p *DeckPackage) Document() map[string]any {
 	doc := map[string]any{
-		"manifest.json": p.Manifest,
-		"notes.json":    p.Notes,
-		"cards.json":    p.Cards,
-		"preset.json":   p.Preset,
+		"manifest.json":   p.Manifest,
+		"note_types.json": p.NoteTypes,
+		"notes.json":      p.Notes,
+		"cards.json":      p.Cards,
+		"preset.json":     p.Preset,
 	}
 	if p.Manifest.IncludeProgress && p.Progress != nil {
 		doc["progress.json"] = p.Progress
@@ -579,24 +651,6 @@ func formatTimePtr(t *time.Time) *string {
 	}
 	s := t.UTC().Format(time.RFC3339)
 	return &s
-}
-
-// collectMediaRefs recursively scans note fields for media references (<sha256>.<ext> or media/<sha256>.<ext>).
-func collectMediaRefs(v any, out map[string]bool) {
-	switch x := v.(type) {
-	case string:
-		for _, m := range mediaRefRE.FindAllStringSubmatch(x, -1) {
-			out[m[1]] = true
-		}
-	case map[string]any:
-		for _, child := range x {
-			collectMediaRefs(child, out)
-		}
-	case []any:
-		for _, child := range x {
-			collectMediaRefs(child, out)
-		}
-	}
 }
 
 // NoteFingerprint is the content fingerprint of a note: sha256 over kind + canonicalized fields (the de-duplication rule).

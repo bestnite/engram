@@ -2,11 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.com/schema/deck-package.schema.json",
   "title": "Deck package (.edeck)",
-  "description": "Logical content of a deck package. A package is a single zip archive with the extension .edeck (a plain .edeck.json file is also allowed when no media is included). Its entries are the top-level properties of this object: manifest.json, notes.json, cards.json, preset.json and the optional progress.json and media.json. Media binaries live under the media/ prefix and are described by media.json. Unknown additional entries and unknown fields are ignored so that a newer package can still be read; an unknown note 'kind' is an error.",
+  "description": "Logical content of a deck package in format 2. A package is a single zip archive with the extension .edeck (a plain .edeck.json file is also allowed when no media is included). Its entries are the top-level properties of this object: manifest.json, note_types.json, notes.json, cards.json, preset.json and the optional progress.json and media.json. Media binaries live under the media/ prefix and are described by media.json. Unknown additional entries and unknown fields are ignored so that a newer package can still be read; a note that names a note type reference note_types.json does not declare is an error.",
   "type": "object",
-  "required": ["manifest.json", "notes.json", "cards.json", "preset.json"],
+  "required": ["manifest.json", "note_types.json", "notes.json", "cards.json", "preset.json"],
   "properties": {
     "manifest.json": { "$ref": "#/$defs/manifest" },
+    "note_types.json": { "$ref": "#/$defs/note_types" },
     "notes.json": { "$ref": "#/$defs/notes" },
     "cards.json": { "$ref": "#/$defs/cards" },
     "preset.json": { "$ref": "#/$defs/preset" },
@@ -29,8 +30,8 @@
       "properties": {
         "format_version": {
           "type": "integer",
-          "const": 1,
-          "description": "Package format version. The importer must support at least N-1; this schema describes version 1."
+          "const": 2,
+          "description": "Package format version. This release writes and accepts exactly version 2; a package of any other version is rejected and must be imported with an older release and exported again. schema/README.md records this one-time exception to the usual N-1 compatibility rule."
         },
         "exported_at": {
           "type": "string",
@@ -93,6 +94,82 @@
       },
       "additionalProperties": true
     },
+    "note_types": {
+      "title": "note_types.json",
+      "description": "Every note type of the exported deck. Each entry carries a package-local reference; notes.json names that reference and never a database id.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/note_type" }
+    },
+    "note_type": {
+      "title": "Note type",
+      "description": "One note type: its name and its config, which declares the fields and card templates every note of this type uses.",
+      "type": "object",
+      "required": ["ref", "name", "config"],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+          "description": "Package-local reference used by notes.json. It is not a database id."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Note type name, unique per deck in the exported instance."
+        },
+        "config": { "$ref": "#/$defs/note_type_config" }
+      },
+      "additionalProperties": true
+    },
+    "note_type_config": {
+      "title": "Note type config",
+      "description": "The note type definition: generation kind, the ordered fields, the card templates, CSS and template options.",
+      "type": "object",
+      "required": ["kind", "fields", "templates"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["normal", "cloze"],
+          "description": "normal generates one card per template; cloze generates one card per cloze number in the fields."
+        },
+        "fields": {
+          "type": "array",
+          "description": "Ordered field definitions. A field id is opaque and stable; a note's fields map is keyed by it.",
+          "items": {
+            "type": "object",
+            "required": ["id", "name"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "minLength": 1 },
+              "plain_text": {
+                "type": "boolean",
+                "description": "The stored value is literal text, not HTML to render."
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "templates": {
+          "type": "array",
+          "description": "Card templates. A template id is opaque and stable; cards.json names it.",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "qfmt", "afmt"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "minLength": 1 },
+              "qfmt": { "type": "string" },
+              "afmt": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "css": { "type": "string" },
+        "sort_field_id": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
     "notes": {
       "title": "notes.json",
       "description": "Note content, in the order referenced by cards.json and progress.json.",
@@ -101,237 +178,32 @@
     },
     "note": {
       "title": "Note",
-      "description": "One note. Same shape as the note objects of the note-import request; the 'kind' discriminates between the per-kind shapes in the oneOf below, and an unknown kind matches no branch.",
+      "description": "One note. Fields maps a field id of the referenced note type to that field's HTML value; every other property is content that lives outside the field map.",
       "type": "object",
-      "required": ["kind", "fields"],
+      "required": ["note_type", "fields"],
       "properties": {
-        "kind": { "type": "string", "minLength": 1 },
-        "fields": { "type": "object" },
+        "note_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reference to an entry of note_types.json."
+        },
+        "fields": {
+          "type": "object",
+          "description": "Field id to HTML value. A field the note leaves empty is written as the empty string.",
+          "additionalProperties": { "type": "string" }
+        },
         "external_ref": { "type": "string", "minLength": 1, "maxLength": 255 },
         "tags": {
           "type": "array",
           "items": { "type": "string", "minLength": 1, "maxLength": 64 },
           "uniqueItems": true
         },
-        "extra": { "type": "object" },
+        "extra": {
+          "description": "Optional content without a field or column of its own. Any JSON value is preserved."
+        },
         "source_url": { "type": "string", "format": "uri", "maxLength": 2048 }
       },
-      "additionalProperties": true,
-      "discriminator": { "propertyName": "kind" },
-      "allOf": [
-        {
-          "oneOf": [
-            { "$ref": "#/$defs/note_basic" },
-            { "$ref": "#/$defs/note_basic_both" },
-            { "$ref": "#/$defs/note_cloze" },
-            { "$ref": "#/$defs/note_list" },
-            { "$ref": "#/$defs/note_typed" },
-            { "$ref": "#/$defs/note_numeric" },
-            { "$ref": "#/$defs/note_choice_single" },
-            { "$ref": "#/$defs/note_choice_multi" },
-            { "$ref": "#/$defs/note_true_false" },
-            { "$ref": "#/$defs/note_short_answer" }
-          ]
-        }
-      ]
-    },
-    "fields_basic": {
-      "type": "object",
-      "required": ["front", "back"],
-      "properties": {
-        "front": { "type": "string", "minLength": 1 },
-        "back": { "type": "string", "minLength": 1 }
-      },
       "additionalProperties": true
-    },
-    "fields_cloze": {
-      "type": "object",
-      "required": ["text"],
-      "properties": {
-        "text": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "\\{\\{c[0-9]+::",
-          "description": "Text with cloze deletions in the form {{cN::text}} or {{cN::text::hint}}. Separate several accepted answers with | ({{cN::first|second}}); the first is the canonical one. A | inside a formula never separates answers, so a deletion whose whole content is inside a formula separates answers with \\alt ({{cN::first \\alt second}}). Write \\| for a literal |."
-        }
-      },
-      "additionalProperties": true
-    },
-    "fields_list": {
-      "type": "object",
-      "required": ["prompt", "items"],
-      "properties": {
-        "prompt": { "type": "string", "minLength": 1 },
-        "items": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "ordered": { "type": "boolean", "default": false }
-      },
-      "additionalProperties": true
-    },
-    "fields_typed": {
-      "type": "object",
-      "required": ["prompt", "answer"],
-      "properties": {
-        "prompt": { "type": "string", "minLength": 1 },
-        "answer": { "type": "string", "minLength": 1 },
-        "accept": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "uniqueItems": true
-        },
-        "ignore_case": { "type": "boolean", "default": true },
-        "ignore_whitespace": { "type": "boolean", "default": true },
-        "regex": { "type": "string", "minLength": 1 }
-      },
-      "additionalProperties": true
-    },
-    "fields_numeric": {
-      "type": "object",
-      "required": ["prompt", "value"],
-      "properties": {
-        "prompt": { "type": "string", "minLength": 1 },
-        "value": { "type": "number" },
-        "tolerance_absolute": { "type": "number", "minimum": 0 },
-        "tolerance_relative": { "type": "number", "minimum": 0, "maximum": 1 },
-        "unit": { "type": "string" }
-      },
-      "additionalProperties": true
-    },
-    "fields_choice_single": {
-      "type": "object",
-      "required": ["question", "options", "answer"],
-      "properties": {
-        "question": { "type": "string", "minLength": 1 },
-        "options": {
-          "type": "array",
-          "minItems": 2,
-          "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "answer": { "type": "integer", "minimum": 0 }
-      },
-      "additionalProperties": true
-    },
-    "fields_choice_multi": {
-      "type": "object",
-      "required": ["question", "options", "answers"],
-      "properties": {
-        "question": { "type": "string", "minLength": 1 },
-        "options": {
-          "type": "array",
-          "minItems": 2,
-          "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "answers": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": { "type": "integer", "minimum": 0 }
-        }
-      },
-      "additionalProperties": true
-    },
-    "fields_true_false": {
-      "type": "object",
-      "required": ["statement", "answer"],
-      "properties": {
-        "statement": { "type": "string", "minLength": 1 },
-        "answer": { "type": "boolean" }
-      },
-      "additionalProperties": true
-    },
-    "fields_short_answer": {
-      "type": "object",
-      "required": ["prompt"],
-      "properties": {
-        "prompt": { "type": "string", "minLength": 1 },
-        "reference": { "type": "string" }
-      },
-      "additionalProperties": true
-    },
-    "note_basic": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "basic" },
-        "fields": { "$ref": "#/$defs/fields_basic" }
-      }
-    },
-    "note_basic_both": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "basic_both" },
-        "fields": { "$ref": "#/$defs/fields_basic" }
-      }
-    },
-    "note_cloze": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "cloze" },
-        "fields": { "$ref": "#/$defs/fields_cloze" }
-      }
-    },
-    "note_list": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "list" },
-        "fields": { "$ref": "#/$defs/fields_list" }
-      }
-    },
-    "note_typed": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "typed" },
-        "fields": { "$ref": "#/$defs/fields_typed" }
-      }
-    },
-    "note_numeric": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "numeric" },
-        "fields": { "$ref": "#/$defs/fields_numeric" }
-      }
-    },
-    "note_choice_single": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "choice_single" },
-        "fields": { "$ref": "#/$defs/fields_choice_single" }
-      }
-    },
-    "note_choice_multi": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "choice_multi" },
-        "fields": { "$ref": "#/$defs/fields_choice_multi" }
-      }
-    },
-    "note_true_false": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "true_false" },
-        "fields": { "$ref": "#/$defs/fields_true_false" }
-      }
-    },
-    "note_short_answer": {
-      "type": "object",
-      "required": ["kind", "fields"],
-      "properties": {
-        "kind": { "const": "short_answer" },
-        "fields": { "$ref": "#/$defs/fields_short_answer" }
-      }
     },
     "cards": {
       "title": "cards.json",
@@ -349,15 +221,17 @@
           "template": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^[a-z][a-z0-9_]*(:[0-9a-z_]+)?$",
-            "examples": ["forward", "reverse", "cloze:1"],
-            "description": "Card template: 'forward', 'reverse', or 'cloze:<index>' for a cloze deletion. Other registered templates may extend this set."
+            "description": "Template id of the note's note type (for example 't-card'), or 'cloze:<n>' for a cloze deletion."
           },
           "ordinal": {
             "type": "integer",
             "minimum": 0,
             "default": 0,
             "description": "Order of the card within its note."
+          },
+          "deck_path": {
+            "type": ["string", "null"],
+            "description": "Subdeck path relative to the imported root deck (for example 'Lesson 1::Verbs'); null means the card sits directly in the note's deck."
           }
         },
         "additionalProperties": true
@@ -520,7 +394,7 @@
     },
     "media": {
       "title": "media.json",
-      "description": "Map from sha256 to the media file inside the package.",
+      "description": "Map from sha256 to the media file inside the package and the deck-scoped names that resolve to it.",
       "type": "object",
       "patternProperties": {
         "^[a-f0-9]{64}$": {
@@ -535,7 +409,13 @@
             "mime": { "type": "string", "minLength": 1 },
             "bytes": { "type": "integer", "minimum": 0 },
             "width": { "type": "integer", "minimum": 0 },
-            "height": { "type": "integer", "minimum": 0 }
+            "height": { "type": "integer", "minimum": 0 },
+            "names": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Deck-scoped file names that resolve to this sha in the exporting deck. A field's HTML refers to media by these names, so the importer registers them for the target deck."
+            }
           },
           "additionalProperties": true
         }
