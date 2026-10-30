@@ -77,6 +77,12 @@ import {
   type RegistrationInfo,
   type CardTypesResponse,
   type NoteTypesResponse,
+  type NoteTypeStocksResponse,
+  type AnswerControlsResponse,
+  type CreateNoteTypeRequest,
+  type UpdateNoteTypeRequest,
+  type UpdateNoteTypeResponse,
+  type NoteType,
   type IdentitiesResponse,
   type BindIdentityResponse,
 } from './types';
@@ -378,6 +384,65 @@ export class ApiClient {
   async listNoteTypes(deckId: string): Promise<NoteTypesResponse> {
     const id = encodeURIComponent(String(deckId));
     return this.request<NoteTypesResponse>(`/api/v1/decks/${id}/note-types`);
+  }
+
+  /**
+   * Read the stock definitions a note type can be created from (GET /api/v1/note-type-stocks, scope: read).
+   * Static metadata; the create call sends the returned id and the server builds the config.
+   */
+  async listNoteTypeStocks(): Promise<NoteTypeStocksResponse> {
+    return this.request<NoteTypeStocksResponse>('/api/v1/note-type-stocks');
+  }
+
+  /**
+   * Read the registered answer controls and their roles (GET /api/v1/answer-controls, scope: read).
+   * The note type editor builds its control and binding pickers from this response, so a newly
+   * registered control needs no frontend release.
+   */
+  async listAnswerControls(): Promise<AnswerControlsResponse> {
+    return this.request<AnswerControlsResponse>('/api/v1/answer-controls');
+  }
+
+  /**
+   * Create a note type in a deck (POST /api/v1/decks/:id/note-types, scope: write, editor role).
+   * Send stock_id to build the config on the server, or config to copy an existing type.
+   */
+  async createNoteType(deckId: string, input: CreateNoteTypeRequest): Promise<NoteType> {
+    if (!this.csrfToken) await this.getSession();
+    const id = encodeURIComponent(String(deckId));
+    return this.notifying('cards', this.request<NoteType>(`/api/v1/decks/${id}/note-types`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }));
+  }
+
+  /**
+   * Update a note type's name and config (PATCH /api/v1/decks/:id/note-types/:type_id).
+   * A dry_run returns the card impact without writing. A 409 card_removal_unconfirmed error carries
+   * the same counts in its response body, so the caller can show them before confirming.
+   */
+  async updateNoteType(
+    deckId: string,
+    typeId: string,
+    input: UpdateNoteTypeRequest,
+  ): Promise<UpdateNoteTypeResponse> {
+    if (!this.csrfToken) await this.getSession();
+    const id = encodeURIComponent(String(deckId));
+    const type = encodeURIComponent(String(typeId));
+    return this.request<UpdateNoteTypeResponse>(`/api/v1/decks/${id}/note-types/${type}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** Delete a note type (DELETE /api/v1/decks/:id/note-types/:type_id); the server refuses one a note still uses. */
+  async deleteNoteType(deckId: string, typeId: string): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    const id = encodeURIComponent(String(deckId));
+    const type = encodeURIComponent(String(typeId));
+    await this.notifying('cards', this.request<void>(`/api/v1/decks/${id}/note-types/${type}`, {
+      method: 'DELETE',
+    }));
   }
 
   /**

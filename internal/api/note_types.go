@@ -34,9 +34,14 @@ type NoteTypeListResponse struct {
 }
 
 // CreateNoteTypeInput is the input for creating a note type; Name and Config are validated by the store.
+//
+// StockID names one of the stock definitions listed by GET /api/v1/note-type-stocks. When it is
+// set, the server builds the config from that definition and Config is ignored, so a client never
+// has to carry a copy of a stock config. Name may be empty then and defaults to the stock name.
 type CreateNoteTypeInput struct {
-	Name   string
-	Config notetype.Config
+	Name    string
+	Config  notetype.Config
+	StockID string
 }
 
 // UpdateNoteTypeInput is the input for updating a note type. Version is the version the caller read;
@@ -142,8 +147,18 @@ func (a *API) CreateNoteType(ctx context.Context, userID, deckID uint64, apiKeyI
 	if err != nil {
 		return NoteTypeJSON{}, err
 	}
-	nt := store.NoteType{DeckID: d.ID, Name: in.Name}
-	if err := a.noteTypes.Create(ctx, &nt, in.Config); err != nil {
+	name := in.Name
+	cfg := in.Config
+	if in.StockID != "" {
+		def, ok := stockNoteTypeByID(in.StockID)
+		if !ok {
+			return NoteTypeJSON{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "unknown stock note type \""+in.StockID+"\"")
+		}
+		cfg = def.Config
+		name = stockNoteTypeName(name, def.JSON.Name)
+	}
+	nt := store.NoteType{DeckID: d.ID, Name: name}
+	if err := a.noteTypes.Create(ctx, &nt, cfg); err != nil {
 		return NoteTypeJSON{}, noteTypeWriteError(err)
 	}
 	a.auditor.Record(ctx, store.AuditEntry{
@@ -352,10 +367,13 @@ func (a *API) getNoteType(c *gin.Context) {
 	c.JSON(http.StatusOK, nt)
 }
 
-// createNoteTypeRequest is the create body: name plus the config value, in the same shape GET returns.
+// createNoteTypeRequest is the create body: name plus either a stock definition id or the
+// config value in the same shape GET returns. stock_id and config are alternatives; stock_id
+// wins when both are present.
 type createNoteTypeRequest struct {
-	Name   string          `json:"name"`
-	Config notetype.Config `json:"config"`
+	Name    string          `json:"name"`
+	Config  notetype.Config `json:"config"`
+	StockID string          `json:"stock_id"`
 }
 
 // createNoteType is POST /api/v1/decks/:id/note-types, scope: write, editor role.
@@ -376,8 +394,9 @@ func (a *API) createNoteType(c *gin.Context) {
 		return
 	}
 	nt, err := a.CreateNoteType(c.Request.Context(), u.ID, d.ID, CurrentAPIKeyID(c), CreateNoteTypeInput{
-		Name:   req.Name,
-		Config: req.Config,
+		Name:    req.Name,
+		Config:  req.Config,
+		StockID: req.StockID,
 	})
 	if err != nil {
 		writeServiceError(c, err)

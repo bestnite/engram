@@ -170,9 +170,12 @@ change.
   resolves the note type and maps field names to field ids. Note types are managed per deck at
   `GET|POST /decks/:id/note-types` and `GET|PATCH|DELETE /decks/:id/note-types/:type_id`; an update
   names the version it read and a stale version is `409`, and a delete is refused while a note still
-  uses the type. A reader may list and read note types but only an editor may change them. `kind`
-  remains a transitional alias for `note_type` on a note write while the SPA editor still sends the
-  card kind.
+  uses the type. A reader may list and read note types but only an editor may change them. A create
+  may send `stock_id` instead of a config; `GET /note-type-stocks` lists the source-prefixed ids of
+  Anki's six and engram's ten stock definitions, and the server builds the config from the chosen
+  definition. `GET /answer-controls` lists the registered controls with their role names and parses,
+  so a client builds an answer spec without a second hard-coded list. `kind` remains a transitional
+  alias for `note_type` on a note write while the SPA editor still sends the card kind.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on
   every request. `list_note_types` and `get_note_type` expose a deck's note types; `create_notes`
   and `update_note` take `note_type` and send field values as an HTML map.

@@ -71,6 +71,10 @@ describe('SPA router matching and query parsing', () => {
     // The literal new must match before :noteId and must not be swallowed by the edit alias.
     expect(matchRoute('/decks/456/notes/new', prodRoutes).route?.name).toBe('note-create');
     expect(matchRoute('/import', prodRoutes).route?.name).toBe('import');
+
+    const noteTypesMatch = matchRoute('/decks/456/note-types', prodRoutes);
+    expect(noteTypesMatch.route?.name).toBe('deck-note-types');
+    expect(noteTypesMatch.params).toEqual({ id: '456' });
   });
 
   // Regression: the server already returns the app shell for GET /review (switched over in 5a3b489), so the client router must handle that exact

@@ -14,6 +14,7 @@ import NoteEditView from '../views/NoteEditView.svelte';
 import ImportView from '../views/ImportView.svelte';
 import DeckSharingView from '../views/DeckSharingView.svelte';
 import DeckSettingsView from '../views/DeckSettingsView.svelte';
+import NoteTypesView from '../views/NoteTypesView.svelte';
 import SecurityView from '../views/SecurityView.svelte';
 import PresetsView from '../views/PresetsView.svelte';
 import AdminIndexView from '../views/admin/AdminIndexView.svelte';
@@ -66,6 +67,12 @@ export const routes: RouteDefinition[] = [
     path: '/decks/:id/settings',
     name: 'deck-settings',
     component: DeckSettingsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // Deck note type management. There is no dedicated server page; the server's NoRoute fallback returns the app shell.
+    path: '/decks/:id/note-types',
+    name: 'deck-note-types',
+    component: NoteTypesView as unknown as RouteDefinition['component'],
   },
   {
     path: '/decks/:id',

@@ -286,6 +286,15 @@ export interface NoteTypeField {
   prevent_deletion?: boolean;
 }
 
+/**
+ * The answer control a template binds (aligned with Go internal/notetype.AnswerSpec).
+ * Bindings maps a role name declared by GET /api/v1/answer-controls to a field id.
+ */
+export interface NoteTypeAnswerSpec {
+  control: string;
+  bindings: Record<string, string>;
+}
+
 /** One card template of a note type (aligned with Go internal/notetype.Template). */
 export interface NoteTypeTemplate {
   id: string;
@@ -296,6 +305,8 @@ export interface NoteTypeTemplate {
   bafmt?: string;
   browser_font?: string;
   browser_font_size?: number;
+  /** The answer spec, or null when the template has no machine-graded control. */
+  answer?: NoteTypeAnswerSpec | null;
 }
 
 /**
@@ -328,6 +339,73 @@ export interface NoteType {
 /** GET /api/v1/decks/:id/note-types response; the server orders the types by name then id. */
 export interface NoteTypesResponse {
   note_types: NoteType[];
+}
+
+/**
+ * One stock definition a note type can be created from (GET /api/v1/note-type-stocks).
+ * The id is "source:kind" because Anki's and engram's stock sets share kind values;
+ * label_key is the translation catalog entry for the display name.
+ */
+export interface NoteTypeStock {
+  id: string;
+  source: 'anki' | 'engram';
+  name: string;
+  label_key: string;
+}
+
+/** GET /api/v1/note-type-stocks response; Anki's six definitions followed by engram's ten. */
+export interface NoteTypeStocksResponse {
+  stocks: NoteTypeStock[];
+}
+
+/** One role an answer control reads (GET /api/v1/answer-controls). */
+export interface AnswerControlRole {
+  name: string;
+  kind: 'text' | 'lines' | 'bool' | 'number';
+  required: boolean;
+}
+
+/** One registered answer control and the roles it declares. */
+export interface AnswerControl {
+  name: string;
+  roles: AnswerControlRole[];
+}
+
+/** GET /api/v1/answer-controls response; controls are in lexicographic order by name. */
+export interface AnswerControlsResponse {
+  controls: AnswerControl[];
+}
+
+/** POST /api/v1/decks/:id/note-types body: a stock id, or a config copied from an existing type. */
+export interface CreateNoteTypeRequest {
+  name: string;
+  config?: NoteTypeConfig;
+  stock_id?: string;
+}
+
+/**
+ * PATCH /api/v1/decks/:id/note-types/:type_id body.
+ * version is the version the caller read. dry_run counts the card impact without writing;
+ * confirm_card_removal is required when the update would remove cards.
+ */
+export interface UpdateNoteTypeRequest {
+  name: string;
+  config: NoteTypeConfig;
+  version: number;
+  dry_run?: boolean;
+  confirm_card_removal?: boolean;
+}
+
+/** The card impact of a note type update, reported by a dry run and by the real update alike. */
+export interface NoteTypeImpact {
+  cards_added: number;
+  cards_removed: number;
+  reviews_on_removed_cards: number;
+}
+
+/** PATCH response: the updated type plus the impact counts. */
+export interface UpdateNoteTypeResponse extends NoteType, NoteTypeImpact {
+  dry_run: boolean;
 }
 
 /**

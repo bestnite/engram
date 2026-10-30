@@ -167,6 +167,14 @@
       </h1>
     {/if}
 
+    <!-- Note types are deck content, not this member's study settings, so they get their own page rather than a field here. -->
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-5 py-4" data-testid="deck-note-types-entry">
+      <p class="text-sm text-muted-foreground">{$t('notetype.settings_hint')}</p>
+      <Button variant="outline" href={`/decks/${encodeURIComponent(deckId)}/note-types`} testId="deck-note-types-link">
+        <span>{$t('notetype.open')}</span>
+      </Button>
+    </div>
+
     <!-- The two sections share one form and one save button: preset and daily cap are the same PATCH. -->
     <form onsubmit={save} data-testid="deck-settings-form">
       <SettingsSection title={$t('deck.settings.preset')} description={$t('deck.settings.preset_hint')}>

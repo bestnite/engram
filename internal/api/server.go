@@ -177,6 +177,10 @@ func (a *API) Register(r gin.IRouter) {
 	v1.DELETE("/decks/:id/membership", a.authn.RequireScope(store.ScopeWrite), a.leaveDeck)
 	v1.GET("/decks/:id/notes", a.authn.RequireScope(store.ScopeRead), a.listNotes)
 	v1.GET("/decks/:id/tags", a.authn.RequireScope(store.ScopeRead), a.listDeckTags)
+	// Note type metadata: the stock definitions a type can be created from, and the answer controls
+	// with their roles. Both are static, so they need the read scope but no role on any deck.
+	v1.GET("/note-type-stocks", a.authn.RequireScope(store.ScopeRead), a.noteTypeStocks)
+	v1.GET("/answer-controls", a.authn.RequireScope(store.ScopeRead), a.answerControls)
 	// Note type CRUD under a deck. Reading needs the read scope; every write needs an editor role on the deck.
 	v1.GET("/decks/:id/note-types", a.authn.RequireScope(store.ScopeRead), a.listNoteTypes)
 	v1.GET("/decks/:id/note-types/:type_id", a.authn.RequireScope(store.ScopeRead), a.getNoteType)
