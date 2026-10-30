@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { faces } from './card-face-fixture';
 import { shownHtmlOnSide } from './card-frame-fixture';
 
 /**
@@ -53,6 +54,7 @@ describe('ReviewView shortcode controls', () => {
       getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
+        ...faces(TTS_HTML, AUDIO_HTML),
         front_html: TTS_HTML,
         back_html: AUDIO_HTML,
         options_html: [],

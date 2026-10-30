@@ -4,7 +4,9 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
-import { shownFaces, postAnswerFromFrame } from './card-frame-fixture';
+import { faces } from './card-face-fixture';
+import { shownFaces, postAnswerFromFrame, frameDocument } from './card-frame-fixture';
+import { REVIEW_BACK_CSS, REVIEW_FRONT_CSS } from '../lib/card-frame';
 
 /**
  * The review page's card faces leave the parent DOM: every face — the question, the revealed answer and a graded result's
@@ -57,6 +59,7 @@ describe('ReviewView card faces in the frame', () => {
     };
     const renderReviewCard = vi.fn().mockResolvedValue({
       card_id: 'b1',
+      ...faces('<p><strong>Sanitized</strong> front</p>', '<p><em>Sanitized</em> back</p>', '/fm/token/'),
       front_html: '<p><strong>Sanitized</strong> front</p>',
       back_html: '<p><em>Sanitized</em> back</p>',
       options_html: [],
@@ -77,14 +80,13 @@ describe('ReviewView card faces in the frame', () => {
     (target.querySelector('[data-testid="review-reveal"]') as HTMLElement).click();
     await flush();
 
-    const faces = await shownFaces(target);
-    expect(faces.map((face) => face.side)).toEqual(['question', 'answer']);
-    expect(faces[1]).toMatchObject({ html: '<p><em>Sanitized</em> back</p>', mediaBase: '/fm/token/' });
+    const shown = await shownFaces(target);
+    expect(shown.map((face) => face.side)).toEqual(['question', 'answer']);
+    expect(shown[1]).toMatchObject({ html: '<p><em>Sanitized</em> back</p>', mediaBase: '/fm/token/' });
     expect(target.textContent).not.toContain('RAW-BACK-TEXT');
   });
 
-  it('hands a graded result answer to the frame and keeps the parent free of the answer HTML', async () => {
-    const card: DueCard = {
+  it('hands a graded result answer to the frame and keeps the parent free of the answer HTML', async () => {    const card: DueCard = {
       card_id: 'g1',
       note_id: 'n2',
       deck_id: 'd1',
@@ -115,6 +117,7 @@ describe('ReviewView card faces in the frame', () => {
     const target = await mountView(card, {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'g1',
+        ...faces('<p>Capital of France?</p>', '<strong>Paris</strong>', '/fm/token/'),
         front_html: '<p>Capital of France?</p>',
         back_html: '<strong>Paris</strong>',
         options_html: [],
@@ -133,10 +136,60 @@ describe('ReviewView card faces in the frame', () => {
 
     expect(submitGradedReview).toHaveBeenCalledTimes(1);
     expect(submitGradedReview.mock.calls[0]![1]).toEqual({ frame: true });
-    const faces = await shownFaces(target);
+    const shown = await shownFaces(target);
     // The prompt frame is the first; the result panel adds the answer frame with the feedback's own media base.
-    const answer = faces.find((face) => face.side === 'answer');
+    const answer = shown.find((face) => face.side === 'answer');
     expect(answer).toMatchObject({ html: '<strong>Paris</strong>', mediaBase: '/fm/graded/' });
     expect(target.querySelector('[data-testid="review-graded-result"]')?.textContent).not.toContain('Paris');
+  });
+
+  it('writes the note type CSS and the server body class into the frame document', async () => {
+    const card: DueCard = {
+      card_id: 'n1',
+      note_id: 'n1',
+      deck_id: 'd1',
+      state: 'new',
+      due_at: '',
+      retrievability: 0,
+      kind: 'basic',
+      fields: { front: 'Question', back: 'Answer' },
+      tags: [],
+      template: 'forward',
+      version: 0,
+    };
+    // A note type that styles the card body itself: the front and the back carry different rules and class lists, so the
+    // case proves each frame takes its own side's object instead of sharing one.
+    const frontCSS = '.card { color: rgb(1, 2, 3); }';
+    const backCSS = '.card { color: rgb(9, 8, 7); }';
+    const target = await mountView(card, {
+      renderReviewCard: vi.fn().mockResolvedValue({
+        card_id: 'n1',
+        front: { html: '<p>Question</p>', css: frontCSS, body_class: 'card type-front', side: 'front', media_base: '/fm/token/' },
+        back: { html: '<p>Answer</p>', css: backCSS, body_class: 'card type-back', side: 'back', media_base: '/fm/token/' },
+        options_html: [],
+        blanks: null,
+        edit_href: '',
+        media_base: '/fm/token/',
+      }),
+      getCardTypes: vi.fn(),
+    });
+
+    (target.querySelector('[data-testid="review-reveal"]') as HTMLElement).click();
+    await flush();
+
+    const shown = await shownFaces(target);
+    expect(shown.map((face) => face.side)).toEqual(['question', 'answer']);
+
+    // The question frame: the engram typography first, then the note type rule, so the note type's colour wins.
+    const front = await frameDocument(shown[0]!);
+    const frontStyle = front.head.querySelector('style[data-card-css]');
+    expect(frontStyle?.textContent).toBe(`${REVIEW_FRONT_CSS}\n${frontCSS}`);
+    expect(front.body.className).toBe('card type-front card1');
+
+    // The answer frame takes the back object: its own CSS and its own class list.
+    const back = await frameDocument(shown[1]!);
+    const backStyle = back.head.querySelector('style[data-card-css]');
+    expect(backStyle?.textContent).toBe(`${REVIEW_BACK_CSS}\n${backCSS}`);
+    expect(back.body.className).toBe('card type-back card1');
   });
 });

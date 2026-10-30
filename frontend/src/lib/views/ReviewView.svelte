@@ -4,13 +4,13 @@
   import { t } from '../i18n';
   import { fieldText } from '../format';
   import { apiClient, ApiClientError } from '../api';
-  import type { ApiClient, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
+  import type { ApiClient, CardFace, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
   import { toast } from '../components/ui/toast';
   import { typeset } from '../mathjax';
   import { enhanceShortcodes, stopShortcodePlayback } from '../shortcodes';
   import { reviewShortcut, reviewSwipe, type ReviewShortcut } from '../review-shortcuts';
   import CardFrame, { type CardFrameKey } from '../components/CardFrame.svelte';
-  import { REVIEW_FRONT_CSS, REVIEW_BACK_CSS, REVIEW_ANSWER_CSS } from '../card-frame';
+  import { REVIEW_FRONT_CSS, REVIEW_BACK_CSS, REVIEW_ANSWER_CSS, faceStyle } from '../card-frame';
 
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -28,10 +28,11 @@
     initialError?: ApiClientError | Error | null;
     initialFeedback?: GradedFeedback | null;
     initialRevealedAnswerHTML?: string;
-    // The server-sanitized card-face HTML and the edit address. In production the path is fetched from the render endpoint via $effect; these
-    // initial values are kept so the DOM-less server-side rendering tests can pin "only sanitized HTML reaches the HTML sink".
-    initialFrontHTML?: string;
-    initialBackHTML?: string;
+    // The render endpoint's two faces, carrying the note type's CSS, body class and media base. In production the path is
+    // fetched from the render endpoint via $effect; these initial values are kept so the DOM-less server-side rendering tests
+    // can pin "only sanitized HTML reaches the HTML sink".
+    initialFrontFace?: CardFace | null;
+    initialBackFace?: CardFace | null;
     initialEditHref?: string;
     /** Whether the self-graded card is already flipped (flipped by reveal() in production; the initial value overrides it in tests). */
     initialRevealed?: boolean;
@@ -46,8 +47,8 @@
     initialError = null,
     initialFeedback = null,
     initialRevealedAnswerHTML = '',
-    initialFrontHTML = '',
-    initialBackHTML = '',
+    initialFrontFace = null,
+    initialBackFace = null,
     initialEditHref = '',
     initialRevealed = false,
     initialLastUndo = null,
@@ -101,12 +102,12 @@
   let gradedRevealed = $state(initialRevealedAnswerHTML !== '');
   let needAnswer = $state(false);
 
-  // The server-sanitized card-face HTML, one of the review page's HTML sinks. An empty string means it has not been fetched yet,
+  // The render endpoint's card faces, one of the review page's HTML sinks. A null face means it has not been fetched yet,
   // in which case it falls back to plain text; the raw fields are never sent into the HTML sink as Markdown.
   // svelte-ignore state_referenced_locally
-  let frontHTML = $state(initialFrontHTML);
+  let frontFace = $state<CardFace | null>(initialFrontFace);
   // svelte-ignore state_referenced_locally
-  let backHTML = $state(initialBackHTML);
+  let backFace = $state<CardFace | null>(initialBackFace);
   // The current card's zero-based template ordinal, used for the frame body class `cardN` (N = ordinal + 1).
   let cardOrdinal = $state(0);
   // svelte-ignore state_referenced_locally
@@ -116,9 +117,8 @@
   // The grading breakdown stays in the parent page: it is the only HTML container left here, so it is what gets typeset and enhanced.
   let feedbackSection = $state<HTMLElement | null>(null);
 
-  // The `<base href>` prefix each frame needs for the relative media names in its HTML, one per response that carries a face.
-  // The render response covers the front and the back; the reveal and the graded result carry their own base.
-  let mediaBase = $state('');
+  // The `<base href>` prefix for the reveal and the graded-result answer frames. Those two responses carry the answer HTML but
+  // no face object, so they bring their own base; the front and back frames read the base off the face the render sent.
   let revealedMediaBase = $state('');
   let feedbackMediaBase = $state('');
 
@@ -226,7 +226,7 @@
   const scopeTags = typeof window === 'undefined' ? [] : (selectedTags() ?? []);
 
   /**
-   * Fetch the current card's server-sanitized HTML. The token keeps an old request from overwriting the new card's content after a card change;
+   * Fetch the current card's two faces. The token keeps an old request from overwriting the new card's content after a card change;
    * on failure it only discards the rich text and falls back to plain text, never interrupting the review flow.
    */
   async function loadRender(card: DueCard, token: number): Promise<void> {
@@ -237,28 +237,25 @@
         { frame: true },
       );
       if (token !== renderToken) return;
-      frontHTML = response.front_html;
-      backHTML = response.back_html;
-      mediaBase = response.media_base ?? '';
+      frontFace = response.front;
+      backFace = response.back;
       cardOrdinal = response.ordinal ?? 0;
       editHref = response.edit_href;
     } catch {
       if (token !== renderToken) return;
-      frontHTML = '';
-      backHTML = '';
-      mediaBase = '';
+      frontFace = null;
+      backFace = null;
       cardOrdinal = 0;
       editHref = '';
     }
   }
 
-  // A card change refetches the sanitized HTML; the old card's content is cleared so the previous card's rich text is not shown before the response arrives.
+  // A card change refetches the faces; the old card's content is cleared so the previous card's rich text is not shown before the response arrives.
   $effect(() => {
     const card = current;
     const token = ++renderToken;
-    frontHTML = '';
-    backHTML = '';
-    mediaBase = '';
+    frontFace = null;
+    backFace = null;
     cardOrdinal = 0;
     editHref = '';
     essayText = '';
@@ -404,7 +401,7 @@
       remaining = response.remaining;
       newRemaining = countNew(response.cards);
       feedback = response.feedback ?? null;
-      feedbackMediaBase = response.feedback?.media_base ?? mediaBase;
+      feedbackMediaBase = response.feedback?.media_base ?? backFace?.media_base ?? '';
       lastUndo = { cardId: current.card_id, version: response.version, rating: response.feedback?.rating ?? 0 };
       done += 1;
       // The answer face goes into the frame; only the per-item breakdown stays here, so it is what gets typeset and enhanced.
@@ -434,7 +431,7 @@
         { frame: true },
       );
       revealedAnswerHTML = response.answer_html;
-      revealedMediaBase = response.media_base ?? mediaBase;
+      revealedMediaBase = response.media_base ?? backFace?.media_base ?? '';
       gradedRevealed = true;
     } catch (cause) {
       error = cause;
@@ -928,13 +925,13 @@
           <Skeleton testId="review-meta-loading" label={$t('common.loading')} lines={3} />
         {:else if selfAssessable}
           <div class="min-h-28" data-testid="review-front">
-            {#if frontHTML}
+            {#if frontFace && frontFace.html}
               <CardFrame
-                html={frontHTML}
-                css={REVIEW_FRONT_CSS}
-                bodyClass="card"
+                html={frontFace.html}
+                css={faceStyle(REVIEW_FRONT_CSS, frontFace.css)}
+                bodyClass={frontFace.body_class}
                 side="question"
-                mediaBase={mediaBase}
+                mediaBase={frontFace.media_base}
                 ordinal={cardOrdinal}
                 title={$t('note_preview.front')}
                 onkey={onFrameKey}
@@ -957,14 +954,14 @@
               {/if}
               <div class="border-t border-input pt-5" data-testid="review-answer">
                 <div class="text-xs text-zinc-500 mb-1">{$t('review.essay.reference')}</div>
-                {#if backHTML}
+                {#if backFace && backFace.html}
                   <CardFrame
-                    html={backHTML}
-                    css={REVIEW_BACK_CSS}
-                    bodyClass="card"
+                    html={backFace.html}
+                    css={faceStyle(REVIEW_BACK_CSS, backFace.css)}
+                    bodyClass={backFace.body_class}
                     ordinal={cardOrdinal}
                     side="answer"
-                    mediaBase={mediaBase}
+                    mediaBase={backFace.media_base}
                     title={$t('note_preview.back')}
                     onkey={onFrameKey}
                   />
@@ -978,14 +975,14 @@
               </div>
             {:else}
               <div class="border-t border-input pt-6" data-testid="review-answer">
-                {#if backHTML}
+                {#if backFace && backFace.html}
                   <CardFrame
-                    html={backHTML}
-                    css={REVIEW_BACK_CSS}
-                    bodyClass="card"
+                    html={backFace.html}
+                    css={faceStyle(REVIEW_BACK_CSS, backFace.css)}
+                    bodyClass={backFace.body_class}
                     ordinal={cardOrdinal}
                     side="answer"
-                    mediaBase={mediaBase}
+                    mediaBase={backFace.media_base}
                     title={$t('note_preview.back')}
                     onkey={onFrameKey}
                   />
@@ -1030,14 +1027,14 @@
                behind a divider, so the learner does not have to recall the original question while reading the answer. -->
           <div class="space-y-5">
             <div class="min-h-28" data-testid="review-graded-prompt">
-              {#if frontHTML}
+              {#if frontFace && frontFace.html}
                 <CardFrame
-                  html={frontHTML}
-                  css={REVIEW_FRONT_CSS}
-                  bodyClass="card"
+                  html={frontFace.html}
+                  css={faceStyle(REVIEW_FRONT_CSS, frontFace.css)}
+                  bodyClass={frontFace.body_class}
                   ordinal={cardOrdinal}
                   side="question"
-                  mediaBase={mediaBase}
+                  mediaBase={frontFace.media_base}
                   title={$t('note_preview.front')}
                   onkey={onFrameKey}
                   onanswer={onFrameAnswer}
@@ -1081,10 +1078,12 @@
                     </ul>
                   {:else}
                     <div data-testid="review-graded-answer">
+                      <!-- The grade response carries the answer HTML but no face object: the note type is the card's own, so its
+                           back face supplies the CSS and body class the frame needs. -->
                       <CardFrame
                         html={feedback.answer_html}
-                        css={REVIEW_ANSWER_CSS}
-                        bodyClass="card"
+                        css={faceStyle(REVIEW_ANSWER_CSS, backFace?.css)}
+                        bodyClass={backFace?.body_class ?? 'card'}
                         ordinal={cardOrdinal}
                         side="answer"
                         mediaBase={feedbackMediaBase}
@@ -1111,10 +1110,12 @@
                 <div data-testid="review-graded-revealed-answer">
                   <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
                   <div data-testid="review-graded-answer">
+                    <!-- The reveal response carries the answer HTML but no face object: the note type is the card's own, so its
+                         back face supplies the CSS and body class the frame needs. -->
                     <CardFrame
                       html={revealedAnswerHTML}
-                      css={REVIEW_ANSWER_CSS}
-                      bodyClass="card"
+                      css={faceStyle(REVIEW_ANSWER_CSS, backFace?.css)}
+                      bodyClass={backFace?.body_class ?? 'card'}
                       ordinal={cardOrdinal}
                       side="answer"
                       mediaBase={revealedMediaBase}

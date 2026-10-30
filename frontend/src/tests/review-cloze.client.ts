@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { faces } from './card-face-fixture';
 import { shownHtmlOnSide, postAnswerFromFrame } from './card-frame-fixture';
 
 /**
@@ -56,6 +57,10 @@ describe('ReviewView cloze blanks', () => {
       getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
+        ...faces(
+          '<p><span class="cloze">[…]</span> and <span class="cloze">[city]</span></p>',
+          '<p>Paris and Rome</p>',
+        ),
         front_html: '<p><span class="cloze">[…]</span> and <span class="cloze">[city]</span></p>',
         back_html: '<p>Paris and Rome</p>',
         blanks: ['', 'city'],

@@ -8,7 +8,9 @@ import { apiClient, ApiClientError, type Note, type NotePreviewResponse } from '
 import { seedCardTypes, clearCardTypes } from './card-type-fixture';
 import { typeset } from '../lib/mathjax';
 import { setLocale, formatMessage } from '../lib/i18n';
-import { shownHtmlOnSide } from './card-frame-fixture';
+import { shownHtmlOnSide, shownFaces, frameDocument } from './card-frame-fixture';
+import { face } from './card-face-fixture';
+import { NOTE_PREVIEW_CSS } from '../lib/card-frame';
 import { toast } from '../lib/components/ui/toast';
 
 // MathJax is taken over by a module-boundary stand-in: the cases assert "typesetting really ran, and only on the preview container",
@@ -45,8 +47,14 @@ function noteFixture(overrides: Partial<Note> = {}): Note {
   };
 }
 
+/** The response the preview endpoint sends: one entry per card, each carrying both faces. */
 function createResponse(cards: Array<{ front_html: string; back_html: string }>): NotePreviewResponse {
-  return { cards };
+  return {
+    cards: cards.map((card) => ({
+      front: face(card.front_html),
+      back: face(card.back_html, { side: 'back' }),
+    })),
+  };
 }
 
 let target: HTMLElement;
@@ -202,6 +210,37 @@ describe('unified note editor — create mode', () => {
     expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'Q' }, { frame: true });
     expect(await previewFront()).toContain('rendered Q');
     expect(target.querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
+  });
+
+  it('writes the note type CSS and the server body class into the preview frame document', async () => {
+    const noteCSS = '.card { color: rgb(1, 2, 3); }';
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue({
+      cards: [
+        {
+          front: { html: '<p>Q</p>', css: noteCSS, body_class: 'card type-preview', side: 'front', media_base: '/fm/token/' },
+          back: { html: '<p>A</p>', css: noteCSS, body_class: 'card type-preview', side: 'back', media_base: '/fm/token/' },
+        },
+      ],
+      media_base: '/fm/token/',
+    });
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    setField('note-field-front', 'Q');
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+
+    const shown = await shownFaces(target);
+    expect(shown).toHaveLength(2);
+    // Same rule as the review page: the preview's engram typography first, then the note type CSS, so the note type wins.
+    for (const shownFace of shown) {
+      const doc = await frameDocument(shownFace);
+      expect(doc.head.querySelector('style[data-card-css]')?.textContent).toBe(`${NOTE_PREVIEW_CSS}\n${noteCSS}`);
+      expect(doc.body.className).toBe('card type-preview card1');
+      expect(shownFace.mediaBase).toBe('/fm/token/');
+    }
   });
 
   it('resets the debounce window on every keystroke (only the last one fires)', async () => {

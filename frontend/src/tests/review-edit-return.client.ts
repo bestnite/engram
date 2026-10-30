@@ -6,6 +6,7 @@ import { routeStore } from '../lib/router';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { faces } from './card-face-fixture';
 
 /**
  * The edit entry on a review card opens the editor with the review address as its return path, scope
@@ -50,6 +51,7 @@ describe('ReviewView edit entry', () => {
       getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
+        ...faces('<p>Q</p>', '<p>A</p>'),
         front_html: '<p>Q</p>',
         back_html: '<p>A</p>',
         blanks: null,

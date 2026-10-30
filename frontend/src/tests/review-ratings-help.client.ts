@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { faces } from './card-face-fixture';
 
 /**
  * After flipping a self-rated card, the rating row offers a "how to choose" help popover
@@ -45,7 +46,14 @@ describe('ReviewView rating guidance', () => {
     seedCardTypes();
     const client = {
       getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),
-      renderReviewCard: vi.fn().mockResolvedValue({ card_id: 'c1', front_html: '<p>q</p>', back_html: '<p>a</p>', blanks: null, edit_href: '' }),
+      renderReviewCard: vi.fn().mockResolvedValue({
+        card_id: 'c1',
+        ...faces('<p>q</p>', '<p>a</p>'),
+        front_html: '<p>q</p>',
+        back_html: '<p>a</p>',
+        blanks: null,
+        edit_href: '',
+      }),
       getCardTypes: vi.fn(),
     } as unknown as ApiClient;
     const target = document.createElement('div');

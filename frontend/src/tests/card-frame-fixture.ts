@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import { flushSync } from 'svelte';
+import { createRuntime } from '../cardframe/runtime';
 
 /**
  * Test helper for the card frames a view renders.
@@ -84,6 +85,25 @@ export async function shownHtmlOnSide(root: ParentNode, side: string): Promise<s
   return frames(root).flatMap((frame, index) =>
     frame.getAttribute('data-side') === side ? [faces[index]?.html ?? ''] : [],
   );
+}
+
+/**
+ * Rebuilds the frame document from one recorded show message.
+ *
+ * The sandboxed iframe never loads in the test environment, so "what the frame document ends up with" is reproduced exactly
+ * as the frame does it: the same runtime writes the message into a fresh document. The returned document is the frame's own:
+ * its head carries the style the face CSS became and its body carries the class list. The runtime is destroyed afterwards,
+ * which only removes its listeners.
+ */
+export async function frameDocument(shown: ShownFace): Promise<Document> {
+  const doc = document.implementation.createHTMLDocument('card frame');
+  const parent = { postMessage: () => {} };
+  const runtime = createRuntime({ doc, parent: parent as unknown as Window });
+  await runtime.handleMessage(
+    new MessageEvent('message', { data: { type: 'show', ...shown }, source: parent as unknown as MessageEventSource }),
+  );
+  runtime.destroy();
+  return doc;
 }
 
 /**

@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { faces } from './card-face-fixture';
 import { shownHtmlOnSide, postAnswerFromFrame } from './card-frame-fixture';
 
 /**
@@ -66,6 +67,7 @@ describe('ReviewView list items', () => {
       getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'l1',
+        ...faces('<p>光的三原色是什么？</p>', '<ul><li>red</li><li>green</li><li>blue</li></ul>'),
         front_html: '<p>光的三原色是什么？</p>',
         back_html: '<ul><li>red</li><li>green</li><li>blue</li></ul>',
         blanks: ['', '', ''],

@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { DueCard, GradedFeedback } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { face } from './card-face-fixture';
 
 /** Build a due answering-type card (field shape matching GET /api/v1/review/due, including the raw answer text). */
 function gradedCard(kind: string, fields: Record<string, unknown>): DueCard {
@@ -147,8 +148,8 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
         initialLoading: false,
         initialCards: [basic],
         initialRevealed: true,
-        initialFrontHTML: '<p><strong>Sanitized</strong> front</p>',
-        initialBackHTML: '<p><em>Sanitized</em> back</p>',
+        initialFrontFace: face('<p><strong>Sanitized</strong> front</p>'),
+        initialBackFace: face('<p><em>Sanitized</em> back</p>', { side: 'back' }),
         initialEditHref: '/decks/5/notes/21',
       },
     });
@@ -178,7 +179,7 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
       props: {
         initialLoading: false,
         initialCards: [typed],
-        initialFrontHTML: '<p>Sanitized <code>prompt</code></p>',
+        initialFrontFace: face('<p>Sanitized <code>prompt</code></p>'),
       },
     });
     expect(html).toContain('data-testid="review-graded-prompt"');

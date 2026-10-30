@@ -5,7 +5,7 @@
   import { RETURN_PARAM, safeReturnPath } from '../return-to';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { Note } from '../api';
+  import type { Note, NotePreviewCard } from '../api';
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import Select from '../components/ui/Select.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -14,7 +14,7 @@
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
   import CardFrame from '../components/CardFrame.svelte';
-  import { NOTE_PREVIEW_CSS } from '../card-frame';
+  import { NOTE_PREVIEW_CSS, faceStyle } from '../card-frame';
   import { emptyFields, toFormFields, toPayloadFields } from '../card-fields';
   import { backField, cardTypes, fieldsForKind, frontField, kindOrder, loadCardTypes } from '../card-types';
   import type { MediaReference } from '../../editframe/runtime';
@@ -62,9 +62,7 @@
   // incomplete fields are not complete (server 400) / error fetching failed.
   type PreviewStatus = 'empty' | 'loading' | 'ready' | 'incomplete' | 'error';
   let previewStatus = $state<PreviewStatus>('empty');
-  let previewCards = $state<Array<{ front_html: string; back_html: string }> | null>(null);
-  // The `<base href>` prefix the frames need for the relative media names in the preview HTML.
-  let previewMediaBase = $state('');
+  let previewCards = $state<NotePreviewCard[] | null>(null);
   let previewReady = $state(false);
 
   // Non-reactive control slots: no state may be written after unmount; generation guarantees only the latest request can land.
@@ -230,9 +228,9 @@
     }, PREVIEW_DEBOUNCE_MS);
   }
 
-  /** The landing result of one preview request: success carries the cards and their media base, failure carries the state (400 = incomplete fields, anything else = fetch failure). */
+  /** The landing result of one preview request: a success carries the cards, whose faces carry their own media base; a failure carries the state (400 = incomplete fields, anything else = fetch failure). */
   type PreviewOutcome =
-    | { ok: true; cards: Array<{ front_html: string; back_html: string }>; mediaBase: string }
+    | { ok: true; cards: NotePreviewCard[] }
     | { ok: false; status: 'incomplete' | 'error' };
 
   /**
@@ -248,7 +246,6 @@
       return;
     }
     previewCards = outcome.cards;
-    previewMediaBase = outcome.mediaBase;
     previewStatus = 'ready';
   }
 
@@ -262,7 +259,7 @@
       // The preview faces are rendered by the frame, so the request asks for frame-ready HTML and its media base.
       const response = await apiClient.previewNote(deckId, requestKind, requestFields, { frame: true });
       if (disposed || generation !== previewGeneration) return;
-      outcome = { ok: true, cards: response.cards, mediaBase: response.media_base ?? '' };
+      outcome = { ok: true, cards: response.cards };
     } catch (err) {
       if (disposed || generation !== previewGeneration) return;
       // 400 means "the fields are not complete yet / the card type cannot render", expressed separately from a fetch failure.
@@ -529,11 +526,11 @@
                         <h3 class="text-xs font-medium text-muted-foreground">{$t('note_preview.front')}</h3>
                         <!-- Only the HTML returned by the preview API reaches the frame: the editor's raw fields never do. -->
                         <CardFrame
-                          html={card.front_html}
-                          css={NOTE_PREVIEW_CSS}
-                          bodyClass=""
+                          html={card.front.html}
+                          css={faceStyle(NOTE_PREVIEW_CSS, card.front.css)}
+                          bodyClass={card.front.body_class}
                           side="question"
-                          mediaBase={previewMediaBase}
+                          mediaBase={card.front.media_base}
                           title={$t('note_preview.front')}
                         />
                       </div>
@@ -541,11 +538,11 @@
                         <h3 class="text-xs font-medium text-muted-foreground">{$t('note_preview.back')}</h3>
                         <!-- Only the HTML returned by the preview API reaches the frame: the editor's raw fields never do. -->
                         <CardFrame
-                          html={card.back_html}
-                          css={NOTE_PREVIEW_CSS}
-                          bodyClass=""
+                          html={card.back.html}
+                          css={faceStyle(NOTE_PREVIEW_CSS, card.back.css)}
+                          bodyClass={card.back.body_class}
                           side="answer"
-                          mediaBase={previewMediaBase}
+                          mediaBase={card.back.media_base}
                           title={$t('note_preview.back')}
                         />
                       </div>

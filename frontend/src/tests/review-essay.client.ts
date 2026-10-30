@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { faces } from './card-face-fixture';
 import { shownHtmlOnSide, postAnswerFromFrame } from './card-frame-fixture';
 
 /**
@@ -47,8 +48,14 @@ describe('ReviewView short answer', () => {
     const submitSelfReview = vi.fn().mockResolvedValue({ card_id: 's1', state: 'learning', version: 1, remaining: 0, cards: [] });
     const client = {
       getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),
-      renderReviewCard: vi.fn().mockResolvedValue({ card_id: 's1', front_html: '<p>月相为什么会变化？</p>', back_html: backHTML, blanks: null, edit_href: '' }),
-      getCardTypes: vi.fn(),
+      renderReviewCard: vi.fn().mockResolvedValue({
+        card_id: 's1',
+        ...faces('<p>月相为什么会变化？</p>', backHTML),
+        front_html: '<p>月相为什么会变化？</p>',
+        back_html: backHTML,
+        blanks: null,
+        edit_href: '',
+      }),
       submitSelfReview,
     } as unknown as ApiClient;
     const target = document.createElement('div');

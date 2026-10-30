@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { faces } from './card-face-fixture';
 
 /**
  * The empty review page marks how the learner got there: a session that rated at least one card
@@ -74,6 +75,7 @@ describe('ReviewView empty-state icon', () => {
       getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
+        ...faces('<p>q</p>', '<p>a</p>'),
         front_html: '<p>q</p>',
         back_html: '<p>a</p>',
         blanks: null,

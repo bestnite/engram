@@ -24,3 +24,15 @@ export const REVIEW_ANSWER_CSS = `#qa{${FACE_BASE}font-size:1.125rem;line-height
  * wrapper did (only the review faces preserved source line breaks).
  */
 export const NOTE_PREVIEW_CSS = '#qa{color:var(--foreground);overflow-wrap:break-word}';
+
+/**
+ * The style string a frame receives: the view's engram face constant first, then the note type's own CSS.
+ *
+ * The order is the rule, not a preference: the frame document writes the whole string into one `<style>` element, so a note
+ * type rule that targets the same selector wins over the engram default only when it comes later. A face without CSS (or
+ * before the render response lands) keeps the engram typography alone.
+ */
+export function faceStyle(base: string, css: string | null | undefined): string {
+  const noteTypeCSS = css?.trim() ?? '';
+  return noteTypeCSS === '' ? base : `${base}\n${noteTypeCSS}`;
+}

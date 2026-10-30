@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard, ExtraNewStatus } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { faces } from './card-face-fixture';
 
 /**
  * "One more round": when a single-deck review scope's queue is empty but the deck still has
@@ -62,7 +63,14 @@ describe('ReviewView another batch of new cards', () => {
       getDueCards,
       getExtraNew,
       addExtraNew,
-      renderReviewCard: vi.fn().mockResolvedValue({ card_id: 'c1', front_html: '<p>q</p>', back_html: '<p>a</p>', blanks: null, edit_href: '' }),
+      renderReviewCard: vi.fn().mockResolvedValue({
+        card_id: 'c1',
+        ...faces('<p>q</p>', '<p>a</p>'),
+        front_html: '<p>q</p>',
+        back_html: '<p>a</p>',
+        blanks: null,
+        edit_href: '',
+      }),
       getCardTypes: vi.fn(),
     } as unknown as ApiClient;
     return { client, getDueCards, getExtraNew, addExtraNew };

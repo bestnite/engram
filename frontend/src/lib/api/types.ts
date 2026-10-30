@@ -169,9 +169,34 @@ export interface UpdateNoteRequest {
   tags?: string[];
 }
 
+/**
+ * One rendered side of a card (Go: internal/web/review.go:CardFace).
+ *
+ * html is already sanitized by the server; css is the note type's own stylesheet, which the frame appends after its engram
+ * face typography so a note type rule wins; body_class is the class list the frame writes on its `<body>`; media_base is the
+ * `<base href>` the face's relative media names resolve against.
+ */
+export interface CardFace {
+  html: string;
+  css: string;
+  body_class: string;
+  /** The server's own side name, `front` or `back`. The frame's side prop is `question` or `answer` and is not read from here. */
+  side: string;
+  media_base: string;
+}
+
+/** One preview card: the two faces the review frame would show. */
+export interface NotePreviewCard {
+  front: CardFace;
+  back: CardFace;
+  /** Transitional duplicates of front.html / back.html; the SPA reads the face objects. */
+  front_html?: string;
+  back_html?: string;
+}
+
 /** POST /api/v1/decks/:id/notes/preview response; the HTML is already sanitized by the server. */
 export interface NotePreviewResponse {
-  cards: Array<{ front_html: string; back_html: string }>;
+  cards: NotePreviewCard[];
   /**
    * `<base href>` prefix the frame needs to resolve the relative media names in the HTML (`/fm/<token>/`).
    * The relative names are only handed out when the request carried `X-Engram-Frame: 1`.
@@ -630,7 +655,8 @@ export interface RevealAnswerResponse {
 
 /**
  * POST /api/v1/review/render response body (Go: internal/web/review_api.go).
- * front_html / back_html / options_html are already sanitized by goldmark + bluemonday on the server and are the review page's HTML sinks
+ * front / back are the card's faces — sanitized HTML plus the note type's CSS, body class and media base — and are the review
+ * page's HTML sinks. front_html / back_html repeat their HTML for older callers only.
  * edit_href points at the card edit page, for the `e` shortcut to jump there.
  */
 export interface ReviewRenderResponse {
@@ -640,8 +666,12 @@ export interface ReviewRenderResponse {
    * `cardN` Anki's reviewer uses.
    */
   ordinal?: number;
-  front_html: string;
-  back_html: string;
+  /** The two faces of the card. */
+  front: CardFace;
+  back: CardFace;
+  /** Transitional duplicates of front.html / back.html; the SPA reads the face objects. */
+  front_html?: string;
+  back_html?: string;
   /**
    * Server-sanitized HTML of each choice option, one entry per option in option order; null for card types without options.
    * The answer controls inject these fragments, so they must never be replaced with the raw option text.

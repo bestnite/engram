@@ -4,6 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { clearCardTypes, seedCardTypes } from './card-type-fixture';
+import { faces } from './card-face-fixture';
 
 /**
  * The header's due counter is split into new cards and review cards. Both numbers come from the
@@ -109,6 +110,7 @@ describe('ReviewView due counter split', () => {
       getDueCards: vi.fn().mockResolvedValue({ cards: queue }),
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
+        ...faces('<p>front</p>', '<p>back</p>'),
         front_html: '<p>front</p>',
         back_html: '<p>back</p>',
         blanks: null,
