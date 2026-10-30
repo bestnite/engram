@@ -1,0 +1,297 @@
+{
+  "compare_answers": [],
+  "fixture": "audio-tts-latex",
+  "note_types": [
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "AV LaTeX",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "AV Replay Order",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "AV Sound",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "AV TTS",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "AV TTS Filter",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{tts ja_JP voices=alpha speed=0.75:Front}}"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [
+            "[sound:placeholder.wav]"
+          ],
+          "answer_av_tags_parsed": [
+            {
+              "kind": "sound",
+              "name": "placeholder.wav"
+            }
+          ],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>before [anki:play:q:0] after [anki:play:q:1]<hr id=answer>back [anki:play:a:0]",
+          "answer_nodes_text": "before [sound:placeholder.wav] after [sound:placeholder2.wav]<hr id=answer>back [sound:placeholder.wav]",
+          "front_is_empty": false,
+          "id": 1500000000002,
+          "ordinal": 0,
+          "question_av_tags": [
+            "[sound:placeholder.wav]",
+            "[sound:placeholder2.wav]"
+          ],
+          "question_av_tags_parsed": [
+            {
+              "kind": "sound",
+              "name": "placeholder.wav"
+            },
+            {
+              "kind": "sound",
+              "name": "placeholder2.wav"
+            }
+          ],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>before [anki:play:q:0] after [anki:play:q:1]",
+          "question_nodes_text": "before [sound:placeholder.wav] after [sound:placeholder2.wav]"
+        }
+      ],
+      "fields": {
+        "Back": "back [sound:placeholder.wav]",
+        "Front": "before [sound:placeholder.wav] after [sound:placeholder2.wav]"
+      },
+      "guid": "av-sound-one",
+      "notetype_name": "AV Sound"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[anki:play:q:0]",
+          "answer_nodes_text": "[anki:tts lang=en_US voices=alpha,beta speed=1.25 unknown=keepme]spoken text [sound:placeholder.wav][/anki:tts]",
+          "front_is_empty": false,
+          "id": 1500000000004,
+          "ordinal": 0,
+          "question_av_tags": [
+            "[anki:tts lang=en_US voices=alpha,beta speed=1.25 unknown=keepme]spoken text [sound:placeholder.wav][/anki:tts]"
+          ],
+          "question_av_tags_parsed": [
+            {
+              "field_text": "spoken text [sound:placeholder.wav]",
+              "kind": "tts",
+              "lang": "en_US",
+              "other_args": [
+                "unknown=keepme"
+              ],
+              "speed": 1.25,
+              "voices": [
+                "alpha",
+                "beta"
+              ]
+            }
+          ],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[anki:play:q:0]",
+          "question_nodes_text": "[anki:tts lang=en_US voices=alpha,beta speed=1.25 unknown=keepme]spoken text [sound:placeholder.wav][/anki:tts]"
+        }
+      ],
+      "fields": {
+        "Front": "[anki:tts lang=en_US voices=alpha,beta speed=1.25 unknown=keepme]spoken text [sound:placeholder.wav][/anki:tts]"
+      },
+      "guid": "av-tts-one",
+      "notetype_name": "AV TTS"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[anki:play:q:0]",
+          "answer_nodes_text": "[anki:tts lang=ja_JP voices=alpha speed=0.75]spoken <b>text</b>[/anki:tts]",
+          "front_is_empty": false,
+          "id": 1500000000003,
+          "ordinal": 0,
+          "question_av_tags": [
+            "[anki:tts lang=ja_JP voices=alpha speed=0.75]spoken text[/anki:tts]"
+          ],
+          "question_av_tags_parsed": [
+            {
+              "field_text": "spoken text",
+              "kind": "tts",
+              "lang": "ja_JP",
+              "other_args": [],
+              "speed": 0.75,
+              "voices": [
+                "alpha"
+              ]
+            }
+          ],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[anki:play:q:0]",
+          "question_nodes_text": "[anki:tts lang=ja_JP voices=alpha speed=0.75]spoken <b>text</b>[/anki:tts]"
+        }
+      ],
+      "fields": {
+        "Front": "spoken <b>text</b>"
+      },
+      "guid": "av-tts-filter-one",
+      "notetype_name": "AV TTS Filter"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [
+            "[sound:placeholder.wav]"
+          ],
+          "answer_av_tags_parsed": [
+            {
+              "kind": "sound",
+              "name": "placeholder.wav"
+            }
+          ],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[anki:play:q:0][anki:play:q:1] middle [anki:play:q:2]<hr id=answer>[anki:play:a:0] tail",
+          "answer_nodes_text": "[sound:placeholder.wav][sound:placeholder2.wav] middle [anki:tts lang=en_US]speech[/anki:tts]<hr id=answer>[sound:placeholder.wav] tail",
+          "front_is_empty": false,
+          "id": 1500000000001,
+          "ordinal": 0,
+          "question_av_tags": [
+            "[sound:placeholder.wav]",
+            "[sound:placeholder2.wav]",
+            "[anki:tts lang=en_US speed=1.0]speech[/anki:tts]"
+          ],
+          "question_av_tags_parsed": [
+            {
+              "kind": "sound",
+              "name": "placeholder.wav"
+            },
+            {
+              "kind": "sound",
+              "name": "placeholder2.wav"
+            },
+            {
+              "field_text": "speech",
+              "kind": "tts",
+              "lang": "en_US",
+              "other_args": [],
+              "speed": 1.0,
+              "voices": []
+            }
+          ],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[anki:play:q:0][anki:play:q:1] middle [anki:play:q:2]",
+          "question_nodes_text": "[sound:placeholder.wav][sound:placeholder2.wav] middle [anki:tts lang=en_US]speech[/anki:tts]"
+        }
+      ],
+      "fields": {
+        "Back": "[sound:placeholder.wav] tail",
+        "Front": "[sound:placeholder.wav][sound:placeholder2.wav] middle [anki:tts lang=en_US]speech[/anki:tts]"
+      },
+      "guid": "av-order-one",
+      "notetype_name": "AV Replay Order"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><img class=latex alt=\"x&#x5E;2\" src=\"latex-7046d961a8144b7b2c2da6066849a9f889ff2ac9.png\"> <img class=latex alt=\"&#x24;y&#x2B;1&#x24;\" src=\"latex-7f801b9f0ef3c2c1d614cd42c8abd34ebedf7c8d.png\"> <img class=latex alt=\"&#x5C;begin&#x7B;displaymath&#x7D;z&#x3D;1&#x5C;end&#x7B;displaymath&#x7D;\" src=\"latex-cce99a428979adb1e067ecac844982839ba3e2c1.png\">LaTeX image generation is disabled in the preferences.",
+          "answer_nodes_text": "[latex]x^2[/latex] [$]y+1[/$] [$$]z=1[/$$]",
+          "front_is_empty": false,
+          "id": 1500000000000,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><img class=latex alt=\"x&#x5E;2\" src=\"latex-7046d961a8144b7b2c2da6066849a9f889ff2ac9.png\"> <img class=latex alt=\"&#x24;y&#x2B;1&#x24;\" src=\"latex-7f801b9f0ef3c2c1d614cd42c8abd34ebedf7c8d.png\"> <img class=latex alt=\"&#x5C;begin&#x7B;displaymath&#x7D;z&#x3D;1&#x5C;end&#x7B;displaymath&#x7D;\" src=\"latex-cce99a428979adb1e067ecac844982839ba3e2c1.png\">LaTeX image generation is disabled in the preferences.",
+          "question_nodes_text": "[latex]x^2[/latex] [$]y+1[/$] [$$]z=1[/$$]"
+        }
+      ],
+      "fields": {
+        "Front": "[latex]x^2[/latex] [$]y+1[/$] [$$]z=1[/$$]"
+      },
+      "guid": "av-latex-one",
+      "notetype_name": "AV LaTeX"
+    }
+  ],
+  "packages": [
+    "audio-tts-latex.anki21b.apkg"
+  ],
+  "source": "anki==26.9.3"
+}

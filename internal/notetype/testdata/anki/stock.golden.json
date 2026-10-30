@@ -1,0 +1,427 @@
+{
+  "compare_answers": [
+    {
+      "combining": true,
+      "expected": "42",
+      "expected_source": "field:Back",
+      "guid": "stock-typing-one",
+      "notetype_name": "Basic (type in the answer)",
+      "output": "<code id=typeans><span class=typeGood>42</span></code>",
+      "provided": "42"
+    },
+    {
+      "combining": true,
+      "expected": "42",
+      "expected_source": "field:Back",
+      "guid": "stock-typing-one",
+      "notetype_name": "Basic (type in the answer)",
+      "output": "<code id=typeans><span class=typeGood>4</span><span class=typeMissed>-</span><br><span id=typearrow>&darr;</span><br><span class=typeGood>4</span><span class=typeMissed>2</span></code>",
+      "provided": "4"
+    },
+    {
+      "combining": true,
+      "expected": "42",
+      "expected_source": "field:Back",
+      "guid": "stock-typing-one",
+      "notetype_name": "Basic (type in the answer)",
+      "output": "<code id=typeans>42</code>",
+      "provided": ""
+    }
+  ],
+  "fixture": "stock",
+  "note_types": [
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Basic",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Basic (and reversed card)",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        },
+        {
+          "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Front}}",
+          "name": "Card 2",
+          "ordinal": 1,
+          "qfmt": "{{Back}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back",
+        "Add Reverse"
+      ],
+      "kind": "normal",
+      "name": "Basic (optional reversed card)",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        },
+        {
+          "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Front}}",
+          "name": "Card 2",
+          "ordinal": 1,
+          "qfmt": "{{#Add Reverse}}{{Back}}{{/Add Reverse}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Basic (type in the answer)",
+      "templates": [
+        {
+          "afmt": "{{Front}}\n\n<hr id=answer>\n\n{{type:Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}\n\n{{type:Back}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Text",
+        "Back Extra"
+      ],
+      "kind": "cloze",
+      "name": "Cloze",
+      "templates": [
+        {
+          "afmt": "{{cloze:Text}}<br>\n{{Back Extra}}",
+          "name": "Cloze",
+          "ordinal": 0,
+          "qfmt": "{{cloze:Text}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Occlusion",
+        "Image",
+        "Header",
+        "Back Extra",
+        "Comments"
+      ],
+      "kind": "cloze",
+      "name": "Image Occlusion",
+      "templates": [
+        {
+          "afmt": "{{#Header}}<div>{{Header}}</div>{{/Header}}\n<div style=\"display: none\">{{cloze:Occlusion}}</div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    {{Image}}\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n{{#Back Extra}}<div>{{Back Extra}}</div>{{/Back Extra}}\n",
+          "name": "Image Occlusion",
+          "ordinal": 0,
+          "qfmt": "{{#Header}}<div>{{Header}}</div>{{/Header}}\n<div style=\"display: none\">{{cloze:Occlusion}}</div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    {{Image}}\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front <b>one</b>\n\n<hr id=answer>\n\nback one",
+          "answer_nodes_text": "front <b>one</b>\n\n<hr id=answer>\n\nback one",
+          "front_is_empty": false,
+          "id": 1500000000036,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front <b>one</b>",
+          "question_nodes_text": "front <b>one</b>"
+        }
+      ],
+      "fields": {
+        "Back": "back one",
+        "Front": "front <b>one</b>"
+      },
+      "guid": "stock-basic-one",
+      "notetype_name": "Basic"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front two\n\n<hr id=answer>\n\nback two",
+          "answer_nodes_text": "front two\n\n<hr id=answer>\n\nback two",
+          "front_is_empty": false,
+          "id": 1500000000037,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front two",
+          "question_nodes_text": "front two"
+        }
+      ],
+      "fields": {
+        "Back": "back two",
+        "Front": "front two"
+      },
+      "guid": "stock-basic-two",
+      "notetype_name": "Basic"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0,
+        1
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front one\n\n<hr id=answer>\n\nback one",
+          "answer_nodes_text": "front one\n\n<hr id=answer>\n\nback one",
+          "front_is_empty": false,
+          "id": 1500000000044,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front one",
+          "question_nodes_text": "front one"
+        },
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>back one\n\n<hr id=answer>\n\nfront one",
+          "answer_nodes_text": "back one\n\n<hr id=answer>\n\nfront one",
+          "front_is_empty": false,
+          "id": 1500000000045,
+          "ordinal": 1,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>back one",
+          "question_nodes_text": "back one"
+        }
+      ],
+      "fields": {
+        "Back": "back one",
+        "Front": "front one"
+      },
+      "guid": "stock-reversed-one",
+      "notetype_name": "Basic (and reversed card)"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front one\n\n<hr id=answer>\n\nback one",
+          "answer_nodes_text": "front one\n\n<hr id=answer>\n\nback one",
+          "front_is_empty": false,
+          "id": 1500000000041,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front one",
+          "question_nodes_text": "front one"
+        }
+      ],
+      "fields": {
+        "Add Reverse": "",
+        "Back": "back one",
+        "Front": "front one"
+      },
+      "guid": "stock-optional-off",
+      "notetype_name": "Basic (optional reversed card)"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0,
+        1
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front two\n\n<hr id=answer>\n\nback two",
+          "answer_nodes_text": "front two\n\n<hr id=answer>\n\nback two",
+          "front_is_empty": false,
+          "id": 1500000000042,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front two",
+          "question_nodes_text": "front two"
+        },
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>back two\n\n<hr id=answer>\n\nfront two",
+          "answer_nodes_text": "back two\n\n<hr id=answer>\n\nfront two",
+          "front_is_empty": false,
+          "id": 1500000000043,
+          "ordinal": 1,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>back two",
+          "question_nodes_text": "back two"
+        }
+      ],
+      "fields": {
+        "Add Reverse": "1",
+        "Back": "back two",
+        "Front": "front two"
+      },
+      "guid": "stock-optional-on",
+      "notetype_name": "Basic (optional reversed card)"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front one\n\n<hr id=answer>\n\n[[type:Back]]",
+          "answer_nodes_text": "front one\n\n<hr id=answer>\n\n[[type:Back]]",
+          "front_is_empty": false,
+          "id": 1500000000046,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style>front one\n\n[[type:Back]]",
+          "question_nodes_text": "front one\n\n[[type:Back]]"
+        }
+      ],
+      "fields": {
+        "Back": "42",
+        "Front": "front one"
+      },
+      "guid": "stock-typing-one",
+      "notetype_name": "Basic (type in the answer)"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0,
+        1
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n.cloze {\n    font-weight: bold;\n    color: blue;\n}\n.nightMode .cloze {\n    color: lightblue;\n}\n</style>one <span class=\"cloze\" data-ordinal=\"1\">two</span> three <span class=\"cloze-inactive\" data-ordinal=\"2\">four</span><br>\nextra",
+          "answer_nodes_text": "one <span class=\"cloze\" data-ordinal=\"1\">two</span> three <span class=\"cloze-inactive\" data-ordinal=\"2\">four</span><br>\nextra",
+          "front_is_empty": false,
+          "id": 1500000000038,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n.cloze {\n    font-weight: bold;\n    color: blue;\n}\n.nightMode .cloze {\n    color: lightblue;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n.cloze {\n    font-weight: bold;\n    color: blue;\n}\n.nightMode .cloze {\n    color: lightblue;\n}\n</style>one <span class=\"cloze\" data-cloze=\"two\" data-ordinal=\"1\">[...]</span> three <span class=\"cloze-inactive\" data-ordinal=\"2\">four</span>",
+          "question_nodes_text": "one <span class=\"cloze\" data-cloze=\"two\" data-ordinal=\"1\">[...]</span> three <span class=\"cloze-inactive\" data-ordinal=\"2\">four</span>"
+        },
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n.cloze {\n    font-weight: bold;\n    color: blue;\n}\n.nightMode .cloze {\n    color: lightblue;\n}\n</style>one <span class=\"cloze-inactive\" data-ordinal=\"1\">two</span> three <span class=\"cloze\" data-ordinal=\"2\">four</span><br>\nextra",
+          "answer_nodes_text": "one <span class=\"cloze-inactive\" data-ordinal=\"1\">two</span> three <span class=\"cloze\" data-ordinal=\"2\">four</span><br>\nextra",
+          "front_is_empty": false,
+          "id": 1500000000039,
+          "ordinal": 1,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n.cloze {\n    font-weight: bold;\n    color: blue;\n}\n.nightMode .cloze {\n    color: lightblue;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n.cloze {\n    font-weight: bold;\n    color: blue;\n}\n.nightMode .cloze {\n    color: lightblue;\n}\n</style>one <span class=\"cloze-inactive\" data-ordinal=\"1\">two</span> three <span class=\"cloze\" data-cloze=\"four\" data-ordinal=\"2\">[a hint]</span>",
+          "question_nodes_text": "one <span class=\"cloze-inactive\" data-ordinal=\"1\">two</span> three <span class=\"cloze\" data-cloze=\"four\" data-ordinal=\"2\">[a hint]</span>"
+        }
+      ],
+      "cloze_numbers": [
+        1,
+        2
+      ],
+      "fields": {
+        "Back Extra": "extra",
+        "Text": "one {{c1::two}} three {{c2::four::a hint}}"
+      },
+      "guid": "stock-cloze-one",
+      "notetype_name": "Cloze"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>header one</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "answer_nodes_text": "<div>header one</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "front_is_empty": false,
+          "id": 1500000000040,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>header one</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n",
+          "question_nodes_text": "<div>header one</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        }
+      ],
+      "cloze_numbers": [
+        1
+      ],
+      "fields": {
+        "Back Extra": "",
+        "Comments": "",
+        "Header": "header one",
+        "Image": "<img src=\"placeholder.png\">",
+        "Occlusion": "{{c1::image-occlusion:rect:left=0.1:top=0.2:width=0.3:height=0.4:oi=1}}"
+      },
+      "guid": "stock-image-occlusion-one",
+      "notetype_name": "Image Occlusion"
+    }
+  ],
+  "packages": [
+    "stock.anki2.apkg",
+    "stock.anki21.apkg",
+    "stock.anki21b.apkg"
+  ],
+  "source": "anki==26.9.3"
+}

@@ -1,0 +1,322 @@
+{
+  "compare_answers": [
+    {
+      "combining": true,
+      "expected": "42",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-basic-one",
+      "notetype_name": "Type Basic",
+      "output": "<code id=typeans><span class=typeGood>42</span></code>",
+      "provided": "42"
+    },
+    {
+      "combining": true,
+      "expected": "42",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-basic-one",
+      "notetype_name": "Type Basic",
+      "output": "<code id=typeans><span class=typeGood>4</span><span class=typeMissed>-</span><br><span id=typearrow>&darr;</span><br><span class=typeGood>4</span><span class=typeMissed>2</span></code>",
+      "provided": "4"
+    },
+    {
+      "combining": true,
+      "expected": "42",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-basic-one",
+      "notetype_name": "Type Basic",
+      "output": "<code id=typeans>42</code>",
+      "provided": ""
+    },
+    {
+      "combining": true,
+      "expected": "42",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-basic-one",
+      "notetype_name": "Type Basic",
+      "output": "<code id=typeans><span class=typeGood>42</span><span class=typeBad> </span><br><span id=typearrow>&darr;</span><br><span class=typeGood>42</span></code>",
+      "provided": "42 "
+    },
+    {
+      "combining": false,
+      "expected": "42",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-basic-one",
+      "notetype_name": "Type Basic",
+      "output": "<code id=typeans><span class=typeGood>42</span></code>",
+      "provided": "42"
+    },
+    {
+      "combining": true,
+      "expected": "",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-basic-empty",
+      "notetype_name": "Type Basic",
+      "output": "<code id=typeans><span class=typeBad>extra</span><br><span id=typearrow>&darr;</span><br></code>",
+      "provided": "extra"
+    },
+    {
+      "combining": true,
+      "expected": "",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-basic-empty",
+      "notetype_name": "Type Basic",
+      "output": "<code id=typeans></code>",
+      "provided": ""
+    },
+    {
+      "combining": true,
+      "expected": "a b",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-nc-one",
+      "notetype_name": "Type Nc",
+      "output": "<code id=typeans><span class=typeGood>a</span><span class=typeMissed>-</span><span class=typeGood>b</span><br><span id=typearrow>&darr;</span><br><span class=typeGood>a</span><span class=typeMissed> </span><span class=typeGood>b</span></code>",
+      "provided": "ab"
+    },
+    {
+      "combining": false,
+      "expected": "a b",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-nc-one",
+      "notetype_name": "Type Nc",
+      "output": "<code id=typeans><span class=typeGood>a</span><span class=typeMissed>-</span><span class=typeGood>b</span><br><span id=typearrow>&darr;</span><br><span class=typeGood>a</span><span class=typeMissed> </span><span class=typeGood>b</span></code>",
+      "provided": "ab"
+    },
+    {
+      "combining": false,
+      "expected": "a b",
+      "expected_source": "field:Back",
+      "guid": "typeanswer-nc-one",
+      "notetype_name": "Type Nc",
+      "output": "<code id=typeans><span class=typeGood>a </span><span class=typeBad> </span><span class=typeGood>b</span><br><span id=typearrow>&darr;</span><br><span class=typeGood>a </span><span class=typeGood>b</span></code>",
+      "provided": "a  b"
+    },
+    {
+      "combining": true,
+      "expected": "two",
+      "expected_source": "cloze:Text",
+      "guid": "typeanswer-cloze-one",
+      "notetype_name": "Type Cloze",
+      "output": "<code id=typeans><span class=typeGood>two</span></code>",
+      "provided": "two"
+    },
+    {
+      "combining": true,
+      "expected": "two",
+      "expected_source": "cloze:Text",
+      "guid": "typeanswer-cloze-one",
+      "notetype_name": "Type Cloze",
+      "output": "<code id=typeans><span class=typeGood>t</span><span class=typeMissed>-</span><span class=typeGood>o</span><span class=typeBad>o</span><br><span id=typearrow>&darr;</span><br><span class=typeGood>t</span><span class=typeMissed>w</span><span class=typeGood>o</span></code>",
+      "provided": "too"
+    },
+    {
+      "combining": false,
+      "expected": "two",
+      "expected_source": "cloze:Text",
+      "guid": "typeanswer-cloze-one",
+      "notetype_name": "Type Cloze",
+      "output": "<code id=typeans><span class=typeGood>two</span></code>",
+      "provided": "two"
+    },
+    {
+      "combining": true,
+      "expected": "four",
+      "expected_source": "cloze:Text",
+      "guid": "typeanswer-cloze-one",
+      "notetype_name": "Type Cloze",
+      "output": "<code id=typeans><span class=typeGood>four</span></code>",
+      "provided": "four"
+    }
+  ],
+  "fixture": "typeanswer",
+  "note_types": [
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Type Basic",
+      "templates": [
+        {
+          "afmt": "{{Front}}\n\n<hr id=answer>\n\n{{type:Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}\n\n{{type:Back}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Text"
+      ],
+      "kind": "cloze",
+      "name": "Type Cloze",
+      "templates": [
+        {
+          "afmt": "{{cloze:Text}}<hr id=answer>{{type:cloze:Text}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{cloze:Text}} {{type:cloze:Text}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Type Nc",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}<hr id=answer>{{type-nc:Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}} {{type-nc:Back}}"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one\n\n<hr id=answer>\n\n[[type:Back]]",
+          "answer_nodes_text": "front one\n\n<hr id=answer>\n\n[[type:Back]]",
+          "front_is_empty": false,
+          "id": 1500000000072,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one\n\n[[type:Back]]",
+          "question_nodes_text": "front one\n\n[[type:Back]]"
+        }
+      ],
+      "fields": {
+        "Back": "42",
+        "Front": "front one"
+      },
+      "guid": "typeanswer-basic-one",
+      "notetype_name": "Type Basic"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front two\n\n<hr id=answer>\n\n[[type:Back]]",
+          "answer_nodes_text": "front two\n\n<hr id=answer>\n\n[[type:Back]]",
+          "front_is_empty": false,
+          "id": 1500000000071,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front two\n\n[[type:Back]]",
+          "question_nodes_text": "front two\n\n[[type:Back]]"
+        }
+      ],
+      "fields": {
+        "Back": "",
+        "Front": "front two"
+      },
+      "guid": "typeanswer-basic-empty",
+      "notetype_name": "Type Basic"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one [[type:nc:Back]]<hr id=answer>[[type:nc:Back]]",
+          "answer_nodes_text": "front one [[type:nc:Back]]<hr id=answer>[[type:nc:Back]]",
+          "front_is_empty": false,
+          "id": 1500000000075,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one [[type:nc:Back]]",
+          "question_nodes_text": "front one [[type:nc:Back]]"
+        }
+      ],
+      "fields": {
+        "Back": "a b",
+        "Front": "front one"
+      },
+      "guid": "typeanswer-nc-one",
+      "notetype_name": "Type Nc"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0,
+        1
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>one <span class=\"cloze\" data-ordinal=\"1\">two</span> three <span class=\"cloze-inactive\" data-ordinal=\"2\">four</span><hr id=answer>[[type:cloze:Text]]",
+          "answer_nodes_text": "one <span class=\"cloze\" data-ordinal=\"1\">two</span> three <span class=\"cloze-inactive\" data-ordinal=\"2\">four</span><hr id=answer>[[type:cloze:Text]]",
+          "front_is_empty": false,
+          "id": 1500000000073,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>one <span class=\"cloze\" data-cloze=\"two\" data-ordinal=\"1\">[...]</span> three <span class=\"cloze-inactive\" data-ordinal=\"2\">four</span> [[type:cloze:Text]]",
+          "question_nodes_text": "one <span class=\"cloze\" data-cloze=\"two\" data-ordinal=\"1\">[...]</span> three <span class=\"cloze-inactive\" data-ordinal=\"2\">four</span> [[type:cloze:Text]]"
+        },
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>one <span class=\"cloze-inactive\" data-ordinal=\"1\">two</span> three <span class=\"cloze\" data-ordinal=\"2\">four</span><hr id=answer>[[type:cloze:Text]]",
+          "answer_nodes_text": "one <span class=\"cloze-inactive\" data-ordinal=\"1\">two</span> three <span class=\"cloze\" data-ordinal=\"2\">four</span><hr id=answer>[[type:cloze:Text]]",
+          "front_is_empty": false,
+          "id": 1500000000074,
+          "ordinal": 1,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>one <span class=\"cloze-inactive\" data-ordinal=\"1\">two</span> three <span class=\"cloze\" data-cloze=\"four\" data-ordinal=\"2\">[a hint]</span> [[type:cloze:Text]]",
+          "question_nodes_text": "one <span class=\"cloze-inactive\" data-ordinal=\"1\">two</span> three <span class=\"cloze\" data-cloze=\"four\" data-ordinal=\"2\">[a hint]</span> [[type:cloze:Text]]"
+        }
+      ],
+      "cloze_numbers": [
+        1,
+        2
+      ],
+      "cloze_typing": [
+        {
+          "ordinal": 1,
+          "text": "two"
+        },
+        {
+          "ordinal": 2,
+          "text": "four"
+        }
+      ],
+      "fields": {
+        "Text": "one {{c1::two}} three {{c2::four::a hint}}"
+      },
+      "guid": "typeanswer-cloze-one",
+      "notetype_name": "Type Cloze"
+    }
+  ],
+  "packages": [
+    "typeanswer.anki21b.apkg"
+  ],
+  "source": "anki==26.9.3"
+}

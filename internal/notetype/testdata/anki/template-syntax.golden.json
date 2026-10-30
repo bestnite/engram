@@ -1,0 +1,764 @@
+{
+  "compare_answers": [],
+  "fixture": "template-syntax",
+  "note_types": [
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Rule Card Id",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}|{{CardID}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Text"
+      ],
+      "kind": "cloze",
+      "name": "Rule Cloze Conditional",
+      "templates": [
+        {
+          "afmt": "{{cloze:Text}}<br>{{#c1}}[c1-on]{{/c1}}{{^c1}}[c1-off]{{/c1}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{cloze:Text}}{{#c1}} [c1-on]{{/c1}}{{^c1}} [c1-off]{{/c1}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Rule Comment",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}-before<!-- {{Front}} -->after"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Rule Conditional",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "[{{#Front}}{{Front}}{{/Front}}]"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Rule Delimiter Change",
+      "templates": [
+        {
+          "afmt": "{{=<% %>=}}<%FrontSide%>",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{=<% %>=}}<%Front%>|<%Back%>"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Rule Field Replacement",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Tags",
+        "Deck"
+      ],
+      "kind": "normal",
+      "name": "Rule Field Shadowing",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}|{{Tags}}|{{Deck}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Rule FrontSide",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}+{{Back}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Rule Inverted Conditional",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "[{{^Front}}empty{{/Front}}]"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Rule Special Fields",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}|{{Tags}}|{{Type}}|{{Deck}}|{{Subdeck}}|{{Card}}|{{CardFlag}}"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>plain field<hr id=answer><b>back</b>",
+          "answer_nodes_text": "plain field<hr id=answer><b>back</b>",
+          "front_is_empty": false,
+          "id": 1500000000067,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>plain field",
+          "question_nodes_text": "plain field"
+        }
+      ],
+      "fields": {
+        "Back": "<b>back</b>",
+        "Front": "plain field"
+      },
+      "guid": "syntax-replacement-one",
+      "notetype_name": "Rule Field Replacement"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>second field<hr id=answer>second back",
+          "answer_nodes_text": "second field<hr id=answer>second back",
+          "front_is_empty": false,
+          "id": 1500000000068,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>second field",
+          "question_nodes_text": "second field"
+        }
+      ],
+      "fields": {
+        "Back": "second back",
+        "Front": "second field"
+      },
+      "guid": "syntax-replacement-two",
+      "notetype_name": "Rule Field Replacement"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[content]",
+          "answer_nodes_text": "[content]",
+          "front_is_empty": false,
+          "id": 1500000000057,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[content]",
+          "question_nodes_text": "[content]"
+        }
+      ],
+      "fields": {
+        "Front": "content"
+      },
+      "guid": "syntax-conditional-text",
+      "notetype_name": "Rule Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000055,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": ""
+      },
+      "guid": "syntax-conditional-empty",
+      "notetype_name": "Rule Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000056,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "   "
+      },
+      "guid": "syntax-conditional-spaces",
+      "notetype_name": "Rule Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000051,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "<br>"
+      },
+      "guid": "syntax-conditional-br",
+      "notetype_name": "Rule Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000053,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "<div></div>"
+      },
+      "guid": "syntax-conditional-div",
+      "notetype_name": "Rule Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000054,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "<div> </div>"
+      },
+      "guid": "syntax-conditional-div-space",
+      "notetype_name": "Rule Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000052,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "<br><div></div>"
+      },
+      "guid": "syntax-conditional-br-div",
+      "notetype_name": "Rule Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000066,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "content"
+      },
+      "guid": "syntax-inverted-text",
+      "notetype_name": "Rule Inverted Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000064,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": ""
+      },
+      "guid": "syntax-inverted-empty",
+      "notetype_name": "Rule Inverted Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000065,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "   "
+      },
+      "guid": "syntax-inverted-spaces",
+      "notetype_name": "Rule Inverted Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000060,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "<br>"
+      },
+      "guid": "syntax-inverted-br",
+      "notetype_name": "Rule Inverted Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000062,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "<div></div>"
+      },
+      "guid": "syntax-inverted-div",
+      "notetype_name": "Rule Inverted Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000063,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "<div> </div>"
+      },
+      "guid": "syntax-inverted-div-space",
+      "notetype_name": "Rule Inverted Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000061,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "[empty]<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "<br><div></div>"
+      },
+      "guid": "syntax-inverted-br-div",
+      "notetype_name": "Rule Inverted Conditional"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>hidden-before<!-- {{Front}} -->after",
+          "answer_nodes_text": "hidden-before<!-- {{Front}} -->after",
+          "front_is_empty": false,
+          "id": 1500000000050,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>hidden-before<!-- {{Front}} -->after",
+          "question_nodes_text": "hidden-before<!-- {{Front}} -->after"
+        }
+      ],
+      "fields": {
+        "Front": "hidden"
+      },
+      "guid": "syntax-comment-one",
+      "notetype_name": "Rule Comment"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>left|right",
+          "answer_nodes_text": "left|right",
+          "front_is_empty": false,
+          "id": 1500000000058,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>left|right",
+          "question_nodes_text": "left|right"
+        }
+      ],
+      "fields": {
+        "Back": "right",
+        "Front": "left"
+      },
+      "guid": "syntax-delimiter-one",
+      "notetype_name": "Rule Delimiter Change"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one+back one<hr id=answer>back one",
+          "answer_nodes_text": "front one+back one<hr id=answer>back one",
+          "front_is_empty": false,
+          "id": 1500000000059,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one+back one",
+          "question_nodes_text": "front one+back one"
+        }
+      ],
+      "fields": {
+        "Back": "back one",
+        "Front": "front one"
+      },
+      "guid": "syntax-frontside-one",
+      "notetype_name": "Rule FrontSide"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one|alpha beta|Rule Special Fields|Placeholder::Lesson 1|Lesson 1|Card 1|flag0",
+          "answer_nodes_text": "front one|alpha beta|Rule Special Fields|Placeholder::Lesson 1|Lesson 1|Card 1|flag0",
+          "front_is_empty": false,
+          "id": 1500000000070,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one|alpha beta|Rule Special Fields|Placeholder::Lesson 1|Lesson 1|Card 1|flag0",
+          "question_nodes_text": "front one|alpha beta|Rule Special Fields|Placeholder::Lesson 1|Lesson 1|Card 1|flag0"
+        }
+      ],
+      "fields": {
+        "Front": "front one"
+      },
+      "guid": "syntax-specials-one",
+      "notetype_name": "Rule Special Fields"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one|1500000000047",
+          "answer_nodes_text": "front one|1500000000047",
+          "front_is_empty": false,
+          "id": 1500000000047,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one|1500000000047",
+          "question_nodes_text": "front one|1500000000047"
+        }
+      ],
+      "fields": {
+        "Front": "front one"
+      },
+      "guid": "syntax-card-id-one",
+      "notetype_name": "Rule Card Id"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one|field-tags|field-deck",
+          "answer_nodes_text": "front one|field-tags|field-deck",
+          "front_is_empty": false,
+          "id": 1500000000069,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one|field-tags|field-deck",
+          "question_nodes_text": "front one|field-tags|field-deck"
+        }
+      ],
+      "fields": {
+        "Deck": "field-deck",
+        "Front": "front one",
+        "Tags": "field-tags"
+      },
+      "guid": "syntax-shadowing-one",
+      "notetype_name": "Rule Field Shadowing"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0,
+        1
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze\" data-ordinal=\"1\">one</span> <span class=\"cloze-inactive\" data-ordinal=\"2\">two</span><br>[c1-on]",
+          "answer_nodes_text": "<span class=\"cloze\" data-ordinal=\"1\">one</span> <span class=\"cloze-inactive\" data-ordinal=\"2\">two</span><br>[c1-on]",
+          "front_is_empty": false,
+          "id": 1500000000048,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze\" data-cloze=\"one\" data-ordinal=\"1\">[...]</span> <span class=\"cloze-inactive\" data-ordinal=\"2\">two</span> [c1-on]",
+          "question_nodes_text": "<span class=\"cloze\" data-cloze=\"one\" data-ordinal=\"1\">[...]</span> <span class=\"cloze-inactive\" data-ordinal=\"2\">two</span> [c1-on]"
+        },
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze-inactive\" data-ordinal=\"1\">one</span> <span class=\"cloze\" data-ordinal=\"2\">two</span><br>[c1-off]",
+          "answer_nodes_text": "<span class=\"cloze-inactive\" data-ordinal=\"1\">one</span> <span class=\"cloze\" data-ordinal=\"2\">two</span><br>[c1-off]",
+          "front_is_empty": false,
+          "id": 1500000000049,
+          "ordinal": 1,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze-inactive\" data-ordinal=\"1\">one</span> <span class=\"cloze\" data-cloze=\"two\" data-ordinal=\"2\">[...]</span> [c1-off]",
+          "question_nodes_text": "<span class=\"cloze-inactive\" data-ordinal=\"1\">one</span> <span class=\"cloze\" data-cloze=\"two\" data-ordinal=\"2\">[...]</span> [c1-off]"
+        }
+      ],
+      "cloze_numbers": [
+        1,
+        2
+      ],
+      "fields": {
+        "Text": "{{c1::one}} {{c2::two}}"
+      },
+      "guid": "syntax-cloze-conditional-one",
+      "notetype_name": "Rule Cloze Conditional"
+    }
+  ],
+  "packages": [
+    "template-syntax.anki21b.apkg"
+  ],
+  "source": "anki==26.9.3"
+}

@@ -1,0 +1,277 @@
+{
+  "compare_answers": [],
+  "fixture": "cardgen",
+  "note_types": [
+    {
+      "fields": [
+        "Text",
+        "Extra"
+      ],
+      "kind": "cloze",
+      "name": "Cardgen Cloze",
+      "templates": [
+        {
+          "afmt": "{{cloze:Text}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{cloze:Text}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Cardgen Empty Existing",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front",
+        "Back"
+      ],
+      "kind": "normal",
+      "name": "Cardgen Normal",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "name": "Always",
+          "ordinal": 0,
+          "qfmt": "{{Front}}"
+        },
+        {
+          "afmt": "{{Back}}",
+          "name": "Conditional",
+          "ordinal": 1,
+          "qfmt": "{{#Back}}{{Front}}{{/Back}}"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "cardgen_expected_ordinals": [
+        0,
+        1
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one<hr id=answer>back one",
+          "answer_nodes_text": "front one<hr id=answer>back one",
+          "front_is_empty": false,
+          "id": 1500000000005,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one",
+          "question_nodes_text": "front one"
+        },
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>back one",
+          "answer_nodes_text": "back one",
+          "front_is_empty": false,
+          "id": 1500000000006,
+          "ordinal": 1,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front one",
+          "question_nodes_text": "front one"
+        }
+      ],
+      "fields": {
+        "Back": "back one",
+        "Front": "front one"
+      },
+      "guid": "cardgen-both",
+      "notetype_name": "Cardgen Normal"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front two<hr id=answer>",
+          "answer_nodes_text": "front two<hr id=answer>",
+          "front_is_empty": false,
+          "id": 1500000000012,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>front two",
+          "question_nodes_text": "front two"
+        }
+      ],
+      "fields": {
+        "Back": "",
+        "Front": "front two"
+      },
+      "guid": "cardgen-no-back",
+      "notetype_name": "Cardgen Normal"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000013,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Back": "back three",
+        "Front": ""
+      },
+      "guid": "cardgen-no-front",
+      "notetype_name": "Cardgen Normal"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0,
+        2
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze\" data-ordinal=\"1\">one</span> <span class=\"cloze-inactive\" data-ordinal=\"3\">three</span>",
+          "answer_nodes_text": "<span class=\"cloze\" data-ordinal=\"1\">one</span> <span class=\"cloze-inactive\" data-ordinal=\"3\">three</span>",
+          "front_is_empty": false,
+          "id": 1500000000007,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze\" data-cloze=\"one\" data-ordinal=\"1\">[...]</span> <span class=\"cloze-inactive\" data-ordinal=\"3\">three</span>",
+          "question_nodes_text": "<span class=\"cloze\" data-cloze=\"one\" data-ordinal=\"1\">[...]</span> <span class=\"cloze-inactive\" data-ordinal=\"3\">three</span>"
+        },
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze-inactive\" data-ordinal=\"1\">one</span> <span class=\"cloze\" data-ordinal=\"3\">three</span>",
+          "answer_nodes_text": "<span class=\"cloze-inactive\" data-ordinal=\"1\">one</span> <span class=\"cloze\" data-ordinal=\"3\">three</span>",
+          "front_is_empty": false,
+          "id": 1500000000008,
+          "ordinal": 2,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze-inactive\" data-ordinal=\"1\">one</span> <span class=\"cloze\" data-cloze=\"three\" data-ordinal=\"3\">[...]</span>",
+          "question_nodes_text": "<span class=\"cloze-inactive\" data-ordinal=\"1\">one</span> <span class=\"cloze\" data-cloze=\"three\" data-ordinal=\"3\">[...]</span>"
+        }
+      ],
+      "cloze_numbers": [
+        1,
+        3
+      ],
+      "fields": {
+        "Extra": "",
+        "Text": "{{c1::one}} {{c3::three}}"
+      },
+      "guid": "cardgen-cloze-gap",
+      "notetype_name": "Cardgen Cloze"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0,
+        1
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze\" data-ordinal=\"1\">one</span>",
+          "answer_nodes_text": "<span class=\"cloze\" data-ordinal=\"1\">one</span>",
+          "front_is_empty": false,
+          "id": 1500000000009,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><span class=\"cloze\" data-cloze=\"one\" data-ordinal=\"1\">[...]</span>",
+          "question_nodes_text": "<span class=\"cloze\" data-cloze=\"one\" data-ordinal=\"1\">[...]</span>"
+        },
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>",
+          "answer_nodes_text": "",
+          "front_is_empty": false,
+          "id": 1500000000010,
+          "ordinal": 1,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>",
+          "question_nodes_text": ""
+        }
+      ],
+      "cloze_numbers": [
+        1,
+        2
+      ],
+      "fields": {
+        "Extra": "{{c2::two}}",
+        "Text": "{{c1::one}}"
+      },
+      "guid": "cardgen-cloze-other-field",
+      "notetype_name": "Cardgen Cloze"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000011,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Back": "back one",
+        "Front": ""
+      },
+      "guid": "cardgen-empty-existing-one",
+      "notetype_name": "Cardgen Empty Existing"
+    }
+  ],
+  "packages": [
+    "cardgen.anki21b.apkg"
+  ],
+  "source": "anki==26.9.3"
+}

@@ -1,0 +1,338 @@
+{
+  "compare_answers": [],
+  "fixture": "template-filters",
+  "note_types": [
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Filter Chain",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{text:hint:Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Filter Empty Field Name",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{text:}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Filter Furigana",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{furigana:Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Filter Hint",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{hint:Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Filter Kana",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{kana:Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Filter Kanji",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{kanji:Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Filter Text",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{text:Front}}"
+        }
+      ]
+    },
+    {
+      "fields": [
+        "Front"
+      ],
+      "kind": "normal",
+      "name": "Filter Unknown",
+      "templates": [
+        {
+          "afmt": "{{FrontSide}}",
+          "name": "Card 1",
+          "ordinal": 0,
+          "qfmt": "{{unknown:Front}}"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>bold  tail",
+          "answer_nodes_text": "bold  tail",
+          "front_is_empty": false,
+          "id": 1500000000034,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>bold  tail",
+          "question_nodes_text": "bold  tail"
+        }
+      ],
+      "fields": {
+        "Front": "<b>bold</b> <img src=\"placeholder.png\"> tail"
+      },
+      "guid": "filter-text-one",
+      "notetype_name": "Filter Text"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>\n<a class=hint href=\"#\"\nonclick=\"this.style.display='none';\ndocument.getElementById('hintfe2d154c35ff3d09').style.display='block';\nreturn false;\" draggable=false>\nFront</a>\n<div id=\"hintfe2d154c35ff3d09\" class=hint style=\"display: none\"><b>hinted</b> text</div>\n",
+          "answer_nodes_text": "\n<a class=hint href=\"#\"\nonclick=\"this.style.display='none';\ndocument.getElementById('hintfe2d154c35ff3d09').style.display='block';\nreturn false;\" draggable=false>\nFront</a>\n<div id=\"hintfe2d154c35ff3d09\" class=hint style=\"display: none\"><b>hinted</b> text</div>\n",
+          "front_is_empty": false,
+          "id": 1500000000031,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>\n<a class=hint href=\"#\"\nonclick=\"this.style.display='none';\ndocument.getElementById('hintfe2d154c35ff3d09').style.display='block';\nreturn false;\" draggable=false>\nFront</a>\n<div id=\"hintfe2d154c35ff3d09\" class=hint style=\"display: none\"><b>hinted</b> text</div>\n",
+          "question_nodes_text": "\n<a class=hint href=\"#\"\nonclick=\"this.style.display='none';\ndocument.getElementById('hintfe2d154c35ff3d09').style.display='block';\nreturn false;\" draggable=false>\nFront</a>\n<div id=\"hintfe2d154c35ff3d09\" class=hint style=\"display: none\"><b>hinted</b> text</div>\n"
+        }
+      ],
+      "fields": {
+        "Front": "<b>hinted</b> text"
+      },
+      "guid": "filter-hint-one",
+      "notetype_name": "Filter Hint"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><ruby><rb>漢字</rb><rt>かんじ</rt></ruby> と<ruby><rb>カナ</rb><rt>かな</rt></ruby>",
+          "answer_nodes_text": "<ruby><rb>漢字</rb><rt>かんじ</rt></ruby> と<ruby><rb>カナ</rb><rt>かな</rt></ruby>",
+          "front_is_empty": false,
+          "id": 1500000000030,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><ruby><rb>漢字</rb><rt>かんじ</rt></ruby> と<ruby><rb>カナ</rb><rt>かな</rt></ruby>",
+          "question_nodes_text": "<ruby><rb>漢字</rb><rt>かんじ</rt></ruby> と<ruby><rb>カナ</rb><rt>かな</rt></ruby>"
+        }
+      ],
+      "fields": {
+        "Front": "漢字[かんじ] と カナ[かな]"
+      },
+      "guid": "filter-furigana-one",
+      "notetype_name": "Filter Furigana"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>かんじ とかな",
+          "answer_nodes_text": "かんじ とかな",
+          "front_is_empty": false,
+          "id": 1500000000032,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>かんじ とかな",
+          "question_nodes_text": "かんじ とかな"
+        }
+      ],
+      "fields": {
+        "Front": "漢字[かんじ] と カナ[かな]"
+      },
+      "guid": "filter-kana-one",
+      "notetype_name": "Filter Kana"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>漢字 とカナ",
+          "answer_nodes_text": "漢字 とカナ",
+          "front_is_empty": false,
+          "id": 1500000000033,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>漢字 とカナ",
+          "question_nodes_text": "漢字 とカナ"
+        }
+      ],
+      "fields": {
+        "Front": "漢字[かんじ] と カナ[かな]"
+      },
+      "guid": "filter-kanji-one",
+      "notetype_name": "Filter Kanji"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>\n\nFront\nchained text\n",
+          "answer_nodes_text": "\n\nFront\nchained text\n",
+          "front_is_empty": false,
+          "id": 1500000000028,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style>\n\nFront\nchained text\n",
+          "question_nodes_text": "\n\nFront\nchained text\n"
+        }
+      ],
+      "fields": {
+        "Front": "<b>chained</b> text"
+      },
+      "guid": "filter-chain-one",
+      "notetype_name": "Filter Chain"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><b>unfiltered</b> text",
+          "answer_nodes_text": "<b>unfiltered</b> text",
+          "front_is_empty": false,
+          "id": 1500000000035,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><b>unfiltered</b> text",
+          "question_nodes_text": "<b>unfiltered</b> text"
+        }
+      ],
+      "fields": {
+        "Front": "<b>unfiltered</b> text"
+      },
+      "guid": "filter-unknown-one",
+      "notetype_name": "Filter Unknown"
+    },
+    {
+      "cardgen_expected_ordinals": [],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "answer_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "front_is_empty": true,
+          "id": 1500000000029,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
+          "question_html": "<style>.card {\n    font-family: arial;\n    text-align: left;\n}\n</style><div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>",
+          "question_nodes_text": "<div>The front of this card is blank.<br><a href='https://docs.ankiweb.invalid/templates/errors.html#front-of-card-is-blank'>More information</a></div>"
+        }
+      ],
+      "fields": {
+        "Front": "ignored"
+      },
+      "guid": "filter-empty-name-one",
+      "notetype_name": "Filter Empty Field Name"
+    }
+  ],
+  "packages": [
+    "template-filters.anki21b.apkg"
+  ],
+  "source": "anki==26.9.3"
+}

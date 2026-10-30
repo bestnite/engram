@@ -39,6 +39,7 @@ engram/
 ├── schema/                   # JSON Schemas for note import, bulk notes, and deck packages
 ├── decks/                    # bundled deck library
 ├── tools/optimizer/          # Rust FSRS optimiser adapter
+├── tools/anki-oracle/        # Python oracle that generates the Anki reference fixtures
 ├── Dockerfile, Dockerfile.release, docker-compose.yaml
 └── go.mod                    # Go module definition
 ```
