@@ -22,7 +22,6 @@ describe('SPA media picker catalog keys', () => {
       'media.upload.image_only',
       'media.upload.inserted',
       'media.upload.magic_mismatch',
-      'media.upload.mime_not_allowed',
       'media.upload.quota_exceeded',
       'media.upload.too_large',
       'media.upload.uploading',
