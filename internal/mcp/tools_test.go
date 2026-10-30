@@ -35,6 +35,22 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Fatalf("seed import status = %d body %v", st, raw)
 	}
 
+	// list_note_types: the initial import created the deck's stock basic note type; its public id is
+	// what the note_type payload needs.
+	typesOut, isErr, text := callTool(t, cs, "list_note_types", map[string]any{"deck_id": deck.PublicID})
+	if isErr {
+		t.Fatalf("list_note_types error: %s", text)
+	}
+	types, _ := typesOut["note_types"].([]any)
+	if len(types) == 0 {
+		t.Fatalf("list_note_types returned no note types: %v", typesOut)
+	}
+	basicType, _ := types[0].(map[string]any)
+	basicTypeID, _ := basicType["id"].(string)
+	if basicTypeID == "" {
+		t.Fatalf("list_note_types entry has no id: %v", basicType)
+	}
+
 	// list_decks
 	mcpOut, _, _ := callTool(t, cs, "list_decks", map[string]any{})
 	if _, restOut := rest(t, base, http.MethodGet, "/api/v1/decks", key, ""); !reflect.DeepEqual(mcpOut, restOut) {
@@ -54,7 +70,7 @@ func TestToolsMatchREST(t *testing.T) {
 	}
 
 	// export_deck: returns the deck package document, with manifest/notes/cards/preset.
-	mcpOut, isErr, text := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID})
+	mcpOut, isErr, text = callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID})
 	if isErr {
 		t.Fatalf("export_deck error: %s", text)
 	}
@@ -70,12 +86,14 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("package document is missing notes.json: %v", mcpOut)
 	}
 
-	// create_notes / import_deck (dry_run, produces the same counts under the same deck state)
+	// create_notes / import_deck (dry_run, produces the same counts under the same deck state).
+	// The dry run uses the permanent payload: note_type plus fields keyed by field name with HTML values.
 	dry := map[string]any{"deck_id": deck.PublicID, "dry_run": true, "notes": []any{
-		map[string]any{"kind": "basic", "fields": map[string]any{"front": "x", "back": "y"}, "external_ref": "n:3"},
+		map[string]any{"note_type": basicTypeID, "fields": map[string]any{"front": "<p>x</p>", "back": "<p>y</p>"}, "external_ref": "n:3"},
 	}}
 	mcpOut, _, _ = callTool(t, cs, "create_notes", dry)
-	if _, restOut := rest(t, base, http.MethodPost, deckPath, key, `{"dry_run":true,"notes":[{"kind":"basic","fields":{"front":"x","back":"y"},"external_ref":"n:3"}]}`); !reflect.DeepEqual(mcpOut, restOut) {
+	dryBody := fmt.Sprintf(`{"dry_run":true,"notes":[{"note_type":%q,"fields":{"front":"<p>x</p>","back":"<p>y</p>"},"external_ref":"n:3"}]}`, basicTypeID)
+	if _, restOut := rest(t, base, http.MethodPost, deckPath, key, dryBody); !reflect.DeepEqual(mcpOut, restOut) {
 		t.Errorf("create_notes(dry_run) MCP=%v REST=%v", mcpOut, restOut)
 	}
 
@@ -102,8 +120,9 @@ func TestToolsMatchREST(t *testing.T) {
 	note1, note2 := byRef["n:1"], byRef["n:2"]
 
 	// update_note: same content, so it should match once the dynamic fields are stripped.
-	mcpUpd, _, _ := callTool(t, cs, "update_note", map[string]any{"note_id": note1, "kind": "basic", "fields": map[string]any{"front": "u", "back": "Y"}, "tags": []any{"t1"}})
-	_, restUpd := rest(t, base, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", note2), key, `{"kind":"basic","fields":{"front":"u","back":"Y"},"tags":["t1"]}`)
+	mcpUpd, _, _ := callTool(t, cs, "update_note", map[string]any{"note_id": note1, "note_type": basicTypeID, "fields": map[string]any{"front": "<p>u</p>", "back": "<p>Y</p>"}, "tags": []any{"t1"}})
+	restUpdBody := fmt.Sprintf(`{"note_type":%q,"fields":{"front":"<p>u</p>","back":"<p>Y</p>"},"tags":["t1"]}`, basicTypeID)
+	_, restUpd := rest(t, base, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", note2), key, restUpdBody)
 	if !reflect.DeepEqual(stripDynamic(mcpUpd), stripDynamic(restUpd)) {
 		t.Errorf("update_note MCP=%v REST=%v", stripDynamic(mcpUpd), stripDynamic(restUpd))
 	}

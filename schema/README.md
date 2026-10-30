@@ -7,7 +7,7 @@ server remains the source of truth for validation.
 
 | File | Describes |
 |---|---|
-| `note-import.schema.json` | Request body of the bulk note endpoint `POST /api/v1/decks/:id/notes`, including the per-kind `fields` of the built-in card types |
+| `note-import.schema.json` | Request body of the bulk note endpoint `POST /api/v1/decks/:id/notes`: `note_type` plus `fields` as a map from field name to HTML string |
 | `note-bulk.schema.json` | Request body of the notes bulk action endpoint `POST /api/v1/notes/bulk` |
 | `deck-package.schema.json` | Logical content of a `.edeck` deck package (export and import) |
 
@@ -45,26 +45,24 @@ the two for bodies carrying repeated or blank entries.
 The request carries a `notes` array (1 to 500 entries) plus the `dry_run` and
 `on_conflict` options.
 
-Each note is discriminated by its `kind` field. The `fields` object holds the
-type-specific values and is validated per kind through a `oneOf` whose branches pin
-`kind` with a `const`; a `discriminator` annotation names `kind` for generators. The
-built-in kinds and their required fields are:
+Each note names its note type with `note_type`, the opaque **public id** returned by
+`GET /api/v1/decks/:id/note-types`, and sends `fields` as an object from field name to
+HTML string. There is no per-kind shape any more: every field value is an HTML string,
+including a numeric value (`"100"`) and a boolean (`"true"`), and list-like fields join
+their items with `<br>`. The server maps each field name to the note type's field id and
+rejects an unknown name with a per-row error that names it. A field the payload omits
+becomes the empty string.
 
-| `kind` | Required `fields` | Notes |
-|---|---|---|
-| `basic` | `front`, `back` | one card |
-| `basic_both` | `front`, `back` | two cards (forward and reverse) |
-| `cloze` | `text` | `text` must contain at least one `{{cN::text}}` / `{{cN::text::hint}}`; one card per index |
-| `list` | `prompt`, `items` | `items` has at least one entry; optional `ordered` |
-| `typed` | `prompt`, `answer` | optional `accept`, `ignore_case`, `ignore_whitespace`, `regex` |
-| `numeric` | `prompt`, `value` | optional `tolerance_absolute`, `tolerance_relative`, `unit` |
-| `choice_single` | `question`, `options`, `answer` | `options` has at least two unique entries; `answer` is a zero-based index |
-| `choice_multi` | `question`, `options`, `answers` | `options` has at least two unique entries; `answers` is a non-empty set of zero-based indices |
-| `true_false` | `statement`, `answer` | `answer` is a boolean |
-| `short_answer` | `prompt` | optional `reference`; self-graded for now |
+`kind` remains accepted as a transitional alias for `note_type`: it names an engram stock
+kind (`basic`, `cloze`, ...), the server resolves it to the deck's stock note type for that
+kind, and creates that note type when the deck has none. New clients send `note_type`;
+`kind` disappears when the rich-text editor replaces the card-kind editor. When a note
+carries both, `note_type` wins.
 
 Every note may also carry `external_ref` (the caller-defined idempotency key),
-`note_id`, `tags`, `extra` and `source_url`.
+`note_id`, `tags`, `extra` and `source_url`. `extra` and `source_url` are stored in the
+note's own columns rather than as potential note type fields, unless the note type declares
+a field of that name; the note write path decides which reading applies.
 
 `note_id` addresses an existing note of the deck in the path by its opaque
 **public id** (a string, never the numeric primary key), so a
@@ -80,8 +78,9 @@ deck), and the note is only rewritten when it belongs to the deck in the path.
 
 What JSON Schema cannot express and the server enforces instead:
 
-- A choice answer index must be smaller than the length of `options`.
-  The schema only constrains it to a non-negative integer.
+- A note type id must belong to the deck in the path and must exist; the schema only
+  requires a non-empty string.
+- A field name must be declared by the note type; the schema accepts any string key.
 - `numeric` accepts an answer when either tolerance matches; both tolerances are
   optional and their combination is a runtime rule.
 
@@ -95,7 +94,9 @@ whose properties are the package's entry names, and defines each file under `$de
 
 - `manifest.json` (required) — `format_version`, export time, application version,
   deck metadata, the `include_*` flags and the entry counts.
-- `notes.json` (required) — the note content, same note shape as the import request.
+- `notes.json` (required) — the note content in the format-1 shape: each note carries
+  a `kind` and the typed `fields` that shape defines. The import endpoint's `note_type` /
+  HTML-map shape is not used by format 1; format 2 (M17-20) replaces it.
 - `cards.json` (required) — one entry per card: `note_index`, `template`, `ordinal`.
 - `preset.json` (required) — scheduling parameters. The 21 FSRS weights are exported
   only when `include_weights` is requested, because they are fitted to the exporting
@@ -121,8 +122,10 @@ so a name that can be created can always be exported and imported unchanged.
 - Unknown fields inside any object are ignored, never fatal.
 - Unknown extra entries in the package itself are ignored, so a newer package can still
   be read by an older importer.
-- An unknown note `kind` is an error. It matches none of the `oneOf` branches, and the
-  importer must list every offending entry instead of dropping it silently.
+- In a format-1 deck package, an unknown note `kind` is an error. It matches none of the
+  `oneOf` branches, and the importer must list every offending entry instead of dropping
+  it silently. In an import request, an unknown `note_type` or field name is a row error
+  naming the offending id or field.
 - `manifest.app_version` is informational and never used for compatibility decisions.
 
 ## Validating with check-jsonschema
@@ -135,20 +138,25 @@ uvx check-jsonschema \
   schema/examples/note-import.example.json
 
 uvx check-jsonschema \
+  --schemafile schema/note-bulk.schema.json \
+  schema/examples/note-bulk.example.json
+
+uvx check-jsonschema \
   --schemafile schema/deck-package.schema.json \
   schema/examples/deck-package.example.json
 ```
 
-Both commands print `ok -- validation done` when the example is valid. To validate your
-own payload, pass its path in place of the example file. Because the note shapes are
-chosen with `oneOf`, add `--verbose` to make the offending field appear by name, for
-example `$.notes[0].fields: 'value' is a required property`. If `uvx` is unavailable, a
-syntax-only fallback is `python3 -m json.tool <file>`.
+Each command prints `ok -- validation done` when the example is valid. To validate your
+own payload, pass its path in place of the example file. The deck-package note shape is
+chosen with `oneOf`, so add `--verbose` there to make the offending field appear by name,
+for example `$.notes[0].fields: 'value' is a required property`. If `uvx` is unavailable,
+a syntax-only fallback is `python3 -m json.tool <file>`.
 
 ## Examples
 
-- `examples/note-import.example.json` — a valid bulk import request exercising
-  `basic`, `cloze`, `numeric`, `choice_multi` and `list`.
+- `examples/note-import.example.json` — a valid bulk import request exercising five note
+  types, with `fields` as a map from field name to HTML string.
+- `examples/note-bulk.example.json` — a valid bulk tag action on three notes.
 - `examples/deck-package.example.json` — a valid package with a manifest, two notes,
   their cards, a preset and one media entry.
 

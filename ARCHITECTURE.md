@@ -128,12 +128,13 @@ change.
   stripped, because the input markup is the frame runtime's job. Until the SPA reads the two
   objects, `front_html`/`back_html` repeat their HTML and `options_html`, `option_order` and
   `blanks` describe the answer controls the old review page draws itself. Those flat fields, and
-  the card-kind vocabulary the REST/MCP payloads still use (`kind` in a note, the transitional
-  description catalog in `internal/api/card_catalog.go`), are removed when the note-type payload
-  and the frame runtime land.
+  the card-kind vocabulary the note response still carries (`kind`, the transitional description
+  catalog in `internal/api/card_catalog.go`), are removed when the rich-text editor and the frame
+  runtime land. A note write already uses the permanent payload: `note_type` plus `fields` keyed by
+  field name with HTML values.
 - **Note write and review.** `NoteStore.Save` resolves the note type (deck and note type id),
-  rejects a field name the config does not declare, converts the payload values to HTML keyed by
-  field id, recomputes `search_text` from the plain text of every field not marked
+  rejects a field name the config does not declare and names it, converts the payload values to
+  HTML keyed by field id, recomputes `search_text` from the plain text of every field not marked
   `exclude_from_search`, regenerates the cards with `notetype.GenerateCards` (existing cards keep
   their rows and progress; a card the note no longer generates is soft-deleted), and rebuilds the
   `media_notes` mapping from the `src`, `[sound:]` and CSS `url()` references of the field HTML.
@@ -142,9 +143,16 @@ change.
   spec, or the self-assessed short answer control, takes the four-grade self-assessment. A
   self-graded template refuses a machine answer, and a stale `expected_version` is `409`.
 - **REST clients.** `/api/v1` (`internal/api`) accepts either the session channel or a bearer API
-  key. An API key carries scopes, and each route declares the scope it requires.
+  key. An API key carries scopes, and each route declares the scope it requires. A note is sent and
+  received as `{"note_type": "<public id>", "fields": {"<field name>": "<HTML>"}}`; the server
+  resolves the note type and maps field names to field ids. Note types are managed per deck at
+  `GET|POST /decks/:id/note-types` and `GET|PATCH|DELETE /decks/:id/note-types/:type_id`; an update
+  names the version it read and a stale version is `409`, and a delete is refused while a note still
+  uses the type. A reader may list and read note types but only an editor may change them. `kind`
+  remains a transitional alias for `note_type` on a note write until the rich-text editor lands.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on
-  every request.
+  every request. `list_note_types` and `get_note_type` expose a deck's note types; `create_notes`
+  and `update_note` take `note_type` and send field values as an HTML map.
 - **One business layer.** A REST handler and the MCP tool for the same operation call the same
   `internal/api` service method, so validation and results cannot drift between transports.
   Service errors (`ServiceError`) carry an HTTP status, a stable English `code`, and a message.
@@ -185,10 +193,12 @@ change.
   type. `cmd/engram check-migration` runs the same read-only pre-flight check migration 0012
   enforces and reports blocking and warning notes without writing. `source_url` and `extra_json`
   are nullable TEXT.
-- **Field values are HTML.** A field value is an HTML string; nothing else is stored. The
-  transitional REST/MCP payloads still send the old typed shapes (a string array for options, a
-  boolean, a number) and still receive them back, and the format-1 deck package writes them; the
-  store converts between the two (`legacy_fields.go`) for as long as those shapes exist.
+- **Field values are HTML.** A field value is an HTML string; nothing else is stored. The note
+  write path already takes that shape: `fields` maps a field name to an HTML string. The
+  transitional `kind` alias still accepts the old typed shapes (a string array for options, a
+  boolean, a number), and the note response still returns them in `fields` so the current SPA
+  editor keeps working; the format-1 deck package also writes them. The store converts between the
+  two (`legacy_fields.go`) for as long as those shapes exist.
 - **Cards and subdecks.** `cards.deck_path` is a nullable TEXT path relative to the imported root
   deck (for example `Lesson 1::Verbs`); a card without it sits directly in the note's deck. A
   subdeck is stored only as this path and never as a deck row.

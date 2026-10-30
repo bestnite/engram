@@ -7,10 +7,11 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// TestNoteImportSchemaAcceptsNoteIDAndRejectsUnknownKind runs machine validation directly against schema/note-import.schema.json:
-// a body carrying note_id passes, while an unknown kind and a body giving both note_id and
-// external_ref are rejected. The schema is the machine-readable contract external tools validate against and must stay in sync with the implementation.
-func TestNoteImportSchemaAcceptsNoteIDAndRejectsUnknownKind(t *testing.T) {
+// TestNoteImportSchemaMatchesTheContract runs machine validation directly against
+// schema/note-import.schema.json. The schema is the machine-readable contract external tools
+// validate against, so it must accept the payload the server accepts: note_type plus a map from
+// field name to HTML string, with the transitional kind alias still allowed.
+func TestNoteImportSchemaMatchesTheContract(t *testing.T) {
 	sch, err := jsonschema.NewCompiler().Compile("../../schema/note-import.schema.json")
 	if err != nil {
 		t.Fatalf("compile note-import schema: %v", err)
@@ -23,24 +24,36 @@ func TestNoteImportSchemaAcceptsNoteIDAndRejectsUnknownKind(t *testing.T) {
 		return sch.Validate(doc)
 	}
 
-	// The new note_id field (external id, a string) passes validation.
-	if err := validate(`{"notes":[{"note_id":"0198c0de-0000-7000-8000-000000000001","kind":"basic","fields":{"front":"q","back":"a"}}]}`); err != nil {
-		t.Errorf("payload carrying note_id was rejected: %v", err)
+	valid := []string{
+		// The permanent shape: a note type public id and field values as HTML strings.
+		`{"notes":[{"note_type":"0198c0de-0000-7000-8000-000000000001","fields":{"Front":"<p>q</p>","Back":"a"}}]}`,
+		// The transitional alias: a stock kind instead of a note type id.
+		`{"notes":[{"kind":"basic","fields":{"front":"q","back":"a"}}]}`,
+		// note_id addresses an existing note and is legal on its own.
+		`{"notes":[{"note_id":"0198c0de-0000-7000-8000-000000000001","kind":"basic","fields":{"front":"q","back":"a"}}]}`,
+		// external_ref on its own is still legal.
+		`{"notes":[{"external_ref":"e:1","kind":"basic","fields":{"front":"q","back":"a"}}]}`,
 	}
-	// external_ref on its own is still legal.
-	if err := validate(`{"notes":[{"external_ref":"e:1","kind":"basic","fields":{"front":"q","back":"a"}}]}`); err != nil {
-		t.Errorf("payload carrying only external_ref was rejected: %v", err)
+	for _, body := range valid {
+		if err := validate(body); err != nil {
+			t.Errorf("valid payload was rejected: %v (%s)", err, body)
+		}
 	}
-	// An unknown kind matches no oneOf branch and must be rejected.
-	if err := validate(`{"notes":[{"kind":"made_up","fields":{"x":"y"}}]}`); err == nil {
-		t.Error("unknown kind was accepted, want a schema violation")
+
+	invalid := []string{
+		// Neither note_type nor kind: the note names no type.
+		`{"notes":[{"fields":{"front":"q"}}]}`,
+		// A field value is an HTML string; the old typed shapes are no longer part of the contract.
+		`{"notes":[{"note_type":"0198c0de-0000-7000-8000-000000000001","fields":{"options":["a","b"]}}]}`,
+		`{"notes":[{"note_type":"0198c0de-0000-7000-8000-000000000001","fields":{"answer":true}}]}`,
+		// note_id and external_ref are mutually exclusive, expressed with allOf + not + required.
+		`{"notes":[{"note_id":"0198c0de-0000-7000-8000-000000000001","external_ref":"e:1","kind":"basic","fields":{"front":"q","back":"a"}}]}`,
+		// note_id is a non-empty string: numbers (the old auto-increment primary key form) are no longer accepted.
+		`{"notes":[{"note_id":7,"kind":"basic","fields":{"front":"q","back":"a"}}]}`,
 	}
-	// note_id and external_ref are mutually exclusive, expressed with allOf + not + required.
-	if err := validate(`{"notes":[{"note_id":"0198c0de-0000-7000-8000-000000000001","external_ref":"e:1","kind":"basic","fields":{"front":"q","back":"a"}}]}`); err == nil {
-		t.Error("payload carrying both note_id and external_ref was accepted, want a schema violation")
-	}
-	// note_id is a non-empty string: numbers (the old auto-increment primary key form) are no longer accepted.
-	if err := validate(`{"notes":[{"note_id":7,"kind":"basic","fields":{"front":"q","back":"a"}}]}`); err == nil {
-		t.Error("payload carrying a numeric note_id was accepted, want a schema violation")
+	for _, body := range invalid {
+		if err := validate(body); err == nil {
+			t.Errorf("invalid payload was accepted, want a schema violation: %s", body)
+		}
 	}
 }

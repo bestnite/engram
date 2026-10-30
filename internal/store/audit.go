@@ -30,6 +30,10 @@ const (
 	ActionDeckCreate = "deck.create"
 	// ActionDeckUpdate is the audit action written when a deck's name and description are changed.
 	ActionDeckUpdate = "deck.update"
+	// Note type writes are audited like deck writes: the audit answers who changed a deck's content model and when.
+	ActionNoteTypeCreate = "note_type.create"
+	ActionNoteTypeUpdate = "note_type.update"
+	ActionNoteTypeDelete = "note_type.delete"
 	// uploading media.
 	ActionMediaUpload = "media.upload"
 

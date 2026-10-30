@@ -66,14 +66,14 @@ Create an API key in the **Settings** panel, then add Engram to your MCP client 
 
 ### Available Tools
 
-Engram provides 22 dedicated MCP tools:
+Engram provides 23 dedicated MCP tools:
 
 - `list_decks` / `create_deck` / `update_deck`: Inspect accessible decks, create new ones with custom scheduling presets, or rename and describe them.
 - `delete_deck`: Delete a deck together with its notes, cards and progress. Only the owner can do this, and the deletion cannot be undone.
 - `bulk_decks`: Delete several decks in one call; each row is owner-checked, and `dry_run` counts without writing. Mirrors REST `POST /decks/bulk`.
-- `list_card_types`: List the supported card types with each type's fields and a validated example note, so an agent can write notes without guessing field names or syntax.
+- `list_note_types` / `get_note_type`: List a deck's note types or read one, with each type's field ids and names, templates and CSS. Note field values are HTML strings keyed by field name, so an agent can write a note without guessing the payload shape.
 - `search_notes` / `get_note` / `list_deck_tags`: Query notes with tag and keyword filters, read a single note, and list the tags used in a deck.
-- `create_notes` / `update_note` / `delete_note` / `bulk_notes`: Create, update and delete notes across all supported card types, with dry-run validation, bulk insertion and bulk tag or delete actions.
+- `create_notes` / `update_note` / `delete_note` / `bulk_notes`: Create, update and delete notes across all note types, with dry-run validation, bulk insertion and bulk tag or delete actions. A note names its `note_type` and sends `fields` as HTML strings keyed by field name.
 - `get_due_cards` / `submit_review`: Fetch cards due for review and record reviews. Self-assessed cards take a rating (`Again`, `Hard`, `Good`, `Easy`), and a short-answer card may also carry the answer the learner wrote, stored with the review; answer-type cards (cloze, list, typed, numeric, choice, true/false) take the answer instead, and the server grades it.
 - `add_extra_new_cards`: After the daily new card limit is reached, allow extra new cards in one deck for the current review day only. The deck settings do not change, and the next day returns to the daily limit.
 - `bury_card`: Postpone one card to the start of your next review day without touching its progress. Mirrors REST `POST /cards/{id}/bury`.

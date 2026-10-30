@@ -48,15 +48,16 @@ type Deps struct {
 
 // API holds every handler and middleware of /api/v1.
 type API struct {
-	db      *gorm.DB
-	logger  *slog.Logger
-	keys    *store.APIKeyStore
-	users   *store.UserStore
-	decks   *store.DeckStore
-	notes   *store.NoteStore
-	presets *store.PresetStore
-	cards   *store.CardStore
-	grants  *store.GrantStore
+	db        *gorm.DB
+	logger    *slog.Logger
+	keys      *store.APIKeyStore
+	users     *store.UserStore
+	decks     *store.DeckStore
+	notes     *store.NoteStore
+	noteTypes *store.NoteTypeStore
+	presets   *store.PresetStore
+	cards     *store.CardStore
+	grants    *store.GrantStore
 	// access is the permission check shared by Web and REST/MCP (the single implementation lives in auth.DeckAccess).
 	access  *auth.DeckAccess
 	auditor *auth.Auditor
@@ -142,6 +143,7 @@ func New(deps Deps) (*API, error) {
 		users:     deps.Users,
 		decks:     deps.Decks,
 		notes:     deps.Notes,
+		noteTypes: store.NewNoteTypeStore(deps.DB),
 		presets:   deps.Presets,
 		cards:     deps.Cards,
 		grants:    grants,
@@ -175,6 +177,12 @@ func (a *API) Register(r gin.IRouter) {
 	v1.DELETE("/decks/:id/membership", a.authn.RequireScope(store.ScopeWrite), a.leaveDeck)
 	v1.GET("/decks/:id/notes", a.authn.RequireScope(store.ScopeRead), a.listNotes)
 	v1.GET("/decks/:id/tags", a.authn.RequireScope(store.ScopeRead), a.listDeckTags)
+	// Note type CRUD under a deck. Reading needs the read scope; every write needs an editor role on the deck.
+	v1.GET("/decks/:id/note-types", a.authn.RequireScope(store.ScopeRead), a.listNoteTypes)
+	v1.GET("/decks/:id/note-types/:type_id", a.authn.RequireScope(store.ScopeRead), a.getNoteType)
+	v1.POST("/decks/:id/note-types", a.authn.RequireScope(store.ScopeWrite), a.createNoteType)
+	v1.PATCH("/decks/:id/note-types/:type_id", a.authn.RequireScope(store.ScopeWrite), a.updateNoteType)
+	v1.DELETE("/decks/:id/note-types/:type_id", a.authn.RequireScope(store.ScopeWrite), a.deleteNoteType)
 	// "One more batch": read today's new-card allowance, add to the caller's allowance for today; touches only personal progress and sits under review like reviewing.
 	v1.GET("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.getExtraNew)
 	v1.POST("/decks/:id/extra-new", a.authn.RequireScope(store.ScopeReview), a.postExtraNew)

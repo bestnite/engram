@@ -277,7 +277,8 @@ var toolScopes = map[string]string{
 	"list_deck_tags":       store.ScopeRead,
 	"get_note":             store.ScopeRead,
 	"get_stats":            store.ScopeRead,
-	"list_card_types":      store.ScopeRead,
+	"list_note_types":      store.ScopeRead,
+	"get_note_type":        store.ScopeRead,
 	"export_deck":          store.ScopeRead,
 	"create_deck":          store.ScopeWrite,
 	"update_deck":          store.ScopeWrite,
@@ -319,10 +320,11 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(s, srv, id, "get_note", "Read one note by its public id.", s.getNote)
 	addTool(s, srv, id, "list_deck_tags", "List the tags used in a deck with the number of notes carrying each; use them as the tags filter of get_due_cards.", s.listDeckTags)
 	addTool(s, srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards. retention is true retention: the share of due reviews (cards already in the Review state) not rated Again, over all history; retention_total and retention_passed are its denominator and numerator, and retention_total = 0 means there is no retention data yet.", s.getStats)
-	addTool(s, srv, id, "list_card_types", "List the card types this instance supports. Each entry gives the kind, its fields (key, editor control, required, default), which fields form the front and back, whether the server grades typed answers, and an example note whose fields pass validation: copy its shape. Option indexes start at 0, and math is written with \\( \\) and \\[ \\], not $. Call it before writing notes for create_notes or a deck package.", s.listCardTypes)
+	addTool(s, srv, id, "list_note_types", "List one deck's note types, each with its field ids and names, templates and CSS. Field values in create_notes and update_note are HTML strings keyed by field name. Call it before writing notes so the note_type id and field names are known.", s.listNoteTypes)
+	addTool(s, srv, id, "get_note_type", "Read one note type of a deck: its fields (id, name and options), templates and CSS. Field values in create_notes and update_note are HTML strings keyed by field name.", s.getNoteType)
 	addTool(s, srv, id, "export_deck", "Export one deck as a self-contained deck package: manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)
-	addTool(s, srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run).", s.createNotes)
-	addTool(s, srv, id, "update_note", "Update one note's content and tags.", s.updateNote)
+	addTool(s, srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run). Each note names its note_type and sends fields as a map from field name to HTML string; list_note_types returns the deck's note types and their field names.", s.createNotes)
+	addTool(s, srv, id, "update_note", "Update one note's content and tags. Fields are a map from field name to HTML string; note_type defaults to the note's existing type. list_note_types returns the available note types and field names.", s.updateNote)
 	addTool(s, srv, id, "delete_note", "Soft-delete one note (review progress is preserved).", s.deleteNote)
 	addTool(s, srv, id, "bulk_notes", "Apply one bulk action (delete, add_tags, remove_tags, set_tags) to a set of notes; dry_run counts without writing. Mirrors REST POST /notes/bulk.", s.bulkNotes)
 	addTool(s, srv, id, "import_deck", "Import a deck package into a new deck or an existing one (target, dry_run, conflict policy). Give exactly one source: the JSON document returned by export_deck, a base64-encoded .edeck archive, or a public HTTPS direct link (url) to an .edeck/.zip file. For a large package, or one that is already a local file, use create_import_upload instead.", s.importDeck)

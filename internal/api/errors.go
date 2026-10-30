@@ -40,6 +40,8 @@ const (
 	// CodeMediaNotReadable means a note write referenced media the writer cannot read, so the write was rejected (pre-write check).
 	// Same value as store.CodeMediaNotReadable.
 	CodeMediaNotReadable = "media_not_readable"
+	// CodeNoteTypeInUse means a note type still backs at least one note, so deleting it would orphan that content.
+	CodeNoteTypeInUse = "note_type_in_use"
 	// CodeCSRFFailed means the CSRF token is missing or failed validation.
 	CodeCSRFFailed = "csrf_failed"
 	// CodeCSRFNoSession means there is no active session to validate CSRF against.
@@ -122,6 +124,9 @@ var errorMessages = map[string]string{
 
 	// Stable codes for the pre-write media readability check (store.MediaWriteError.Code).
 	CodeMediaNotReadable: "You referenced media you cannot read; upload it first or obtain access.",
+
+	// Stable code for deleting a note type that notes still use.
+	CodeNoteTypeInUse: "The note type is still used by one or more notes.",
 
 	// Stable codes for deck create/rename (store.ErrDeckNameInvalid).
 	CodeDeckNameInvalid:        "The deck name is invalid.",

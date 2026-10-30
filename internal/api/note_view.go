@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"gorm.io/gorm"
@@ -118,14 +119,27 @@ func gradeMappingFor(preset *store.Preset) *answer.GradeMapping {
 	return &mapping
 }
 
-// noteTypeIDFor resolves the note type a write names.
+// noteTypeIDFor resolves the note type a write names with the transitional kind alias.
 //
-// The transitional payload names a card kind; the note type is the deck's stock note type for that kind, created when the
+// The alias names a card kind; the note type is the deck's stock note type for that kind, created when the
 // deck has none yet. An unknown kind is a request error naming the kind.
 func (a *API) noteTypeIDFor(ctx context.Context, deckID uint64, kind string) (uint64, error) {
 	nt, err := a.notes.EnsureStockNoteType(ctx, deckID, kind)
 	if err != nil {
 		return 0, err
+	}
+	return nt.ID, nil
+}
+
+// noteTypeIDForPublicID resolves a note type public id scoped to a deck.
+//
+// A public id that names no note type, or names one of another deck, yields the same error: a write
+// cannot attach a note to a type from a different deck, and the response must not confirm that the id
+// exists elsewhere.
+func (a *API) noteTypeIDForPublicID(ctx context.Context, deckID uint64, publicID string) (uint64, error) {
+	nt, err := a.noteTypes.ByPublicID(ctx, publicID)
+	if err != nil || nt.DeckID != deckID {
+		return 0, fmt.Errorf("unknown note type %q", publicID)
 	}
 	return nt.ID, nil
 }

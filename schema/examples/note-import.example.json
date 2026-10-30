@@ -4,16 +4,16 @@
   "notes": [
     {
       "external_ref": "example-system:doc-1:block-2",
-      "kind": "basic",
+      "note_type": "0198c0de-0000-7000-8000-0000000000a1",
       "fields": {
-        "front": "What is the capital of France?",
-        "back": "Paris."
+        "front": "<p>What is the capital of France?</p>",
+        "back": "<p>Paris.</p>"
       },
       "tags": ["geography", "europe"],
       "source_url": "https://example.com/notes/geography#france"
     },
     {
-      "kind": "cloze",
+      "note_type": "0198c0de-0000-7000-8000-0000000000a2",
       "fields": {
         "text": "The {{c1::mitochondrion}} is the powerhouse of the cell and carries its own {{c2::DNA::genetic material}}."
       },
@@ -21,11 +21,11 @@
     },
     {
       "external_ref": "example-system:doc-2:block-7",
-      "kind": "numeric",
+      "note_type": "0198c0de-0000-7000-8000-0000000000a3",
       "fields": {
-        "prompt": "At 1 atm, what is the boiling point of water in degrees Celsius?",
-        "value": 100,
-        "tolerance_absolute": 0.5,
+        "prompt": "<p>At 1 atm, what is the boiling point of water in degrees Celsius?</p>",
+        "value": "100",
+        "tolerance_absolute": "0.5",
         "unit": "C"
       },
       "tags": ["physics"],
@@ -35,20 +35,20 @@
       }
     },
     {
-      "kind": "choice_multi",
+      "note_type": "0198c0de-0000-7000-8000-0000000000a4",
       "fields": {
-        "question": "Which of these numbers are prime?",
-        "options": ["4", "7", "9", "11"],
-        "answers": [1, 3]
+        "question": "<p>Which of these numbers are prime?</p>",
+        "options": "4<br>7<br>9<br>11",
+        "answers": "1<br>3"
       },
       "tags": ["math"]
     },
     {
-      "kind": "list",
+      "note_type": "0198c0de-0000-7000-8000-0000000000a5",
       "fields": {
-        "prompt": "Name the stages of the water cycle.",
-        "items": ["evaporation", "condensation", "precipitation", "collection"],
-        "ordered": false
+        "prompt": "<p>Name the stages of the water cycle.</p>",
+        "items": "evaporation<br>condensation<br>precipitation<br>collection",
+        "ordered": "false"
       },
       "tags": ["earth-science"]
     }

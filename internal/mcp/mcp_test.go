@@ -220,7 +220,7 @@ func TestReadOnlyKeySeesNoWriteTools(t *testing.T) {
 	cs := connect(t, ts.URL, key)
 
 	got := toolNames(t, cs)
-	want := []string{"export_deck", "get_note", "get_stats", "list_card_types", "list_deck_tags", "list_decks", "search_notes"}
+	want := []string{"export_deck", "get_note", "get_note_type", "get_stats", "list_deck_tags", "list_decks", "list_note_types", "search_notes"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("read-only tools/list = %v, want %v", got, want)
 	}

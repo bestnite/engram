@@ -66,14 +66,14 @@ Engram 内置 Streamable HTTP MCP 服务（挂载于 `/mcp`），通过用户 AP
 
 ### 工具列表
 
-Engram 暴露 22 个业务 MCP 工具：
+Engram 暴露 23 个业务 MCP 工具：
 
 - `list_decks` / `create_deck` / `update_deck`：查看可访问卡组、创建新卡组并指定调度预设，或修改卡组名称与描述。
 - `delete_deck`：连同笔记、卡片和学习进度一起删除卡组。仅所有者可以执行，且删除后不可恢复。
 - `bulk_decks`：一次删除多个卡组，逐行校验所有者；`dry_run` 只计数不写入。对应 REST `POST /decks/bulk`。
-- `list_card_types`：列出支持的题型，附每个题型的字段表和一条能通过校验的示例 note，agent 不必猜字段名与写法。
+- `list_note_types` / `get_note_type`：列出一个卡组的 note 类型或读取其中一个，返回字段 id 与名称、模板和 CSS。note 的字段值是 HTML 字符串，按字段名索引，agent 不必猜请求体的形状。
 - `search_notes` / `get_note` / `list_deck_tags`：按标签与关键词检索卡片、读取单条 note、列出卡组内用到的标签。
-- `create_notes` / `update_note` / `delete_note` / `bulk_notes`：批量建卡、就地更新、删除，以及批量打标签或删除；支持 Dry-Run 校验。
+- `create_notes` / `update_note` / `delete_note` / `bulk_notes`：批量建卡、就地更新、删除，以及批量打标签或删除；支持 Dry-Run 校验。note 用 `note_type` 指定类型，`fields` 按字段名提交 HTML 字符串。
 - `get_due_cards` / `submit_review`：拉取今日待复习卡片并提交复习结果、推动排程。自评题型提交评分（`Again`、`Hard`、`Good`、`Easy`），简答题还可以附带学习者写下的作答，随复习记录保存；作答类题型（填空、列表、输入作答、数值、选择、判断）提交作答，由服务端判分。
 - `add_extra_new_cards`：学完每日新卡上限后，为某个卡组追加今天的新卡额度，只对当前复习日生效；卡组设置不变，第二天回到每日上限。
 - `bury_card`：把一张卡推迟到你的下一个复习日开始时，不改动学习进度。对应 REST `POST /cards/{id}/bury`。

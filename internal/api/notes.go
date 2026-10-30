@@ -71,8 +71,9 @@ func (a *API) listDeckTags(c *gin.Context) {
 // id is the note's own external id; deck_id is the external id of the deck it belongs to - numeric primary keys are never exposed.
 // suspended means the caller suspended the cards under this note (suspension is personal), fetched for a whole page of notes in one query.
 //
-// kind and the per-field value shapes are transitional: they are derived from the note type and its catalog entry so the
-// SPA editor keeps working until the note-type payload replaces them.
+// note_type is the note's note type public id. kind and the per-field value shapes are transitional: they are
+// derived from the note type and its catalog entry so the SPA editor keeps working until M17-18 replaces it.
+// A write accepts either the note_type public id or the transitional kind; the response keeps both for now.
 func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) []map[string]any {
 	ids := make([]uint64, 0, len(notes))
 	for i := range notes {
@@ -100,7 +101,7 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 			"id":           n.PublicID,
 			"deck_id":      pid,
 			"kind":         view.kind,
-			"note_type_id": noteTypePublicID(view.noteType),
+			"note_type":    noteTypePublicID(view.noteType),
 			"fields":       transitionalFields(view.kind, store.NoteFieldValues(n.FieldsJSON)),
 			"tags":         store.TagsOrEmpty(n.TagsJSON),
 			"created_at":   n.CreatedAt,
@@ -165,9 +166,11 @@ func (a *API) importNotes(c *gin.Context) {
 
 // updateNoteRequest is the single-card update body; tags uses a pointer to distinguish "not provided" from "clear it".
 type updateNoteRequest struct {
-	Kind   string         `json:"kind"`
-	Fields map[string]any `json:"fields"`
-	Tags   *[]string      `json:"tags"`
+	// NoteType is the note type public id; Kind is the transitional alias the current SPA still sends.
+	NoteType string         `json:"note_type"`
+	Kind     string         `json:"kind"`
+	Fields   map[string]any `json:"fields"`
+	Tags     *[]string      `json:"tags"`
 }
 
 // updateNote updates a card's content; the id and user progress of existing cards stay unchanged (guaranteed by NoteStore.Update).
@@ -189,9 +192,10 @@ func (a *API) updateNote(c *gin.Context) {
 		return
 	}
 	updated, err := a.UpdateNote(ctx, u.ID, n.ID, CurrentAPIKeyID(c), UpdateNoteInput{
-		Kind:   req.Kind,
-		Fields: req.Fields,
-		Tags:   req.Tags,
+		NoteType: req.NoteType,
+		Kind:     req.Kind,
+		Fields:   req.Fields,
+		Tags:     req.Tags,
 	})
 	if err != nil {
 		writeServiceError(c, err)

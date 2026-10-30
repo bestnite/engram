@@ -465,7 +465,12 @@ func (a *API) GetNote(ctx context.Context, userID uint64, notePublicID string) (
 }
 
 // ImportNote is one note of a bulk import; field names match schema/note-import.schema.json.
+//
+// NoteType is the note type public id and Fields maps a field name to its HTML value. Kind is the
+// transitional alias the current SPA still sends: when NoteType is empty, Kind resolves to the deck's
+// stock note type for that kind, creating it when the deck has none.
 type ImportNote struct {
+	NoteType    string         `json:"note_type"`
 	Kind        string         `json:"kind"`
 	Fields      map[string]any `json:"fields"`
 	ExternalRef string         `json:"external_ref"`
@@ -544,9 +549,10 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 	hasFailure := false
 
 	for i, item := range req.Notes {
+		item.NoteType = strings.TrimSpace(item.NoteType)
 		item.Kind = strings.TrimSpace(item.Kind)
-		if item.Kind == "" {
-			resp.Errors = append(resp.Errors, ImportError{i, "kind is required"})
+		if item.NoteType == "" && item.Kind == "" {
+			resp.Errors = append(resp.Errors, ImportError{i, "note_type is required"})
 			hasFailure = true
 			continue
 		}
@@ -555,10 +561,12 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 			hasFailure = true
 			continue
 		}
-		if _, ok := notetype.EngramStockByKind(item.Kind); !ok {
-			resp.Errors = append(resp.Errors, ImportError{i, unknownKindText(item.Kind)})
-			hasFailure = true
-			continue
+		if item.NoteType == "" {
+			if _, ok := notetype.EngramStockByKind(item.Kind); !ok {
+				resp.Errors = append(resp.Errors, ImportError{i, unknownKindText(item.Kind)})
+				hasFailure = true
+				continue
+			}
 		}
 
 		if strings.TrimSpace(item.NoteID) != "" && strings.TrimSpace(item.ExternalRef) != "" {
@@ -590,11 +598,23 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 			existing = found
 		}
 
-		noteTypeID, err := a.noteTypeIDFor(ctx, d.ID, item.Kind)
-		if err != nil {
-			resp.Errors = append(resp.Errors, ImportError{i, err.Error()})
-			hasFailure = true
-			continue
+		var noteTypeID uint64
+		if item.NoteType != "" {
+			resolved, err := a.noteTypeIDForPublicID(ctx, d.ID, item.NoteType)
+			if err != nil {
+				resp.Errors = append(resp.Errors, ImportError{i, err.Error()})
+				hasFailure = true
+				continue
+			}
+			noteTypeID = resolved
+		} else {
+			resolved, err := a.noteTypeIDFor(ctx, d.ID, item.Kind)
+			if err != nil {
+				resp.Errors = append(resp.Errors, ImportError{i, err.Error()})
+				hasFailure = true
+				continue
+			}
+			noteTypeID = resolved
 		}
 		n := store.Note{
 			DeckID:     d.ID,
@@ -718,11 +738,13 @@ func (a *API) writeImportBatch(ctx context.Context, batch []importPlan, resp *Im
 	})
 }
 
-// UpdateNoteInput is the single-card update input; Tags uses a pointer to distinguish "not provided" from "clear it".
+// UpdateNoteInput is the single-note update input; Tags uses a pointer to distinguish "not provided"
+// from "clear it". NoteType is the note type public id, and Kind is the transitional alias the current SPA sends.
 type UpdateNoteInput struct {
-	Kind   string
-	Fields map[string]any
-	Tags   *[]string
+	NoteType string
+	Kind     string
+	Fields   map[string]any
+	Tags     *[]string
 }
 
 // UpdateNote updates a card's content; the id and user progress of existing cards stay unchanged (guaranteed by NoteStore.Update).
@@ -736,23 +758,31 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	if len(in.Fields) == 0 {
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "fields are required")
 	}
-	kind := strings.TrimSpace(in.Kind)
-	if kind == "" {
-		kind = a.noteKindOf(ctx, existing)
-	}
 	noteTypeID := uint64(0)
-	if kind != "" {
-		resolved, err := a.noteTypeIDFor(ctx, existing.DeckID, kind)
+	if publicID := strings.TrimSpace(in.NoteType); publicID != "" {
+		resolved, err := a.noteTypeIDForPublicID(ctx, existing.DeckID, publicID)
 		if err != nil {
 			return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 		}
 		noteTypeID = resolved
+	} else {
+		kind := strings.TrimSpace(in.Kind)
+		if kind == "" {
+			kind = a.noteKindOf(ctx, existing)
+		}
+		if kind != "" {
+			resolved, err := a.noteTypeIDFor(ctx, existing.DeckID, kind)
+			if err != nil {
+				return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
+			}
+			noteTypeID = resolved
+		}
 	}
 	if noteTypeID == 0 && existing.NoteTypeID != nil {
 		noteTypeID = *existing.NoteTypeID
 	}
 	if noteTypeID == 0 {
-		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "note type is required")
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "note_type is required")
 	}
 	n := store.Note{ID: existing.ID, DeckID: existing.DeckID, NoteTypeID: store.Ptr(noteTypeID)}
 	if in.Tags != nil {

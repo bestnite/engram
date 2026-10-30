@@ -66,8 +66,16 @@ type getNoteIn struct {
 // getStatsIn takes no arguments.
 type getStatsIn struct{}
 
-// listCardTypesIn is the input of list_card_types: no arguments.
-type listCardTypesIn struct{}
+// listNoteTypesIn is the input of list_note_types: the deck whose note types to list.
+type listNoteTypesIn struct {
+	DeckID string `json:"deck_id" jsonschema:"the public id of the deck whose note types to list"`
+}
+
+// getNoteTypeIn is the input of get_note_type.
+type getNoteTypeIn struct {
+	DeckID     string `json:"deck_id" jsonschema:"the public id of the deck the note type belongs to"`
+	NoteTypeID string `json:"note_type_id" jsonschema:"the public id of the note type to read"`
+}
 
 // exportDeckIn is the input of export_deck; it exports a **deck package**.
 type exportDeckIn struct {
@@ -82,8 +90,11 @@ type exportDeckIn struct {
 
 // importNoteIn is the input for a single note; field names match schema/note-import.schema.json.
 type importNoteIn struct {
-	Kind        string         `json:"kind" jsonschema:"card type (e.g. basic, cloze); list_card_types returns every kind"`
-	Fields      map[string]any `json:"fields" jsonschema:"field values for the card type; list_card_types returns each kind's fields"`
+	NoteType string `json:"note_type,omitempty" jsonschema:"public id of the note type; list_note_types returns the deck's note types and get_note_type their field names"`
+	// Kind is the transitional alias for note_type: the current SPA still sends a card kind, and the server
+	// resolves it to the deck's stock note type for that kind.
+	Kind        string         `json:"kind,omitempty" jsonschema:"transitional alias for note_type: a stock card kind such as basic or cloze"`
+	Fields      map[string]any `json:"fields" jsonschema:"field values keyed by field name; every value is an HTML string (the server maps names to field ids)"`
 	ExternalRef string         `json:"external_ref,omitempty" jsonschema:"caller-defined idempotency key, unique per deck"`
 	// NoteID addresses an existing note by public id and rewrites it in place; mutually exclusive with external_ref.
 	NoteID string   `json:"note_id,omitempty" jsonschema:"address an existing note by public id to rewrite in place; mutually exclusive with external_ref"`
@@ -141,10 +152,12 @@ type createImportUploadIn struct {
 
 // updateNoteIn is the input of update_note.
 type updateNoteIn struct {
-	NoteID string         `json:"note_id" jsonschema:"the public id of the note to update"`
-	Kind   string         `json:"kind,omitempty" jsonschema:"card type; defaults to the existing kind"`
-	Fields map[string]any `json:"fields" jsonschema:"new field values"`
-	Tags   []string       `json:"tags,omitempty" jsonschema:"replacement tags"`
+	NoteID string `json:"note_id" jsonschema:"the public id of the note to update"`
+	// NoteType is the note type public id; Kind is the transitional alias and defaults to the existing type.
+	NoteType string         `json:"note_type,omitempty" jsonschema:"public id of the note type; defaults to the note's existing type"`
+	Kind     string         `json:"kind,omitempty" jsonschema:"transitional alias for note_type: a stock card kind such as basic or cloze"`
+	Fields   map[string]any `json:"fields" jsonschema:"new field values keyed by field name; every value is an HTML string"`
+	Tags     []string       `json:"tags,omitempty" jsonschema:"replacement tags"`
 }
 
 // deleteNoteIn is the input of delete_note.
@@ -317,9 +330,27 @@ func (s *Server) getNote(ctx context.Context, id Identity, in getNoteIn) (any, e
 	return s.api.NotesJSON(ctx, id.User.ID, []store.Note{*n})[0], nil
 }
 
-// listCardTypes lists card type self-descriptions: it goes through the same service method as REST `GET /card-types`.
-func (s *Server) listCardTypes(_ context.Context, _ Identity, _ listCardTypesIn) (api.CardTypesResponse, error) {
-	return s.api.CardTypes(), nil
+// listNoteTypes lists a deck's note types: it goes through the same service method as REST `GET /decks/:id/note-types`.
+// The config carries the field ids and names a note payload must use, and the templates the note type generates cards from.
+func (s *Server) listNoteTypes(ctx context.Context, id Identity, in listNoteTypesIn) (api.NoteTypeListResponse, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return api.NoteTypeListResponse{}, err
+	}
+	types, err := s.api.ListNoteTypes(ctx, id.User.ID, d.ID)
+	if err != nil {
+		return api.NoteTypeListResponse{}, err
+	}
+	return api.NoteTypeListResponse{NoteTypes: types}, nil
+}
+
+// getNoteType reads one note type of a deck: it goes through the same service method as REST `GET /decks/:id/note-types/:type_id`.
+func (s *Server) getNoteType(ctx context.Context, id Identity, in getNoteTypeIn) (api.NoteTypeJSON, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return api.NoteTypeJSON{}, err
+	}
+	return s.api.GetNoteType(ctx, id.User.ID, d.ID, in.NoteTypeID)
 }
 
 func (s *Server) getStats(ctx context.Context, id Identity, _ getStatsIn) (any, error) {
@@ -422,9 +453,10 @@ func (s *Server) updateNote(ctx context.Context, id Identity, in updateNoteIn) (
 		tags = &t
 	}
 	updated, err := s.api.UpdateNote(ctx, id.User.ID, n.ID, id.apiKeyID(), api.UpdateNoteInput{
-		Kind:   in.Kind,
-		Fields: in.Fields,
-		Tags:   tags,
+		NoteType: in.NoteType,
+		Kind:     in.Kind,
+		Fields:   in.Fields,
+		Tags:     tags,
 	})
 	if err != nil {
 		return nil, err
@@ -528,6 +560,7 @@ func toImportRequest(in bulkNotesIn) api.ImportRequest {
 	notes := make([]api.ImportNote, 0, len(in.Notes))
 	for _, n := range in.Notes {
 		notes = append(notes, api.ImportNote{
+			NoteType:    n.NoteType,
 			Kind:        n.Kind,
 			Fields:      n.Fields,
 			ExternalRef: n.ExternalRef,
