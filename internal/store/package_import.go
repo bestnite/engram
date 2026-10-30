@@ -179,6 +179,10 @@ type PackageImportReport struct {
 	WeightsApplied bool `json:"weights_applied"`
 	// WeightsDiscarded means the package carried weights that were not adopted: ApplyWeights was off, or the target was not new_deck.
 	WeightsDiscarded bool `json:"weights_discarded"`
+	// CardsRemoved counts the stored cards this import soft-deleted because the note they belong to
+	// moved to a note type that no longer declares their template. The card_states and reviews rows
+	// of those cards stay.
+	CardsRemoved int `json:"cards_removed"`
 }
 
 // ErrPackageDryRun is the internal dry_run sentinel: once planning is done it rolls the transaction back, leaving no writes.

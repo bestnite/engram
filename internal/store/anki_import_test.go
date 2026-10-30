@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,7 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"git.nite07.com/nite/engram/internal/anki"
 	"git.nite07.com/nite/engram/internal/notetype"
@@ -1023,5 +1026,332 @@ func TestAnkiImportSubdeckPaths(t *testing.T) {
 	}
 	if withPath == 0 {
 		t.Fatal("no card kept a subdeck path")
+	}
+}
+
+// ankiModelsWithoutLastTemplate drops the last template of one legacy note type and returns the
+// rewritten col.models JSON plus the ordinal it dropped.
+func ankiModelsWithoutLastTemplate(t *testing.T, db *gorm.DB, modelID int64) (string, int) {
+	t.Helper()
+	var modelsJSON string
+	if err := db.Raw("SELECT models FROM col").Scan(&modelsJSON).Error; err != nil {
+		t.Fatalf("read col.models: %v", err)
+	}
+	var models map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(modelsJSON), &models); err != nil {
+		t.Fatalf("decode col.models: %v", err)
+	}
+	for key, rawModel := range models {
+		var model map[string]json.RawMessage
+		if err := json.Unmarshal(rawModel, &model); err != nil {
+			t.Fatalf("decode model %s: %v", key, err)
+		}
+		var id int64
+		if err := json.Unmarshal(model["id"], &id); err != nil || id != modelID {
+			continue
+		}
+		var templates []json.RawMessage
+		if err := json.Unmarshal(model["tmpls"], &templates); err != nil {
+			t.Fatalf("decode templates of model %d: %v", modelID, err)
+		}
+		if len(templates) < 2 {
+			t.Fatalf("model %d has %d templates, want at least two", modelID, len(templates))
+		}
+		dropped := len(templates) - 1
+		encodedTemplates, err := json.Marshal(templates[:dropped])
+		if err != nil {
+			t.Fatalf("encode templates of model %d: %v", modelID, err)
+		}
+		model["tmpls"] = encodedTemplates
+		encoded, err := json.Marshal(model)
+		if err != nil {
+			t.Fatalf("encode model %d: %v", modelID, err)
+		}
+		models[key] = encoded
+		encodedModels, err := json.Marshal(models)
+		if err != nil {
+			t.Fatalf("encode col.models: %v", err)
+		}
+		return string(encodedModels), dropped
+	}
+	t.Fatalf("model %d is not in the fixture collection", modelID)
+	return "", 0
+}
+
+// ankiFixtureWithoutTemplate rebuilds a legacy fixture whose note type lost its last template.
+// Deleting a template in Anki takes the cards of that template with it, so the cards of the dropped
+// ordinal are removed as well and the package stays self-consistent: the only change left is the
+// note type's structure.
+func ankiFixtureWithoutTemplate(t *testing.T, modelID int64) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		t.Fatalf("open fixture: %v", err)
+	}
+	entries := make(map[string][]byte, len(zr.File))
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatalf("open entry %s: %v", f.Name, err)
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("read entry %s: %v", f.Name, err)
+		}
+		entries[f.Name] = data
+	}
+	collection, ok := entries["collection.anki2"]
+	if !ok {
+		t.Fatal("fixture carries no collection.anki2")
+	}
+
+	// The collection is a SQLite database; it is edited in a temporary file, never in the fixture.
+	file := filepath.Join(t.TempDir(), "collection.anki2")
+	if err := os.WriteFile(file, collection, 0o600); err != nil {
+		t.Fatalf("write collection: %v", err)
+	}
+	collectionDB, err := gorm.Open(sqlite.Open(file), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("open collection: %v", err)
+	}
+	modelsJSON, dropped := ankiModelsWithoutLastTemplate(t, collectionDB, modelID)
+	if err := collectionDB.Exec("UPDATE col SET models = ?", modelsJSON).Error; err != nil {
+		t.Fatalf("write col.models: %v", err)
+	}
+	if err := collectionDB.Exec("DELETE FROM cards WHERE ord = ? AND nid IN (SELECT id FROM notes WHERE mid = ?)", dropped, modelID).Error; err != nil {
+		t.Fatalf("delete cards of ordinal %d: %v", dropped, err)
+	}
+	sqlDB, err := collectionDB.DB()
+	if err != nil {
+		t.Fatalf("collection handle: %v", err)
+	}
+	// The bytes are read back only after the handle is closed, so every write is flushed to the file.
+	if err := sqlDB.Close(); err != nil {
+		t.Fatalf("close collection: %v", err)
+	}
+	collection, err = os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read rewritten collection: %v", err)
+	}
+	entries["collection.anki2"] = collection
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	names := make([]string, 0, len(entries))
+	for name := range entries {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Store})
+		if err != nil {
+			t.Fatalf("create entry %s: %v", name, err)
+		}
+		if _, err := w.Write(entries[name]); err != nil {
+			t.Fatalf("write entry %s: %v", name, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// TestAnkiStructuralReimportRemovesStaleTemplateCards proves a moved note does not keep a card its
+// new note type cannot render. The re-imported package lost one template, so the note type's
+// structure changed and the note moved to a new row; the stored card of the dropped template keeps
+// the old type's template id, which no longer exists. That card is soft-deleted, its card_states row
+// stays, the report counts it, and every remaining card of the deck renders.
+func TestAnkiStructuralReimportRemovesStaleTemplateCards(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			owner := seedUsers(t, db, "anki_stale_"+driver)[0]
+			original, err := os.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+			if err != nil {
+				t.Fatalf("read fixture: %v", err)
+			}
+			changed := ankiFixtureWithoutTemplate(t, 1001)
+
+			store := NewDeckStore(db)
+			first, err := store.ImportPackage(ctx, owner, bytes.NewReader(original), PackageImportOptions{
+				Target:    PackageTargetNewDeck,
+				MediaRoot: t.TempDir(),
+			})
+			if err != nil {
+				t.Fatalf("first import: %v", err)
+			}
+
+			// The note type that loses a template, and the single note that holds its two cards.
+			types, err := NewNoteTypeStore(db).ListByDeck(ctx, first.DeckID)
+			if err != nil {
+				t.Fatalf("list note types: %v", err)
+			}
+			var typeID uint64
+			for i := range types {
+				if types[i].Name == "Basic (and reversed card)" {
+					typeID = types[i].ID
+				}
+			}
+			if typeID == 0 {
+				t.Fatal("the imported deck has no note type called Basic (and reversed card)")
+			}
+			var note Note
+			if err := db.Where("deck_id = ? AND note_type_id = ?", first.DeckID, typeID).First(&note).Error; err != nil {
+				t.Fatalf("load note: %v", err)
+			}
+			var cards []Card
+			if err := db.Where("note_id = ?", note.ID).Order("ordinal ASC").Find(&cards).Error; err != nil {
+				t.Fatalf("load cards: %v", err)
+			}
+			if len(cards) != 2 {
+				t.Fatalf("note %d has %d cards, want 2", note.ID, len(cards))
+			}
+			dropped, surviving := cards[1], cards[0]
+			state := CardState{CardID: dropped.ID, UserID: owner, State: "review", Reps: 3, Version: 1}
+			if err := db.Create(&state).Error; err != nil {
+				t.Fatalf("seed card state: %v", err)
+			}
+
+			target := "into_deck:" + strconv.FormatUint(first.DeckID, 10)
+			dry, err := store.ImportPackage(ctx, owner, bytes.NewReader(changed), PackageImportOptions{
+				Target: target, DryRun: true, MediaRoot: t.TempDir(),
+			})
+			if err != nil {
+				t.Fatalf("dry-run re-import: %v", err)
+			}
+			if dry.CardsRemoved != 1 {
+				t.Fatalf("dry run cards_removed = %d, want 1", dry.CardsRemoved)
+			}
+			var liveAfterDry int64
+			if err := db.Model(&Card{}).Where("id = ?", dropped.ID).Count(&liveAfterDry).Error; err != nil {
+				t.Fatalf("count card after dry run: %v", err)
+			}
+			if liveAfterDry != 1 {
+				t.Fatal("the dry run soft-deleted the card")
+			}
+
+			second, err := store.ImportPackage(ctx, owner, bytes.NewReader(changed), PackageImportOptions{
+				Target: target, MediaRoot: t.TempDir(),
+			})
+			if err != nil {
+				t.Fatalf("re-import: %v", err)
+			}
+			if second.CardsRemoved != 1 {
+				t.Fatalf("cards_removed = %d, want 1", second.CardsRemoved)
+			}
+
+			var removed Card
+			if err := db.Unscoped().First(&removed, dropped.ID).Error; err != nil {
+				t.Fatalf("load removed card: %v", err)
+			}
+			if !removed.DeletedAt.Valid {
+				t.Fatalf("card %d of the dropped template is still live", dropped.ID)
+			}
+			var stateAfter CardState
+			if err := db.Where("card_id = ? AND user_id = ?", dropped.ID, owner).First(&stateAfter).Error; err != nil {
+				t.Fatalf("the removed card lost its card state: %v", err)
+			}
+			if stateAfter.Reps != 3 || stateAfter.Version != 1 {
+				t.Fatalf("card state after re-import = %+v, want the original state kept", stateAfter)
+			}
+			var kept Card
+			if err := db.First(&kept, surviving.ID).Error; err != nil {
+				t.Fatalf("the surviving card of the same note was removed: %v", err)
+			}
+
+			assertDeckCardsRender(t, db, first.DeckID)
+		})
+	}
+}
+
+// assertDeckCardsRender renders the front of every live card of a deck, failing when a card's
+// template is not declared by its note type.
+func assertDeckCardsRender(t *testing.T, db *gorm.DB, deckID uint64) {
+	t.Helper()
+	ctx := context.Background()
+	types, err := NewNoteTypeStore(db).ListByDeck(ctx, deckID)
+	if err != nil {
+		t.Fatalf("list note types: %v", err)
+	}
+	cfgByID := make(map[uint64]notetype.Config, len(types))
+	nameByID := make(map[uint64]string, len(types))
+	for i := range types {
+		cfg, err := types[i].Config()
+		if err != nil {
+			t.Fatalf("decode note type %q: %v", types[i].Name, err)
+		}
+		cfgByID[types[i].ID] = cfg
+		nameByID[types[i].ID] = types[i].Name
+	}
+	var notes []Note
+	if err := db.Where("deck_id = ?", deckID).Find(&notes).Error; err != nil {
+		t.Fatalf("load notes: %v", err)
+	}
+	noteByID := make(map[uint64]Note, len(notes))
+	for i := range notes {
+		noteByID[notes[i].ID] = notes[i]
+	}
+	var cards []Card
+	if err := db.Joins("JOIN notes ON notes.id = cards.note_id").
+		Where("notes.deck_id = ?", deckID).Find(&cards).Error; err != nil {
+		t.Fatalf("load cards: %v", err)
+	}
+	if len(cards) == 0 {
+		t.Fatal("the deck holds no live card")
+	}
+	for i := range cards {
+		card := cards[i]
+		note, ok := noteByID[card.NoteID]
+		if !ok {
+			t.Fatalf("card %d belongs to an unknown note", card.ID)
+		}
+		if note.NoteTypeID == nil {
+			t.Fatalf("note %d has no note type", note.ID)
+		}
+		cfg, ok := cfgByID[*note.NoteTypeID]
+		if !ok {
+			t.Fatalf("note %d uses an unknown note type %d", note.ID, *note.NoteTypeID)
+		}
+		data := notetype.RenderData{
+			Fields:   NoteFieldValues(note.FieldsJSON),
+			Tags:     TagsOrEmpty(note.TagsJSON),
+			TypeName: nameByID[*note.NoteTypeID],
+			CardID:   strconv.FormatUint(card.ID, 10),
+		}
+		var tmpl notetype.Template
+		if cfg.Kind == notetype.KindCloze {
+			ordinal, err := strconv.Atoi(strings.TrimPrefix(card.Template, "cloze:"))
+			if err != nil || !strings.HasPrefix(card.Template, "cloze:") {
+				t.Fatalf("cloze card %d has template %q", card.ID, card.Template)
+			}
+			if len(cfg.Templates) == 0 {
+				t.Fatalf("cloze note type %q has no template", nameByID[*note.NoteTypeID])
+			}
+			tmpl = cfg.Templates[0]
+			data.ClozeOrdinal = ordinal
+		} else {
+			found := false
+			for _, candidate := range cfg.Templates {
+				if candidate.ID == card.Template {
+					tmpl, found = candidate, true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("card %d keeps template %q, which note type %q does not declare", card.ID, card.Template, nameByID[*note.NoteTypeID])
+			}
+		}
+		data.CardName = tmpl.Name
+		if _, err := notetype.Render(cfg, tmpl, notetype.SideFront, data); err != nil {
+			t.Errorf("card %d does not render: %v", card.ID, err)
+		}
 	}
 }

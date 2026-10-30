@@ -952,6 +952,36 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		report.CardsCreated++
 	}
 
+	// A note that moved to another note type must not keep a card the new type cannot render.
+	// Cards are remapped by ordinal, so a stored card whose ordinal the package no longer carries
+	// keeps the old type's template id; that id does not exist in the new type, and rendering or
+	// rating such a card fails. The removal runs after the card loop, so a card the package remapped
+	// already carries a declared template id and stays. It follows the note type's declared
+	// templates, the same rule a note type update applies: a normal type removes exactly the cards
+	// whose template id it no longer declares, and a cloze type removes none because its cards are
+	// named after the cloze numbers found in the note's fields. A removed card's card_states and
+	// reviews rows stay, and a later re-import that declares the template again restores the same
+	// row through the reuse-by-ordinal branch above.
+	for i := range pkg.Notes {
+		note := &pkg.Notes[i]
+		if !imported[note.ID] {
+			continue
+		}
+		old := byRef[ankiNoteRef(note.GUID)]
+		if old == nil || old.NoteTypeID == nil {
+			continue
+		}
+		target, ok := targets[note.NoteTypeID]
+		if !ok || *old.NoteTypeID == target.ID {
+			continue
+		}
+		removed, err := removeStaleCardsForNoteType(ctx, tx, noteIDs[note.ID], target.Config, now)
+		if err != nil {
+			return err
+		}
+		report.CardsRemoved += removed
+	}
+
 	// Media bytes last, on the transaction handle so metadata and content are atomic. dry_run
 	// only counts; it neither writes a file nor a row.
 	for i := range pkg.Media {
@@ -998,6 +1028,34 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		return ErrPackageDryRun
 	}
 	return nil
+}
+
+// removeStaleCardsForNoteType soft-deletes the live cards of a note that a re-import moved to a note
+// type whose config no longer declares their template, and returns how many it removed.
+//
+// The rule is noteTypeCardKeepRule: a card survives when the config still declares its template id,
+// so a normal type removes only the cards of a template it dropped and a cloze type removes none.
+// Only live cards are loaded, so an already soft-deleted card is not counted twice; a card removed
+// here keeps its id, and with it its card_states and reviews rows.
+func removeStaleCardsForNoteType(ctx context.Context, tx *gorm.DB, noteID uint64, cfg notetype.Config, now time.Time) (int, error) {
+	keep := noteTypeCardKeepRule(cfg)
+	var cards []Card
+	if err := tx.WithContext(ctx).Where("note_id = ?", noteID).Order("id ASC").Find(&cards).Error; err != nil {
+		return 0, fmt.Errorf("load cards of note %d: %w", noteID, err)
+	}
+	var stale []uint64
+	for i := range cards {
+		if !keep(cards[i].Template) {
+			stale = append(stale, cards[i].ID)
+		}
+	}
+	if len(stale) == 0 {
+		return 0, nil
+	}
+	if err := tx.WithContext(ctx).Model(&Card{}).Where("id IN ?", stale).Update("deleted_at", now).Error; err != nil {
+		return 0, fmt.Errorf("soft-delete stale cards of note %d: %w", noteID, err)
+	}
+	return len(stale), nil
 }
 
 // writeAnkiNote creates or updates one note and returns its id. The package's fields are the whole
