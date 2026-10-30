@@ -14,6 +14,7 @@ import (
 
 	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
@@ -185,6 +186,10 @@ type cardFace struct {
 	backHTML  string
 	frontAV   []notetype.AVTag
 	backAV    []notetype.AVTag
+	// empty is true when the note no longer generates this card because its front renders empty. The
+	// card stays in the table and review replaces its front with a notice pointing at the empty-card
+	// cleanup; the row itself is not removed here.
+	empty bool
 }
 
 // renderCard loads the card's note, note type and template and renders both sides with the card's current data.
@@ -221,6 +226,10 @@ func (s *Server) renderCard(ctx context.Context, card *store.Card, submitted jso
 		CardID:       card.PublicID,
 		ClozeOrdinal: clozeOrdinal,
 	}
+	empty, err := s.cardIsEmpty(ctx, card, cfg, data)
+	if err != nil {
+		return nil, err
+	}
 	frontRaw, err := notetype.Render(cfg, tmpl, notetype.SideFront, data)
 	if err != nil {
 		return nil, err
@@ -247,8 +256,43 @@ func (s *Server) renderCard(ctx context.Context, card *store.Card, submitted jso
 		card: card, note: note, deck: deck, noteType: nt, config: cfg, template: tmpl,
 		spec: tmpl.Answer, ordinal: clozeOrdinal, values: values,
 		frontRaw: frontRaw, backRaw: backRaw, frontHTML: frontHTML, backHTML: backHTML,
-		frontAV: frontAV, backAV: backAV,
+		frontAV: frontAV, backAV: backAV, empty: empty,
 	}, nil
+}
+
+// cardIsEmpty reports whether the note no longer generates this card. A note write keeps such a
+// card, because editing a note adds cards and never removes one, so the review page has to tell
+// the learner the card is empty instead of showing a blank question.
+func (s *Server) cardIsEmpty(ctx context.Context, card *store.Card, cfg notetype.Config, data notetype.RenderData) (bool, error) {
+	cards, err := s.cards.ByNote(ctx, card.NoteID)
+	if err != nil {
+		return false, err
+	}
+	existing := make([]notetype.ExistingCard, len(cards))
+	for i, existingCard := range cards {
+		existing[i] = notetype.ExistingCard{Template: existingCard.Template, Ordinal: existingCard.Ordinal}
+	}
+	empty, err := notetype.EmptyExistingCards(cfg, data, existing)
+	if err != nil {
+		return false, err
+	}
+	for _, emptyCard := range empty {
+		if emptyCard.Template == card.Template {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// emptyCardNoticeHTML is the front face of a card the note no longer generates. The text comes from
+// the request locale and says both that the card is empty and that the empty-card cleanup removes
+// it, so the learner knows the card will not disappear by itself.
+func emptyCardNoticeHTML(ctx context.Context) string {
+	loc := i18n.FromContext(ctx)
+	if loc == nil {
+		return ""
+	}
+	return `<div class="empty-card-notice">` + html.EscapeString(loc.T("review.empty_card.notice")) + `</div>`
 }
 
 // deckFieldNames returns the {{Deck}} and {{Subdeck}} values for a card: the deck name with the card's stored subdeck
@@ -608,6 +652,12 @@ func (s *Server) cardViewWithAnswer(ctx context.Context, user *store.User, item 
 		optionOrder = api.OptionOrder(len(options), user.ID, card.ID, version)
 	}
 	front, back := s.faces(ctx, user, rendered, submitted, result, forFrame, optionOrder)
+	if rendered.empty {
+		// The row stays in the table and only its visible front changes: the card is not removed
+		// from the queue or the list, because removing it is the explicit empty-card cleanup.
+		front.HTML = emptyCardNoticeHTML(ctx)
+		front.AVTags = nil
+	}
 	return &ReviewCardView{
 		CardID:          card.PublicID,
 		NoteID:          rendered.note.PublicID,

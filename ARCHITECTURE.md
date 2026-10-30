@@ -163,9 +163,10 @@ change.
   HTML keyed by field id, normalises `/media/<sha256>` and `[sound:<sha256>]` into deck media
   names `<sha256>.<ext>` and registers them in `media_names`, recomputes `search_text` from the
   plain text of every field not marked `exclude_from_search`, regenerates the cards with
-  `notetype.GenerateCards` (existing cards keep their rows and progress; a card the note no longer
-  generates is soft-deleted), and rebuilds the `media_notes` mapping from the `src`, `href`,
-  `[sound:]` and CSS `url()` references of the field HTML.
+  `notetype.GenerateCards` (existing cards keep their rows and progress; a note write adds the
+  generated cards and restores a soft-deleted one, but soft-deletes none, so a card whose front
+  became empty stays until the explicit empty-card cleanup), and rebuilds the `media_notes`
+  mapping from the `src`, `href`, `[sound:]` and CSS `url()` references of the field HTML.
   Submitting a review resolves the card's template answer spec: a grading control decodes the
   submitted answer, grades it, and maps its score through the preset's mapping; a template with no
   spec, or the self-assessed short answer control, takes the four-grade self-assessment. A

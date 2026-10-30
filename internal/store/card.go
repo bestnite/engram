@@ -65,10 +65,11 @@ type cardSyncChange struct {
 //   - an existing card and its id are always kept: progress hangs off the card, deleting the row loses progress with it;
 //   - an existing template reuses the original row (a soft-deleted one is restored here, ordinal aligned), the id stays unchanged;
 //   - only newly appearing templates are inserted;
-//   - a template that exists but is no longer generated is **soft-deleted**: after removing {{c2::}} the cloze:2 card can no longer
-//     enter the review queue (it renders no blank at all). Soft delete writes only cards.deleted_at; card_states and reviews
-//     stay as they are, and when the template reappears the reuse branch above restores the same row, bringing the progress back.
-//     No row is ever hard-deleted here, and the explicit empty-card cleanup is a separate user action.
+//   - a card the note no longer generates is kept in place, never soft-deleted: editing a note adds cards and never removes
+//     one. A card whose front became empty, such as the reverse card after its field is cleared or the cloze:2 card after
+//     {{c2::}} is removed, stays in the table and is dealt with only by the explicit empty-card cleanup. A card that an
+//     earlier version soft-deleted also stays soft-deleted until the note generates it again; the reuse branch above then
+//     restores the same row, bringing its progress back.
 //
 // The stored template value is the card's identity inside a note, not the ordinal: a normal note type's ordinals shift when a
 // template in the middle is removed, while cards.template keeps naming the same card. The (note_id, template) unique index is
@@ -88,7 +89,8 @@ func syncCardsWithChange(tx *gorm.DB, noteID uint64, wanted []notetype.Generated
 
 // syncCardsWithChangeKeeping is syncCardsWithChange with an extra keep rule: a stored card whose
 // template the wanted set omits is soft-deleted only when keep reports false for that template. A nil
-// keep keeps nothing beyond the wanted set, which is what the note write path wants.
+// keep keeps every stored card, which is what the note write path wants: a note write creates and
+// restores cards but never removes one.
 //
 // The note type update passes a keep rule, because it must not decide from the wanted set alone: a
 // template stays declared while it produces no card for a particular note, so removing that card
@@ -143,13 +145,14 @@ func syncCardsWithChangeKeeping(tx *gorm.DB, noteID uint64, wanted []notetype.Ge
 	}
 
 	// wrap-up: soft-delete cards that are still alive but no longer in wanted, except the ones the keep
-	// rule protects. Written per primary key, over the same set loaded above.
+	// rule protects. A nil keep protects every stored card: the note write must never remove one.
+	// Written per primary key, over the same set loaded above.
 	var stale []uint64
 	for i := range existing {
 		if existing[i].DeletedAt.Valid || seen[existing[i].Template] {
 			continue
 		}
-		if keep != nil && keep(existing[i].Template) {
+		if keep == nil || keep(existing[i].Template) {
 			continue
 		}
 		stale = append(stale, existing[i].ID)

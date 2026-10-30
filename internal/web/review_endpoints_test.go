@@ -1,12 +1,14 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
@@ -28,7 +30,10 @@ type queueBody struct {
 
 // reviewRenderBody is the external shape of the card render response.
 type reviewRenderBody struct {
-	CardID    string `json:"card_id"`
+	CardID string `json:"card_id"`
+	Front  struct {
+		HTML string `json:"html"`
+	} `json:"front"`
 	FrontHTML string `json:"front_html"`
 	BackHTML  string `json:"back_html"`
 	// OptionsHTML is null for card types without options.
@@ -507,5 +512,82 @@ func TestReviewBuryUsesTheUsersReviewDay(t *testing.T) {
 	local := st.DueAt.In(loc)
 	if local.Hour() != reviewday.DefaultCutoffHour || local.Minute() != 0 {
 		t.Errorf("buried until %s local, want the next %02d:00 in %s", local.Format(time.RFC3339), reviewday.DefaultCutoffHour, tz)
+	}
+}
+
+// TestReviewRenderEmptyCardShowsLocalizedNotice is the acceptance case for a card the note no
+// longer generates after a note write: the review front is replaced by a notice, and the notice
+// text follows the request locale. The card itself stays in the response and in the queue.
+func TestReviewRenderEmptyCardShowsLocalizedNotice(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	// The account default locale is zh-CN, and a user setting outranks Accept-Language. Clearing it
+	// is what lets the request header choose the locale under test.
+	if err := db.Model(&store.User{}).Where("id = ?", ownerID).Update("locale", "").Error; err != nil {
+		t.Fatalf("clear the user locale: %v", err)
+	}
+	deck := seedReviewDeck(t, db, ownerID, "Empty card deck")
+	note := seedGradedNote(t, db, deck.ID, "basic_both", map[string]any{"front": "question", "back": "answer"})
+
+	// Clearing the back field makes the reverse template render an empty front, so the note no
+	// longer generates that card. The note write keeps it.
+	if _, err := store.NewNoteStore(db).Update(context.Background(),
+		&store.Note{ID: note.ID, DeckID: deck.ID, NoteTypeID: note.NoteTypeID},
+		map[string]any{"front": "question", "back": ""}); err != nil {
+		t.Fatalf("clear the reverse field: %v", err)
+	}
+	var reverse store.Card
+	if err := db.Where("note_id = ? AND template = ?", note.ID, "reverse").First(&reverse).Error; err != nil {
+		t.Fatalf("load reverse card: %v", err)
+	}
+
+	cases := []struct {
+		name    string
+		lang    string
+		notices []string
+		other   string
+	}{
+		{
+			name:    "en",
+			lang:    "en-US,en;q=0.9",
+			notices: []string{"This card is empty", "The Empty Cards cleanup removes it"},
+			other:   "这张卡片是空的",
+		},
+		{
+			name:    "zh-CN",
+			lang:    "zh-CN,zh;q=0.9",
+			notices: []string{"这张卡片是空的", "清理空卡片会将它删除"},
+			other:   "This card is empty",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := postJSON(srv, "/api/v1/review/render", map[string]any{
+				"card_id": reverse.PublicID, "deck": []string{deck.PublicID},
+			}, cookies, map[string]string{
+				auth.CSRFHeaderName: csrf,
+				"Accept-Language":   tc.lang,
+			})
+			if rec.Code != http.StatusOK {
+				t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+			}
+			var body reviewRenderBody
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
+			}
+			if body.CardID != reverse.PublicID {
+				t.Errorf("render card_id = %q, want the empty card %q", body.CardID, reverse.PublicID)
+			}
+			for _, notice := range tc.notices {
+				if !strings.Contains(body.FrontHTML, notice) {
+					t.Errorf("front_html = %q, want it to contain %q", body.FrontHTML, notice)
+				}
+			}
+			if body.Front.HTML != body.FrontHTML {
+				t.Errorf("front.html = %q, front_html = %q, want the same notice", body.Front.HTML, body.FrontHTML)
+			}
+			if strings.Contains(body.FrontHTML, tc.other) {
+				t.Errorf("front_html carries the other locale's notice %q: %q", tc.other, body.FrontHTML)
+			}
+		})
 	}
 }

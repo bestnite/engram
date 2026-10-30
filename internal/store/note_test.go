@@ -255,9 +255,12 @@ func TestNoteUpdateGrowingClozeAddsCardsOnly(t *testing.T) {
 	}
 }
 
-// TestNoteUpdateShrinkingClozeSoftDeletesCards covers the opposite direction: after an ordinal is dropped its card leaves the visible set
-// (no longer enters the review queue) while the row and the progress remain; when the ordinal reappears the same card returns, progress and all.
-func TestNoteUpdateShrinkingClozeSoftDeletesCards(t *testing.T) {
+// TestNoteUpdateKeepingEmptyClozeCard covers the shrinking direction: removing {{c2::}} leaves the
+// cloze:2 card in place, visible and with its progress, because a note write adds cards and never
+// removes one. It also covers the two rules around an older soft-deleted row: a row an earlier
+// version soft-deleted stays soft-deleted while the note does not generate it again, and the same
+// row is restored when the note generates it again.
+func TestNoteUpdateKeepingEmptyClozeCard(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			if err := db.AutoMigrate(AllModels()...); err != nil {
@@ -281,34 +284,60 @@ func TestNoteUpdateShrinkingClozeSoftDeletesCards(t *testing.T) {
 				t.Fatalf("seed card state: %v", err)
 			}
 
-			steps := []struct {
-				name          string
-				text          string
-				wantTemplates []string
-			}{
-				{"remove c2", "a {{c1::x}} b y", []string{"cloze:1"}},
-				{"bring c2 back", "a {{c1::x}} b {{c2::y}}", []string{"cloze:1", "cloze:2"}},
+			// Removing c2 must keep the card and its progress.
+			if _, err := notes.Update(ctx, &Note{ID: n.ID, DeckID: deckID, NoteTypeID: Ptr(noteTypeID)},
+				map[string]any{"text": "a {{c1::x}} b y"}); err != nil {
+				t.Fatalf("Update(remove c2) error = %v", err)
 			}
-			for _, step := range steps {
-				synced, err := notes.Update(ctx, &Note{ID: n.ID, DeckID: deckID, NoteTypeID: Ptr(noteTypeID)}, map[string]any{"text": step.text})
-				if err != nil {
-					t.Fatalf("%s: Update() error = %v", step.name, err)
-				}
-				live, err := cards.ByNote(ctx, n.ID)
-				if err != nil {
-					t.Fatalf("%s: ByNote() error = %v", step.name, err)
-				}
-				for _, got := range [][]Card{synced, live} {
-					templates := cardTemplates(got)
-					if len(templates) != len(step.wantTemplates) {
-						t.Fatalf("%s: live templates = %v, want %v", step.name, templates, step.wantTemplates)
-					}
-					for _, want := range step.wantTemplates {
-						if templates[want] != before[want] {
-							t.Errorf("%s: card %q id = %d, want %d", step.name, want, templates[want], before[want])
-						}
-					}
-				}
+			live, err := cards.ByNote(ctx, n.ID)
+			if err != nil {
+				t.Fatalf("ByNote() error = %v", err)
+			}
+			templates := cardTemplates(live)
+			if len(templates) != 2 {
+				t.Fatalf("after removing c2 the note has %d visible cards, want both cloze:1 and cloze:2", len(templates))
+			}
+			if templates["cloze:2"] != c2 {
+				t.Errorf("cloze:2 card id after removing the marker = %d, want the unchanged %d", templates["cloze:2"], c2)
+			}
+
+			// A row an earlier version soft-deleted stays soft-deleted while the note does not
+			// generate it again. The row is written directly, because the current write path cannot
+			// produce that state any more.
+			now := time.Now().UTC()
+			if err := db.Model(&Card{}).Where("id = ?", c2).Update("deleted_at", now).Error; err != nil {
+				t.Fatalf("simulate an older soft delete: %v", err)
+			}
+			if _, err := notes.Update(ctx, &Note{ID: n.ID, DeckID: deckID, NoteTypeID: Ptr(noteTypeID)},
+				map[string]any{"text": "a {{c1::x}} b y"}); err != nil {
+				t.Fatalf("Update(remove c2 again) error = %v", err)
+			}
+			afterRemove, err := cards.ByNote(ctx, n.ID)
+			if err != nil {
+				t.Fatalf("ByNote() error = %v", err)
+			}
+			if got := cardTemplates(afterRemove); len(got) != 1 || got["cloze:1"] == 0 {
+				t.Fatalf("visible cards after the older soft delete = %v, want only cloze:1", got)
+			}
+			var stillDeleted Card
+			if err := db.Unscoped().First(&stillDeleted, "id = ?", c2).Error; err != nil {
+				t.Fatalf("load cloze:2 row: %v", err)
+			}
+			if !stillDeleted.DeletedAt.Valid {
+				t.Error("an older soft-deleted card was restored although the note still does not generate it")
+			}
+
+			// Generating c2 again restores the same row.
+			if _, err := notes.Update(ctx, &Note{ID: n.ID, DeckID: deckID, NoteTypeID: Ptr(noteTypeID)},
+				map[string]any{"text": "a {{c1::x}} b {{c2::y}}"}); err != nil {
+				t.Fatalf("Update(bring c2 back) error = %v", err)
+			}
+			restored, err := cards.ByNote(ctx, n.ID)
+			if err != nil {
+				t.Fatalf("ByNote() error = %v", err)
+			}
+			if got := cardTemplates(restored); got["cloze:2"] != c2 {
+				t.Fatalf("restored cloze:2 card id = %d, want the original %d", got["cloze:2"], c2)
 			}
 
 			// Throughout the whole flow c2's progress row is never deleted or modified.
@@ -321,6 +350,82 @@ func TestNoteUpdateShrinkingClozeSoftDeletesCards(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNoteUpdateKeepingEmptyReverseCard is the acceptance case for an optional-reversed note:
+// clearing the field behind the reverse template keeps the reverse card and its card_states.
+func TestNoteUpdateKeepingEmptyReverseCard(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			owner := seedUsers(t, db, "note_optional_reverse_owner")[0]
+			deckID := seedDeck(t, db, owner)
+			notes := NewNoteStore(db)
+			cards := NewCardStore(db)
+
+			cfg, ok := optionalReversedStockConfig()
+			if !ok {
+				t.Fatal("notetype.StockConfigs() has no basic_optional_reversed config")
+			}
+			nt := &NoteType{DeckID: deckID, Name: "Basic (optional reversed card)"}
+			if err := NewNoteTypeStore(db).Create(ctx, nt, cfg); err != nil {
+				t.Fatalf("create optional reversed note type: %v", err)
+			}
+
+			n := &Note{DeckID: deckID, NoteTypeID: Ptr(nt.ID)}
+			created, err := notes.Create(ctx, n, map[string]any{
+				"Front": "question", "Back": "answer", "Add Reverse": "1",
+			})
+			if err != nil {
+				t.Fatalf("Create() error = %v", err)
+			}
+			before := cardTemplates(created)
+			reverseID, ok := before["t1"]
+			if !ok {
+				t.Fatalf("created cards = %v, want the reverse template t1", before)
+			}
+			if err := db.Create(&CardState{CardID: reverseID, UserID: owner, State: "review", Reps: 4, Version: 2}).Error; err != nil {
+				t.Fatalf("seed reverse card state: %v", err)
+			}
+
+			// Clearing Add Reverse makes the reverse template render an empty front, so the note no
+			// longer generates that card.
+			if _, err := notes.Update(ctx, &Note{ID: n.ID, DeckID: deckID, NoteTypeID: Ptr(nt.ID)},
+				map[string]any{"Front": "question", "Back": "answer", "Add Reverse": ""}); err != nil {
+				t.Fatalf("Update(clear Add Reverse) error = %v", err)
+			}
+			live, err := cards.ByNote(ctx, n.ID)
+			if err != nil {
+				t.Fatalf("ByNote() error = %v", err)
+			}
+			after := cardTemplates(live)
+			if after["t1"] != reverseID {
+				t.Fatalf("reverse card id after clearing Add Reverse = %d, want the unchanged %d (visible cards %v)", after["t1"], reverseID, after)
+			}
+
+			var st CardState
+			if err := db.Where("card_id = ? AND user_id = ?", reverseID, owner).Take(&st).Error; err != nil {
+				t.Fatalf("reverse card state disappeared: %v", err)
+			}
+			if st.Reps != 4 || st.Version != 2 {
+				t.Errorf("reverse card state = reps %d version %d, want 4 and 2", st.Reps, st.Version)
+			}
+		})
+	}
+}
+
+// optionalReversedStockConfig returns Anki's basic_optional_reversed stock config, so the test
+// speaks the real field ids (f0, f1, f2) and template ids (t0, t1) of that note type.
+func optionalReversedStockConfig() (notetype.Config, bool) {
+	for _, cfg := range notetype.StockConfigs() {
+		if cfg.OriginalStockKind != nil && *cfg.OriginalStockKind == notetype.StockBasicOptionalReversed {
+			return cfg, true
+		}
+	}
+	return notetype.Config{}, false
 }
 
 // TestNoteSoftDeleteHidesCardsAndRestore covers the other half:

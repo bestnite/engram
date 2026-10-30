@@ -233,3 +233,6 @@ It renders with sample variables; real recipients see their own data."
 # Display name of the default preset in server-rendered text (the stored name is an identity literal).
 - id: presets.default_name
   translation: "Default"
+# Review: notice on a card whose front renders empty (the note no longer generates it).
+- id: review.empty_card.notice
+  translation: "This card is empty. The Empty Cards cleanup removes it."

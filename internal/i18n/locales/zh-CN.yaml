@@ -233,3 +233,6 @@
 # Display name of the "default preset" in server-visible text (the stored name Default is an identity, not copy for humans).
 - id: presets.default_name
   translation: "默认"
+# Review: notice on a card whose front renders empty (the note no longer generates it).
+- id: review.empty_card.notice
+  translation: "这张卡片是空的。清理空卡片会将它删除。"
