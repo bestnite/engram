@@ -71,9 +71,9 @@ func (a *API) listDeckTags(c *gin.Context) {
 // id is the note's own external id; deck_id is the external id of the deck it belongs to - numeric primary keys are never exposed.
 // suspended means the caller suspended the cards under this note (suspension is personal), fetched for a whole page of notes in one query.
 //
-// note_type is the note's note type public id. kind and the per-field value shapes are transitional: they are
-// derived from the note type and its catalog entry so the SPA editor keeps working until M17-18 replaces it.
-// A write accepts either the note_type public id or the transitional kind; the response keeps both for now.
+// note_type is the note's note type public id. fields maps each field id to the stored HTML string, unchanged, so an editor
+// round-trips content without interpreting it. kind is transitional: it names the stock kind the note type was created from
+// and a write still accepts it as an alias for the note_type public id; the response keeps both for now.
 func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) []map[string]any {
 	ids := make([]uint64, 0, len(notes))
 	for i := range notes {
@@ -102,7 +102,7 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 			"deck_id":      pid,
 			"kind":         view.kind,
 			"note_type":    noteTypePublicID(view.noteType),
-			"fields":       transitionalFields(view.kind, store.NoteFieldValues(n.FieldsJSON)),
+			"fields":       store.NoteFieldValues(n.FieldsJSON),
 			"tags":         store.TagsOrEmpty(n.TagsJSON),
 			"created_at":   n.CreatedAt,
 			"updated_at":   n.UpdatedAt,

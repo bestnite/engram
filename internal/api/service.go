@@ -1122,19 +1122,19 @@ type ExportRow struct {
 
 // ---- Review ----
 
-// DueCard is the external shape of a due card (with raw field text); all three ids are external ids.
+// DueCard is the external shape of a due card (with the note fields as their stored HTML); all three ids are external ids.
 type DueCard struct {
-	CardID         string         `json:"card_id"`
-	NoteID         string         `json:"note_id"`
-	DeckID         string         `json:"deck_id"`
-	State          string         `json:"state"`
-	DueAt          time.Time      `json:"due_at"`
-	Retrievability float64        `json:"retrievability"`
-	Kind           string         `json:"kind"`
-	Fields         map[string]any `json:"fields"`
-	Tags           []string       `json:"tags"`
-	Template       string         `json:"template,omitempty"`
-	Version        int            `json:"version"`
+	CardID         string            `json:"card_id"`
+	NoteID         string            `json:"note_id"`
+	DeckID         string            `json:"deck_id"`
+	State          string            `json:"state"`
+	DueAt          time.Time         `json:"due_at"`
+	Retrievability float64           `json:"retrievability"`
+	Kind           string            `json:"kind"`
+	Fields         map[string]string `json:"fields"`
+	Tags           []string          `json:"tags"`
+	Template       string            `json:"template,omitempty"`
+	Version        int               `json:"version"`
 	// AnswerControl is the control name of the card template's answer spec, or null when the template has none.
 	// The review page picks the self-rated, essay or machine-graded flow from it and MachineGraded, never from the kind.
 	AnswerControl *string `json:"answer_control"`
@@ -1289,7 +1289,7 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 			DueAt:          it.DueAt,
 			Retrievability: it.Retrievability,
 			Kind:           view.kind,
-			Fields:         transitionalFields(view.kind, values),
+			Fields:         values,
 			Tags:           store.TagsOrEmpty(note.TagsJSON),
 			FieldOrder:     fieldOrder(view.config),
 		}

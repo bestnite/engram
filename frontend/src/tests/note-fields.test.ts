@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { emptyFields, toFormFields, toPayloadFields } from '../lib/card-fields';
+import { emptyFields } from '../lib/card-fields';
 import {
   answerControl,
   backField,
@@ -105,7 +105,7 @@ describe('the catalog is driven by the server self-description', () => {
   });
 });
 
-describe('field model conversions', () => {
+describe('field model initialization', () => {
   it('starts array and boolean fields at a usable empty value', () => {
     const fields = emptyFields(fieldsForKind(catalog, 'choice_multi'));
     expect(fields.options).toEqual([]);
@@ -115,57 +115,5 @@ describe('field model conversions', () => {
     // otherwise "never touched the switch, saved once" flips the behaviour to false.
     expect(emptyFields(fieldsForKind(catalog, 'typed')).ignore_case).toBe(true);
     expect(emptyFields(fieldsForKind(catalog, 'typed')).ignore_whitespace).toBe(true);
-  });
-
-  it('folds server fields into the form model and fills the missing keys', () => {
-    const form = toFormFields(fieldsForKind(catalog, 'basic'), { front: 'Q' });
-    expect(form.front).toBe('Q');
-    expect(form.back).toBe('');
-  });
-
-  it('drops empty values on submit but keeps an explicit false', () => {
-    const payload = toPayloadFields({
-      prompt: '  ',
-      answer: 'A',
-      accept: ['  ', 'B'],
-      items: [],
-      ignore_case: false,
-      ordered: true,
-    });
-    // Empty strings/arrays are always omitted: the server's optional-field validation rejects them as invalid values.
-    expect(payload).toEqual({ answer: 'A', accept: ['B'], ignore_case: false, ordered: true });
-    expect('prompt' in payload).toBe(false);
-    expect('items' in payload).toBe(false);
-  });
-
-  it('keeps multi-choice answer indexes as numbers on submit', () => {
-    const form = toFormFields(fieldsForKind(catalog, 'choice_multi'), {
-      question: 'Which are prime?',
-      options: ['2', '4', '5'],
-      answers: [0, 2],
-    });
-    // The server only accepts integer indices; array items used to be String()'d before submit, so ["0","2"] was rejected with 400,
-    // and the UI showed "fill in the required fields to preview" even when everything was filled, while saving failed the same way.
-    expect(toPayloadFields(form)).toEqual({ question: 'Which are prime?', options: ['2', '4', '5'], answers: [0, 2] });
-  });
-
-  it('keeps numeric fields as numbers when folding server fields into the form', () => {
-    const form = toFormFields(fieldsForKind(catalog, 'numeric'), { prompt: 'g', value: 9.81, tolerance_absolute: 0 });
-    expect(form.value).toBe(9.81);
-    // 0 is a legal value and must not be treated as "not filled".
-    expect(form.tolerance_absolute).toBe(0);
-    expect(form.tolerance_relative).toBe('');
-    expect(toPayloadFields(form)).toMatchObject({ value: 9.81, tolerance_absolute: 0 });
-  });
-
-  it('parses numeric strings and treats unparsable values as unset', () => {
-    const form = toFormFields(fieldsForKind(catalog, 'numeric'), { value: '42', tolerance_absolute: 'abc' });
-    expect(form.value).toBe(42);
-    expect(form.tolerance_absolute).toBe('');
-  });
-
-  it('keeps unknown keys out of the form model so the view can preserve them separately', () => {
-    const form = toFormFields(fieldsForKind(catalog, 'basic'), { front: 'Q', back: 'A', custom: 'x' });
-    expect(Object.keys(form)).not.toContain('custom');
   });
 });

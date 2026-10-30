@@ -72,6 +72,82 @@ func TestGetNoteReadsBeyondFirstPage(t *testing.T) {
 	}
 }
 
+// TestNoteResponsesReturnStoredFieldHTML is the M17-49 acceptance: a choice note's option is one HTML string, and every
+// note read path returns it unchanged instead of splitting it into lines. The editor saves what it loaded, so a reshaped
+// response would delete the image and the formatting on the next save.
+func TestNoteResponsesReturnStoredFieldHTML(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "note_html_reader", store.RoleUser)
+	deck := seedDeck(t, env.db, user.ID)
+	key := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil).Plaintext
+	router := env.router()
+
+	const optionHTML = `<img src="x.png"><b>bold option</b>`
+	noteType, err := store.NewNoteStore(env.db).EnsureStockNoteType(context.Background(), deck.ID, "choice_single")
+	if err != nil {
+		t.Fatalf("ensure choice_single note type: %v", err)
+	}
+	note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID), CreatedBy: store.Ptr(user.ID)}
+	if _, err := store.NewNoteStore(env.db).Create(context.Background(), note, map[string]any{
+		"question": "Which one?",
+		"options":  optionHTML,
+		"answer":   "0",
+	}); err != nil {
+		t.Fatalf("create choice note: %v", err)
+	}
+
+	assertOptions := func(t *testing.T, raw []byte) {
+		t.Helper()
+		var got map[string]any
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("response is not JSON: %v (%s)", err, raw)
+		}
+		fields, ok := got["fields"].(map[string]any)
+		if !ok {
+			t.Fatalf("fields is %T, want an object (response %s)", got["fields"], raw)
+		}
+		if fields["options"] != optionHTML {
+			t.Errorf("fields.options = %#v, want the stored HTML string %#v", fields["options"], optionHTML)
+		}
+	}
+
+	// Get one note.
+	status, raw := doJSON(t, router, http.MethodGet, "/api/v1/notes/"+note.PublicID, key, "")
+	if status != http.StatusOK {
+		t.Fatalf("get note status = %d, want 200 (body %s)", status, raw)
+	}
+	assertOptions(t, raw)
+
+	// List the deck's notes.
+	status, raw = doJSON(t, router, http.MethodGet, fmt.Sprintf("/api/v1/decks/%s/notes?per_page=50", deck.PublicID), key, "")
+	if status != http.StatusOK {
+		t.Fatalf("list notes status = %d, want 200 (body %s)", status, raw)
+	}
+	var listed struct {
+		Notes []json.RawMessage `json:"notes"`
+	}
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		t.Fatalf("list response is not JSON: %v (%s)", err, raw)
+	}
+	if len(listed.Notes) != 1 {
+		t.Fatalf("list returned %d notes, want 1 (body %s)", len(listed.Notes), raw)
+	}
+	assertOptions(t, listed.Notes[0])
+
+	// Search the deck's notes by plain text inside the option HTML.
+	status, raw = doJSON(t, router, http.MethodGet, fmt.Sprintf("/api/v1/decks/%s/notes?q=bold", deck.PublicID), key, "")
+	if status != http.StatusOK {
+		t.Fatalf("search notes status = %d, want 200 (body %s)", status, raw)
+	}
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		t.Fatalf("search response is not JSON: %v (%s)", err, raw)
+	}
+	if len(listed.Notes) != 1 {
+		t.Fatalf("search returned %d notes, want 1 (body %s)", len(listed.Notes), raw)
+	}
+	assertOptions(t, listed.Notes[0])
+}
+
 // TestGetNoteAuthorization covers the negative cases: unknown id, non-member, and a key with write scope only.
 func TestGetNoteAuthorization(t *testing.T) {
 	env := newTestEnv(t, 60, 60)

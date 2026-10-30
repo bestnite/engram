@@ -15,7 +15,7 @@
   import PageHeader from '../components/ui/PageHeader.svelte';
   import CardFrame from '../components/CardFrame.svelte';
   import { NOTE_PREVIEW_CSS, faceStyle } from '../card-frame';
-  import { emptyFields, toPayloadFields, type FieldSpec } from '../card-fields';
+  import { emptyFields, type FieldSpec } from '../card-fields';
   import type { RichFieldOptions } from '../components/RichTextField.svelte';
   import type { MediaReference } from '../../editframe/runtime';
   import { Check, Eye, Plus, Trash2, X } from '@lucide/svelte';
@@ -132,10 +132,15 @@
 
   /**
    * Form model → fields for submission. The keys are the selected note type's field names, which is what the note write
-   * resolves to field ids; unknown keys cannot occur, because the form only holds the selected type's fields.
+   * resolves to field ids. A field value is the HTML string the editor holds, sent unchanged; an empty field is omitted
+   * because the note write fills a field the payload omits with the empty string.
    */
-  function collectFields(): Record<string, unknown> {
-    return toPayloadFields(fields);
+  function collectFields(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(fields)) {
+      if (typeof value === 'string' && value !== '') out[key] = value;
+    }
+    return out;
   }
 
   /**
@@ -147,24 +152,18 @@
   }
 
   /**
-   * The HTML a loaded field value stands for. The note response presents some stock-kind fields in their legacy shapes
-   * (an array of lines, a boolean or a number), while the stored value is one HTML string; joining lines with <br> and
-   * writing booleans and numbers as their literal text reproduces what the note write stores.
+   * Load one note's content into the form; the selected type comes from the note itself.
+   *
+   * A note response carries each field as its stored HTML string. A value of any other type is not converted: a response
+   * from before this shape is left blank rather than turned into text, so saving cannot overwrite the stored HTML.
    */
-  function fieldHtml(value: unknown): string {
-    if (value === undefined || value === null) return '';
-    if (typeof value === 'string') return value;
-    if (Array.isArray(value)) return value.map((item) => String(item)).join('<br>');
-    return String(value);
-  }
-
-  /** Load one note's content into the form; the selected type comes from the note itself. */
   function adoptFields(loaded: Note, type: NoteType): void {
     noteTypeId = type.id;
     const next: Record<string, unknown> = {};
     for (const field of type.config.fields) {
       // The response keys field values by field id; accepting the name too keeps an older payload readable.
-      next[field.name] = fieldHtml(loaded.fields[field.id] ?? loaded.fields[field.name]);
+      const value = loaded.fields[field.id] ?? loaded.fields[field.name];
+      next[field.name] = typeof value === 'string' ? value : '';
     }
     fields = next;
     tagsText = loaded.tags.join(', ');

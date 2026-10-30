@@ -101,6 +101,15 @@ function customNoteType(): NoteType {
   );
 }
 
+/** A choice note type: its option field is one HTML value, not a list of lines. */
+function choiceNoteType(): NoteType {
+  return noteType('nt-choice', 'Choice', [
+    noteTypeField('question', 'Question'),
+    noteTypeField('options', 'Options'),
+    noteTypeField('answer', 'Answer'),
+  ]);
+}
+
 /** A note type carrying every field option the editor has to apply. */
 function styledNoteType(): NoteType {
   return noteType('nt-styled', 'Styled', [
@@ -821,6 +830,38 @@ describe('unified note editor — edit mode', () => {
       { frame: true }
     );
     expect(toast.success).toHaveBeenCalledWith('卡片已保存。');
+  });
+
+  it('loads and saves a choice option as the stored HTML string', async () => {
+    const choice = choiceNoteType();
+    const optionHTML = '<img src="x.png"><b>bold option</b>';
+    const fields = { question: 'Which one?', options: optionHTML, answer: '0' };
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(
+      noteFixture({ kind: 'choice_single', note_type: choice.id, fields })
+    );
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    const updateNote = vi.spyOn(apiClient, 'updateNote').mockResolvedValue(
+      noteFixture({ kind: 'choice_single', note_type: choice.id, fields })
+    );
+
+    mountEditor({ id: '5', noteId: '9' }, {}, [choice]);
+    await flush();
+
+    // The field receives the stored HTML unchanged: no line splitting, no boolean or number conversion.
+    const frame = frameFor('note-field-Options');
+    fromFrame(frame, { type: 'ready' });
+    await flush();
+    expect(loadedHtml('note-field-Options')).toBe(optionHTML);
+
+    // Saving without edits sends exactly the HTML that was loaded.
+    submitForm();
+    await flush();
+
+    expect(updateNote).toHaveBeenCalledWith('9', {
+      note_type: choice.id,
+      fields: { Question: 'Which one?', Options: optionHTML, Answer: '0' },
+      tags: [],
+    });
   });
 
   it('reports a rejected edit as an error toast and keeps the draft', async () => {

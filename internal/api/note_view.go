@@ -15,10 +15,10 @@ import (
 // This file holds the transitional view of a note: the shape the SPA and the old REST contract still read while the
 // note-type payload and the frame runtime replace them.
 //
-// A note stores only its note type id and HTML field values keyed by field id. The old contract speaks a card kind and
-// a field map whose values follow the kind's editor controls (a string array for options, a boolean for true/false, a
-// number for a tolerance). The helpers here derive that view from the note type config; nothing that decides behaviour
-// reads the derived kind or the reshaped values.
+// A note stores only its note type id and HTML field values keyed by field id. The helpers here derive the note type's
+// stock kind and read the note type config; the field values themselves are returned exactly as stored, because a field
+// value is HTML and any reshaping would lose the formatting an editor writes back. Nothing that decides behaviour reads
+// the derived kind.
 
 // noteTypeView is one note's note type together with its decoded config, cached per request by noteTypeCache.
 type noteTypeView struct {
@@ -56,14 +56,6 @@ func (c *noteTypeCache) load(ctx context.Context, note *store.Note) noteTypeView
 	view := noteTypeView{noteType: nt, config: cfg, kind: notetype.EngramStockKindFor(cfg)}
 	c.byID[*note.NoteTypeID] = view
 	return view
-}
-
-// transitionalFields presents stored field values in the typed shapes the legacy editor expects.
-//
-// The shape rule lives in the store, next to the format-1 package translation that needs the same mapping, so the two
-// cannot drift.
-func transitionalFields(kind string, values map[string]string) map[string]any {
-	return store.LegacyNoteFields(kind, values)
 }
 
 // fieldOrder returns the note type's field ids in config order; the field value map keeps no order of its own.
