@@ -15,7 +15,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -122,7 +121,7 @@ func (a *API) CreateImportUpload(ctx context.Context, u *store.User, apiKeyID *u
 		UploadURL: a.baseURL + importUploadPathPrefix + plaintext,
 		Method:    http.MethodPut,
 		ExpiresAt: row.ExpiresAt,
-		MaxBytes:  media.ResolveMaxBytes(ctx, a.db),
+		MaxBytes:  store.ResolvePackageLimits(ctx, a.db).MaxPackageBytes,
 	}, nil
 }
 
@@ -168,7 +167,7 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 	if _, err := a.authorizeImportTarget(ctx, u.ID, opts.Target); err != nil {
 		return nil, err
 	}
-	limited := &overflowReader{r: body, remaining: media.ResolveMaxBytes(ctx, a.db)}
+	limited := &overflowReader{r: body, remaining: store.ResolvePackageLimits(ctx, a.db).MaxPackageBytes}
 	r, err := uploadPackageReader(limited)
 	if err != nil {
 		err = mapPackageError(err)

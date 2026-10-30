@@ -7,7 +7,6 @@
 package urlfetch
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -17,6 +16,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -94,7 +94,9 @@ func New(limits Limits) *Client {
 	return &Client{limits: limits, resolver: net.DefaultResolver, dialer: &net.Dialer{}}
 }
 
-// Fetch validates rawURL and downloads its content, returning the response bytes capped at maxBytes. The caller is responsible for Close.
+// Fetch validates rawURL and downloads its content into a temporary file capped at maxBytes.
+// The caller is responsible for Close, which also removes the file, so a package of any size is
+// never held in memory on the way to the importer.
 //
 // The order cannot be swapped: validate the address shape and publicness first, then connect; every redirect goes through
 // this step again, so a redirect to a private address is rejected as well.
@@ -143,18 +145,56 @@ func (c *Client) Fetch(ctx context.Context, rawURL string, maxBytes int64) (io.R
 	if resp.ContentLength > maxBytes {
 		return nil, &Error{Kind: KindTooLarge, Reason: "response exceeds the size limit"}
 	}
-	// Read one extra byte to decide whether the limit is exceeded: a package of exactly maxBytes is legal, maxBytes+1 is over it.
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
+	// Stream into a temporary file. A package may be gigabytes, so holding the response in memory
+	// would defeat streaming the media inside it; the caller imports from this file and Close
+	// removes it.
+	tmp, err := os.CreateTemp("", "engram-urlfetch-*")
 	if err != nil {
-		return nil, classifyFetchError(err)
+		return nil, &Error{Kind: KindFetchFailed, Reason: "cannot create temporary file", cause: err}
 	}
-	if int64(len(raw)) > maxBytes {
-		return nil, &Error{Kind: KindTooLarge, Reason: "response exceeds the size limit"}
+	body := &tempFile{File: tmp, path: tmp.Name()}
+	fail := func(err error) (io.ReadCloser, error) {
+		body.Close()
+		return nil, err
 	}
-	if looksHTML(raw) {
-		return nil, &Error{Kind: KindNotPackage, Reason: "the URL returned an HTML page"}
+	// Read one extra byte to decide whether the limit is exceeded: a package of exactly maxBytes is legal, maxBytes+1 is over it.
+	n, err := io.Copy(tmp, io.LimitReader(resp.Body, maxBytes+1))
+	if err != nil {
+		return fail(classifyFetchError(err))
 	}
-	return io.NopCloser(bytes.NewReader(raw)), nil
+	if n > maxBytes {
+		return fail(&Error{Kind: KindTooLarge, Reason: "response exceeds the size limit"})
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return fail(&Error{Kind: KindFetchFailed, Reason: "cannot rewind temporary file", cause: err})
+	}
+	head := make([]byte, 512)
+	read, err := io.ReadFull(tmp, head)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return fail(classifyFetchError(err))
+	}
+	if looksHTML(head[:read]) {
+		return fail(&Error{Kind: KindNotPackage, Reason: "the URL returned an HTML page"})
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return fail(&Error{Kind: KindFetchFailed, Reason: "cannot rewind temporary file", cause: err})
+	}
+	return body, nil
+}
+
+// tempFile is a downloaded body backed by a temporary file: closing it removes the file, so a
+// caller that defers Close leaves nothing behind on any path.
+type tempFile struct {
+	*os.File
+	path string
+}
+
+func (t *tempFile) Close() error {
+	err := t.File.Close()
+	if rerr := os.Remove(t.path); rerr != nil && !errors.Is(rerr, os.ErrNotExist) && err == nil {
+		err = rerr
+	}
+	return err
 }
 
 // dialContext pins the connection to the "public address resolved and validated for this fetch".

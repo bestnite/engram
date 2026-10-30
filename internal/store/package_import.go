@@ -45,8 +45,95 @@ type PackageLimits struct {
 }
 
 // DefaultPackageLimits gives conservative default caps against zip bombs.
+//
+// The .edeck reader keeps these caps and its in-memory reading. The .apkg reader has its own
+// deployment limits (see PackageImportLimits), because a package with audio legitimately needs
+// far more entries and bytes than the package format itself.
 func DefaultPackageLimits() PackageLimits {
 	return PackageLimits{MaxEntries: 2000, MaxFileBytes: 32 << 20, MaxTotalBytes: 128 << 20}
+}
+
+// Settings keys and environment variables for the import caps. Each resolves as environment
+// variable, then settings table, then its default, the same order media_max_bytes uses.
+const (
+	SettingKeyPackageMaxBytes         = "package_max_bytes"
+	EnvPackageMaxBytes                = "PACKAGE_MAX_BYTES"
+	SettingKeyPackageMaxEntries       = "package_max_entries"
+	EnvPackageMaxEntries              = "PACKAGE_MAX_ENTRIES"
+	SettingKeyPackageMaxUnpackedBytes = "package_max_unpacked_bytes"
+	EnvPackageMaxUnpackedBytes        = "PACKAGE_MAX_UNPACKED_BYTES"
+)
+
+// Defaults of the import caps: 2 GiB accepted package, 100 000 entries, 4 GiB decompressed.
+const (
+	defaultPackageMaxBytes         = 2 << 30
+	defaultPackageMaxEntries       = 100_000
+	defaultPackageMaxUnpackedBytes = 4 << 30
+)
+
+// PackageImportLimits are the deployment caps applied to one package import.
+//
+// MaxPackageBytes bounds the body a transport accepts before it is spooled. MaxEntries and
+// MaxUnpackedBytes bound the .apkg archive; the .edeck reader keeps DefaultPackageLimits.
+type PackageImportLimits struct {
+	MaxPackageBytes  int64
+	MaxEntries       int
+	MaxUnpackedBytes int64
+}
+
+// DefaultPackageImportLimits returns the documented defaults.
+func DefaultPackageImportLimits() PackageImportLimits {
+	return PackageImportLimits{
+		MaxPackageBytes:  defaultPackageMaxBytes,
+		MaxEntries:       defaultPackageMaxEntries,
+		MaxUnpackedBytes: defaultPackageMaxUnpackedBytes,
+	}
+}
+
+// effective fills every unset field with its default, so callers that do not resolve the
+// settings (tests, the CLI) still import under the documented caps.
+func (l PackageImportLimits) effective() PackageImportLimits {
+	def := DefaultPackageImportLimits()
+	if l.MaxPackageBytes <= 0 {
+		l.MaxPackageBytes = def.MaxPackageBytes
+	}
+	if l.MaxEntries <= 0 {
+		l.MaxEntries = def.MaxEntries
+	}
+	if l.MaxUnpackedBytes <= 0 {
+		l.MaxUnpackedBytes = def.MaxUnpackedBytes
+	}
+	return l
+}
+
+// ResolvePackageLimits resolves all three import caps from the environment, the settings table
+// and the defaults, in that order.
+func ResolvePackageLimits(ctx context.Context, db *gorm.DB) PackageImportLimits {
+	return PackageImportLimits{
+		MaxPackageBytes:  resolvePackageInt64(ctx, db, SettingKeyPackageMaxBytes, EnvPackageMaxBytes, defaultPackageMaxBytes),
+		MaxEntries:       int(resolvePackageInt64(ctx, db, SettingKeyPackageMaxEntries, EnvPackageMaxEntries, defaultPackageMaxEntries)),
+		MaxUnpackedBytes: resolvePackageInt64(ctx, db, SettingKeyPackageMaxUnpackedBytes, EnvPackageMaxUnpackedBytes, defaultPackageMaxUnpackedBytes),
+	}
+}
+
+// resolvePackageInt64 is the one resolution rule of a positive byte or count cap: a valid
+// positive environment value wins, then a valid positive settings value, then the default.
+func resolvePackageInt64(ctx context.Context, db *gorm.DB, key, env string, def int64) int64 {
+	if raw := strings.TrimSpace(os.Getenv(env)); raw != "" {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
+			return n
+		}
+	}
+	if db != nil {
+		if settings, err := LoadSettings(ctx, db); err == nil {
+			if raw, ok := settings[key]; ok {
+				if n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64); err == nil && n > 0 {
+					return n
+				}
+			}
+		}
+	}
+	return def
 }
 
 // The length bounds for deck name and description live in deck.go alone (creation/rename and deck package import share one source).
@@ -137,6 +224,9 @@ type PackageImportOptions struct {
 	MediaQuotaBytes int64
 	// MediaRoot is the root directory for media bytes on disk; empty means media is not written to disk (only when needed).
 	MediaRoot string
+	// Limits are the deployment caps of this import. The zero value uses DefaultPackageImportLimits,
+	// so a caller that does not resolve the settings still gets the documented caps.
+	Limits PackageImportLimits
 	// NewDeckName optionally overrides the deck name for new_deck.
 	NewDeckName string
 	// Now is an injectable clock; the zero value uses the system UTC time.
@@ -198,9 +288,62 @@ func ReadPackageArchive(r io.Reader, limits PackageLimits) (map[string][]byte, e
 	return unzipPackageArchive(raw, limits)
 }
 
-// readArchiveBytes reads the whole archive into memory under the total-size cap. The import entry
-// point needs the bytes before it can tell an .apkg from an .edeck, because telling them apart means
-// looking at the zip entries, not at the file name.
+// packageSource returns random access to the package. A caller that already produced a file —
+// the URL transport, the CLI, or a multipart part that spilled to disk — hands it over directly;
+// any other reader is spooled to one temporary file, capped at package_max_bytes. The .apkg
+// reader opens the zip from this source, so neither the archive nor its media is held in memory.
+func packageSource(r io.Reader, maxBytes int64) (io.ReaderAt, int64, func(), error) {
+	if src, ok := r.(interface {
+		io.ReaderAt
+		Stat() (os.FileInfo, error)
+	}); ok {
+		info, err := src.Stat()
+		if err != nil {
+			return nil, 0, nil, &PackageError{Code: CodePackageBadFormat, Message: "cannot read archive", Entries: []string{err.Error()}}
+		}
+		if info.Size() > maxBytes {
+			return nil, 0, nil, &PackageError{Code: CodePackageTooLarge, Message: "archive exceeds the package size limit"}
+		}
+		// The reader's owner removes it: the handler's defer, or the URL transport's Close.
+		return src, info.Size(), nil, nil
+	}
+	file, size, cleanup, err := spoolPackage(r, maxBytes)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	return file, size, cleanup, nil
+}
+
+// spoolPackage copies r into one temporary file, refusing more than maxBytes. The returned handle
+// is rewound for random access and stays open for the whole import; cleanup closes it and removes
+// the file, and the caller must defer it on every path.
+func spoolPackage(r io.Reader, maxBytes int64) (source *os.File, size int64, cleanup func(), err error) {
+	file, err := os.CreateTemp("", "engram-package-*")
+	if err != nil {
+		return nil, 0, nil, &PackageError{Code: CodePackageBadFormat, Message: "cannot read archive", Entries: []string{err.Error()}}
+	}
+	cleanup = func() {
+		file.Close()
+		os.Remove(file.Name())
+	}
+	written, err := io.Copy(file, io.LimitReader(r, maxBytes+1))
+	if err != nil {
+		cleanup()
+		return nil, 0, nil, &PackageError{Code: CodePackageBadFormat, Message: "cannot read archive", Entries: []string{err.Error()}}
+	}
+	if written > maxBytes {
+		cleanup()
+		return nil, 0, nil, &PackageError{Code: CodePackageTooLarge, Message: "archive exceeds the package size limit"}
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		cleanup()
+		return nil, 0, nil, &PackageError{Code: CodePackageBadFormat, Message: "cannot read archive", Entries: []string{err.Error()}}
+	}
+	return file, written, cleanup, nil
+}
+
+// readArchiveBytes reads the whole archive into memory under the total-size cap. It remains for
+// ReadPackageArchive, the in-memory path used when a caller already holds the package bytes.
 func readArchiveBytes(r io.Reader, limits PackageLimits) ([]byte, error) {
 	// Read it all into memory first (with a total cap), because zip.NewReader needs a ReaderAt.
 	raw, err := io.ReadAll(io.LimitReader(r, limits.MaxTotalBytes+1))
@@ -215,7 +358,12 @@ func readArchiveBytes(r io.Reader, limits PackageLimits) ([]byte, error) {
 
 // unzipPackageArchive applies the entry checks to already-read archive bytes.
 func unzipPackageArchive(raw []byte, limits PackageLimits) (map[string][]byte, error) {
-	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	return unzipPackageFile(bytes.NewReader(raw), int64(len(raw)), limits)
+}
+
+// unzipPackageFile applies the entry checks to a spooled archive.
+func unzipPackageFile(r io.ReaderAt, size int64, limits PackageLimits) (map[string][]byte, error) {
+	zr, err := zip.NewReader(r, size)
 	if err != nil {
 		return nil, &PackageError{Code: CodePackageBadFormat, Message: "not a valid zip archive"}
 	}
@@ -349,17 +497,22 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		return nil, err
 	}
 
-	limits := DefaultPackageLimits()
-	raw, err := readArchiveBytes(r, limits)
+	importLimits := opts.Limits.effective()
+	source, size, cleanup, err := packageSource(r, importLimits.MaxPackageBytes)
 	if err != nil {
 		return nil, err
 	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
 	// An Anki package is told apart from an .edeck by its entries, never by the file name: an
 	// .apkg archive carries a collection entry and/or a "meta" entry.
-	if isAnkiArchive(raw) {
-		return s.importAnkiPackage(ctx, actorUserID, raw, opts, targetKind, targetDeckID)
+	if isAnkiArchiveReader(source, size) {
+		return s.importAnkiPackage(ctx, actorUserID, source, size, importLimits, opts, targetKind, targetDeckID)
 	}
-	entries, err := unzipPackageArchive(raw, limits)
+	// The .edeck reader keeps its in-memory reading and its own caps.
+	entries, err := unzipPackageFile(source, size, DefaultPackageLimits())
 	if err != nil {
 		return nil, err
 	}
@@ -764,13 +917,18 @@ func headBytes(raw []byte) []byte {
 // quota<=0 means unlimited and passes straight through. Exceeding it returns CodePackageQuotaExceeded and the caller returns before the transaction,
 // so no deck/card/media row or disk file is left behind.
 func checkImportMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64, pkg *packageModel, quota int64) error {
-	return checkMediaQuota(ctx, db, actorUserID, pkg.MediaRaw, quota)
+	sizes := make(map[string]int64, len(pkg.MediaRaw))
+	for sha, raw := range pkg.MediaRaw {
+		sizes[sha] = int64(len(raw))
+	}
+	return checkMediaQuota(ctx, db, actorUserID, sizes, quota)
 }
 
 // checkMediaQuota is the shared quota rule for every package import path: the bytes newly added by
 // the package (de-duplicated by sha256, minus the shas the importer is already charged for) must fit
-// in the importer's remaining quota. quota <= 0 means unlimited.
-func checkMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64, rawBySha map[string][]byte, quota int64) error {
+// in the importer's remaining quota. quota <= 0 means unlimited. The sizes come from the reader's
+// single pass, so the .apkg path never holds the media bytes to measure them.
+func checkMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64, sizeBySha map[string]int64, quota int64) error {
 	if quota <= 0 {
 		return nil
 	}
@@ -779,11 +937,11 @@ func checkMediaQuota(ctx context.Context, db *gorm.DB, actorUserID uint64, rawBy
 		return fmt.Errorf("import package: media usage: %w", err)
 	}
 	var extra int64
-	for sha, raw := range rawBySha {
+	for sha, size := range sizeBySha {
 		if usage.Sha256[sha] {
 			continue
 		}
-		extra += int64(len(raw))
+		extra += size
 	}
 	if usage.Bytes+extra <= quota {
 		return nil

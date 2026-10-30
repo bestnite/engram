@@ -586,17 +586,21 @@ func TestAnkiReportItems(t *testing.T) {
 			Fields: []string{`<img src="missing.png"> [sound:gone.mp3] [latex]x^2[/latex] <script src="https://example.com/note.js"></script>`},
 		}},
 		Media: []anki.MediaEntry{
-			{Name: "clip.mp4", Data: []byte("not really an mp4")},
-			{Name: "movie.avi", Data: []byte("RIFF....AVI LIST")},
-			{Name: "clip.webm", Data: []byte("not really a webm")},
+			testMediaEntry("clip.mp4", []byte("not really an mp4")),
+			testMediaEntry("movie.avi", []byte("RIFF....AVI LIST")),
+			testMediaEntry("clip.webm", []byte("not really a webm")),
 		},
 	}
-	missing := ankiMissingMedia(pkg)
+	files, err := hashAnkiMedia(pkg, anki.DefaultLimits())
+	if err != nil {
+		t.Fatalf("hash media: %v", err)
+	}
+	missing := ankiMissingMedia(pkg, files)
 	wantMissing := []string{"gone.mp3", "missing.png"}
 	if strings.Join(missing, ",") != strings.Join(wantMissing, ",") {
 		t.Fatalf("missing media = %v, want %v", missing, wantMissing)
 	}
-	video := ankiUnplayableVideo(pkg)
+	video := ankiUnplayableVideo(files)
 	if len(video) != 1 || video[0] != "movie.avi" {
 		t.Fatalf("unplayable video = %v, want only movie.avi", video)
 	}
@@ -607,9 +611,18 @@ func TestAnkiReportItems(t *testing.T) {
 		t.Fatalf("external assets = %v, want %v", assets, wantAssets)
 	}
 	types := map[int64]anki.NoteType{1: pkg.NoteTypes[0]}
-	latex := ankiMissingLatexImages(pkg, types)
+	latex := ankiMissingLatexImages(pkg, files, types)
 	if len(latex) != 1 || !strings.HasPrefix(latex[0], "latex-") {
 		t.Fatalf("missing LaTeX images = %v, want one latex-… name", latex)
+	}
+}
+
+// testMediaEntry builds one in-memory media entry for the report checks.
+func testMediaEntry(name string, data []byte) anki.MediaEntry {
+	return anki.MediaEntry{
+		Name: name,
+		Size: uint32(len(data)),
+		Open: func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(data)), nil },
 	}
 }
 

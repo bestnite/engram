@@ -22,9 +22,10 @@
 // the build to Anki's proto tree.
 //
 // Safety: every archive is read under Limits, each entry name must be a
-// single normal path component, and the SQLite payload is written to a
+// single normal path component, and the SQLite payload is streamed into a
 // temporary file under a generated name, never under a name taken from the
-// archive.
+// archive. Media payloads are exposed as openers over their zip entries, so
+// reading a package never materialises its media in memory.
 //
 // The layout and the wire details are those of ankitects/anki at tag 26.09.3:
 // proto/anki/import_export.proto (meta and media), proto/anki/notetypes.proto
@@ -36,6 +37,7 @@
 package anki
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -68,20 +70,16 @@ func (f Format) String() string {
 	}
 }
 
-// ReadFile reads the package at path. The file is read through its handle
-// rather than loaded whole, so the archive caps apply before any large payload
-// is allocated.
+// ReadFile reads the package at path. It is a convenience for small files
+// (fixtures and tests): the file is loaded whole so the returned media openers
+// stay usable after this call. The import path instead keeps the spooled file
+// open and calls Read, so it never holds the archive in memory.
 func ReadFile(path string) (*Package, error) {
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("anki package: open %s: %w", path, err)
+		return nil, fmt.Errorf("anki package: read %s: %w", path, err)
 	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("anki package: stat %s: %w", path, err)
-	}
-	return Read(f, info.Size())
+	return Read(bytes.NewReader(raw), int64(len(raw)))
 }
 
 // Read reads a package from r, which must provide size bytes.

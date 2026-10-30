@@ -55,6 +55,27 @@ func mediaSettingSpecs() []settingSpec {
 			key: settingKeyMediaUserQuotaBytes, envVar: envMediaUserQuotaBytes,
 			def: func(*i18n.Localizer) string { return "0" },
 		},
+		{
+			// Package caps: the largest accepted package body, the most zip entries an .apkg may
+			// have and its decompressed total. They apply to package import only; media_max_bytes
+			// stays the single-upload limit.
+			key: store.SettingKeyPackageMaxBytes, envVar: store.EnvPackageMaxBytes,
+			def: func(*i18n.Localizer) string {
+				return strconv.FormatInt(store.DefaultPackageImportLimits().MaxPackageBytes, 10)
+			},
+		},
+		{
+			key: store.SettingKeyPackageMaxEntries, envVar: store.EnvPackageMaxEntries,
+			def: func(*i18n.Localizer) string {
+				return strconv.Itoa(store.DefaultPackageImportLimits().MaxEntries)
+			},
+		},
+		{
+			key: store.SettingKeyPackageMaxUnpackedBytes, envVar: store.EnvPackageMaxUnpackedBytes,
+			def: func(*i18n.Localizer) string {
+				return strconv.FormatInt(store.DefaultPackageImportLimits().MaxUnpackedBytes, 10)
+			},
+		},
 	}
 }
 

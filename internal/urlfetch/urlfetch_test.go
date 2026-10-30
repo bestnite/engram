@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -213,6 +214,41 @@ func TestFetchDownloadsPublicPackage(t *testing.T) {
 	// The connection must be pinned to the resolved public address, not to the host name itself.
 	if !strings.HasPrefix(d.dialed()[0], "93.184.216.34:") {
 		t.Errorf("dialed %q, want the validated public address", d.dialed()[0])
+	}
+}
+
+// TestFetchSpoolsToTemporaryFileAndRemovesIt proves a download is not held in memory and that
+// closing the body removes the spooled file.
+func TestFetchSpoolsToTemporaryFileAndRemovesIt(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	pkg := []byte("PK\x03\x04 spooled-package-bytes")
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(pkg)
+	}))
+	defer srv.Close()
+
+	c, _ := newTestClient(t, srv, publicResolver(), DefaultLimits())
+	body, err := c.Fetch(context.Background(), "https://example.com/pkg.edeck", 1<<20)
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	path := body.(*tempFile).Name()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("spooled file is missing before Close: %v", err)
+	}
+	got, err := io.ReadAll(body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if string(got) != string(pkg) {
+		t.Fatalf("body = %q, want %q", got, pkg)
+	}
+	if err := body.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("spooled file still exists after Close (err = %v)", err)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path"
 	"regexp"
 	"sort"
@@ -26,16 +27,34 @@ import (
 // Anki package (.apkg) import.
 //
 // The reader in internal/anki stays a leaf: it knows the three archive layouts and returns one
-// in-memory model. This file maps that model onto the data model. It lives in internal/store,
-// not internal/anki, because the writes need the store's unexported transaction, media, quota and
-// note-type helpers; importing internal/store from internal/anki would create a cycle and force
-// those helpers to become public API.
+// model whose note types, decks, notes and cards are in memory while each media entry is an
+// opener over its decompressed stream. This file maps that model onto the data model; it hashes
+// the media once and streams each write, so memory does not grow with the package's media. It
+// lives in internal/store, not internal/anki, because the writes need the store's unexported
+// transaction, media, quota and note-type helpers; importing internal/store from internal/anki
+// would create a cycle and force those helpers to become public API.
+
+// ankiLimits turns the deployment caps into the reader's limits. The per-entry allocation guard
+// stays the reader's constant; only the entry count and decompressed total are deployment choices.
+func (l PackageImportLimits) ankiLimits() anki.Limits {
+	return anki.Limits{
+		MaxEntries:    l.MaxEntries,
+		MaxFileBytes:  anki.DefaultLimits().MaxFileBytes,
+		MaxTotalBytes: l.MaxUnpackedBytes,
+	}
+}
 
 // isAnkiArchive reports whether raw is an Anki package. The decision reads the zip entry names:
 // every .apkg layout carries a collection entry and/or a "meta" entry, while an .edeck carries
 // manifest.json and note_types.json instead. The file name is never consulted.
 func isAnkiArchive(raw []byte) bool {
-	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	return isAnkiArchiveReader(bytes.NewReader(raw), int64(len(raw)))
+}
+
+// isAnkiArchiveReader is the file-backed form: the import sniffs the spooled package through
+// random access instead of holding the archive in memory.
+func isAnkiArchiveReader(r io.ReaderAt, size int64) bool {
+	zr, err := zip.NewReader(r, size)
 	if err != nil {
 		return false
 	}
@@ -195,37 +214,108 @@ func planAnkiDecks(pkg *anki.Package) ankiDeckPlan {
 	return plan
 }
 
-// ankiMediaDigest returns the two digests the import needs for one media entry: sha1 for Anki's
-// clash-rename suffix and sha256 for the content-addressed store.
-func ankiMediaDigest(entry anki.MediaEntry) (sha1hex, sha256hex string) {
-	sum1 := sha1.Sum(entry.Data)
-	sum256 := sha256.Sum256(entry.Data)
-	return hex.EncodeToString(sum1[:]), hex.EncodeToString(sum256[:])
+// ankiMediaFile is one media entry after the import's single hashing pass. The stream is read
+// once to produce both digests, the size and the head bytes the unplayable-video check needs;
+// every later step works from this record and never holds the payload in memory.
+type ankiMediaFile struct {
+	entry     *anki.MediaEntry
+	sha1hex   string
+	sha256hex string
+	size      int64
+	head      []byte
 }
 
-// ankiRawMedia indexes the media bytes the package carries by sha256, for the quota check. An
-// entry without bytes is a missing file, not an empty file: it contributes no bytes.
-func ankiRawMedia(pkg *anki.Package) map[string][]byte {
-	out := make(map[string][]byte, len(pkg.Media))
-	for _, entry := range pkg.Media {
-		if len(entry.Data) == 0 {
+// hashAnkiMedia hashes every media stream exactly once. The clash rename, the quota check and
+// the media write all use these results, so the archive payload is never materialised.
+func hashAnkiMedia(pkg *anki.Package, limits anki.Limits) ([]ankiMediaFile, error) {
+	files := make([]ankiMediaFile, 0, len(pkg.Media))
+	total := pkg.UnpackedBytes
+	for i := range pkg.Media {
+		entry := &pkg.Media[i]
+		h1 := sha1.New()
+		h256 := sha256.New()
+		head := &headBuffer{max: mediatype.HeadBytes}
+		size, err := hashMediaEntry(entry, io.MultiWriter(h1, h256, head), limits.MaxFileBytes)
+		if err != nil {
+			return nil, err
+		}
+		if entry.Size != 0 && int64(entry.Size) != size {
+			return nil, fmt.Errorf("%w: media entry %q declares %d bytes, got %d", anki.ErrCorruptMedia, entry.Name, entry.Size, size)
+		}
+		sum1 := h1.Sum(nil)
+		if len(entry.SHA1) == sha1.Size && !bytes.Equal(entry.SHA1, sum1) {
+			return nil, fmt.Errorf("%w: media entry %q does not match its sha1", anki.ErrCorruptMedia, entry.Name)
+		}
+		total += size
+		if total > limits.MaxTotalBytes {
+			return nil, fmt.Errorf("%w: archive is over the total cap", anki.ErrTooLarge)
+		}
+		files = append(files, ankiMediaFile{
+			entry:     entry,
+			sha1hex:   hex.EncodeToString(sum1),
+			sha256hex: hex.EncodeToString(h256.Sum(nil)),
+			size:      size,
+			head:      head.bytes,
+		})
+	}
+	return files, nil
+}
+
+// hashMediaEntry copies one entry's decompressed stream into dst under the per-entry cap.
+func hashMediaEntry(entry *anki.MediaEntry, dst io.Writer, max int64) (int64, error) {
+	rc, err := entry.Open()
+	if err != nil {
+		return 0, fmt.Errorf("%w: media entry %q: %v", anki.ErrCorruptMedia, entry.Name, err)
+	}
+	defer rc.Close()
+	n, err := io.Copy(dst, io.LimitReader(rc, max+1))
+	if err != nil {
+		return n, fmt.Errorf("media entry %q: %w", entry.Name, err)
+	}
+	if n > max {
+		return n, fmt.Errorf("%w: media entry %q decompresses over the per-file cap", anki.ErrTooLarge, entry.Name)
+	}
+	return n, nil
+}
+
+// headBuffer keeps the first max bytes written to it and discards the rest.
+type headBuffer struct {
+	max   int
+	bytes []byte
+}
+
+func (h *headBuffer) Write(p []byte) (int, error) {
+	if room := h.max - len(h.bytes); room > 0 {
+		if len(p) < room {
+			room = len(p)
+		}
+		h.bytes = append(h.bytes, p[:room]...)
+	}
+	return len(p), nil
+}
+
+// ankiRawMediaSizes indexes the bytes each media entry carries by sha256, for the quota check.
+// An entry without bytes is a missing file, not an empty file: it contributes no bytes.
+func ankiRawMediaSizes(files []ankiMediaFile) map[string]int64 {
+	out := make(map[string]int64, len(files))
+	for i := range files {
+		if files[i].size == 0 {
 			continue
 		}
-		_, sha := ankiMediaDigest(entry)
-		out[sha] = entry.Data
+		out[files[i].sha256hex] = files[i].size
 	}
 	return out
 }
 
 // ankiMediaNameIndex indexes the package's media names after the clash rename. Only entries with
 // bytes are indexed: a name without bytes is reported as missing instead of resolving a reference.
-func ankiMediaNameIndex(pkg *anki.Package) map[string]bool {
-	idx := make(map[string]bool, len(pkg.Media))
-	for _, entry := range pkg.Media {
-		if len(entry.Data) == 0 {
+func ankiMediaNameIndex(files []ankiMediaFile) map[string]bool {
+	idx := make(map[string]bool, len(files))
+	for i := range files {
+		if files[i].size == 0 {
 			continue
 		}
-		idx[normaliseMediaName(entry.Name)] = true
+		idx[normaliseMediaName(files[i].entry.Name)] = true
 	}
 	return idx
 }
@@ -268,15 +358,14 @@ func ankiMediaRefs(pkg *anki.Package) []string {
 // ankiMissingMedia lists every referenced name that the package has no bytes for. A reference
 // that already carries a sha256 needs the package to carry that exact content; any other name is
 // matched against the package's own media names.
-func ankiMissingMedia(pkg *anki.Package) []string {
-	names := ankiMediaNameIndex(pkg)
+func ankiMissingMedia(pkg *anki.Package, files []ankiMediaFile) []string {
+	names := ankiMediaNameIndex(files)
 	shas := map[string]bool{}
-	for _, entry := range pkg.Media {
-		if len(entry.Data) == 0 {
+	for i := range files {
+		if files[i].size == 0 {
 			continue
 		}
-		_, sha := ankiMediaDigest(entry)
-		shas[sha] = true
+		shas[files[i].sha256hex] = true
 	}
 	var missing []string
 	for _, ref := range ankiMediaRefs(pkg) {
@@ -301,13 +390,14 @@ var videoExtensions = map[string]bool{
 }
 
 // ankiUnplayableVideo lists video files a browser cannot play: everything except mp4 and webm.
-func ankiUnplayableVideo(pkg *anki.Package) []string {
+func ankiUnplayableVideo(files []ankiMediaFile) []string {
 	var out []string
-	for _, entry := range pkg.Media {
-		if len(entry.Data) == 0 {
+	for i := range files {
+		entry := files[i].entry
+		if files[i].size == 0 {
 			continue
 		}
-		mime, class := mediatype.Classify(headBytes(entry.Data), entry.Name)
+		mime, class := mediatype.Classify(files[i].head, entry.Name)
 		ext := strings.TrimPrefix(strings.ToLower(path.Ext(entry.Name)), ".")
 		if class != mediatype.ClassVideo && !videoExtensions[ext] {
 			continue
@@ -386,8 +476,8 @@ func ankiExternalAssets(pkg *anki.Package) []string {
 // ankiMissingLatexImages lists the LaTeX image names a note needs but the package does not carry.
 // Anki rewrites [latex]…[/latex], [$]…[/$] and [$$]…[/$$] to latex-<sha1>.<ext>; the renderer
 // computes the same name, so the expected file can be named without rendering.
-func ankiMissingLatexImages(pkg *anki.Package, types map[int64]anki.NoteType) []string {
-	names := ankiMediaNameIndex(pkg)
+func ankiMissingLatexImages(pkg *anki.Package, files []ankiMediaFile, types map[int64]anki.NoteType) []string {
+	names := ankiMediaNameIndex(files)
 	seen := map[string]struct{}{}
 	for i := range pkg.Notes {
 		note := &pkg.Notes[i]
@@ -717,8 +807,13 @@ func ankiNoteRef(guid string) string { return "anki:" + guid }
 
 // importAnkiPackage imports one decoded .apkg package. Everything the import writes happens in one
 // transaction; under dry_run the transaction rolls back and no media file is written.
-func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, raw []byte, opts PackageImportOptions, targetKind string, targetDeckID uint64) (*PackageImportReport, error) {
-	pkg, err := anki.Read(bytes.NewReader(raw), int64(len(raw)))
+func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r io.ReaderAt, size int64, limits PackageImportLimits, opts PackageImportOptions, targetKind string, targetDeckID uint64) (*PackageImportReport, error) {
+	ankiLimits := limits.ankiLimits()
+	pkg, err := anki.ReadWithLimits(r, size, ankiLimits)
+	if err != nil {
+		return nil, mapAnkiPackageError(err)
+	}
+	files, err := hashAnkiMedia(pkg, ankiLimits)
 	if err != nil {
 		return nil, mapAnkiPackageError(err)
 	}
@@ -726,7 +821,7 @@ func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r
 
 	// Quota is checked before the transaction and before any disk write, exactly like the .edeck
 	// path, so an over-quota package leaves no deck, row or file behind.
-	if err := checkMediaQuota(ctx, s.db, actorUserID, ankiRawMedia(pkg), opts.MediaQuotaBytes); err != nil {
+	if err := checkMediaQuota(ctx, s.db, actorUserID, ankiRawMediaSizes(files), opts.MediaQuotaBytes); err != nil {
 		return nil, err
 	}
 
@@ -738,7 +833,7 @@ func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r
 	}
 	var writtenMedia []mediaWrite
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return s.importAnkiInTx(ctx, tx, actorUserID, pkg, &plan, targetKind, targetDeckID, opts, report, &writtenMedia)
+		return s.importAnkiInTx(ctx, tx, actorUserID, pkg, files, &plan, targetKind, targetDeckID, opts, report, &writtenMedia)
 	})
 	if err != nil {
 		s.cleanupMediaWrites(ctx, writtenMedia)
@@ -773,7 +868,7 @@ func dropUnusedAnkiNoteTypes(pkg *anki.Package) {
 }
 
 // importAnkiInTx performs the Anki mapping inside one transaction.
-func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *anki.Package, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport, writtenMedia *[]mediaWrite) error {
+func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *anki.Package, files []ankiMediaFile, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport, writtenMedia *[]mediaWrite) error {
 	// The unused note types leave no trace in the target: they are not created, they contribute no
 	// media references to the report, and no stored row points at them.
 	dropUnusedAnkiNoteTypes(pkg)
@@ -799,7 +894,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 	// deck's existing content is renamed with a SHA-1 suffix, and this package's references are
 	// rewritten before notes are written.
 	if opts.MediaRoot != "" {
-		if err := renameAnkiMedia(ctx, tx, deckID, pkg); err != nil {
+		if err := renameAnkiMedia(ctx, tx, deckID, pkg, files); err != nil {
 			return err
 		}
 	}
@@ -810,11 +905,11 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 	for i := range pkg.NoteTypes {
 		types[pkg.NoteTypes[i].ID] = pkg.NoteTypes[i]
 	}
-	report.MissingMedia = ankiMissingMedia(pkg)
+	report.MissingMedia = ankiMissingMedia(pkg, files)
 	report.MediaMissing = len(report.MissingMedia)
-	report.UnplayableVideo = ankiUnplayableVideo(pkg)
+	report.UnplayableVideo = ankiUnplayableVideo(files)
 	report.ExternalAssets = ankiExternalAssets(pkg)
-	report.LatexMissingImages = ankiMissingLatexImages(pkg, types)
+	report.LatexMissingImages = ankiMissingLatexImages(pkg, files, types)
 
 	targets, err := resolveAnkiNoteTypes(ctx, tx, deckID, pkg)
 	if err != nil {
@@ -824,14 +919,14 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 	// Package-provided bytes are attributed to the importer before the note writes, so the
 	// pre-write readability check sees them as supplied by the same user. dry_run writes no row.
 	if !opts.DryRun && opts.MediaRoot != "" {
-		for sha := range ankiRawMedia(pkg) {
+		for sha := range ankiRawMediaSizes(files) {
 			if err := RecordMediaUploader(ctx, tx, sha, actorUserID); err != nil {
 				return fmt.Errorf("import Anki package: record media uploader: %w", err)
 			}
 		}
 	}
 	if opts.MediaRoot != "" {
-		if err := registerAnkiMediaNames(ctx, tx, deckID, pkg); err != nil {
+		if err := registerAnkiMediaNames(ctx, tx, deckID, files); err != nil {
 			return err
 		}
 	}
@@ -1015,21 +1110,19 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		report.CardsRemoved += removed
 	}
 
-	// Media bytes last, on the transaction handle so metadata and content are atomic. dry_run
-	// only counts; it neither writes a file nor a row.
-	for i := range pkg.Media {
-		entry := pkg.Media[i]
-		if opts.MediaRoot == "" {
-			continue
-		}
-		_, sha := ankiMediaDigest(entry)
-		if len(entry.Data) == 0 {
+	// Media bytes last, on the transaction handle so metadata and content are atomic. The entry is
+	// streamed through the hashing pass's digest into a temporary file and renamed into place, so
+	// a media payload is never held in memory. dry_run only counts; it neither writes a file nor a
+	// row.
+	for i := range files {
+		file := &files[i]
+		if opts.MediaRoot == "" || file.size == 0 {
 			continue
 		}
 		mstore := NewMediaStore(tx)
-		stored, err := mstore.BySha256(ctx, sha)
+		stored, err := mstore.BySha256(ctx, file.sha256hex)
 		if err != nil {
-			return fmt.Errorf("import Anki package: check media %s: %w", sha, err)
+			return fmt.Errorf("import Anki package: check media %s: %w", file.sha256hex, err)
 		}
 		if stored != nil {
 			if opts.DryRun {
@@ -1044,13 +1137,21 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		if opts.DryRun {
 			continue
 		}
-		mime, _ := mediatype.Classify(headBytes(entry.Data), entry.Name)
-		_, abs, err := mstore.SaveBytesTracked(ctx, opts.MediaRoot, mime, entry.Data, Ptr(actorUserID))
+		rc, err := file.entry.Open()
+		if err != nil {
+			return fmt.Errorf("import Anki package: open media %q: %w", file.entry.Name, err)
+		}
+		mime, _ := mediatype.Classify(file.head, file.entry.Name)
+		row, abs, err := mstore.SaveStreamTracked(ctx, opts.MediaRoot, mime, rc, Ptr(actorUserID))
+		rc.Close()
 		if abs != "" {
-			*writtenMedia = append(*writtenMedia, mediaWrite{sha: sha, abs: abs})
+			*writtenMedia = append(*writtenMedia, mediaWrite{sha: file.sha256hex, abs: abs})
 		}
 		if err != nil {
 			return err
+		}
+		if row.Sha256 != file.sha256hex {
+			return fmt.Errorf("import Anki package: media %q streamed under an unexpected digest", file.entry.Name)
 		}
 	}
 
@@ -1224,18 +1325,17 @@ func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName s
 }
 
 // registerAnkiMediaNames records every media name the package provides for the target deck.
-func registerAnkiMediaNames(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *anki.Package) error {
+func registerAnkiMediaNames(ctx context.Context, tx *gorm.DB, deckID uint64, files []ankiMediaFile) error {
 	names := NewMediaNameStore(tx)
-	for _, entry := range pkg.Media {
-		if len(entry.Data) == 0 {
+	for i := range files {
+		if files[i].size == 0 {
 			continue
 		}
-		name := normaliseMediaName(entry.Name)
+		name := normaliseMediaName(files[i].entry.Name)
 		if name == "" {
 			continue
 		}
-		_, sha := ankiMediaDigest(entry)
-		if err := names.Upsert(ctx, deckID, name, sha); err != nil {
+		if err := names.Upsert(ctx, deckID, name, files[i].sha256hex); err != nil {
 			return err
 		}
 	}
@@ -1244,8 +1344,8 @@ func registerAnkiMediaNames(ctx context.Context, tx *gorm.DB, deckID uint64, pkg
 
 // renameAnkiMedia implements Anki's clash rule for an .apkg import and rewrites this package's
 // references. It mirrors the .edeck rule but works on the reader's model, because that is what
-// the mapping later consumes.
-func renameAnkiMedia(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *anki.Package) error {
+// the mapping later consumes. The digests come from the single hashing pass.
+func renameAnkiMedia(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *anki.Package, files []ankiMediaFile) error {
 	rows, err := NewMediaNameStore(tx).ListByDeck(ctx, deckID)
 	if err != nil {
 		return fmt.Errorf("import Anki package: list existing media names: %w", err)
@@ -1255,19 +1355,18 @@ func renameAnkiMedia(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *anki.
 		existing[row.Name] = row.Sha256
 	}
 	renames := map[string]string{}
-	for i := range pkg.Media {
-		entry := &pkg.Media[i]
-		if len(entry.Data) == 0 {
+	for i := range files {
+		file := &files[i]
+		if file.size == 0 {
 			continue
 		}
-		sha1hex, sha256hex := ankiMediaDigest(*entry)
-		oldName := normaliseMediaName(entry.Name)
-		newName := addDataToFolderUniquely(existing, oldName, sha256hex, sha1hex)
+		oldName := normaliseMediaName(file.entry.Name)
+		newName := addDataToFolderUniquely(existing, oldName, file.sha256hex, file.sha1hex)
 		if newName != oldName {
 			renames[oldName] = newName
 		}
-		entry.Name = newName
-		existing[newName] = sha256hex
+		file.entry.Name = newName
+		existing[newName] = file.sha256hex
 	}
 	if len(renames) == 0 {
 		return nil

@@ -71,10 +71,25 @@ func TestFixturesDecodeToSameModel(t *testing.T) {
 // part instead of printing the whole package.
 func assertSameModel(t *testing.T, name string, want, got *anki.Package) {
 	t.Helper()
+	// Media entries carry an opener, which reflect cannot compare, and the legacy layout
+	// advertises no sha1. Compare the media model by name and declared size instead.
 	wantCopy := *want
 	wantCopy.Format = 0
+	wantCopy.Media = nil
+	wantCopy.UnpackedBytes = 0
 	gotCopy := *got
 	gotCopy.Format = 0
+	gotCopy.Media = nil
+	gotCopy.UnpackedBytes = 0
+	if len(want.Media) != len(got.Media) {
+		t.Fatalf("%s: media entries = %d, want %d", name, len(got.Media), len(want.Media))
+	}
+	for i := range want.Media {
+		if want.Media[i].Name != got.Media[i].Name || want.Media[i].Size != got.Media[i].Size {
+			t.Fatalf("%s: media %d = {%q %d}, want {%q %d}", name, i,
+				got.Media[i].Name, got.Media[i].Size, want.Media[i].Name, want.Media[i].Size)
+		}
+	}
 	if reflect.DeepEqual(wantCopy, gotCopy) {
 		return
 	}
@@ -95,10 +110,11 @@ func TestModernMediaMatchesMetaAndEntry(t *testing.T) {
 	if entry.Name != "placeholder.png" {
 		t.Fatalf("media name = %q", entry.Name)
 	}
-	if entry.Size != uint32(len(entry.Data)) {
-		t.Fatalf("media size = %d, data length = %d", entry.Size, len(entry.Data))
+	data := readMediaStream(t, entry)
+	if entry.Size != uint32(len(data)) {
+		t.Fatalf("media size = %d, stream length = %d", entry.Size, len(data))
 	}
-	if !bytes.Equal(entry.SHA1, sha1Sum(entry.Data)) {
+	if !bytes.Equal(entry.SHA1, sha1Sum(data)) {
 		t.Fatalf("media sha1 does not match its data")
 	}
 
@@ -135,13 +151,28 @@ func TestModernMediaMatchesMetaAndEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dec.Close()
-	data, err := io.ReadAll(dec)
+	data, err = io.ReadAll(dec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(data, entry.Data) {
+	if !bytes.Equal(data, readMediaStream(t, entry)) {
 		t.Fatalf("media %q resolved to the wrong entry bytes", entry.Name)
 	}
+}
+
+// readMediaStream reads one entry's decompressed stream through its opener.
+func readMediaStream(t *testing.T, entry anki.MediaEntry) []byte {
+	t.Helper()
+	rc, err := entry.Open()
+	if err != nil {
+		t.Fatalf("open media %q: %v", entry.Name, err)
+	}
+	defer rc.Close()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read media %q: %v", entry.Name, err)
+	}
+	return data
 }
 
 func TestCorruptZstdStream(t *testing.T) {

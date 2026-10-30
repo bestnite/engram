@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/urlfetch"
 )
@@ -63,8 +62,9 @@ func (a *API) ImportDeckPackageURL(ctx context.Context, u *store.User, apiKeyID 
 	if !a.importURL.Allow(urlImportLimitKey(u.ID)) {
 		return nil, newServiceError(http.StatusTooManyRequests, CodeRateLimited, "")
 	}
-	// Download: address shape, public-address pinning and byte cap all live in the fetcher; the cap comes from the same source as file import.
-	limit := media.ResolveMaxBytes(ctx, a.db)
+	// Download: address shape, public-address pinning and byte cap all live in the fetcher; the cap is
+	// package_max_bytes, the same source as file import.
+	limit := store.ResolvePackageLimits(ctx, a.db).MaxPackageBytes
 	body, err := a.fetcher.Fetch(ctx, rawURL, limit)
 	if err != nil {
 		return nil, mapFetchError(err)

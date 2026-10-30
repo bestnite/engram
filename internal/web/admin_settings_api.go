@@ -177,6 +177,12 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 				adminError(c, http.StatusBadRequest, "invalid_number")
 				return
 			}
+		case store.SettingKeyPackageMaxBytes, store.SettingKeyPackageMaxEntries, store.SettingKeyPackageMaxUnpackedBytes:
+			// Every package cap is a positive count, so zero and negatives are invalid.
+			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n <= 0 {
+				adminError(c, http.StatusBadRequest, "invalid_number")
+				return
+			}
 		case store.SettingKeyOptimizeMinReviews:
 			if n, err := strconv.Atoi(raw); err != nil || n < store.MinOptimizeMinReviews {
 				adminError(c, http.StatusBadRequest, "optimize_min_reviews_too_low")

@@ -46,6 +46,9 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 	// Hand the importer's currently effective media quota to the store layer; all four entries (REST/MCP/CLI/Web) go through this method,
 	// so they share one resolution and nobody can bypass the quota check.
 	opts.MediaQuotaBytes = media.ResolveUserQuotaBytes(ctx, a.db)
+	// The package caps are deployment settings resolved once per import, the same way the media
+	// quota is: every transport that reaches this method uses the same values.
+	opts.Limits = store.ResolvePackageLimits(ctx, a.db)
 	if opts.Now == nil {
 		opts.Now = a.now
 	}
@@ -211,10 +214,11 @@ func isRequestBodyTooLarge(err error) bool {
 // handleImportPackage is POST /api/v1/decks/import (multipart file upload).
 func (a *API) handleImportPackage(c *gin.Context) {
 	u, _ := CurrentUser(c)
-	// Cap the request body at the admin-configured upload limit before parsing multipart: gin spills parts beyond MaxMultipartMemory
-	// to a temp file, so setting no limit first would invite memory/disk amplification.
+	// Cap the request body at package_max_bytes before parsing multipart: gin spills parts beyond MaxMultipartMemory
+	// to a temp file, so setting no limit first would invite memory/disk amplification. This is the package cap,
+	// not the single-media upload cap: a 12 MB deck is a normal package even with the default 10 MiB media limit.
 	// Over the limit is a stable 413, reusing the deck package's existing package_too_large code.
-	limit := media.ResolveMaxBytes(c.Request.Context(), a.db)
+	limit := store.ResolvePackageLimits(c.Request.Context(), a.db).MaxPackageBytes
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 	fh, err := c.FormFile("file")
 	if err != nil {

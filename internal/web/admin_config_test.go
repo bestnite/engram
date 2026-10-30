@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -47,6 +48,7 @@ func TestAdminSettingsReadAndSave(t *testing.T) {
 	}
 	names := map[string]bool{}
 	foundSiteName := false
+	packageDefaults := map[string]string{}
 	for _, sec := range read.Sections {
 		names[sec.Name] = true
 		for _, row := range sec.Rows {
@@ -56,7 +58,18 @@ func TestAdminSettingsReadAndSave(t *testing.T) {
 					t.Errorf("site.name source = %q, want default", row.Source)
 				}
 			}
+			switch row.Key {
+			case store.SettingKeyPackageMaxBytes, store.SettingKeyPackageMaxEntries, store.SettingKeyPackageMaxUnpackedBytes:
+				packageDefaults[row.Key] = row.Value
+			}
 		}
+	}
+	// The three package caps are documented in the media section with their defaults.
+	wantDefaults := store.DefaultPackageImportLimits()
+	if packageDefaults[store.SettingKeyPackageMaxBytes] != strconv.FormatInt(wantDefaults.MaxPackageBytes, 10) ||
+		packageDefaults[store.SettingKeyPackageMaxEntries] != strconv.Itoa(wantDefaults.MaxEntries) ||
+		packageDefaults[store.SettingKeyPackageMaxUnpackedBytes] != strconv.FormatInt(wantDefaults.MaxUnpackedBytes, 10) {
+		t.Errorf("package cap defaults = %v, want %+v", packageDefaults, wantDefaults)
 	}
 	for _, want := range []string{"general", "media", "optimize"} {
 		if !names[want] {
@@ -69,7 +82,12 @@ func TestAdminSettingsReadAndSave(t *testing.T) {
 
 	// Valid save: persisted and marked with source db.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", adminSettingsRequest{
-		Values: map[string]string{"site.name": "Example Deck Site", "media_max_bytes": "2048"},
+		Values: map[string]string{
+			"site.name": "Example Deck Site", "media_max_bytes": "2048",
+			store.SettingKeyPackageMaxBytes:         "4096",
+			store.SettingKeyPackageMaxEntries:       "64",
+			store.SettingKeyPackageMaxUnpackedBytes: "8192",
+		},
 	}, cookies, csrf); rec.Code != http.StatusNoContent {
 		t.Fatalf("save settings = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
@@ -77,8 +95,17 @@ func TestAdminSettingsReadAndSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSettings: %v", err)
 	}
-	if settings["site.name"] != "Example Deck Site" || settings["media_max_bytes"] != "2048" {
+	if settings["site.name"] != "Example Deck Site" || settings["media_max_bytes"] != "2048" ||
+		settings[store.SettingKeyPackageMaxBytes] != "4096" ||
+		settings[store.SettingKeyPackageMaxEntries] != "64" ||
+		settings[store.SettingKeyPackageMaxUnpackedBytes] != "8192" {
 		t.Fatalf("settings not persisted: %+v", settings)
+	}
+	// A package cap of zero is invalid and persists nothing.
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", adminSettingsRequest{
+		Values: map[string]string{store.SettingKeyPackageMaxEntries: "0"},
+	}, cookies, csrf); rec.Code != http.StatusBadRequest {
+		t.Errorf("zero package cap = %d, want 400", rec.Code)
 	}
 	after := getJSON(t, srv, "/api/v1/admin/settings", cookies, nil)
 	if !strings.Contains(after.Body.String(), "Example Deck Site") {

@@ -254,7 +254,7 @@ func TestImportUploadRejectsOversizedBody(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "up_big", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
-	t.Setenv("MEDIA_MAX_BYTES", "256")
+	t.Setenv(store.EnvPackageMaxBytes, "256")
 	up := issueUpload(t, env, k.Plaintext, `{}`)
 	if up.MaxBytes != 256 {
 		t.Fatalf("max_bytes = %d, want 256", up.MaxBytes)

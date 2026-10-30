@@ -85,9 +85,9 @@ func TestImportPackageSurfacesTooLarge(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "pkg_too_large", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
-	t.Setenv("MEDIA_MAX_BYTES", "")
-	if err := store.PutSetting(context.Background(), env.db, "media_max_bytes", "256", nil, time.Now().UTC()); err != nil {
-		t.Fatalf("seed media_max_bytes: %v", err)
+	t.Setenv(store.EnvPackageMaxBytes, "")
+	if err := store.PutSetting(context.Background(), env.db, store.SettingKeyPackageMaxBytes, "256", nil, time.Now().UTC()); err != nil {
+		t.Fatalf("seed package_max_bytes: %v", err)
 	}
 
 	body, ct := multipartBody(t, "big.edeck", bytes.Repeat([]byte("A"), 4096))

@@ -1,11 +1,13 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -146,26 +148,11 @@ func (s *MediaStore) SaveBytes(ctx context.Context, root, mime string, raw []byt
 // SaveBytesTracked is SaveBytes that also returns the path Put moved into place (see Put for when it is set).
 func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, raw []byte, createdBy *uint64) (*Media, string, error) {
 	sum := sha256.Sum256(raw)
-	tmpDir := MediaTempDir(root)
-	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
-		return nil, "", fmt.Errorf("media: create temp dir: %w", err)
-	}
-	tmp, err := os.CreateTemp(tmpDir, "write-*")
+	tmpName, err := s.stageBytes(root, bytes.NewReader(raw))
 	if err != nil {
-		return nil, "", fmt.Errorf("media: create temp file: %w", err)
+		return nil, "", err
 	}
-	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }()
-	_, werr := tmp.Write(raw)
-	if werr == nil {
-		werr = tmp.Sync()
-	}
-	if cerr := tmp.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr != nil {
-		return nil, "", fmt.Errorf("media: write temp file: %w", werr)
-	}
 	return s.Put(ctx, root, MediaPut{
 		Sha256:    hex.EncodeToString(sum[:]),
 		Mime:      mime,
@@ -173,4 +160,54 @@ func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, ra
 		TempPath:  tmpName,
 		CreatedBy: createdBy,
 	})
+}
+
+// SaveStreamTracked writes one stream through a temporary file and Put, hashing it on the way.
+// The reader is not closed here: the caller owns it. The same temporary-file + rename rule as
+// SaveBytesTracked applies, so an imported media file is never held in memory.
+func (s *MediaStore) SaveStreamTracked(ctx context.Context, root, mime string, r io.Reader, createdBy *uint64) (*Media, string, error) {
+	sum := sha256.New()
+	tmpName, err := s.stageBytes(root, io.TeeReader(r, sum))
+	if err != nil {
+		return nil, "", err
+	}
+	defer func() { _ = os.Remove(tmpName) }()
+	info, err := os.Stat(tmpName)
+	if err != nil {
+		return nil, "", fmt.Errorf("media: stat temporary file: %w", err)
+	}
+	return s.Put(ctx, root, MediaPut{
+		Sha256:    hex.EncodeToString(sum.Sum(nil)),
+		Mime:      mime,
+		Bytes:     info.Size(),
+		TempPath:  tmpName,
+		CreatedBy: createdBy,
+	})
+}
+
+// stageBytes copies one stream into a fresh temporary file under root/tmp and returns its path.
+// The caller removes the path after Put, because Put renames it into place on a fresh write and
+// leaves it untouched on a dedup hit.
+func (s *MediaStore) stageBytes(root string, r io.Reader) (string, error) {
+	tmpDir := MediaTempDir(root)
+	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+		return "", fmt.Errorf("media: create temp dir: %w", err)
+	}
+	tmp, err := os.CreateTemp(tmpDir, "write-*")
+	if err != nil {
+		return "", fmt.Errorf("media: create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	_, werr := io.Copy(tmp, r)
+	if werr == nil {
+		werr = tmp.Sync()
+	}
+	if cerr := tmp.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		_ = os.Remove(tmpName)
+		return "", fmt.Errorf("media: write temp file: %w", werr)
+	}
+	return tmpName, nil
 }

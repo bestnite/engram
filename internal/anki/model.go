@@ -1,5 +1,7 @@
 package anki
 
+import "io"
+
 // Package is one decoded .apkg package. Slices are ordered deterministically:
 // note types, decks, notes and cards by ID, media by the archive index.
 type Package struct {
@@ -9,6 +11,10 @@ type Package struct {
 	Notes     []Note
 	Cards     []Card
 	Media     []MediaEntry
+	// UnpackedBytes is the decompressed size of what the reader itself produced: the
+	// collection, the meta entry and the media table. Media payloads are streamed by the
+	// caller, so their bytes are added by the caller when it enforces the total cap.
+	UnpackedBytes int64
 }
 
 // Note type kinds match Anki's own numbering in both package layouts.
@@ -95,11 +101,13 @@ type Card struct {
 }
 
 // MediaEntry is one media file. Name is the file name as stored by Anki, not
-// an archive entry name. SHA1 is the digest advertised by the package when
-// the layout advertises one, and the computed digest otherwise.
+// an archive entry name. Size is the size the package declares; a layout that
+// declares none leaves it zero. SHA1 is the digest the package advertises, or
+// nil when the layout advertises none. Open returns the decompressed stream;
+// the caller closes it and keeps the package's source open while reading.
 type MediaEntry struct {
 	Name string
 	Size uint32
 	SHA1 []byte
-	Data []byte
+	Open func() (io.ReadCloser, error)
 }

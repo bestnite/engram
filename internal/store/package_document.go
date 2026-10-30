@@ -15,7 +15,7 @@ import (
 //
 // MCP/CLI may receive either the JSON document output by `export_deck` (keyed by manifest.json etc.,
 // with media entries as base64 strings) or a base64-encoded .edeck zip. Both entry points normalize onto
-// the store layer's single zip parsing path (ImportPackage -> ReadPackageArchive), avoiding a second parser.
+// the store layer's single zip parsing path (ImportPackage -> unzipPackageFile), avoiding a second parser.
 
 // PackageDocumentToZip turns a document in DeckPackage.Document form back into .edeck zip bytes.
 // Entries ending in .json are serialized as JSON; the other entries (files under media/) are treated as base64 strings and decoded.
