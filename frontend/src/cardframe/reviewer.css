@@ -48,6 +48,27 @@ textarea.answer-input {
   resize: vertical;
 }
 
+/*
+ * The type-in input a template without an answer spec draws. Its font and size come from the note type's field config as
+ * an inline style, because an input does not inherit the card's typography; only the box and its states are styled here.
+ */
+#typeans {
+  display: block;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--input);
+  border-radius: 0.6rem;
+}
+
+#typeans:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+
 .answer-inputs {
   display: flex;
   flex-direction: column;

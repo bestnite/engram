@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -147,6 +148,9 @@ type ReviewCardView struct {
 	// Blanks holds the hint for each input box of per-blank/per-item answer controls (cloze and list), in order, empty
 	// string when there is no hint; the review page uses it to decide the number of input boxes.
 	Blanks []string
+	// TypeIn is true when the front template carries a type placeholder without an answer spec. The frame draws the
+	// type-in input, and the answer side compares the typed value with the field it names.
+	TypeIn bool
 	// EditHref points at the edit page of that note, for the e-key jump.
 	EditHref string
 	// MediaBase is the frame document's <base href> ("/fm/<token>/") for this user and this card's deck. It is set on every
@@ -307,10 +311,28 @@ func (s *Server) faces(ctx context.Context, user *store.User, item *cardFace, su
 }
 
 // frontFaceHTML renders the front side. A frame request replaces the type marker with the answer control's input
-// markup; every other request strips the marker, because the transitional SPA draws its own control.
+// markup, or with a type-in input when the template has no answer spec; every other request strips the marker,
+// because the transitional SPA draws its own control.
 func frontFaceHTML(item *cardFace, source string, optionOrder []int, forFrame bool) string {
 	marker := typeMarkerPattern.FindString(source)
-	if !forFrame || item.spec == nil || marker == "" {
+	if marker == "" {
+		return source
+	}
+	if item.spec == nil {
+		if !forFrame {
+			return typeMarkerPattern.ReplaceAllString(source, "")
+		}
+		// A template without an answer spec still names a type-in field. The control's id is the one Anki's reviewer
+		// uses, so a card stylesheet that targets #typeans keeps working; the field's own font and size style it.
+		input, ok := typeInInputHTML(item, marker)
+		if !ok {
+			return typeMarkerPattern.ReplaceAllString(source, "")
+		}
+		rendered := strings.Replace(source, marker, input, 1)
+		// The reviewer reads one input by id, so any further marker on the face is stripped rather than duplicated.
+		return typeMarkerPattern.ReplaceAllString(rendered, "")
+	}
+	if !forFrame {
 		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	control, ok := answer.Lookup(item.spec.Control)
@@ -334,12 +356,25 @@ func frontFaceHTML(item *cardFace, source string, optionOrder []int, forFrame bo
 	return rendered
 }
 
-// backFaceHTML replaces the back side's type marker with the answer control's breakdown when a control exists, and
-// strips the marker otherwise.
+// backFaceHTML replaces the back side's type marker with the answer control's breakdown when a control exists, with
+// Anki's typed-answer comparison when the template has no answer spec, and strips the marker otherwise.
 func backFaceHTML(item *cardFace, source string, submitted json.RawMessage, result *answer.GradeResult, optionOrder []int) string {
 	marker := typeMarkerPattern.FindString(source)
-	if item.spec == nil || marker == "" {
-		return typeMarkerPattern.ReplaceAllString(source, "")
+	if marker == "" {
+		return source
+	}
+	if item.spec == nil {
+		// The comparison is Anki's own output for the typed value; an empty typed value still shows the expected text,
+		// so the answer face is readable when the learner revealed without typing.
+		comparison, ok := typeInComparisonHTML(item, marker, submitted)
+		if !ok {
+			return typeMarkerPattern.ReplaceAllString(source, "")
+		}
+		// A template that inserts its front with {{FrontSide}} carries the question's marker as well. The first marker is
+		// where the learner saw the input, so it becomes the comparison; any later marker is removed, and only from the
+		// source, because the comparison itself may legitimately contain the literal marker text.
+		first := strings.Index(source, marker)
+		return source[:first] + comparison + typeMarkerPattern.ReplaceAllString(source[first+len(marker):], "")
 	}
 	control, ok := answer.Lookup(item.spec.Control)
 	if !ok {
@@ -362,6 +397,111 @@ func backFaceHTML(item *cardFace, source string, submitted json.RawMessage, resu
 		return typeMarkerPattern.ReplaceAllString(source, "")
 	}
 	return rendered
+}
+
+// typeInMarker is the parsed form of a [[type:...]] placeholder: the field it names and the comparison Anki applies.
+type typeInMarker struct {
+	field string
+	// combining selects the plain comparison; a type-nc placeholder compares without combining marks.
+	combining bool
+	// cloze compares the deletion carrying the card's cloze number instead of the whole field.
+	cloze bool
+}
+
+// parseTypeInMarker splits the placeholder the type filter emits. The filter writes three forms: [[type:F]],
+// [[type:nc:F]] and [[type:cloze:F]]; the field name is the rest of the body after the variant prefix.
+func parseTypeInMarker(marker string) (typeInMarker, bool) {
+	body, ok := strings.CutPrefix(marker, "[[type:")
+	if !ok {
+		return typeInMarker{}, false
+	}
+	body, ok = strings.CutSuffix(body, "]]")
+	if !ok {
+		return typeInMarker{}, false
+	}
+	switch {
+	case strings.HasPrefix(body, "nc:"):
+		return typeInMarker{field: strings.TrimPrefix(body, "nc:")}, true
+	case strings.HasPrefix(body, "cloze:"):
+		return typeInMarker{field: strings.TrimPrefix(body, "cloze:"), combining: true, cloze: true}, true
+	default:
+		return typeInMarker{field: body, combining: true}, true
+	}
+}
+
+// fieldValue returns a note's stored value for the field the template names. The note values are keyed by field id,
+// while a marker carries the field name, so the config is what joins the two.
+func (item *cardFace) fieldValue(name string) (string, bool) {
+	for _, field := range item.config.Fields {
+		if field.Name != name {
+			continue
+		}
+		value, ok := item.values[field.ID]
+		return value, ok
+	}
+	return "", false
+}
+
+// typeInExpected is the text the comparison uses for one placeholder. A cloze placeholder compares the deletion the
+// card shows, not the whole field; every other form compares the field.
+func (item *cardFace) typeInExpected(parsed typeInMarker) (string, bool) {
+	value, ok := item.fieldValue(parsed.field)
+	if !ok {
+		return "", false
+	}
+	if parsed.cloze {
+		return notetype.ExtractClozeForTyping(value, item.ordinal+1), true
+	}
+	return value, true
+}
+
+// typeInInputHTML renders the type-in input a front face shows when the template has no answer spec. The id is the
+// one Anki's reviewer uses, and the field's configured font and size travel as an inline style because the input does
+// not inherit the card's typography.
+func typeInInputHTML(item *cardFace, marker string) (string, bool) {
+	parsed, ok := parseTypeInMarker(marker)
+	if !ok || strings.TrimSpace(parsed.field) == "" {
+		return "", false
+	}
+	var font string
+	var size int
+	for _, field := range item.config.Fields {
+		if field.Name == parsed.field {
+			font, size = field.Font, field.FontSize
+			break
+		}
+	}
+	style := ""
+	var declarations []string
+	if font = strings.TrimSpace(font); font != "" {
+		declarations = append(declarations, "font-family:"+font)
+	}
+	if size > 0 {
+		declarations = append(declarations, "font-size:"+strconv.Itoa(size)+"px")
+	}
+	if len(declarations) > 0 {
+		style = ` style="` + html.EscapeString(strings.Join(declarations, ";")) + `"`
+	}
+	return `<input id="typeans" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"` + style + `>`, true
+}
+
+// typeInComparisonHTML renders the back-side comparison for a template without an answer spec, using the same
+// comparison Anki's reviewer shows. The submitted value is the typed string the frame posted; any other shape
+// means nothing was typed, and the expected text alone is shown.
+func typeInComparisonHTML(item *cardFace, marker string, submitted json.RawMessage) (string, bool) {
+	parsed, ok := parseTypeInMarker(marker)
+	if !ok {
+		return "", false
+	}
+	expected, ok := item.typeInExpected(parsed)
+	if !ok {
+		return "", false
+	}
+	typed := ""
+	if len(submitted) > 0 {
+		_ = json.Unmarshal(submitted, &typed)
+	}
+	return notetype.CompareAnswer(expected, typed, parsed.combining), true
 }
 
 // optionLines splits a stored options field into its entries.
@@ -482,6 +622,7 @@ func (s *Server) cardViewWithAnswer(ctx context.Context, user *store.User, item 
 		OptionsHTML:     options,
 		OptionOrder:     optionOrder,
 		Blanks:          blankHints(rendered.spec, rendered.values, rendered.ordinal),
+		TypeIn:          rendered.spec == nil && typeMarkerPattern.MatchString(rendered.frontRaw),
 		EditHref:        "/decks/" + rendered.deck.PublicID + "/notes/" + rendered.note.PublicID,
 		MediaBase:       front.MediaBase,
 	}, nil

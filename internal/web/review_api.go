@@ -53,6 +53,15 @@ type reviewCardRequest struct {
 	Tags   []string `json:"tags"`
 }
 
+// reviewRenderRequest is the request body of the card render endpoint. Answer is the typed value a type-in card's frame
+// posted; it only renders the answer side's comparison and is never written as progress.
+type reviewRenderRequest struct {
+	CardID string          `json:"card_id"`
+	Deck   []string        `json:"deck"`
+	Tags   []string        `json:"tags"`
+	Answer json.RawMessage `json:"answer"`
+}
+
 // reviewAnswer gives the SPA a session and CSRF protected answer entry point; the business submit and the queue still reuse the API service.
 func (s *Server) reviewAnswer(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
@@ -280,15 +289,16 @@ func (s *Server) reviewUndo(c *gin.Context) {
 // reviewRender returns both sides of a card and each choice option's HTML.
 //
 // front and back carry the card-view contract (html, css, body_class, side, media_base); front_html and back_html repeat
-// their HTML for the SPA until it reads the objects. edit_href is the review page's edit entry; intervals are the next
-// interval for each of the four grades (api.PreviewIntervals).
+// their HTML for the SPA until it reads the objects. An answer carries the typed value of a type-in card so the back can
+// compare it. edit_href is the review page's edit entry; intervals are the next interval for each of the four grades
+// (api.PreviewIntervals).
 func (s *Server) reviewRender(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
 		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
 		return
 	}
-	var req reviewCardRequest
+	var req reviewRenderRequest
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.CardID) == "" {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
@@ -297,7 +307,7 @@ func (s *Server) reviewRender(c *gin.Context) {
 	if !ok {
 		return
 	}
-	view, err := s.cardViewWithAnswer(c.Request.Context(), user, schedule.QueueItem{CardID: card.ID}, nil, nil, frameOutputRequested(c))
+	view, err := s.cardViewWithAnswer(c.Request.Context(), user, schedule.QueueItem{CardID: card.ID}, req.Answer, nil, frameOutputRequested(c))
 	if err != nil {
 		s.logger.Error("render spa review card failed", "card_id", card.ID, "error", err)
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
@@ -320,6 +330,7 @@ func (s *Server) reviewRender(c *gin.Context) {
 		"options_html": view.OptionsHTML,
 		"option_order": view.OptionOrder,
 		"blanks":       view.Blanks,
+		"type_in":      view.TypeIn,
 		"edit_href":    view.EditHref,
 		"media_base":   view.MediaBase,
 		"intervals":    intervals,

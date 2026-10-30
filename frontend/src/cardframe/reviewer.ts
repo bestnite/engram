@@ -104,6 +104,9 @@ function checkedInput(group: Element | null, selector: string): HTMLInputElement
  * `.answer-inputs` with `data-index` order, and the choices are `input[type=radio|checkbox]` named after their group.
  */
 export function readControlValue(target: Element): FrameAnswerValue | undefined {
+  // A type-in template without an answer spec draws its own input rather than an answer control, so its value is the
+  // typed answer. Posting it on input keeps a click on "show answer" able to compare it without a key press.
+  if (target instanceof HTMLInputElement && target.id === 'typeans') return target.value;
   const control = target.closest('[data-control]')?.getAttribute('data-control') ?? '';
   if (control === '') return undefined;
 
@@ -147,6 +150,8 @@ function answerInputs(root: Element): HTMLInputElement[] {
 function readCurrent(root: Element): FrameAnswerValue | undefined {
   const filled = answerInputs(root)[0];
   if (filled) return readControlValue(filled);
+  const typed = root.querySelector<HTMLInputElement>('input#typeans');
+  if (typed) return typed.value;
   const checked = root.querySelector<HTMLInputElement>('input[type=checkbox]:checked, input[type=radio]:checked');
   if (checked) return readControlValue(checked);
   const group = root.querySelector<HTMLElement>('.answer-choices[data-control], .answer-inputs[data-control]');
@@ -175,9 +180,10 @@ export function attachAnswerControls(root: Element, emit: (value: FrameAnswerVal
     },
     typedAnswer(): string {
       const inputs = answerInputs(root);
-      const typed = inputs.find(
-        (input) => input instanceof HTMLTextAreaElement || TEXT_CONTROLS.has(input.getAttribute('data-control') ?? ''),
-      );
+      const typed =
+        inputs.find(
+          (input) => input instanceof HTMLTextAreaElement || TEXT_CONTROLS.has(input.getAttribute('data-control') ?? ''),
+        ) ?? root.querySelector<HTMLInputElement>('input#typeans');
       return typed?.value ?? '';
     },
   };

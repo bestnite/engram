@@ -887,6 +887,11 @@ export interface ReviewRenderResponse {
   option_order?: number[] | null;
   /** Prompt per blank of a blanks-graded card (answer_control = 'blanks') on this card, in order of appearance; empty string for no prompt, null for other kinds. */
   blanks?: string[] | null;
+  /**
+   * True when the front template is a type-in placeholder without an answer spec. The frame draws `input#typeans`, and
+   * the answer face compares the typed value with the field the placeholder names; the rating stays self-chosen.
+   */
+  type_in?: boolean;
   edit_href: string;
   /**
    * `<base href>` prefix (`/fm/<token>/`) that the frame needs for the relative media names in front_html / back_html.

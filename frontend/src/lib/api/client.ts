@@ -958,7 +958,7 @@ export class ApiClient {
    * The review page only hands this HTML to the card frame and never renders raw fields as Markdown.
    */
   async renderReviewCard(
-    input: { card_id: string; deck?: string[]; tags?: string[] },
+    input: { card_id: string; deck?: string[]; tags?: string[]; answer?: string },
     options?: CardFaceRequestOptions,
   ): Promise<ReviewRenderResponse> {
     if (!this.csrfToken) {

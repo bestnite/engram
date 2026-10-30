@@ -113,6 +113,10 @@
   let backFace = $state<CardFace | null>(initialBackFace);
   // The current card's zero-based template ordinal, used for the frame body class `cardN` (N = ordinal + 1).
   let cardOrdinal = $state(0);
+  // Whether the front template is a type-in placeholder without an answer spec. Such a card is self-rated like any other,
+  // but its answer face compares the typed value, which only the server can do, so the reveal fetches that face again.
+  // svelte-ignore state_referenced_locally
+  let typeIn = $state(false);
   // svelte-ignore state_referenced_locally
   let editHref = $state(initialEditHref);
   let renderToken = 0;
@@ -223,12 +227,14 @@
       frontFace = response.front;
       backFace = response.back;
       cardOrdinal = response.ordinal ?? 0;
+      typeIn = response.type_in ?? false;
       editHref = response.edit_href;
     } catch {
       if (token !== renderToken) return;
       frontFace = null;
       backFace = null;
       cardOrdinal = 0;
+      typeIn = false;
       editHref = '';
     }
   }
@@ -240,6 +246,7 @@
     frontFace = null;
     backFace = null;
     cardOrdinal = 0;
+    typeIn = false;
     editHref = '';
     essayText = '';
     frameAnswer = undefined;
@@ -351,9 +358,28 @@
     }
   }
 
-  /** Reveal the back of a self-graded card: the frame mounts the answer face and handles its own typesetting. */
-  function reveal(): void {
+  /**
+   * Reveal the back of a self-graded card. A type-in card compares the typed value with the expected text, and that
+   * comparison is Anki's server-side rule, so its answer face is fetched again with the typed value. The rating stays
+   * self-chosen: the typed value is only used to render the comparison and is never submitted as progress.
+   */
+  async function reveal(): Promise<void> {
+    if (revealed) return;
     revealed = true;
+    const answer = frameAnswer;
+    const card = current;
+    if (!typeIn || !card || typeof answer !== 'string' || answer === '') return;
+    const cardId = card.card_id;
+    try {
+      const response = await client.renderReviewCard(
+        { card_id: cardId, deck: selectedDecks(), tags: selectedTags(), answer },
+        { frame: true },
+      );
+      // The learner may have moved on while the request was in flight; a stale answer face must not replace the new card's.
+      if (current?.card_id === cardId) backFace = response.back;
+    } catch {
+      // The pre-fetched answer face still shows the expected text, so a failed comparison keeps the card usable.
+    }
   }
 
   /** Submit the raw answer and let the server grade it; the result panel keeps the answered card, and the card only changes when the user presses "continue". */

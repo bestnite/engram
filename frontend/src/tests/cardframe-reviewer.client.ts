@@ -224,6 +224,27 @@ describe('card frame answer controls post their value', () => {
     fire(area, 'input');
     expect(answers()).toEqual(['a written answer']);
   });
+
+  it('posts the typed answer on Enter in a type-in input', async () => {
+    const root = await showControl('<p>Question</p><input id="typeans" type="text" autocomplete="off">');
+    const input = root.querySelector<HTMLInputElement>('#typeans')!;
+    input.value = 'Paris';
+    input.focus();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+
+    // The typed value reaches the parent so the answer face can compare it; Enter also travels as the reveal key.
+    expect(answers()).toEqual(['Paris']);
+    expect(posted().some((message) => message.type === 'key' && message.key === 'Enter')).toBe(true);
+
+    // A non-Enter key stays with the input and posts no answer.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA' }));
+    expect(answers()).toEqual(['Paris']);
+
+    // Typing also posts the value, so revealing with the button compares the latest text without pressing Enter.
+    input.value = 'Lyon';
+    fire(input, 'input');
+    expect(answers()).toEqual(['Paris', 'Lyon']);
+  });
 });
 
 describe('card frame reviewer globals', () => {

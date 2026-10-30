@@ -311,7 +311,7 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
 
   /** Puts the caret in the answer input a question face shows, as Anki's reviewer does on a type-in card. */
   function focusAnswer(node: Element): void {
-    const input = node.querySelector<HTMLElement>('input.answer-input[type=text], textarea.answer-input');
+    const input = node.querySelector<HTMLElement>('input.answer-input[type=text], textarea.answer-input, input#typeans');
     if (!input || typeof input.focus !== 'function') return;
     input.focus();
   }
@@ -361,6 +361,16 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   function onKeyDown(event: KeyboardEvent): void {
     const active = doc.activeElement;
     if (active instanceof HTMLElement) {
+      // A type-in face draws its own input (#typeans) rather than an answer control. Enter posts the typed value so the
+      // parent can hand it to the server's comparison, and then travels on as the reveal key, as Anki's reviewer does.
+      if (active instanceof HTMLInputElement && active.id === 'typeans') {
+        const submitTyped = event.key === 'Enter' && !event.isComposing && event.keyCode !== 229;
+        if (submitTyped) {
+          post({ type: 'answer', value: active.value });
+          postKey(event);
+        }
+        return;
+      }
       // Enter in a single-line answer input is the graded card's submit key, so it is forwarded even though the
       // control owns the rest of the keyboard. A textarea keeps Enter for a newline (the short-answer card).
       const submitFromInput =
