@@ -390,6 +390,11 @@ func (s *Shell) ServeAsset(c *gin.Context) {
 
 	c.Header("Cache-Control", "public, max-age=31536000, immutable")
 	c.Header("ETag", asset.etag)
+	// The card frame document is served with sandbox="allow-scripts" and no allow-same-origin, so its origin is opaque
+	// ("null") and Vite's module scripts and crossorigin stylesheets are cross-origin requests that need this header.
+	// The assets are public, content-hashed and carry no credentials, so a wildcard origin exposes nothing a plain GET
+	// would not. Without it the frame runtime never loads and no card face renders.
+	c.Header("Access-Control-Allow-Origin", "*")
 	c.Data(http.StatusOK, asset.contentType, asset.data)
 }
 

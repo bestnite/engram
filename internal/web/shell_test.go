@@ -65,6 +65,11 @@ func TestServesAssetsWithImmutableCache(t *testing.T) {
 		if csp := rec.Header().Get("Content-Security-Policy"); csp == "" {
 			t.Errorf("GET %s Content-Security-Policy is missing", target.url)
 		}
+		// The sandboxed card frame has an opaque origin, so its module scripts and stylesheets are cross-origin
+		// requests; without this header the frame runtime never boots.
+		if acao := rec.Header().Get("Access-Control-Allow-Origin"); acao != "*" {
+			t.Errorf("GET %s Access-Control-Allow-Origin = %q, want *", target.url, acao)
+		}
 	}
 }
 
