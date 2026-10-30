@@ -42,6 +42,9 @@ const (
 	CodeMediaNotReadable = "media_not_readable"
 	// CodeNoteTypeInUse means a note type still backs at least one note, so deleting it would orphan that content.
 	CodeNoteTypeInUse = "note_type_in_use"
+	// CodeCardRemovalUnconfirmed means a note type update would soft-delete at least one card, and the body did not
+	// set confirm_card_removal. The response carries the counts so the caller can decide whether to confirm.
+	CodeCardRemovalUnconfirmed = "card_removal_unconfirmed"
 	// CodeCSRFFailed means the CSRF token is missing or failed validation.
 	CodeCSRFFailed = "csrf_failed"
 	// CodeCSRFNoSession means there is no active session to validate CSRF against.
@@ -127,6 +130,9 @@ var errorMessages = map[string]string{
 
 	// Stable code for deleting a note type that notes still use.
 	CodeNoteTypeInUse: "The note type is still used by one or more notes.",
+
+	// Stable code for a note type update that would remove cards without confirmation.
+	CodeCardRemovalUnconfirmed: "The update would remove cards from existing notes; resend it with confirm_card_removal set.",
 
 	// Stable codes for deck create/rename (store.ErrDeckNameInvalid).
 	CodeDeckNameInvalid:        "The deck name is invalid.",

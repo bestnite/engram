@@ -41,10 +41,29 @@ type CreateNoteTypeInput struct {
 
 // UpdateNoteTypeInput is the input for updating a note type. Version is the version the caller read;
 // it is required, so a caller cannot update blind and silently overwrite a newer edit.
+//
+// DryRun and ConfirmCardRemoval are the card-impact switches: a template change adds cards, and if it
+// removes any, the caller must first see the counts and confirm. The two switches are independent, so
+// a caller may also preview a change and then confirm it with one body.
 type UpdateNoteTypeInput struct {
-	Name    string
-	Config  notetype.Config
-	Version *int
+	Name               string
+	Config             notetype.Config
+	Version            *int
+	DryRun             bool
+	ConfirmCardRemoval bool
+}
+
+// UpdateNoteTypeResult is the updated note type together with the card impact of the update.
+//
+// The counts are reported for a dry run and for a real update alike, and they are also filled on the
+// refusal a card removal triggers without confirmation, so the caller can show the same numbers in
+// both responses.
+type UpdateNoteTypeResult struct {
+	NoteType              NoteTypeJSON
+	DryRun                bool
+	CardsAdded            int
+	CardsRemoved          int
+	ReviewsOnRemovedCards int
 }
 
 // NoteTypeJSON renders one note type, decoding its stored config.
@@ -145,21 +164,72 @@ func (a *API) CreateNoteType(ctx context.Context, userID, deckID uint64, apiKeyI
 // UpdateNoteType replaces a note type's name and config when the caller's version is still current
 // (scope: write, editor role). A moved version is 409 version_conflict; validation is 400 and names
 // the offending field or template.
-func (a *API) UpdateNoteType(ctx context.Context, userID, deckID uint64, publicID string, apiKeyID *uint64, in UpdateNoteTypeInput) (NoteTypeJSON, error) {
+//
+// The kind is fixed at creation: a normal type cannot become cloze or the reverse, because the two
+// kinds generate and render cards by different rules, so an existing note's cards could not be carried
+// over. Such an update is 400 invalid_request and writes nothing.
+//
+// Cards follow the config. Every live note of the type is regenerated from the new config in the
+// same transaction as the row, so an added template yields a card per note whose front is non-empty,
+// and a removed template soft-deletes the cards it no longer generates while their card_states and
+// reviews rows stay. A dry run returns the counts and writes nothing; an update that would remove
+// cards without ConfirmCardRemoval is refused with 409 card_removal_unconfirmed and the same counts.
+// A successful update writes one audit row recording the counts.
+func (a *API) UpdateNoteType(ctx context.Context, userID, deckID uint64, publicID string, apiKeyID *uint64, in UpdateNoteTypeInput) (UpdateNoteTypeResult, error) {
+	empty := UpdateNoteTypeResult{DryRun: in.DryRun}
 	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleEditor)
 	if err != nil {
-		return NoteTypeJSON{}, err
+		return empty, err
 	}
 	if in.Version == nil {
-		return NoteTypeJSON{}, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "version is required")
+		return empty, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "version is required")
 	}
 	nt, err := a.noteTypeInDeck(ctx, d.ID, publicID)
 	if err != nil {
-		return NoteTypeJSON{}, err
+		return empty, err
 	}
+	currentCfg, err := nt.Config()
+	if err != nil {
+		a.logger.Error("decode note type config failed", "note_type_id", nt.ID, "error", err)
+		return empty, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read note type")
+	}
+	if currentCfg.Kind != in.Config.Kind {
+		return empty, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "the note type kind cannot change")
+	}
+	// Keep the stored row as a value so a dry run can render what is still in the database; nt itself
+	// is mutated by the store's validation before the transaction decides whether to commit.
+	before := *nt
 	nt.Name = in.Name
-	if err := a.noteTypes.Update(ctx, nt, in.Config, *in.Version); err != nil {
-		return NoteTypeJSON{}, noteTypeWriteError(err)
+	impact, err := a.noteTypes.Update(ctx, nt, in.Config, store.NoteTypeUpdateOptions{
+		ExpectedVersion:    *in.Version,
+		DryRun:             in.DryRun,
+		ConfirmCardRemoval: in.ConfirmCardRemoval,
+	})
+	result := UpdateNoteTypeResult{
+		DryRun:                in.DryRun,
+		CardsAdded:            impact.CardsAdded,
+		CardsRemoved:          impact.CardsRemoved,
+		ReviewsOnRemovedCards: impact.ReviewsOnRemovedCards,
+	}
+	if err != nil {
+		if errors.Is(err, store.ErrCardRemovalUnconfirmed) {
+			return result, newServiceError(http.StatusConflict, CodeCardRemovalUnconfirmed, "")
+		}
+		return result, noteTypeWriteError(err)
+	}
+	source := nt
+	if in.DryRun {
+		source = &before
+	}
+	out, err := a.NoteTypeJSON(source, d.PublicID)
+	if err != nil {
+		return result, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read note type")
+	}
+	result.NoteType = out
+	if in.DryRun {
+		// A dry run writes nothing, and that includes the audit trail: the row would claim a change
+		// that never happened.
+		return result, nil
 	}
 	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),
@@ -167,13 +237,16 @@ func (a *API) UpdateNoteType(ctx context.Context, userID, deckID uint64, publicI
 		Action:     store.ActionNoteTypeUpdate,
 		TargetType: "note_type",
 		TargetID:   store.Ptr(nt.ID),
-		Detail:     map[string]any{"deck_id": d.PublicID, "name": nt.Name, "version": nt.Version},
+		Detail: map[string]any{
+			"deck_id":                  d.PublicID,
+			"name":                     nt.Name,
+			"version":                  nt.Version,
+			"cards_added":              impact.CardsAdded,
+			"cards_removed":            impact.CardsRemoved,
+			"reviews_on_removed_cards": impact.ReviewsOnRemovedCards,
+		},
 	})
-	out, err := a.NoteTypeJSON(nt, d.PublicID)
-	if err != nil {
-		return NoteTypeJSON{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read note type")
-	}
-	return out, nil
+	return result, nil
 }
 
 // DeleteNoteType removes a note type (scope: write, editor role). It is refused with 409
@@ -314,10 +387,32 @@ func (a *API) createNoteType(c *gin.Context) {
 }
 
 // updateNoteTypeRequest is the update body; version is required and must be the value the caller read.
+// dry_run previews the card impact, and confirm_card_removal allows the update to soft-delete cards.
 type updateNoteTypeRequest struct {
-	Name    string          `json:"name"`
-	Config  notetype.Config `json:"config"`
-	Version *int            `json:"version"`
+	Name               string          `json:"name"`
+	Config             notetype.Config `json:"config"`
+	Version            *int            `json:"version"`
+	DryRun             bool            `json:"dry_run"`
+	ConfirmCardRemoval bool            `json:"confirm_card_removal"`
+}
+
+// updateNoteTypeResponse is the note type plus the card impact. It embeds NoteTypeJSON, so a client
+// that read the old response keeps finding id, name, config and version at the same locations.
+type updateNoteTypeResponse struct {
+	NoteTypeJSON
+	DryRun                bool `json:"dry_run"`
+	CardsAdded            int  `json:"cards_added"`
+	CardsRemoved          int  `json:"cards_removed"`
+	ReviewsOnRemovedCards int  `json:"reviews_on_removed_cards"`
+}
+
+// cardRemovalUnconfirmedResponse carries the standard error envelope plus the impact counts, so the
+// caller sees exactly what confirming would remove.
+type cardRemovalUnconfirmedResponse struct {
+	Error                 errorBody `json:"error"`
+	CardsAdded            int       `json:"cards_added"`
+	CardsRemoved          int       `json:"cards_removed"`
+	ReviewsOnRemovedCards int       `json:"reviews_on_removed_cards"`
 }
 
 // updateNoteType is PATCH /api/v1/decks/:id/note-types/:type_id, scope: write, editor role.
@@ -341,16 +436,37 @@ func (a *API) updateNoteType(c *gin.Context) {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
-	nt, err := a.UpdateNoteType(c.Request.Context(), u.ID, d.ID, typePublicID, CurrentAPIKeyID(c), UpdateNoteTypeInput{
-		Name:    req.Name,
-		Config:  req.Config,
-		Version: req.Version,
+	result, err := a.UpdateNoteType(c.Request.Context(), u.ID, d.ID, typePublicID, CurrentAPIKeyID(c), UpdateNoteTypeInput{
+		Name:               req.Name,
+		Config:             req.Config,
+		Version:            req.Version,
+		DryRun:             req.DryRun,
+		ConfirmCardRemoval: req.ConfirmCardRemoval,
 	})
 	if err != nil {
+		var se *ServiceError
+		if errors.As(err, &se) && se.Code == CodeCardRemovalUnconfirmed {
+			c.JSON(se.Status, cardRemovalUnconfirmedResponse{
+				Error: errorBody{
+					Code:    se.Code,
+					Message: formatErrorMessage(c.Request.Context(), se.Code, se.Message),
+				},
+				CardsAdded:            result.CardsAdded,
+				CardsRemoved:          result.CardsRemoved,
+				ReviewsOnRemovedCards: result.ReviewsOnRemovedCards,
+			})
+			return
+		}
 		writeServiceError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, nt)
+	c.JSON(http.StatusOK, updateNoteTypeResponse{
+		NoteTypeJSON:          result.NoteType,
+		DryRun:                result.DryRun,
+		CardsAdded:            result.CardsAdded,
+		CardsRemoved:          result.CardsRemoved,
+		ReviewsOnRemovedCards: result.ReviewsOnRemovedCards,
+	})
 }
 
 // deleteNoteType is DELETE /api/v1/decks/:id/note-types/:type_id, scope: write, editor role.

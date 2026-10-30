@@ -423,3 +423,447 @@ func TestNoteTypeValidationRejected(t *testing.T) {
 		t.Fatalf("note types after rejected create = %d, want 0", count)
 	}
 }
+
+// noteTypePK resolves the internal primary key of a note type by its public id.
+func noteTypePK(t *testing.T, env *testEnv, publicID string) uint64 {
+	t.Helper()
+	var nt store.NoteType
+	if err := env.db.Where("public_id = ?", publicID).First(&nt).Error; err != nil {
+		t.Fatalf("load note type %q: %v", publicID, err)
+	}
+	return nt.ID
+}
+
+// noteTypeUpdateREST sends a PATCH body for a note type, with optional extra body keys such as
+// dry_run and confirm_card_removal, and returns the status and raw response.
+func noteTypeUpdateREST(t *testing.T, router http.Handler, path, key, name string, cfg notetype.Config, version int, extra map[string]any) (int, []byte) {
+	t.Helper()
+	body := map[string]any{"name": name, "config": cfg, "version": version}
+	for k, v := range extra {
+		body[k] = v
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal update body: %v", err)
+	}
+	return doJSON(t, router, http.MethodPatch, path, key, string(raw))
+}
+
+// noteTypeUpdateResponseJSON is the PATCH response: the note type fields sit at the top level (the
+// embedded NoteTypeJSON), followed by the card impact counts.
+type noteTypeUpdateResponseJSON struct {
+	NoteTypeJSON
+	DryRun                bool `json:"dry_run"`
+	CardsAdded            int  `json:"cards_added"`
+	CardsRemoved          int  `json:"cards_removed"`
+	ReviewsOnRemovedCards int  `json:"reviews_on_removed_cards"`
+}
+
+// decodeNoteTypeUpdate decodes a successful PATCH response.
+func decodeNoteTypeUpdate(t *testing.T, raw []byte) noteTypeUpdateResponseJSON {
+	t.Helper()
+	var out noteTypeUpdateResponseJSON
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("update response is not JSON: %v (%s)", err, raw)
+	}
+	return out
+}
+
+// noteTypeCards loads the cards of a note type, ordered by note and ordinal. When includeDeleted is
+// false only visible cards are returned; when it is true soft-deleted cards are included too.
+func noteTypeCards(t *testing.T, env *testEnv, noteTypeID uint64, includeDeleted bool) []store.Card {
+	t.Helper()
+	q := env.db.Model(&store.Card{}).
+		Joins("JOIN notes ON notes.id = cards.note_id").
+		Where("notes.note_type_id = ? AND notes.deleted_at IS NULL", noteTypeID)
+	if includeDeleted {
+		q = q.Unscoped()
+	}
+	var cards []store.Card
+	if err := q.Order("cards.note_id ASC, cards.ordinal ASC, cards.id ASC").Find(&cards).Error; err != nil {
+		t.Fatalf("load cards of note type %d: %v", noteTypeID, err)
+	}
+	return cards
+}
+
+// createNotesREST creates the given field maps as notes of one note type through the note endpoint.
+func createNotesREST(t *testing.T, router http.Handler, deckPublicID, noteTypeID, key string, fields []map[string]string) {
+	t.Helper()
+	notes := make([]map[string]any, 0, len(fields))
+	for _, f := range fields {
+		notes = append(notes, map[string]any{"note_type": noteTypeID, "fields": f})
+	}
+	raw, err := json.Marshal(map[string]any{"notes": notes})
+	if err != nil {
+		t.Fatalf("marshal notes body: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/decks/%s/notes", deckPublicID)
+	code, body := doJSON(t, router, http.MethodPost, path, key, string(raw))
+	if code != http.StatusOK {
+		t.Fatalf("POST %s = %d, want 200 (body %s)", path, code, body)
+	}
+}
+
+// TestNoteTypeUpdateAddsCardsForNewTemplate: an update that adds a template creates one card per
+// note whose new front is not empty, and reports the count.
+func TestNoteTypeUpdateAddsCardsForNewTemplate(t *testing.T) {
+	env := newTestEnv(t, 1000, 1000)
+	router := env.router()
+	owner := seedUser(t, env.db, "note_type_add_cards", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	base := fmt.Sprintf("/api/v1/decks/%s/note-types", deck.PublicID)
+	nt := createNoteTypeREST(t, router, base, key, "Cards", testNoteTypeConfig())
+	ntPK := noteTypePK(t, env, nt.ID)
+
+	// Two notes have a non-empty Front, the third does not. The initial template renders Front,
+	// so only two cards exist before the update.
+	createNotesREST(t, router, deck.PublicID, nt.ID, key, []map[string]string{
+		{"Front": "Q1", "Back": "A1"},
+		{"Front": "Q2", "Back": "A2"},
+		{"Front": "", "Back": "A3"},
+	})
+	if got := len(noteTypeCards(t, env, ntPK, false)); got != 2 {
+		t.Fatalf("cards before update = %d, want 2", got)
+	}
+
+	cfg := testNoteTypeConfig()
+	cfg.Templates = append(cfg.Templates, notetype.Template{
+		ID: "card-2", Name: "Card 2", QFormat: "{{Front}}", AFormat: "{{Back}}",
+	})
+	code, raw := noteTypeUpdateREST(t, router, base+"/"+nt.ID, key, "Cards", cfg, 0, nil)
+	if code != http.StatusOK {
+		t.Fatalf("PATCH adding template = %d, want 200 (body %s)", code, raw)
+	}
+	resp := decodeNoteTypeUpdate(t, raw)
+	if resp.CardsAdded != 2 || resp.CardsRemoved != 0 || resp.ReviewsOnRemovedCards != 0 {
+		t.Errorf("impact = added %d removed %d reviews %d, want 2/0/0",
+			resp.CardsAdded, resp.CardsRemoved, resp.ReviewsOnRemovedCards)
+	}
+	if resp.Version != 1 {
+		t.Errorf("version = %d, want 1", resp.Version)
+	}
+
+	cards := noteTypeCards(t, env, ntPK, false)
+	if len(cards) != 4 {
+		t.Fatalf("cards after update = %d, want 4", len(cards))
+	}
+	newCards := 0
+	for _, card := range cards {
+		if card.Template != "card-2" {
+			continue
+		}
+		newCards++
+		if card.Ordinal != 1 {
+			t.Errorf("card-2 ordinal = %d, want 1 (the second template)", card.Ordinal)
+		}
+	}
+	if newCards != 2 {
+		t.Errorf("card-2 cards = %d, want 2 (only notes with a non-empty front)", newCards)
+	}
+}
+
+// TestNoteTypeUpdateDryRunWritesNothing: a dry run reports both counts and leaves the note type,
+// its cards and the audit trail untouched.
+func TestNoteTypeUpdateDryRunWritesNothing(t *testing.T) {
+	env := newTestEnv(t, 1000, 1000)
+	router := env.router()
+	owner := seedUser(t, env.db, "note_type_dry_run", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	base := fmt.Sprintf("/api/v1/decks/%s/note-types", deck.PublicID)
+	nt := createNoteTypeREST(t, router, base, key, "Dry", testNoteTypeConfig())
+	ntPK := noteTypePK(t, env, nt.ID)
+	onePath := base + "/" + nt.ID
+
+	createNotesREST(t, router, deck.PublicID, nt.ID, key, []map[string]string{
+		{"Front": "Q1", "Back": "A1"},
+	})
+	before := noteTypeCards(t, env, ntPK, true)
+	if len(before) != 1 {
+		t.Fatalf("cards before dry run = %d, want 1", len(before))
+	}
+
+	// Dry-run an addition: the count is reported, nothing is written.
+	addCfg := testNoteTypeConfig()
+	addCfg.Templates = append(addCfg.Templates, notetype.Template{
+		ID: "card-2", Name: "Card 2", QFormat: "{{Back}}", AFormat: "{{Front}}",
+	})
+	code, raw := noteTypeUpdateREST(t, router, onePath, key, "Dry", addCfg, 0, map[string]any{"dry_run": true})
+	if code != http.StatusOK {
+		t.Fatalf("dry-run addition = %d, want 200 (body %s)", code, raw)
+	}
+	resp := decodeNoteTypeUpdate(t, raw)
+	if !resp.DryRun || resp.CardsAdded != 1 || resp.CardsRemoved != 0 {
+		t.Errorf("dry-run addition = (dry_run %v added %d removed %d), want (true, 1, 0)",
+			resp.DryRun, resp.CardsAdded, resp.CardsRemoved)
+	}
+	if resp.Version != 0 {
+		t.Errorf("dry-run response version = %d, want the stored 0", resp.Version)
+	}
+
+	// Dry-run a removal: the count is reported, the card and its review stay.
+	card := before[0]
+	if err := env.db.Create(&store.Review{
+		CardID: card.ID, UserID: owner.ID, Rating: 3, GradeSource: "self",
+		ReviewedAt: env.now, ReviewDay: env.api.reviewDay(owner), StateBefore: 0,
+	}).Error; err != nil {
+		t.Fatalf("create review: %v", err)
+	}
+	removeCfg := testNoteTypeConfig()
+	removeCfg.Templates = []notetype.Template{}
+	code, raw = noteTypeUpdateREST(t, router, onePath, key, "Dry", removeCfg, 0, map[string]any{"dry_run": true})
+	if code != http.StatusOK {
+		t.Fatalf("dry-run removal = %d, want 200 (body %s)", code, raw)
+	}
+	resp = decodeNoteTypeUpdate(t, raw)
+	if !resp.DryRun || resp.CardsAdded != 0 || resp.CardsRemoved != 1 || resp.ReviewsOnRemovedCards != 1 {
+		t.Errorf("dry-run removal = (dry_run %v added %d removed %d reviews %d), want (true, 0, 1, 1)",
+			resp.DryRun, resp.CardsAdded, resp.CardsRemoved, resp.ReviewsOnRemovedCards)
+	}
+
+	// Nothing was written by either dry run: version, cards, reviews and audit are unchanged.
+	stored, err := store.NewNoteTypeStore(env.db).ByID(t.Context(), ntPK)
+	if err != nil {
+		t.Fatalf("load note type: %v", err)
+	}
+	if stored.Version != 0 {
+		t.Errorf("version after dry runs = %d, want 0", stored.Version)
+	}
+	after := noteTypeCards(t, env, ntPK, true)
+	if len(after) != 1 || after[0].ID != card.ID || after[0].DeletedAt.Valid {
+		t.Errorf("cards after dry runs = %+v, want the one original visible card", after)
+	}
+	var reviews int64
+	if err := env.db.Model(&store.Review{}).Where("card_id = ?", card.ID).Count(&reviews).Error; err != nil {
+		t.Fatalf("count reviews: %v", err)
+	}
+	if reviews != 1 {
+		t.Errorf("reviews after dry runs = %d, want 1", reviews)
+	}
+	auditCount, err := store.NewAuditStore(env.db).CountByAction(t.Context(), store.ActionNoteTypeUpdate)
+	if err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	}
+	if auditCount != 0 {
+		t.Errorf("note_type.update audit rows after dry runs = %d, want 0", auditCount)
+	}
+}
+
+// TestNoteTypeUpdateRemovalRequiresConfirmation: removing a template without confirm_card_removal is
+// a 409 that writes nothing; the same body with the confirmation soft-deletes the cards and keeps
+// every review and card_states row.
+func TestNoteTypeUpdateRemovalRequiresConfirmation(t *testing.T) {
+	env := newTestEnv(t, 1000, 1000)
+	router := env.router()
+	owner := seedUser(t, env.db, "note_type_remove_cards", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	base := fmt.Sprintf("/api/v1/decks/%s/note-types", deck.PublicID)
+
+	cfg := testNoteTypeConfig()
+	cfg.Templates = append(cfg.Templates, notetype.Template{
+		ID: "card-2", Name: "Card 2", QFormat: "{{Back}}", AFormat: "{{Front}}",
+	})
+	nt := createNoteTypeREST(t, router, base, key, "Removable", cfg)
+	ntPK := noteTypePK(t, env, nt.ID)
+	onePath := base + "/" + nt.ID
+	createNotesREST(t, router, deck.PublicID, nt.ID, key, []map[string]string{
+		{"Front": "Q1", "Back": "A1"},
+	})
+
+	cards := noteTypeCards(t, env, ntPK, false)
+	if len(cards) != 2 {
+		t.Fatalf("cards before removal = %d, want 2", len(cards))
+	}
+	var removed store.Card
+	for _, card := range cards {
+		if card.Template == "card-2" {
+			removed = card
+		}
+	}
+	if removed.ID == 0 {
+		t.Fatalf("no card-2 in %+v", cards)
+	}
+	if err := env.db.Create(&store.Review{
+		CardID: removed.ID, UserID: owner.ID, Rating: 3, GradeSource: "self",
+		ReviewedAt: env.now, ReviewDay: env.api.reviewDay(owner), StateBefore: 0,
+	}).Error; err != nil {
+		t.Fatalf("create review: %v", err)
+	}
+	due := env.now.AddDate(0, 0, 3)
+	if err := env.db.Create(&store.CardState{
+		CardID: removed.ID, UserID: owner.ID, State: "review", DueAt: &due,
+	}).Error; err != nil {
+		t.Fatalf("create card state: %v", err)
+	}
+
+	// Without the confirmation: 409 with the counts, and not a single row changes.
+	removeCfg := testNoteTypeConfig()
+	code, raw := noteTypeUpdateREST(t, router, onePath, key, "Removable", removeCfg, 0, nil)
+	if code != http.StatusConflict {
+		t.Fatalf("PATCH removing a template without confirmation = %d, want 409 (body %s)", code, raw)
+	}
+	var refusal struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+		CardsAdded            int `json:"cards_added"`
+		CardsRemoved          int `json:"cards_removed"`
+		ReviewsOnRemovedCards int `json:"reviews_on_removed_cards"`
+	}
+	if err := json.Unmarshal(raw, &refusal); err != nil {
+		t.Fatalf("refusal is not JSON: %v (%s)", err, raw)
+	}
+	if refusal.Error.Code != CodeCardRemovalUnconfirmed {
+		t.Errorf("refusal code = %q, want %q", refusal.Error.Code, CodeCardRemovalUnconfirmed)
+	}
+	if refusal.CardsAdded != 0 || refusal.CardsRemoved != 1 || refusal.ReviewsOnRemovedCards != 1 {
+		t.Errorf("refusal counts = added %d removed %d reviews %d, want 0/1/1",
+			refusal.CardsAdded, refusal.CardsRemoved, refusal.ReviewsOnRemovedCards)
+	}
+	stored, err := store.NewNoteTypeStore(env.db).ByID(t.Context(), ntPK)
+	if err != nil {
+		t.Fatalf("load note type after refusal: %v", err)
+	}
+	if stored.Version != 0 {
+		t.Errorf("version after refusal = %d, want 0 (the refused update writes nothing)", stored.Version)
+	}
+	if got := len(noteTypeCards(t, env, ntPK, false)); got != 2 {
+		t.Errorf("visible cards after refusal = %d, want 2", got)
+	}
+	auditCount, err := store.NewAuditStore(env.db).CountByAction(t.Context(), store.ActionNoteTypeUpdate)
+	if err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	}
+	if auditCount != 0 {
+		t.Errorf("note_type.update audit rows after refusal = %d, want 0", auditCount)
+	}
+
+	// With the confirmation: 200, the template's cards are soft-deleted, progress rows survive.
+	code, raw = noteTypeUpdateREST(t, router, onePath, key, "Removable", removeCfg, 0,
+		map[string]any{"confirm_card_removal": true})
+	if code != http.StatusOK {
+		t.Fatalf("PATCH removing a template with confirmation = %d, want 200 (body %s)", code, raw)
+	}
+	resp := decodeNoteTypeUpdate(t, raw)
+	if resp.CardsAdded != 0 || resp.CardsRemoved != 1 || resp.ReviewsOnRemovedCards != 1 {
+		t.Errorf("confirmed removal counts = added %d removed %d reviews %d, want 0/1/1",
+			resp.CardsAdded, resp.CardsRemoved, resp.ReviewsOnRemovedCards)
+	}
+	if resp.Version != 1 {
+		t.Errorf("version after confirmed removal = %d, want 1", resp.Version)
+	}
+
+	all := noteTypeCards(t, env, ntPK, true)
+	if len(all) != 2 {
+		t.Fatalf("stored cards after confirmed removal = %d, want 2 rows (one soft-deleted)", len(all))
+	}
+	for _, card := range all {
+		switch card.Template {
+		case "card-2":
+			if !card.DeletedAt.Valid {
+				t.Errorf("card-2 is still visible after the confirmed removal")
+			}
+		case "card-1":
+			if card.DeletedAt.Valid {
+				t.Errorf("card-1 was soft-deleted by an update that kept its template")
+			}
+		}
+	}
+	var reviews int64
+	if err := env.db.Model(&store.Review{}).Where("card_id = ?", removed.ID).Count(&reviews).Error; err != nil {
+		t.Fatalf("count reviews: %v", err)
+	}
+	if reviews != 1 {
+		t.Errorf("reviews on the removed card = %d, want 1 (removal must keep the log)", reviews)
+	}
+	var states int64
+	if err := env.db.Model(&store.CardState{}).Where("card_id = ?", removed.ID).Count(&states).Error; err != nil {
+		t.Fatalf("count card states: %v", err)
+	}
+	if states != 1 {
+		t.Errorf("card_states on the removed card = %d, want 1 (removal must keep progress)", states)
+	}
+
+	// One audit row records the counts of the removal.
+	var audit store.AuditLog
+	if err := env.db.Where("action = ?", store.ActionNoteTypeUpdate).Order("id DESC").First(&audit).Error; err != nil {
+		t.Fatalf("load audit row: %v", err)
+	}
+	if audit.DetailJSON == nil || !strings.Contains(*audit.DetailJSON, `"cards_removed":1`) ||
+		!strings.Contains(*audit.DetailJSON, `"reviews_on_removed_cards":1`) {
+		t.Errorf("audit detail = %v, want the removal counts", audit.DetailJSON)
+	}
+}
+
+// TestNoteTypeUpdateKindChangeRejected: the kind is fixed at creation, so switching normal to cloze
+// is a 400 invalid_request that writes nothing.
+func TestNoteTypeUpdateKindChangeRejected(t *testing.T) {
+	env := newTestEnv(t, 1000, 1000)
+	router := env.router()
+	owner := seedUser(t, env.db, "note_type_kind", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	base := fmt.Sprintf("/api/v1/decks/%s/note-types", deck.PublicID)
+	nt := createNoteTypeREST(t, router, base, key, "Kind", testNoteTypeConfig())
+	ntPK := noteTypePK(t, env, nt.ID)
+
+	cloze := testNoteTypeConfig()
+	cloze.Kind = notetype.KindCloze
+	cloze.Templates = cloze.Templates[:1]
+	code, raw := noteTypeUpdateREST(t, router, base+"/"+nt.ID, key, "Kind", cloze, 0, nil)
+	if code != http.StatusBadRequest {
+		t.Fatalf("PATCH changing kind = %d, want 400 (body %s)", code, raw)
+	}
+	assertErrorCode(t, raw, CodeInvalidRequest)
+
+	kept, err := store.NewNoteTypeStore(env.db).ByID(t.Context(), ntPK)
+	if err != nil {
+		t.Fatalf("load note type after kind change: %v", err)
+	}
+	if kept.Version != 0 {
+		t.Errorf("version after rejected kind change = %d, want 0", kept.Version)
+	}
+	keptCfg, err := kept.Config()
+	if err != nil {
+		t.Fatalf("decode kept config: %v", err)
+	}
+	if keptCfg.Kind != notetype.KindNormal {
+		t.Errorf("stored kind after rejected change = %q, want %q", keptCfg.Kind, notetype.KindNormal)
+	}
+}
+
+// TestNoteTypeUpdateStaleVersion: the card regeneration must not bypass the optimistic lock, so a
+// stale version still returns 409 version_conflict and writes no card.
+func TestNoteTypeUpdateStaleVersion(t *testing.T) {
+	env := newTestEnv(t, 1000, 1000)
+	router := env.router()
+	owner := seedUser(t, env.db, "note_type_stale_cards", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	base := fmt.Sprintf("/api/v1/decks/%s/note-types", deck.PublicID)
+	nt := createNoteTypeREST(t, router, base, key, "Stale", testNoteTypeConfig())
+	ntPK := noteTypePK(t, env, nt.ID)
+	onePath := base + "/" + nt.ID
+	createNotesREST(t, router, deck.PublicID, nt.ID, key, []map[string]string{{"Front": "Q1", "Back": "A1"}})
+
+	cfg := testNoteTypeConfig()
+	cfg.Templates = append(cfg.Templates, notetype.Template{
+		ID: "card-2", Name: "Card 2", QFormat: "{{Front}}", AFormat: "{{Back}}",
+	})
+	// First write wins and moves the version to 1.
+	code, raw := noteTypeUpdateREST(t, router, onePath, key, "Stale", cfg, 0, nil)
+	if code != http.StatusOK {
+		t.Fatalf("first update = %d, want 200 (body %s)", code, raw)
+	}
+	// The same version again is stale: rejected before any card is regenerated.
+	code, raw = noteTypeUpdateREST(t, router, onePath, key, "Stale", cfg, 0, nil)
+	if code != http.StatusConflict {
+		t.Fatalf("stale update = %d, want 409 (body %s)", code, raw)
+	}
+	assertErrorCode(t, raw, CodeVersionConflict)
+	if got := len(noteTypeCards(t, env, ntPK, false)); got != 2 {
+		t.Errorf("cards after the stale update = %d, want the 2 from the first update", got)
+	}
+}

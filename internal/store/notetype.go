@@ -20,7 +20,33 @@ var (
 	// in between. Callers should map it to HTTP 409. It is the one optimistic-lock sentinel of the repository;
 	// internal/schedule aliases it for card_states instead of defining a second value.
 	ErrVersionConflict = errors.New("version conflict")
+	// ErrCardRemovalUnconfirmed means an update would soft-delete at least one card and the caller did not confirm it.
+	// The store returns it together with the computed impact, so the caller can report the counts before asking again.
+	ErrCardRemovalUnconfirmed = errors.New("note type update would remove cards without confirmation")
 )
+
+// NoteTypeUpdateOptions carries the optimistic lock and the two safety switches of a note type update.
+type NoteTypeUpdateOptions struct {
+	// ExpectedVersion is the version the caller read. A stale value is rejected with ErrVersionConflict.
+	ExpectedVersion int
+	// DryRun computes the card impact and rolls the transaction back, so nothing is written.
+	DryRun bool
+	// ConfirmCardRemoval allows the update to soft-delete cards whose template the new config no longer declares.
+	// Without it an update that would remove at least one card returns ErrCardRemovalUnconfirmed and writes nothing.
+	ConfirmCardRemoval bool
+}
+
+// NoteTypeCardImpact is the card effect of one note type update.
+//
+// CardsAdded counts cards that became visible: newly inserted rows and previously soft-deleted rows
+// restored because their template is generated again. CardsRemoved counts cards this update
+// soft-deleted. ReviewsOnRemovedCards counts the review rows attached to those removed cards; the
+// rows themselves are kept, because progress and the review log are never destroyed by a content change.
+type NoteTypeCardImpact struct {
+	CardsAdded            int
+	CardsRemoved          int
+	ReviewsOnRemovedCards int
+}
 
 // SetConfig validates and stores a note type config in ConfigJSON.
 //
@@ -155,25 +181,37 @@ func (s *NoteTypeStore) ListByDeck(ctx context.Context, deckID uint64) ([]NoteTy
 	return types, nil
 }
 
-// Update replaces the name and config only when the stored version equals expectedVersion, and increments the version.
+// Update replaces the name and config only when the stored version equals opts.ExpectedVersion, and increments the version.
 //
 // The compare-and-swap is one UPDATE ... WHERE id = ? AND version = ?, so two concurrent writers cannot both win on either database.
 // A zero-row result is disambiguated afterwards: the type is gone (gorm.ErrRecordNotFound) or the version moved (ErrVersionConflict).
-func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.Config, expectedVersion int) error {
+//
+// The version bump, the media reference set and the card regeneration of every note of the type commit
+// in one transaction, so a note type never holds a card set that its stored config does not generate.
+//
+// Both safety outcomes finish by rolling the transaction back, which is what makes "writes nothing"
+// literal: a dry run reports the impact and returns nil, and an unconfirmed card removal reports the
+// impact with ErrCardRemovalUnconfirmed. The compare-and-swap still runs first in both cases, so a
+// stale version is rejected even when nothing is written.
+func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.Config, opts NoteTypeUpdateOptions) (NoteTypeCardImpact, error) {
 	if nt == nil || nt.ID == 0 {
-		return errors.New("update note type: id is required")
+		return NoteTypeCardImpact{}, errors.New("update note type: id is required")
 	}
 	if err := nt.SetConfig(nt.Name, cfg); err != nil {
-		return err
+		return NoteTypeCardImpact{}, err
 	}
 	now := time.Now().UTC()
+	var impact NoteTypeCardImpact
+	// rollbackUpdate ends the transaction without committing. It is a sentinel rather than a real
+	// failure: the caller converts it into the dry-run result or the confirmation error.
+	rollbackUpdate := errors.New("rollback note type update")
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&NoteType{}).
-			Where("id = ? AND version = ?", nt.ID, expectedVersion).
+			Where("id = ? AND version = ?", nt.ID, opts.ExpectedVersion).
 			Updates(map[string]any{
 				"name":        nt.Name,
 				"config_json": nt.ConfigJSON,
-				"version":     expectedVersion + 1,
+				"version":     opts.ExpectedVersion + 1,
 				"updated_at":  now,
 			})
 		if res.Error != nil {
@@ -187,20 +225,37 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 			if count == 0 {
 				return gorm.ErrRecordNotFound
 			}
-			return fmt.Errorf("%w: note type %d is not at version %d", ErrVersionConflict, nt.ID, expectedVersion)
+			return fmt.Errorf("%w: note type %d is not at version %d", ErrVersionConflict, nt.ID, opts.ExpectedVersion)
 		}
 		// The new config replaces the reference set in the same transaction: a rejected version writes neither.
 		if err := NewMediaNoteTypeStore(tx).Replace(ctx, nt.ID, noteTypeMediaNames(cfg)); err != nil {
 			return fmt.Errorf("update note type media %d: %w", nt.ID, err)
 		}
+		regenerated, err := regenerateNoteTypeCards(tx, nt.ID, nt.Name, cfg, now)
+		if err != nil {
+			return err
+		}
+		impact = regenerated
+		if opts.DryRun {
+			return rollbackUpdate
+		}
+		if impact.CardsRemoved > 0 && !opts.ConfirmCardRemoval {
+			return rollbackUpdate
+		}
 		return nil
 	})
-	if err != nil {
-		return err
+	if errors.Is(err, rollbackUpdate) {
+		if !opts.DryRun && impact.CardsRemoved > 0 && !opts.ConfirmCardRemoval {
+			return impact, fmt.Errorf("%w: %d card(s) would be removed", ErrCardRemovalUnconfirmed, impact.CardsRemoved)
+		}
+		return impact, nil
 	}
-	nt.Version = expectedVersion + 1
+	if err != nil {
+		return NoteTypeCardImpact{}, err
+	}
+	nt.Version = opts.ExpectedVersion + 1
 	nt.UpdatedAt = now
-	return nil
+	return impact, nil
 }
 
 // Delete removes a note type. It refuses with ErrNoteTypeInUse while any note that is not soft-deleted references it:

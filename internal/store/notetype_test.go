@@ -118,7 +118,7 @@ func TestNoteTypeCreateGetListUpdate(t *testing.T) {
 			newCfg := noteTypeConfig("Card 2")
 			newCfg.Templates[0].QFormat = "{{Back}}"
 			newCfg.Templates[0].AFormat = "{{Front}}"
-			if err := types.Update(ctx, &update, newCfg, 0); err != nil {
+			if _, err := types.Update(ctx, &update, newCfg, NoteTypeUpdateOptions{ExpectedVersion: 0}); err != nil {
 				t.Fatalf("Update() error = %v", err)
 			}
 			if update.Version != 1 {
@@ -142,7 +142,7 @@ func TestNoteTypeCreateGetListUpdate(t *testing.T) {
 			// A stale version is rejected with ErrVersionConflict and changes nothing.
 			stale := *reloaded
 			stale.Name = "Should Not Land"
-			if err := types.Update(ctx, &stale, noteTypeConfig("Card 3"), 0); !errors.Is(err, ErrVersionConflict) {
+			if _, err := types.Update(ctx, &stale, noteTypeConfig("Card 3"), NoteTypeUpdateOptions{ExpectedVersion: 0}); !errors.Is(err, ErrVersionConflict) {
 				t.Fatalf("stale Update() error = %v, want ErrVersionConflict", err)
 			}
 			afterConflict, err := types.ByID(ctx, beta.ID)
@@ -155,7 +155,7 @@ func TestNoteTypeCreateGetListUpdate(t *testing.T) {
 
 			// Updating a row that does not exist reports not found rather than a conflict.
 			missing := NoteType{ID: 999999, Name: "Missing"}
-			if err := types.Update(ctx, &missing, noteTypeConfig("Card 1"), 0); !errors.Is(err, gorm.ErrRecordNotFound) {
+			if _, err := types.Update(ctx, &missing, noteTypeConfig("Card 1"), NoteTypeUpdateOptions{ExpectedVersion: 0}); !errors.Is(err, gorm.ErrRecordNotFound) {
 				t.Errorf("Update(absent) error = %v, want gorm.ErrRecordNotFound", err)
 			}
 		})
