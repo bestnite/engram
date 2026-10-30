@@ -12,8 +12,8 @@ import (
 )
 
 type notePreviewRequest struct {
-	Kind   string         `json:"kind"`
-	Fields map[string]any `json:"fields"`
+	NoteType string         `json:"note_type"`
+	Fields   map[string]any `json:"fields"`
 }
 
 // notePreview returns the card faces the submitted payload would produce.
@@ -33,11 +33,24 @@ func (s *Server) notePreview(c *gin.Context) {
 		return
 	}
 	var req notePreviewRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.Fields == nil {
+	if err := c.ShouldBindJSON(&req); err != nil || req.Fields == nil || strings.TrimSpace(req.NoteType) == "" {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	cards, ok := buildPreview(req.Kind, req.Fields)
+	// The preview renders the note type the caller names, not a stock definition derived from a kind. A type of another deck
+	// is reported as not found, so the endpoint never confirms ids outside the deck in the address.
+	nt, err := store.NewNoteTypeStore(s.db).ByPublicID(c.Request.Context(), strings.TrimSpace(req.NoteType))
+	if err != nil || nt.DeckID != deck.ID {
+		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
+		return
+	}
+	cfg, err := nt.Config()
+	if err != nil {
+		s.logger.Error("decode note type config failed", "note_type_id", nt.ID, "error", err)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		return
+	}
+	cards, ok := buildPreview(nt, cfg, deck, req.Fields)
 	if !ok || len(cards) == 0 {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return

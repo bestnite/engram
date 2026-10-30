@@ -17,3 +17,13 @@ func stockNoteTypeID(t *testing.T, db *gorm.DB, deckID uint64, kind string) uint
 	}
 	return nt.ID
 }
+
+// stockNoteTypePublicID is stockNoteTypeID in the public id the note payloads and the preview endpoint speak.
+func stockNoteTypePublicID(t *testing.T, db *gorm.DB, deckID uint64, kind string) string {
+	t.Helper()
+	nt, err := store.NewNoteStore(db).EnsureStockNoteType(t.Context(), deckID, kind)
+	if err != nil {
+		t.Fatalf("ensure note type for kind %q: %v", kind, err)
+	}
+	return nt.PublicID
+}

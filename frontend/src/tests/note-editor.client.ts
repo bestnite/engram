@@ -4,10 +4,9 @@ import { get } from 'svelte/store';
 import NoteEditView from '../lib/views/NoteEditView.svelte';
 import { routeStore } from '../lib/router';
 import { routes } from '../lib/router/routes';
-import { apiClient, ApiClientError, type Note, type NotePreviewResponse } from '../lib/api';
-import { seedCardTypes, clearCardTypes } from './card-type-fixture';
+import { apiClient, ApiClientError, type Note, type NotePreviewResponse, type NoteType, type NoteTypeConfig, type NoteTypeField } from '../lib/api';
 import { typeset } from '../lib/mathjax';
-import { setLocale, formatMessage } from '../lib/i18n';
+import { setLocale } from '../lib/i18n';
 import { shownHtmlOnSide, shownFaces, frameDocument } from './card-frame-fixture';
 import { face } from './card-face-fixture';
 import { NOTE_PREVIEW_CSS } from '../lib/card-frame';
@@ -32,11 +31,106 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+/** One field of a test note type; every option has the zero value unless the case sets it. */
+function noteTypeField(id: string, name: string, overrides: Partial<NoteTypeField> = {}): NoteTypeField {
+  return {
+    id,
+    name,
+    sticky: false,
+    rtl: false,
+    font: '',
+    font_size: 0,
+    description: '',
+    plain_text: false,
+    collapsed: false,
+    ...overrides,
+  };
+}
+
+/** One note type of the deck; the client only reads id, name and config.fields, but the shape matches the API. */
+function noteType(id: string, name: string, fields: NoteTypeField[], config: Partial<NoteTypeConfig> = {}): NoteType {
+  return {
+    id,
+    deck_id: '5',
+    name,
+    version: 1,
+    config: {
+      kind: 'normal',
+      fields,
+      templates: [
+        {
+          id: 't-card',
+          name: 'Card 1',
+          qfmt: fields.map((field) => `{{${field.name}}}`).join(''),
+          afmt: fields.map((field) => `{{${field.name}}}`).join(''),
+        },
+      ],
+      css: '',
+      ...config,
+    },
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: '2026-10-01T00:00:00Z',
+  };
+}
+
+/** The first note type of the default deck: fields Front and Back, the shape a stock Basic type has. */
+function basicNoteType(): NoteType {
+  return noteType('nt-basic', 'Basic', [noteTypeField('front', 'Front'), noteTypeField('back', 'Back')]);
+}
+
+/**
+ * A note type created in the deck: opaque field ids, names and a template that matches no engram stock kind, so the
+ * card-kind catalog has no entry for it.
+ */
+function customNoteType(): NoteType {
+  return noteType(
+    'nt-custom',
+    'Custom layout',
+    [noteTypeField('f-question', 'Question'), noteTypeField('f-answer', 'Answer')],
+    {
+      templates: [
+        {
+          id: 't-custom',
+          name: 'Custom card',
+          qfmt: '<div id="custom-question">{{Question}}</div>',
+          afmt: '<div id="custom-question">{{Question}}</div><div id="custom-answer">{{Answer}}</div>',
+        },
+      ],
+      css: '.card { color: rgb(4, 5, 6); }',
+    }
+  );
+}
+
+/** A note type carrying every field option the editor has to apply. */
+function styledNoteType(): NoteType {
+  return noteType('nt-styled', 'Styled', [
+    noteTypeField('f-front', 'Front', {
+      sticky: true,
+      collapsed: true,
+      plain_text: true,
+      rtl: true,
+      font: 'Georgia',
+      font_size: 22,
+    }),
+    noteTypeField('f-back', 'Back'),
+  ]);
+}
+
+function defaultNoteTypes(): NoteType[] {
+  return [basicNoteType(), customNoteType()];
+}
+
+/** The field test ids of the default types, named after the field names the form uses as labels. */
+const FRONT = 'note-field-Front';
+const QUESTION = 'note-field-Question';
+const ANSWER = 'note-field-Answer';
+
 function noteFixture(overrides: Partial<Note> = {}): Note {
   return {
     id: '9',
     deck_id: '5',
-    kind: 'basic',
+    kind: '',
+    note_type: 'nt-basic',
     fields: { front: 'Q', back: 'A' },
     tags: [],
     created_at: '2026-10-01T00:00:00Z',
@@ -62,8 +156,13 @@ const mountedInstances: Array<ReturnType<typeof mount>> = [];
 /** The latest HTML each field reported, keyed by data-testid; the frame owns the editing surface. */
 const fieldValues = new Map<string, string>();
 
-function mountEditor(params: Record<string, string>, query: Record<string, string> = {}): void {
-  seedCardTypes();
+function mountEditor(
+  params: Record<string, string>,
+  query: Record<string, string> = {},
+  noteTypes: NoteType[] = defaultNoteTypes()
+): void {
+  // The deck's note types are the only field metadata; each case states the types its deck stores.
+  vi.spyOn(apiClient, 'listNoteTypes').mockResolvedValue({ note_types: noteTypes });
   routeStore.set({ path: '/decks/5/notes', params, query, search: '', route: null });
   target = document.createElement('div');
   document.body.appendChild(target);
@@ -99,7 +198,7 @@ function fromFrame(frame: FakeFrame, data: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', { data, source: frame as unknown as MessageEventSource }));
 }
 
-/** Writes a plain control (a number, a tag, a non-face text field) as a real user input does. */
+/** Writes a plain control (the tags field) as a real user input does. */
 function setInput(testid: string, value: string): void {
   const el = target.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement | HTMLTextAreaElement;
   el.value = value;
@@ -129,8 +228,18 @@ function loadedHtml(testid: string): string {
   return '';
 }
 
-async function selectKind(label: string): Promise<void> {
-  const trigger = target.querySelector('[data-testid="note-edit-kind"]') as HTMLElement;
+/** The last `load` message a field received, for asserting the presentation options it carries. */
+function lastLoad(testid: string): Record<string, unknown> {
+  const calls = frameFor(testid).postMessage.mock.calls;
+  for (let i = calls.length - 1; i >= 0; i -= 1) {
+    const message = calls[i]?.[0] as Record<string, unknown> | undefined;
+    if (message?.type === 'load') return message;
+  }
+  throw new Error(`missing load message for ${testid}`);
+}
+
+async function selectNoteType(label: string): Promise<void> {
+  const trigger = target.querySelector('[data-testid="note-edit-type"]') as HTMLElement;
   trigger.focus();
   trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   await flush();
@@ -167,7 +276,6 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   document.body.innerHTML = '';
-  clearCardTypes();
   fieldValues.clear();
 });
 
@@ -180,9 +288,9 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(target.querySelector('[data-testid="note-editor-form"]')).toBeTruthy();
-    // The preview button is fully gone: no old testid and no leftover references (its keys were removed from the language packs).
-    expect(target.querySelector('[data-testid="note-preview"]')).toBeNull();
-    expect(target.innerHTML).not.toContain('note_preview.action');
+    // The selector starts at the first note type in the order the server returned.
+    expect(target.querySelector('[data-testid="note-edit-type"]')?.textContent).toContain('Basic');
+    expect(target.querySelector(`[data-testid="${FRONT}"]`)).toBeTruthy();
     // No content entered: takes the empty path and sends no preview request to the server.
     expect(target.querySelector('[data-testid="note-preview-empty"]')).toBeTruthy();
     expect(previewNote).not.toHaveBeenCalled();
@@ -198,7 +306,7 @@ describe('unified note editor — create mode', () => {
     mountEditor({ id: '5' });
     await flush();
 
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
 
     await vi.advanceTimersByTimeAsync(499);
@@ -207,7 +315,7 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(previewNote).toHaveBeenCalledTimes(1);
-    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'Q' }, { frame: true });
+    expect(previewNote).toHaveBeenCalledWith('5', 'nt-basic', { Front: 'Q' }, { frame: true });
     expect(await previewFront()).toContain('rendered Q');
     expect(target.querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
   });
@@ -227,7 +335,7 @@ describe('unified note editor — create mode', () => {
     mountEditor({ id: '5' });
     await flush();
 
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
@@ -249,10 +357,10 @@ describe('unified note editor — create mode', () => {
     mountEditor({ id: '5' });
     await flush();
 
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
     await vi.advanceTimersByTimeAsync(300);
-    setField('note-field-front', 'QR');
+    setField(FRONT, 'QR');
     await flush();
 
     // 500ms have passed since the first input, but the second input reset the window, so nothing should be sent yet.
@@ -262,7 +370,7 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(previewNote).toHaveBeenCalledTimes(1);
-    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'QR' }, { frame: true });
+    expect(previewNote).toHaveBeenCalledWith('5', 'nt-basic', { Front: 'QR' }, { frame: true });
   });
 
   it('ignores a stale delayed response and keeps the newest preview', async () => {
@@ -276,10 +384,10 @@ describe('unified note editor — create mode', () => {
     mountEditor({ id: '5' });
     await flush();
 
-    setField('note-field-front', 'A');
+    setField(FRONT, 'A');
     await flush();
     await vi.advanceTimersByTimeAsync(500); // Request 1 in flight
-    setField('note-field-front', 'B');
+    setField(FRONT, 'B');
     await flush();
     await vi.advanceTimersByTimeAsync(500); // Request 2 in flight
     expect(previewNote).toHaveBeenCalledTimes(2);
@@ -305,10 +413,10 @@ describe('unified note editor — create mode', () => {
     mountEditor({ id: '5' });
     await flush();
 
-    setField('note-field-front', 'A');
+    setField(FRONT, 'A');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
-    setField('note-field-front', 'B');
+    setField(FRONT, 'B');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     expect(previewNote).toHaveBeenCalledTimes(2);
@@ -329,7 +437,7 @@ describe('unified note editor — create mode', () => {
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
@@ -338,40 +446,45 @@ describe('unified note editor — create mode', () => {
     expect(target.querySelector('[data-testid="note-preview-error"]')).toBeNull();
   });
 
-  it('treats a blank bool-bearing type as empty and never previews it', async () => {
-    const previewNote = vi.spyOn(apiClient, 'previewNote');
-
-    mountEditor({ id: '5' });
-    await flush();
-
-    // The typed empty form defaults to ignore_case / ignore_whitespace = true: those are not user input,
-    // so they cannot count as "has content" — otherwise an empty form would request a preview.
-    await selectKind(formatMessage('zh-CN', 'notes.kind.typed'));
-    expect(target.querySelector('[data-testid="note-field-prompt"]')).toBeTruthy();
-    await flush();
-
-    await vi.advanceTimersByTimeAsync(600);
-    await flush();
-
-    expect(previewNote).not.toHaveBeenCalled();
-    expect(target.querySelector('[data-testid="note-preview-empty"]')).toBeTruthy();
-  });
-
-  it('counts a numeric zero as real input and previews it', async () => {
+  it('reinitialises the fields and the preview when another note type is selected', async () => {
     const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
 
     mountEditor({ id: '5' });
     await flush();
 
-    await selectKind(formatMessage('zh-CN', 'notes.kind.numeric'));
-    // Only a numeric field is filled (value 0): the empty-string baseline differs from 0, so 0 must count as content and trigger a preview.
-    setInput('note-field-value', '0');
+    setField(FRONT, 'kept');
+    await flush();
+
+    await selectNoteType('Custom layout');
+    expect(target.querySelector(`[data-testid="${FRONT}"]`)).toBeNull();
+    expect(target.querySelector(`[data-testid="${QUESTION}"]`)).toBeTruthy();
+
+    // The new type's fields are blank, so the switch produces no preview request of its own.
+    await vi.advanceTimersByTimeAsync(600);
+    await flush();
+    expect(previewNote).not.toHaveBeenCalled();
+
+    setField(QUESTION, 'custom');
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+
+    expect(previewNote).toHaveBeenCalledWith('5', 'nt-custom', { Question: 'custom' }, { frame: true });
+  });
+
+  it('counts a literal zero as real input and previews it', async () => {
+    const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' });
+    await flush();
+
+    setField(FRONT, '0');
     await flush();
 
     await vi.advanceTimersByTimeAsync(500);
     await flush();
 
-    expect(previewNote).toHaveBeenCalledWith('5', 'numeric', { value: 0 }, { frame: true });
+    expect(previewNote).toHaveBeenCalledWith('5', 'nt-basic', { Front: '0' }, { frame: true });
   });
 
   it('renders the preview through the frame instead of typesetting it in the parent', async () => {
@@ -381,7 +494,7 @@ describe('unified note editor — create mode', () => {
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
@@ -399,7 +512,7 @@ describe('unified note editor — create mode', () => {
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
@@ -418,10 +531,10 @@ describe('unified note editor — create mode', () => {
     mountEditor({ id: '5' });
     await flush();
 
-    setField('note-field-front', 'A');
+    setField(FRONT, 'A');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
-    setField('note-field-front', 'B');
+    setField(FRONT, 'B');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
@@ -434,7 +547,38 @@ describe('unified note editor — create mode', () => {
     expect(await previewFront()).not.toContain('FIRST');
   });
 
-  it('creates a non-basic card and redirects to the deck page only on success', async () => {
+  it('applies the stored field options to the editor', async () => {
+    const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5' }, {}, [styledNoteType()]);
+    await flush();
+
+    // plain_text: the field has no formatting toolbar, only the editing surface.
+    expect(target.querySelector('[data-testid="note-field-Front-toolbar"]')).toBeNull();
+    // collapsed: the field starts folded and brings its own unfold control.
+    const toggle = target.querySelector('[data-testid="note-field-Front-collapse-toggle"]') as HTMLElement;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(target.querySelector('[data-testid="note-field-Front"]')).toBeNull();
+
+    toggle.click();
+    await flush();
+    const frame = frameFor('note-field-Front');
+    fromFrame(frame, { type: 'ready' });
+    await flush();
+
+    // rtl, font and size travel with the value to the editing frame; plain text is a display decision of the same frame.
+    const load = lastLoad('note-field-Front');
+    expect(load.plainText).toBe(true);
+    expect(load.rtl).toBe(true);
+    expect(load.font).toBe('Georgia');
+    expect(load.size).toBe(22);
+
+    // A field with no options set keeps the editor defaults.
+    expect(target.querySelector('[data-testid="note-field-Back-toolbar"]')).toBeTruthy();
+    expect(previewNote).not.toHaveBeenCalled();
+  });
+
+  it('creates a note of a note type that matches no stock kind', async () => {
     const createNotes = vi.spyOn(apiClient, 'createNotes').mockResolvedValue({
       created: 1,
       updated: 0,
@@ -447,9 +591,9 @@ describe('unified note editor — create mode', () => {
     mountEditor({ id: '5' });
     await flush();
 
-    await selectKind(formatMessage('zh-CN', 'notes.kind.cloze'));
-    expect(target.querySelector('[data-testid="note-field-text"]')).toBeTruthy();
-    setField('note-field-text', 'The {{c1::answer}}');
+    await selectNoteType('Custom layout');
+    expect(target.querySelector(`[data-testid="${QUESTION}"]`)).toBeTruthy();
+    setField(QUESTION, '<p>The question</p>');
     setInput('note-tags-editor', 'topic, extra');
     await flush();
 
@@ -457,8 +601,9 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     expect(createNotes).toHaveBeenCalledWith('5', {
-      notes: [{ kind: 'cloze', fields: { text: 'The {{c1::answer}}' }, tags: ['topic', 'extra'] }],
+      notes: [{ note_type: 'nt-custom', fields: { Question: '<p>The question</p>' }, tags: ['topic', 'extra'] }],
     });
+    expect(Object.keys(createNotes.mock.calls[0]![1].notes[0]!)).not.toContain('kind');
     expect(get(routeStore).path).toBe('/decks/5');
   });
 
@@ -474,7 +619,7 @@ describe('unified note editor — create mode', () => {
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'kept');
+    setField(FRONT, 'kept');
     await flush();
 
     submitForm();
@@ -483,8 +628,8 @@ describe('unified note editor — create mode', () => {
     expect(createNotes).toHaveBeenCalledTimes(1);
     // No navigation, the content is still there, and the error is reported as a toast.
     expect(get(routeStore).path).not.toBe('/decks/5');
-    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_create.failed'));
-    expect(fieldValue('note-field-front')).toBe('kept');
+    expect(toast.error).toHaveBeenCalledWith('无法创建卡片，请重试。');
+    expect(fieldValue(FRONT)).toBe('kept');
   });
 
   it('does not navigate on a dry_run success', async () => {
@@ -499,14 +644,14 @@ describe('unified note editor — create mode', () => {
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
 
     submitForm();
     await flush();
 
     expect(get(routeStore).path).not.toBe('/decks/5');
-    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_create.failed'));
+    expect(toast.error).toHaveBeenCalledWith('无法创建卡片，请重试。');
   });
 
   it('prevents duplicate in-flight create submissions', async () => {
@@ -516,7 +661,7 @@ describe('unified note editor — create mode', () => {
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
 
     submitForm();
@@ -537,7 +682,7 @@ describe('unified note editor — create mode', () => {
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
     submitForm();
     await flush();
@@ -565,8 +710,8 @@ describe('unified note editor — create mode', () => {
     expect(target.querySelector('[data-testid="media-picker-toggle"]')).toBeNull();
     expect(target.querySelector('[data-testid="shortcode-insert"]')).toBeNull();
     // The tools sit in the header of the field they write into, and the old insertion dialog is gone.
-    expect(target.querySelector('[data-testid="note-field-front-insert-image"]')).toBeTruthy();
-    expect(target.querySelector('[data-testid="note-field-front-toolbar"]')).toBeTruthy();
+    expect(target.querySelector(`[data-testid="${FRONT}-insert-image"]`)).toBeTruthy();
+    expect(target.querySelector(`[data-testid="${FRONT}-toolbar"]`)).toBeTruthy();
     expect(target.querySelector('[data-testid="note-insert-dialog"]')).toBeNull();
   });
 });
@@ -582,45 +727,100 @@ describe('unified note editor — edit mode', () => {
     await flush();
 
     // The frame announces itself, then receives the loaded field value.
-    const frame = frameFor('note-field-front');
+    const frame = frameFor(FRONT);
     fromFrame(frame, { type: 'ready' });
     await flush();
-    expect(loadedHtml('note-field-front')).toBe('Q');
+    expect(loadedHtml(FRONT)).toBe('Q');
 
     await vi.advanceTimersByTimeAsync(500);
     await flush();
 
-    expect(previewNote).toHaveBeenCalledWith('5', 'basic', { front: 'Q', back: 'A' }, { frame: true });
+    expect(previewNote).toHaveBeenCalledWith('5', 'nt-basic', { Front: 'Q', Back: 'A' }, { frame: true });
     expect(await previewFront()).toContain('Q');
   });
 
-  it('saves in place without redirecting and round-trips unknown fields', async () => {
+  it('saves in place with note_type and ignores keys outside the note type', async () => {
     vi.spyOn(apiClient, 'getNote').mockResolvedValue(
-      noteFixture({ fields: { front: 'Q', back: 'A', custom: 'keep' } })
+      noteFixture({ fields: { front: 'Q', back: 'A', orphan: 'keep' } })
     );
     vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
     const updateNote = vi.spyOn(apiClient, 'updateNote').mockResolvedValue(
-      noteFixture({ fields: { front: 'Q2', back: 'A', custom: 'keep' }, tags: ['a', 'b'] })
+      noteFixture({ fields: { front: 'Q2', back: 'A' }, tags: ['a', 'b'] })
     );
 
     mountEditor({ id: '5', noteId: '9' });
     await flush();
 
-    setField('note-field-front', 'Q2');
+    setField(FRONT, 'Q2');
     setInput('note-tags-editor', 'a, b');
     await flush();
 
     submitForm();
     await flush();
 
-    // The unknown key is passed back unchanged; the identity is the original card id; no navigation.
+    // The identity is the original note id; the payload names the note type and keys fields by field name, with no kind.
     expect(updateNote).toHaveBeenCalledWith('9', {
-      kind: 'basic',
-      fields: { front: 'Q2', back: 'A', custom: 'keep' },
+      note_type: 'nt-basic',
+      fields: { Front: 'Q2', Back: 'A' },
       tags: ['a', 'b'],
     });
+    expect(Object.keys(updateNote.mock.calls[0]![1])).not.toContain('kind');
     expect(get(routeStore).path).not.toBe('/decks/5');
-    expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_edit.saved'));
+    expect(toast.success).toHaveBeenCalledWith('卡片已保存。');
+  });
+
+  it('loads, edits and saves a note of a note type that matches no stock kind', async () => {
+    const custom = customNoteType();
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(
+      noteFixture({
+        kind: '',
+        note_type: custom.id,
+        fields: { 'f-question': '<p>OLD QUESTION</p>', 'f-answer': '<p>OLD ANSWER</p>' },
+      })
+    );
+    const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    const updateNote = vi.spyOn(apiClient, 'updateNote').mockResolvedValue(
+      noteFixture({
+        kind: '',
+        note_type: custom.id,
+        fields: { 'f-question': '<p>NEW QUESTION</p>', 'f-answer': '<p>OLD ANSWER</p>' },
+      })
+    );
+
+    mountEditor({ id: '5', noteId: '9' }, {}, [custom]);
+    await flush();
+
+    // The note's own type is selected and its fields are shown in config order, labelled by field name.
+    expect(target.querySelector('[data-testid="note-edit-type"]')?.textContent).toContain('Custom layout');
+    const frame = frameFor(QUESTION);
+    fromFrame(frame, { type: 'ready' });
+    await flush();
+    expect(loadedHtml(QUESTION)).toBe('<p>OLD QUESTION</p>');
+    expect(target.querySelector(`[data-testid="${ANSWER}"]`)).toBeTruthy();
+
+    setField(QUESTION, '<p>NEW QUESTION</p>');
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+    submitForm();
+    await flush();
+
+    // The save names the note type and the fields by name; it never sends a card kind.
+    const payload = updateNote.mock.calls[0]![1];
+    expect(payload.note_type).toBe('nt-custom');
+    expect(payload.fields).toEqual({
+      Question: '<p>NEW QUESTION</p>',
+      Answer: '<p>OLD ANSWER</p>',
+    });
+    expect(payload).not.toHaveProperty('kind');
+    // The preview used the same type, so the stored template rendered its faces.
+    expect(previewNote).toHaveBeenCalledWith(
+      '5',
+      'nt-custom',
+      { Question: '<p>NEW QUESTION</p>', Answer: '<p>OLD ANSWER</p>' },
+      { frame: true }
+    );
+    expect(toast.success).toHaveBeenCalledWith('卡片已保存。');
   });
 
   it('reports a rejected edit as an error toast and keeps the draft', async () => {
@@ -632,15 +832,15 @@ describe('unified note editor — edit mode', () => {
 
     mountEditor({ id: '5', noteId: '9' });
     await flush();
-    setField('note-field-front', 'Q2');
+    setField(FRONT, 'Q2');
     await flush();
     submitForm();
     await flush();
 
     // 400 means invalid content: report the specific reason rather than a generic failure; the draft is kept and "saved" is not announced.
-    expect(toast.error).toHaveBeenCalledWith(formatMessage('zh-CN', 'note_edit.invalid'));
+    expect(toast.error).toHaveBeenCalledWith('请检查卡片内容后重试。');
     expect(toast.success).not.toHaveBeenCalled();
-    expect(fieldValue('note-field-front')).toBe('Q2');
+    expect(fieldValue(FRONT)).toBe('Q2');
   });
 
   it('keeps typing that arrives during a save in flight and never claims it was saved', async () => {
@@ -652,21 +852,21 @@ describe('unified note editor — edit mode', () => {
     mountEditor({ id: '5', noteId: '9' });
     await flush();
 
-    setField('note-field-front', 'QQ');
+    setField(FRONT, 'QQ');
     await flush();
     submitForm();
     await flush();
     expect(updateNote).toHaveBeenCalledTimes(1);
 
     // Keep typing while the request is in flight.
-    setField('note-field-front', 'QQ-newer');
+    setField(FRONT, 'QQ-newer');
     await flush();
 
     // The server returns a snapshot from the moment of submit: it must never overwrite what the user is typing.
     pending.resolve(noteFixture({ fields: { front: 'QQ', back: 'A' } }));
     await flush();
 
-    expect(fieldValue('note-field-front')).toBe('QQ-newer');
+    expect(fieldValue(FRONT)).toBe('QQ-newer');
     // The current draft was not overwritten by this save, so "saved" cannot be reported either.
     expect(toast.success).not.toHaveBeenCalled();
   });
@@ -690,7 +890,7 @@ describe('unified note editor — lifecycle and routes', () => {
     mountEditor({ id: '5' });
     await flush();
 
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
     unmount(mountedInstances.pop()!);
 
@@ -704,7 +904,7 @@ describe('unified note editor — lifecycle and routes', () => {
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'R');
+    setField(FRONT, 'R');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     expect(previewNote).toHaveBeenCalledTimes(1);
@@ -727,7 +927,7 @@ describe('unified note editor — lifecycle and routes', () => {
 
     mountEditor({ id: '5', noteId: '9' });
     await flush();
-    setField('note-field-front', 'Q2');
+    setField(FRONT, 'Q2');
     await flush();
     submitForm();
     await flush();
@@ -786,7 +986,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     expect(panel().getAttribute('aria-hidden')).toBeNull();
     // The way in exists only where the preview is not already on screen.
     expect(toggle().className).toContain('lg:hidden');
-    expect(toggle().textContent?.trim()).toBe(formatMessage('zh-CN', 'note_preview.title'));
+    expect(toggle().textContent?.trim()).toBe('预览');
     expect(toggle().getAttribute('aria-expanded')).toBe('false');
     expect(toggle().getAttribute('aria-controls')).toBe('note-preview-panel');
     // At lg and wider the panel is the sticky column, as before.
@@ -795,7 +995,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     expect(panel().getAttribute('role')).toBe('region');
     const heading = panel().querySelector('h2');
     expect(heading?.id).toBe('note-preview-heading');
-    expect(heading?.textContent?.trim()).toBe(formatMessage('zh-CN', 'note_preview.title'));
+    expect(heading?.textContent?.trim()).toBe('预览');
     expect(panel().getAttribute('aria-labelledby')).toBe(heading?.id);
     expect(panel().hasAttribute('aria-modal')).toBe(false);
   });
@@ -807,13 +1007,13 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'first');
+    setField(FRONT, 'first');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
     expect(await previewFront()).toContain('before');
 
-    const field = target.querySelector('[data-testid="note-field-front"]') as HTMLIFrameElement;
+    const field = target.querySelector(`[data-testid="${FRONT}"]`) as HTMLIFrameElement;
     openDrawer();
     await flush();
 
@@ -826,7 +1026,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     expect(panel().querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
 
     // Typing while the drawer is open lands in the same panel.
-    setField('note-field-front', 'second');
+    setField(FRONT, 'second');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();
@@ -834,8 +1034,8 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     expect(panel().querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
 
     // Opening and closing never remounted the form: same textarea node, same unsaved text.
-    expect(target.querySelector('[data-testid="note-field-front"]')).toBe(field);
-    expect(fieldValue('note-field-front')).toBe('second');
+    expect(target.querySelector(`[data-testid="${FRONT}"]`)).toBe(field);
+    expect(fieldValue(FRONT)).toBe('second');
   });
 
   it('closes on Esc and returns focus to the header button, keeping the field caret', async () => {
@@ -843,9 +1043,9 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'abcdef');
+    setField(FRONT, 'abcdef');
     await flush();
-    const field = target.querySelector('[data-testid="note-field-front"]') as HTMLIFrameElement;
+    const field = target.querySelector(`[data-testid="${FRONT}"]`) as HTMLIFrameElement;
     expect(field).toBeTruthy();
     flushSync();
 
@@ -862,7 +1062,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     // Focus goes back to the button that opened the drawer.
     expect(document.activeElement).toBe(toggle());
     // The unsaved text and the caret survived, so the next insertion still lands where the author left off.
-    expect(fieldValue('note-field-front')).toBe('abcdef');
+    expect(fieldValue(FRONT)).toBe('abcdef');
     expect(field).toBeTruthy();
   });
 
@@ -875,7 +1075,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     await flush();
 
     const close = target.querySelector('[data-testid="note-preview-close"]') as HTMLButtonElement;
-    expect(close.getAttribute('aria-label')).toBe(formatMessage('zh-CN', 'note_preview.close'));
+    expect(close.getAttribute('aria-label')).toBe('关闭预览');
     close.click();
     await flush();
 
@@ -890,7 +1090,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
 
     mountEditor({ id: '5' });
     await flush();
-    setField('note-field-front', 'Q');
+    setField(FRONT, 'Q');
     await flush();
     await vi.advanceTimersByTimeAsync(500);
     await flush();

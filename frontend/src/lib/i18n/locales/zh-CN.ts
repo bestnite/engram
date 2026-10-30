@@ -1448,4 +1448,10 @@ export const zhCN: LocaleCatalog = {
   'editor.source.toggle': '编辑「{field}」的 HTML 源码',
   'editor.collapsed.show': '展开「{field}」',
   'editor.collapsed.hide': '收起「{field}」',
+
+  // ---- Note editor: note type selector ----
+  'note_edit.type.label': '笔记类型',
+  'note_edit.type.hint': '切换笔记类型会按新类型重新初始化字段。',
+  'note_edit.type.empty': '此卡组还没有笔记类型，无法在此创建笔记。',
+  'note_edit.type.missing': '此卡片的笔记类型在此卡组中已不可用。',
 };

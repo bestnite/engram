@@ -1449,4 +1449,10 @@ export const en: LocaleCatalog = {
   'editor.source.toggle': 'Edit the HTML source of “{field}”',
   'editor.collapsed.show': 'Show “{field}”',
   'editor.collapsed.hide': 'Hide “{field}”',
+
+  // ---- Note editor: note type selector ----
+  'note_edit.type.label': 'Note type',
+  'note_edit.type.hint': 'Choosing another note type re-initialises the fields for that type.',
+  'note_edit.type.empty': 'This deck has no note types yet, so a note cannot be created here.',
+  'note_edit.type.missing': 'The note type of this card is not available in this deck.',
 };

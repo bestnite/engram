@@ -17,19 +17,19 @@ describe('Centralized typed same-origin REST API client', () => {
   });
 
   describe('sanitized note preview', () => {
-    it('loads session CSRF when absent and posts kind plus fields to the deck preview route', async () => {
+    it('loads session CSRF when absent and posts note_type plus fields to the deck preview route', async () => {
       mockFetch
         .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, user: null, csrf_token: 'preview-csrf' }), { status: 200 }))
         .mockResolvedValueOnce(new Response(JSON.stringify({ cards: [{ front_html: '<p>safe</p>', back_html: '<p>answer</p>' }] }), { status: 200 }));
       const fields = { front: '**question**', back: 'answer' };
-      await expect(client.previewNote('deck /1', 'basic', fields)).resolves.toEqual({ cards: [{ front_html: '<p>safe</p>', back_html: '<p>answer</p>' }] });
+      await expect(client.previewNote('deck /1', 'nt-basic', fields)).resolves.toEqual({ cards: [{ front_html: '<p>safe</p>', back_html: '<p>answer</p>' }] });
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
       const [url, init] = mockFetch.mock.calls[1]!;
       expect(url).toBe('/api/v1/decks/deck%20%2F1/notes/preview');
       expect(init?.method).toBe('POST');
       expect(init?.credentials).toBe('same-origin');
-      expect(JSON.parse(String(init?.body))).toEqual({ kind: 'basic', fields });
+      expect(JSON.parse(String(init?.body))).toEqual({ note_type: 'nt-basic', fields });
       expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('preview-csrf');
     });
   });

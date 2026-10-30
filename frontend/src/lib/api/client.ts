@@ -76,6 +76,7 @@ import {
   type OIDCInfo,
   type RegistrationInfo,
   type CardTypesResponse,
+  type NoteTypesResponse,
   type IdentitiesResponse,
   type BindIdentityResponse,
 } from './types';
@@ -371,6 +372,15 @@ export class ApiClient {
   }
 
   /**
+   * Read one deck's note types (GET /api/v1/decks/:id/note-types, scope: read).
+   * Each entry carries the decoded config the editor builds its fields from; the server orders the list by name then id.
+   */
+  async listNoteTypes(deckId: string): Promise<NoteTypesResponse> {
+    const id = encodeURIComponent(String(deckId));
+    return this.request<NoteTypesResponse>(`/api/v1/decks/${id}/note-types`);
+  }
+
+  /**
    * Get the current user's deck list (GET /api/v1/decks)
    */
   async getDecks(): Promise<DecksResponse> {
@@ -634,10 +644,15 @@ export class ApiClient {
     }));
   }
 
-  /** Preview fields using the authenticated session-only sanitized preview endpoint. */
+  /**
+   * Preview fields using the authenticated session-only sanitized preview endpoint.
+   *
+   * noteTypeID is the public id of a note type of the deck in the address; the server renders that stored type (templates
+   * and CSS included). fields is keyed by the note type's field names, the same shape a note write accepts.
+   */
   async previewNote(
     deckId: string,
-    kind: string,
+    noteTypeID: string,
     fields: Record<string, unknown>,
     options?: CardFaceRequestOptions,
   ): Promise<NotePreviewResponse> {
@@ -648,7 +663,7 @@ export class ApiClient {
     return this.request<NotePreviewResponse>(`/api/v1/decks/${encodedId}/notes/preview`, {
       method: 'POST',
       headers: frameHeaders(options),
-      body: JSON.stringify({ kind, fields }),
+      body: JSON.stringify({ note_type: noteTypeID, fields }),
     });
   }
 

@@ -141,7 +141,10 @@ export interface CreateDeckRequest {
 export interface Note {
   id: string;
   deck_id: string;
+  /** Stock kind derived from the note type; transitional, and the editor does not read it. */
   kind: string;
+  /** Public id of the note's note type, or null for a note written before note types existed. */
+  note_type?: string | null;
   fields: Record<string, unknown>;
   tags: string[];
   created_at: string;
@@ -164,6 +167,8 @@ export interface NotesResponse {
 
 /** PATCH /api/v1/notes/:id request body. Fields are replaced as a complete object. */
 export interface UpdateNoteRequest {
+  /** Public id of the note type the fields belong to. The editor sends this instead of the transitional kind. */
+  note_type?: string;
   kind?: string;
   fields: Record<string, unknown>;
   tags?: string[];
@@ -259,6 +264,72 @@ export interface CardTypesResponse {
   kinds: CardTypeDescription[];
 }
 
+/** One note field of a note type (aligned with Go internal/notetype.Field). */
+export interface NoteTypeField {
+  /** Opaque stable id; a note stores its values by this id. */
+  id: string;
+  /** Display name; the editor uses it as the label and the save payload key. */
+  name: string;
+  sticky: boolean;
+  rtl: boolean;
+  /** CSS font family of the field's editing surface; empty means the editor default. */
+  font: string;
+  /** Font size in px; 0 means the editor default. */
+  font_size: number;
+  description: string;
+  /** The field holds plain text: no formatting toolbar and no rich formatting. */
+  plain_text: boolean;
+  /** Start folded in the editor; the writer unfolds it. */
+  collapsed: boolean;
+  exclude_from_search?: boolean;
+  tag?: number | null;
+  prevent_deletion?: boolean;
+}
+
+/** One card template of a note type (aligned with Go internal/notetype.Template). */
+export interface NoteTypeTemplate {
+  id: string;
+  name: string;
+  qfmt: string;
+  afmt: string;
+  bqfmt?: string;
+  bafmt?: string;
+  browser_font?: string;
+  browser_font_size?: number;
+}
+
+/**
+ * The decoded config of a note type (aligned with Go internal/notetype.Config).
+ * Fields are in display order; templates decide which cards a note produces.
+ */
+export interface NoteTypeConfig {
+  kind: 'normal' | 'cloze';
+  fields: NoteTypeField[];
+  templates: NoteTypeTemplate[];
+  css: string;
+  sort_field_id?: string;
+  latex_pre?: string;
+  latex_post?: string;
+  latex_svg?: boolean;
+  original_stock_kind?: string | null;
+}
+
+/** One note type of a deck (Go internal/api.NoteTypeJSON); id is the public id the payloads speak. */
+export interface NoteType {
+  id: string;
+  deck_id: string;
+  name: string;
+  version: number;
+  config: NoteTypeConfig;
+  created_at: string;
+  updated_at: string;
+}
+
+/** GET /api/v1/decks/:id/note-types response; the server orders the types by name then id. */
+export interface NoteTypesResponse {
+  note_types: NoteType[];
+}
+
 /**
  * One item of GET /api/v1/media (aligned with Go internal/api.MediaItem).
  * url is built from sha256 as /media/<sha256> and can be used directly in <img src> and for inserting Markdown references.
@@ -306,12 +377,14 @@ export interface NoteListParams {
 /**
  * Request body of the bulk write contract.
  *
- * The server validates fields by kind from the card-kind registry and accepts any registered kind; here kind is not narrowed to
- * 'basic', otherwise the unified editor could not submit non-basic kinds. fields is a Record carrying each kind's own fields.
+ * A note names either the note type public id (note_type) or the transitional card kind; the server resolves both and
+ * accepts any note type of the deck. Here kind is not narrowed to 'basic', otherwise the unified editor could not submit
+ * other types. fields is a Record whose keys are the selected note type's field names.
  */
 export interface CreateNotesRequest {
   notes: Array<{
-    kind: string;
+    note_type?: string;
+    kind?: string;
     fields: Record<string, unknown>;
     tags: string[];
   }>;

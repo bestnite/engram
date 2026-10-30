@@ -238,9 +238,13 @@ type framePreviewResponse struct {
 }
 
 // preview posts to the editor preview endpoint as the deck owner, optionally marking the request as frame output.
+// The helper takes a stock kind for readability and resolves the deck's note type for it before posting.
 func (f *frameMediaFixture) preview(t *testing.T, kind string, fields map[string]any, forFrame bool) framePreviewResponse {
 	t.Helper()
-	payload, err := json.Marshal(notePreviewRequest{Kind: kind, Fields: fields})
+	payload, err := json.Marshal(notePreviewRequest{
+		NoteType: stockNoteTypePublicID(t, f.db, f.deck.ID, kind),
+		Fields:   fields,
+	})
 	if err != nil {
 		t.Fatalf("encode preview request: %v", err)
 	}
@@ -761,7 +765,7 @@ func TestFrameMediaWithoutSecretsDegrades(t *testing.T) {
 	if rec := getWithCookies(t, srv, "/fm/anything/"+strings.Repeat("ab", 32), nil); rec.Code != http.StatusNotFound {
 		t.Errorf("GET /fm/ without secrets = %d, want 404", rec.Code)
 	}
-	payload, _ := json.Marshal(notePreviewRequest{Kind: "basic", Fields: map[string]any{
+	payload, _ := json.Marshal(notePreviewRequest{NoteType: stockNoteTypePublicID(t, srv.db, deck.ID, "basic"), Fields: map[string]any{
 		"front": `<img src="` + strings.Repeat("ab", 32) + `.png">`, "back": "back",
 	}})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes/preview", strings.NewReader(string(payload)))

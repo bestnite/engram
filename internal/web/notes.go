@@ -181,23 +181,20 @@ type previewCard struct {
 	BackHTML  string
 }
 
-// buildPreview renders the front and back of every card the given payload would produce.
+// buildPreview renders the front and back of every card the given payload would produce against a stored note type.
 //
-// The preview shows unsaved content, so it resolves the stock note type from the kind instead of reading a stored one,
-// converts the payload exactly like the note write path, and generates the card list with the same generator. It reports
-// false when the kind is unknown or the payload cannot be rendered; the endpoint answers those with one stable
-// invalid_request code, so the cause is not carried along.
-func buildPreview(kind string, fields map[string]any) ([]previewCard, bool) {
-	stock, ok := notetype.EngramStockByKind(kind)
-	if !ok {
-		return nil, false
-	}
-	cfg := stock.Config
+// The preview shows unsaved content, so it takes the note type's own config - its fields, templates and CSS - and converts
+// the payload exactly like the note write path. It reports false when the payload cannot be rendered; the endpoint answers
+// that with one stable invalid_request code, so the cause is not carried along.
+func buildPreview(nt *store.NoteType, cfg notetype.Config, deck *store.Deck, fields map[string]any) ([]previewCard, bool) {
 	values, err := store.PayloadFieldValues(cfg, fields)
 	if err != nil {
 		return nil, false
 	}
-	data := notetype.RenderData{Fields: values, TypeName: stock.Name}
+	// {{Deck}} and {{Subdeck}} are filled from the deck the preview is addressed to. A preview has no card row, so there is
+	// no stored subdeck path to append.
+	deckName, subdeckName := deckFieldNames(deck.Name, nil)
+	data := notetype.RenderData{Fields: values, TypeName: nt.Name, DeckName: deckName, SubdeckName: subdeckName}
 	generated, err := notetype.GenerateCards(cfg, data)
 	if err != nil {
 		return nil, false

@@ -99,8 +99,8 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	name := strings.TrimPrefix(saved.URL, "/media/")
 	ref := `<img src="` + name + `">`
 	prev := postJSONWithCSRF(t, srv, "/api/v1/decks/"+deck.PublicID+"/notes/preview", map[string]any{
-		"kind":   "basic",
-		"fields": map[string]any{"front": "see " + ref, "back": "back"},
+		"note_type": stockNoteTypePublicID(t, db, deck.ID, "basic"),
+		"fields":    map[string]any{"front": "see " + ref, "back": "back"},
 	}, cookies, csrf)
 	if prev.Code != http.StatusOK {
 		t.Fatalf("preview status = %d, want 200 (body %s)", prev.Code, prev.Body.String())
@@ -132,8 +132,8 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 
 	// 5) Preview again: the field value still holds the reference and the preview still has the <img> (and it is not base64-inlined).
 	reload := postJSONWithCSRF(t, srv, "/api/v1/decks/"+deck.PublicID+"/notes/preview", map[string]any{
-		"kind":   "basic",
-		"fields": map[string]any{"front": "see " + ref, "back": "back"},
+		"note_type": stockNoteTypePublicID(t, db, deck.ID, "basic"),
+		"fields":    map[string]any{"front": "see " + ref, "back": "back"},
 	}, cookies, csrf)
 	if reload.Code != http.StatusOK {
 		t.Fatalf("reload preview status = %d, want 200", reload.Code)

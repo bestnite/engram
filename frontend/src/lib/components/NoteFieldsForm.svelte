@@ -35,6 +35,11 @@
      * here; a field without an entry uses the editor defaults.
      */
     fieldOptions?: Record<string, RichFieldOptions>;
+    /**
+     * Visible labels per field key, for a host whose field names are data rather than catalog keys
+     * (a note type's fields). A key with no entry falls back to the catalog label of that field name.
+     */
+    labels?: Record<string, string>;
     /** Uploads one media file for the editor; without it the field inserts nothing by upload. */
     upload?: (file: File) => Promise<MediaReference>;
   }
@@ -45,6 +50,7 @@
     faceFields = [],
     testIdPrefix = 'note-field',
     fieldOptions = {},
+    labels = {},
     upload,
   }: Props = $props();
 
@@ -107,7 +113,7 @@
 
 {#each specs as spec (spec.key)}
   {@const helpKey = fieldHelp[spec.key]}
-  {@const fieldLabel = $t('note.fields.' + spec.key)}
+  {@const fieldLabel = labels[spec.key] ?? $t('note.fields.' + spec.key)}
   <div class="block">
     {#if spec.control === 'bool'}
       <div class="flex items-center gap-2">

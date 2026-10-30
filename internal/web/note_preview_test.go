@@ -7,15 +7,19 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"git.nite07.com/nite/engram/internal/notetype"
+	"git.nite07.com/nite/engram/internal/store"
 )
 
-func TestNotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
-	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	deck := seedDeck(t, db, ownerID, "Preview")
-	payload, _ := json.Marshal(notePreviewRequest{Kind: "basic", Fields: map[string]any{
-		"front": `<img src=x onerror=alert(1)> \(x^2\)`, "back": `<script>alert(1)</script>safe`,
-	}})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes/preview", bytes.NewReader(payload))
+// postPreview sends one preview body with the owner's session and CSRF token.
+func postPreview(t *testing.T, srv *Server, deckPublicID string, cookies []*http.Cookie, csrf string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("encode preview request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deckPublicID+"/notes/preview", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-CSRF-Token", csrf)
 	for _, cookie := range cookies {
@@ -23,6 +27,16 @@ func TestNotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+func TestNotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Preview")
+	noteTypeID := stockNoteTypePublicID(t, db, deck.ID, "basic")
+	rec := postPreview(t, srv, deck.PublicID, cookies, csrf, notePreviewRequest{NoteType: noteTypeID, Fields: map[string]any{
+		"front": `<img src=x onerror=alert(1)> \(x^2\)`, "back": `<script>alert(1)</script>safe`,
+	}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("preview status = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -49,17 +63,10 @@ func TestNotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
 func TestNotePreviewKeepsChoiceOptionsInline(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Preview choices")
-	payload, _ := json.Marshal(notePreviewRequest{Kind: "choice_single", Fields: map[string]any{
+	noteTypeID := stockNoteTypePublicID(t, db, deck.ID, "choice_single")
+	rec := postPreview(t, srv, deck.PublicID, cookies, csrf, notePreviewRequest{NoteType: noteTypeID, Fields: map[string]any{
 		"question": "pick-one", "options": []any{"alpha", "beta"}, "answer": 1,
 	}})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes/preview", bytes.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-CSRF-Token", csrf)
-	for _, cookie := range cookies {
-		req.AddCookie(cookie)
-	}
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("preview status = %d: %s", rec.Code, rec.Body.String())
 	}
@@ -89,10 +96,83 @@ func TestNotePreviewKeepsChoiceOptionsInline(t *testing.T) {
 	}
 }
 
+// TestNotePreviewRendersStoredNoteType is the acceptance case for the preview endpoint: a note type whose template and CSS
+// differ from every stock definition renders its own stored template, not the stock definition of a kind.
+func TestNotePreviewRendersStoredNoteType(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Preview stored type")
+	cfg := notetype.Config{
+		Kind: notetype.KindNormal,
+		Fields: []notetype.Field{
+			{ID: "f-question", Name: "Question"},
+			{ID: "f-answer", Name: "Answer"},
+		},
+		Templates: []notetype.Template{{
+			ID:      "t-stored",
+			Name:    "Stored card",
+			QFormat: `<div id="stored-question">{{Question}}</div>`,
+			AFormat: `<div id="stored-question">{{Question}}</div><div id="stored-answer">{{Answer}}</div>`,
+		}},
+		CSS: `.card { color: rgb(9, 9, 9); }`,
+	}
+	nt := &store.NoteType{DeckID: deck.ID, Name: "Stored layout"}
+	if err := store.NewNoteTypeStore(db).Create(t.Context(), nt, cfg); err != nil {
+		t.Fatalf("create note type: %v", err)
+	}
+	rec := postPreview(t, srv, deck.PublicID, cookies, csrf, notePreviewRequest{NoteType: nt.PublicID, Fields: map[string]any{
+		"Question": "STORED-QUESTION", "Answer": "STORED-ANSWER",
+	}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Cards []struct {
+			Front struct {
+				HTML string `json:"html"`
+				CSS  string `json:"css"`
+			} `json:"front"`
+			Back struct {
+				HTML string `json:"html"`
+				CSS  string `json:"css"`
+			} `json:"back"`
+		} `json:"cards"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode preview response: %v (body %s)", err, rec.Body.String())
+	}
+	if len(body.Cards) != 1 {
+		t.Fatalf("preview cards = %d, want 1 (body %s)", len(body.Cards), rec.Body.String())
+	}
+	if !strings.Contains(body.Cards[0].Front.HTML, `id="stored-question"`) || !strings.Contains(body.Cards[0].Front.HTML, "STORED-QUESTION") {
+		t.Errorf("preview front does not render the stored template: %s", body.Cards[0].Front.HTML)
+	}
+	if !strings.Contains(body.Cards[0].Back.HTML, `id="stored-answer"`) || !strings.Contains(body.Cards[0].Back.HTML, "STORED-ANSWER") {
+		t.Errorf("preview back does not render the stored template: %s", body.Cards[0].Back.HTML)
+	}
+	if body.Cards[0].Front.CSS != cfg.CSS || body.Cards[0].Back.CSS != cfg.CSS {
+		t.Errorf("preview css = %q / %q, want the stored %q", body.Cards[0].Front.CSS, body.Cards[0].Back.CSS, cfg.CSS)
+	}
+}
+
+// TestNotePreviewRejectsNoteTypeOfAnotherDeck covers the negative case: the note type must belong to the deck in the address,
+// so a preview cannot read a type of a deck the caller did not address.
+func TestNotePreviewRejectsNoteTypeOfAnotherDeck(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Preview target")
+	other := seedDeck(t, db, ownerID, "Preview other")
+	foreignTypeID := stockNoteTypePublicID(t, db, other.ID, "basic")
+	rec := postPreview(t, srv, deck.PublicID, cookies, csrf, notePreviewRequest{NoteType: foreignTypeID, Fields: map[string]any{
+		"front": "Q", "back": "A",
+	}})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("preview of another deck's note type = %d, want 404 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
 func TestNotePreviewRequiresSessionAndCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Preview")
-	payload, _ := json.Marshal(notePreviewRequest{Fields: map[string]any{"front": "a", "back": "b"}})
+	payload, _ := json.Marshal(notePreviewRequest{NoteType: stockNoteTypePublicID(t, db, deck.ID, "basic"), Fields: map[string]any{"front": "a", "back": "b"}})
 	request := func(withCookie, withCSRF bool) int {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes/preview", bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")

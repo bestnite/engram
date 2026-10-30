@@ -5,7 +5,7 @@
   import { RETURN_PARAM, safeReturnPath } from '../return-to';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { Note, NotePreviewCard } from '../api';
+  import type { Note, NotePreviewCard, NoteType, NoteTypeField } from '../api';
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import Select from '../components/ui/Select.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -15,13 +15,16 @@
   import PageHeader from '../components/ui/PageHeader.svelte';
   import CardFrame from '../components/CardFrame.svelte';
   import { NOTE_PREVIEW_CSS, faceStyle } from '../card-frame';
-  import { emptyFields, toFormFields, toPayloadFields } from '../card-fields';
-  import { backField, cardTypes, fieldsForKind, frontField, kindOrder, loadCardTypes } from '../card-types';
+  import { emptyFields, toPayloadFields, type FieldSpec } from '../card-fields';
+  import type { RichFieldOptions } from '../components/RichTextField.svelte';
   import type { MediaReference } from '../../editframe/runtime';
   import { Check, Eye, Plus, Trash2, X } from '@lucide/svelte';
 
   // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
-  // (card type, fields with their own insertion tools, tags and live preview). A successful create always leaves the editor, leaving no second "create another" path.
+  // (note type, fields with their own insertion tools, tags and live preview). A successful create always leaves the editor, leaving no second "create another" path.
+  //
+  // The fields come from the note type the deck stores, so any type - including one that matches no stock kind - is edited
+  // and previewed with its own definitions. The editor never reads the card-kind catalog and never sends a kind.
   const deckId = $derived($routeStore.params.id || '');
   const noteId = $derived($routeStore.params.noteId || '');
   const isCreate = $derived(noteId === '');
@@ -37,16 +40,18 @@
   const PREVIEW_DEBOUNCE_MS = 500;
 
   let note = $state<Note | null>(null);
-  let kind = $state('basic');
+  // The deck's note types, in the order the server returns them; the selected one supplies the fields.
+  let noteTypes = $state<NoteType[]>([]);
+  let noteTypeId = $state('');
   let fields = $state<Record<string, unknown>>({});
-  // Keys outside this card type's field table (custom keys written externally) are kept as-is and merged back on save, never silently dropped.
-  let unknownKeys = $state<Record<string, unknown>>({});
   let tagsText = $state('');
 
   let loading = $state(true);
   let saving = $state(false);
   let loadError = $state(false);
   let metaError = $state(false);
+  // Why the note type is unusable: the deck has none, or the edited note names one the deck no longer lists.
+  let typeProblem = $state<'' | 'empty' | 'missing'>('');
 
   // Delete confirmation: open, in flight, and the catalog key of the last failure shown inside the dialog.
   let deleteOpen = $state(false);
@@ -70,91 +75,147 @@
   let previewGeneration = 0;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Card type dropdown: the list and its order come from the server's self-description (kind in lexicographic order), empty while the metadata is not ready.
-  const kindOptions = $derived(
-    kindOrder($cardTypes).map((value) => ({ value, label: $t(`notes.kind.${value}` as never) }))
+  /** The selected note type, or null while the list is still empty. */
+  const selectedType = $derived(noteTypes.find((entry) => entry.id === noteTypeId) ?? null);
+
+  /** The selected type's fields in manifest order; the form and the save payload follow this order. */
+  const fieldDefs = $derived(selectedType?.config.fields ?? []);
+
+  // Every note-type field is an HTML value, so the form uses one text control per field and every field gets the
+  // rich-text editor. A field whose option says plain_text still renders as plain text inside that editor.
+  const specs = $derived<FieldSpec[]>(
+    fieldDefs.map((field) => ({ key: field.name, control: 'textarea', required: false }))
   );
+  const fieldLabels = $derived(
+    Object.fromEntries(fieldDefs.map((field) => [field.name, field.name]))
+  );
+  const fieldOptions = $derived(
+    Object.fromEntries(fieldDefs.map((field) => [field.name, optionsFor(field)]))
+  );
+  const faceFields = $derived(fieldDefs.map((field) => field.name));
 
-  // Stable signature of the field contents: a change to kind or any field yields a new string, and the live preview reschedules off it.
-  const signature = $derived(JSON.stringify({ kind, fields: collectFields() }));
+  // Note type dropdown: the list and its order come from the server, empty while the metadata is not ready.
+  const typeOptions = $derived(noteTypes.map((entry) => ({ value: entry.id, label: entry.name })));
 
-  // Draft signature: a change to kind, the submitted fields or the tags yields a new string (tags use the parsed array, so changing only whitespace
+  // Stable signature of the field contents: a change to the note type or any field yields a new string, and the live preview reschedules off it.
+  const signature = $derived(JSON.stringify({ type: noteTypeId, fields: collectFields() }));
+
+  // Draft signature: a change to the note type, the submitted fields or the tags yields a new string (tags use the parsed array, so changing only whitespace
   // does not count as a new change either). Saving is only responsible for the snapshot at the moment of submission, so it is used to tell whether the draft was already changed when the response lands.
   const draftSignature = $derived(
-    JSON.stringify({ kind, fields: collectFields(), tags: parseTags() })
+    JSON.stringify({ type: noteTypeId, fields: collectFields(), tags: parseTags() })
   );
+
+  /**
+   * The field's presentation options. Each one comes from the stored note type, so a field keeps the
+   * behaviour its author configured instead of a form-wide default.
+   */
+  function optionsFor(field: NoteTypeField): RichFieldOptions {
+    return {
+      sticky: field.sticky,
+      collapsed: field.collapsed,
+      plainText: field.plain_text,
+      rtl: field.rtl,
+      font: field.font || undefined,
+      size: field.font_size > 0 ? field.font_size : undefined,
+    };
+  }
+
+  /** Blank form model for one set of fields, keyed by field name. */
+  function emptyNoteFields(defs: readonly NoteTypeField[]): Record<string, unknown> {
+    return emptyFields(defs.map((field) => ({ key: field.name, control: 'textarea', required: false })));
+  }
 
   function parseTags(): string[] {
     return tagsText.split(',').map((tag) => tag.trim()).filter(Boolean);
   }
 
-  /** Form model → fields for submission: recognized keys are cleaned per the table, unknown keys are carried back as-is. */
+  /**
+   * Form model → fields for submission. The keys are the selected note type's field names, which is what the note write
+   * resolves to field ids; unknown keys cannot occur, because the form only holds the selected type's fields.
+   */
   function collectFields(): Record<string, unknown> {
-    return { ...unknownKeys, ...toPayloadFields(fields) };
+    return toPayloadFields(fields);
   }
 
   /**
-   * Whether there is already previewable content: it only looks at the text / array / numeric fields in this card type's
-   * field table and judges whether they deviate from the empty-form baseline. Boolean fields have no renderable body,
-   * and their defaults (e.g. typed's ignore_case=true, list's ordered=false, true_false's answer=false) come from the card
-   * type definition rather than user input, so they never count; keys outside the card type table (unknownKeys) are not
-   * this input either and do not count the same way. The numeric value 0 is real input and must count.
+   * Whether there is already previewable content: at least one field of the selected note type holds something.
+   * An empty form sends no preview request; an incomplete one reaches the server and is reported as incomplete.
    */
   function hasContent(): boolean {
-    const specs = fieldsForKind($cardTypes, kind);
-    const baseline = toPayloadFields(emptyFields(specs));
-    const current = toPayloadFields(fields);
-    for (const spec of specs) {
-      if (spec.control === 'bool') continue;
-      if (!(spec.key in current)) continue;
-      if (JSON.stringify(current[spec.key]) !== JSON.stringify(baseline[spec.key])) return true;
-    }
-    return false;
+    return Object.keys(collectFields()).length > 0;
   }
 
-  /** Load the card and collect the server fields into the form model; unknown keys are returned to be stored separately and merged on save. */
-  function adoptFields(loaded: Note): void {
-    kind = loaded.kind;
-    fields = toFormFields(fieldsForKind($cardTypes, loaded.kind), loaded.fields);
-    const known = new Set(fieldsForKind($cardTypes, loaded.kind).map((spec) => spec.key));
-    unknownKeys = Object.fromEntries(Object.entries(loaded.fields).filter(([key]) => !known.has(key)));
+  /**
+   * The HTML a loaded field value stands for. The note response presents some stock-kind fields in their legacy shapes
+   * (an array of lines, a boolean or a number), while the stored value is one HTML string; joining lines with <br> and
+   * writing booleans and numbers as their literal text reproduces what the note write stores.
+   */
+  function fieldHtml(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.map((item) => String(item)).join('<br>');
+    return String(value);
+  }
+
+  /** Load one note's content into the form; the selected type comes from the note itself. */
+  function adoptFields(loaded: Note, type: NoteType): void {
+    noteTypeId = type.id;
+    const next: Record<string, unknown> = {};
+    for (const field of type.config.fields) {
+      // The response keys field values by field id; accepting the name too keeps an older payload readable.
+      next[field.name] = fieldHtml(loaded.fields[field.id] ?? loaded.fields[field.name]);
+    }
+    fields = next;
     tagsText = loaded.tags.join(', ');
   }
 
   async function load(): Promise<void> {
     loading = true;
     loadError = false;
-    // First make sure the card type metadata is ready: the field table arrives together with the metadata, and an unknown card type cannot initialize the form.
-    let catalogReady = true;
+    metaError = false;
+    typeProblem = '';
+    // The deck's note types are the only field metadata: without them the form cannot be built.
     try {
-      await loadCardTypes(apiClient);
+      const response = await apiClient.listNoteTypes(deckId);
+      if (disposed) return;
+      noteTypes = response.note_types ?? [];
     } catch {
       if (disposed) return;
       metaError = true;
-      catalogReady = false;
+      previewReady = false;
+      loading = false;
+      return;
     }
     // The form is no longer initialized after unmount/a route change: late-arriving metadata must not write state or trigger the first-screen preview.
     if (disposed) return;
     try {
       if (isCreate) {
-        // Creating does not read a remote card, so it never GETs with an empty id. Defaults to basic, falling back to the first entry when the list lacks that card type.
-        const kinds = kindOrder($cardTypes);
-        const initialKind = kinds.includes('basic') ? 'basic' : kinds[0] ?? 'basic';
-        kind = initialKind;
-        fields = emptyFields(fieldsForKind($cardTypes, initialKind));
-        unknownKeys = {};
-        previewReady = catalogReady;
+        // Creating never GETs with an empty id. The first note type in the server's order is the starting point.
+        const initial = noteTypes[0];
+        if (!initial) {
+          typeProblem = 'empty';
+        } else {
+          noteTypeId = initial.id;
+          fields = emptyNoteFields(initial.config.fields);
+          previewReady = true;
+        }
       } else {
-        // Read the target card directly by its public id; a card that does not belong to the deck in the address is treated as "does not exist", and cross-deck editing is forbidden.
+        // Read the target note directly by its public id; a note that does not belong to the deck in the address is treated as "does not exist", and cross-deck editing is forbidden.
         const loaded = await apiClient.getNote(noteId);
         if (disposed) return;
         const loadedNote = loaded && String(loaded.deck_id) === deckId ? loaded : null;
         note = loadedNote;
-        if (loadedNote) {
-          adoptFields(loadedNote);
-          previewReady = catalogReady;
-        } else {
+        if (!loadedNote) {
           loadError = true;
+        } else {
+          const type = noteTypes.find((entry) => entry.id === loadedNote.note_type);
+          if (!type) {
+            typeProblem = 'missing';
+          } else {
+            adoptFields(loadedNote, type);
+            previewReady = true;
+          }
         }
       }
     } catch {
@@ -166,12 +227,14 @@
   }
 
   /**
-   * Switch card type: reinitialize the fields for the new card type (old field names do not transfer, keeping them would only produce half a card).
-   * Unknown keys stay untouched: they are data on the original card that belongs to no field table, and switching card type should not drop them on the way either.
+   * Switch note type: reinitialize the fields for the new type. Old field names do not transfer, because a name means a
+   * different field (or no field) in the new type, and keeping them would only submit content the new type cannot show.
    */
-  function changeKind(next: string): void {
-    kind = next;
-    fields = emptyFields(fieldsForKind($cardTypes, next));
+  function changeNoteType(next: string): void {
+    const type = noteTypes.find((entry) => entry.id === next);
+    if (!type) return;
+    noteTypeId = type.id;
+    fields = emptyNoteFields(type.config.fields);
   }
 
   /**
@@ -252,17 +315,17 @@
   /** Fetch one preview. Before landing it first confirms it is still the newest generation; stale results and stale errors are both discarded. */
   async function runPreview(generation: number): Promise<void> {
     if (disposed || generation !== previewGeneration) return;
-    const requestKind = kind;
+    const requestType = noteTypeId;
     const requestFields = collectFields();
     let outcome: PreviewOutcome;
     try {
       // The preview faces are rendered by the frame, so the request asks for frame-ready HTML and its media base.
-      const response = await apiClient.previewNote(deckId, requestKind, requestFields, { frame: true });
+      const response = await apiClient.previewNote(deckId, requestType, requestFields, { frame: true });
       if (disposed || generation !== previewGeneration) return;
       outcome = { ok: true, cards: response.cards };
     } catch (err) {
       if (disposed || generation !== previewGeneration) return;
-      // 400 means "the fields are not complete yet / the card type cannot render", expressed separately from a fetch failure.
+      // 400 means "the fields are not complete yet / the note type cannot render", expressed separately from a fetch failure.
       outcome = { ok: false, status: err instanceof ApiClientError && err.status === 400 ? 'incomplete' : 'error' };
     }
     commitPreview(generation, outcome);
@@ -284,7 +347,7 @@
     saving = true;
     try {
       const updated = await apiClient.updateNote(note.id, {
-        kind,
+        note_type: noteTypeId,
         fields: collectFields(),
         tags: parseTags(),
       });
@@ -293,7 +356,8 @@
       note = updated;
       if (draftSignature === submitted) {
         // No new input during the request: the response can safely be collected into the form and reported as saved.
-        adoptFields(updated);
+        const type = noteTypes.find((entry) => entry.id === updated.note_type) ?? selectedType;
+        if (type) adoptFields(updated, type);
         toast.success($t('note_edit.saved'));
       }
       // The draft has already been changed: keep what the user is typing (do not adopt it) and do not falsely report "saved".
@@ -344,7 +408,7 @@
     saving = true;
     try {
       const result = await apiClient.createNotes(deckId, {
-        notes: [{ kind, fields: collectFields(), tags: parseTags() }],
+        notes: [{ note_type: noteTypeId, fields: collectFields(), tags: parseTags() }],
       });
       // The user left while the request was in flight (route change/unmount): no more state writes, and do not pull them to the return page either.
       if (disposed) return;
@@ -361,7 +425,7 @@
     }
   }
 
-  // Live preview trigger point: after loading completes (the first-screen preview), every change to kind or the field contents reschedules once.
+  // Live preview trigger point: after loading completes (the first-screen preview), every change to the note type or the field contents reschedules once.
   // The scheduling is wrapped in untrack: scheduling reads previewCards/previewStatus, and if those were recorded as dependencies it would form
   // a self-exciting loop of "preview finished → schedule another preview"; the only real dependencies are previewReady and signature.
   $effect(() => {
@@ -414,36 +478,41 @@
       </Button>
     {/snippet}
   </PageHeader>
-  {#if loading || (note && !$cardTypes && !metaError)}
+  {#if loading}
     <Skeleton testId="note-edit-loading" label={$t('note_edit.loading')} lines={6} />
   {:else if !isCreate && loadError && !note}
     <p role="alert" data-testid="note-edit-not-found" class="text-sm text-destructive-foreground">{$t('note_edit.not_found')}</p>
-  {:else if metaError && !$cardTypes}
+  {:else if metaError}
     <p role="alert" data-testid="note-edit-metadata-error" class="text-sm text-destructive-foreground">{$t('common.error')}</p>
+  {:else if typeProblem === 'empty'}
+    <p role="alert" data-testid="note-edit-no-types" class="text-sm text-muted-foreground">{$t('note_edit.type.empty')}</p>
+  {:else if typeProblem === 'missing'}
+    <p role="alert" data-testid="note-edit-type-missing" class="text-sm text-destructive-foreground">{$t('note_edit.type.missing')}</p>
   {:else}
     <form onsubmit={submit} data-testid="note-editor-form">
       <div class="grid gap-8 lg:grid-cols-2 lg:items-start">
-        <!-- Left column: input. Card type, its fields (the front and back fields carry their own formatting and
-             insertion tools) and the tags; the tools sit on the field they write into, so nothing has to be
-             scrolled to on a phone. -->
+        <!-- Left column: input. Note type, its fields (every field carries its own formatting and insertion tools)
+             and the tags; the tools sit on the field they write into, so nothing has to be scrolled to on a phone. -->
         <div class="min-w-0 space-y-8">
           <div class="space-y-5">
             <div>
-              <span class="block text-sm font-medium text-foreground">{$t('note_edit.kind')}</span>
+              <span class="block text-sm font-medium text-foreground">{$t('note_edit.type.label')}</span>
               <Select
                 class="mt-1.5 w-full"
-                testId="note-edit-kind"
-                value={kind}
-                onValueChange={changeKind}
-                options={kindOptions}
+                testId="note-edit-type"
+                value={noteTypeId}
+                onValueChange={changeNoteType}
+                options={typeOptions}
               />
-              <p class="mt-1.5 text-xs text-muted-foreground">{$t('note_edit.kind_hint')}</p>
+              <p class="mt-1.5 text-xs text-muted-foreground">{$t('note_edit.type.hint')}</p>
             </div>
 
             <NoteFieldsForm
-              specs={fieldsForKind($cardTypes, kind)}
+              {specs}
               {fields}
-              faceFields={[frontField($cardTypes, kind), backField($cardTypes, kind)]}
+              {faceFields}
+              fieldOptions={fieldOptions}
+              labels={fieldLabels}
               testIdPrefix="note-field"
               upload={uploadFieldMedia}
             />
