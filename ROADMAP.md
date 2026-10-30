@@ -242,6 +242,8 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 - [ ] **M17-45 A note write keeps cards that became empty** — Anki's rule: editing a note adds cards
   and never removes one.
+  *Depends on:* M17-50, because the note type update must stop sharing the note write's card rule
+  first.
   *Files:* `internal/store/card.go` (`syncCards`); `internal/web/review.go`; `internal/store/*_test.go`;
   `internal/web/*_test.go`; `internal/i18n/locales/` (append a block with the prefix
   `review.empty_card.`).
@@ -271,6 +273,200 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   does for a deck without a public id.
   *Acceptance:* a test runs the check on a database whose `decks` table has no `public_id` column and
   gets a report.
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+
+**Phase 5 follow-up — defects found in the review of M17-22 to M17-24, M17-35 and M17-40 (on `main`)**
+
+These tasks land on `main` directly. M17-47, M17-48 and M17-49 fix wrong results or data loss and
+come first. The local Ultimate Geography package (`testdata/local/Ultimate-Geography.apkg`) is the
+evidence named below. It is gitignored, so a test that reads it skips when the file is absent.
+
+- [ ] **M17-47 Choose the imported deck from the decks that hold cards** — the top deck must not be
+  Anki's empty `Default` deck.
+  *Files:* `internal/store/anki_import.go` (`planAnkiDecks`); `internal/store/anki_import_test.go`.
+  *Problem:* an Anki package always carries the deck `Default` (id 1). `planAnkiDecks` takes the
+  shortest deck name as the top deck, so the Ultimate Geography import creates a deck named
+  `Default`, and all 975 cards get `deck_path = "Ultimate Geography"`. `TestLocalAnkiPackage` passes
+  `NewDeckName`, which hides the deck name.
+  *Work:*
+  - Only decks that at least one package card references take part in the choice. A deck that no card
+    references is ignored, whatever its name or id.
+  - Split each card deck name into `::` components. The top name is the longest component prefix that
+    all card deck names share.
+  - When the card decks share no first component, the top name is the first component of the card
+    deck with the most cards. On a tie, the lowest deck id wins.
+  - A card in the deck whose full name equals the top name gets `deck_path = NULL`. A card in a deck
+    below the top name gets the path relative to it. Any other card gets its full package deck name.
+  - The new deck's description is the description of the package deck whose full name equals the top
+    name, and empty when there is no such deck.
+
+  *Acceptance:*
+  - Table-driven tests on constructed packages: `Default` without cards plus one deck with cards; a
+    tree `A`, `A::B`, `A::C` whose cards sit only in `A::B` and `A::C` (top `A`, paths `B` and `C`);
+    two unrelated decks `A` and `B`; `Default` holding cards.
+  - A test that imports the local Ultimate Geography package without `NewDeckName` gets the deck name
+    `Ultimate Geography` and `deck_path = NULL` on all 975 cards.
+
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+- [ ] **M17-48 Re-importing an `.apkg` restores soft-deleted notes** — a guid that matches a deleted
+  note must not break the import.
+  *Files:* `internal/store/anki_import.go` (`importAnkiInTx`, `writeAnkiNote`);
+  `internal/store/anki_import_test.go`.
+  *Problem:* existing notes are looked up without soft-deleted rows, but the unique index on
+  `(deck_id, external_ref)` covers them. Two cases fail with `UNIQUE constraint failed:
+  notes.deck_id, notes.external_ref` and roll the whole import back (measured with the Ultimate
+  Geography package):
+  - `into_deck` after the user deleted one imported note;
+  - `replace_deck` on a deck that already holds the package, because it soft-deletes every note first
+    and then creates notes with the same guids.
+
+  The `.edeck` import restores a soft-deleted match with `RestoreInTx` before updating it; the `.apkg`
+  path does not.
+  *Work:* the lookup includes soft-deleted notes of the target deck. A soft-deleted note whose
+  `external_ref` matches is restored with `RestoreInTx` and then updated like a live match. It keeps its
+  id, its cards and their `card_states`. `on_conflict` applies to it as to a live match.
+  *Acceptance:* store tests for both cases: the import succeeds; the matched note keeps its id; and a
+  card that had a `card_states` row before still has it.
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+- [ ] **M17-49 Note responses carry the stored field HTML** — the editor must not round-trip fields
+  through plain text.
+  *Files:* `internal/api/note_view.go`; `internal/store/legacy_fields.go`; `internal/api/notes.go`;
+  `internal/mcp/`; `frontend/src/lib/views/NoteEditView.svelte` (single-writer hotspot); the tests
+  beside them.
+  *Problem:* the note response presents stock-kind fields in legacy shapes through
+  `LegacyNoteFields`. `options`, `items` and `accept` become `answer.ParseLines(html)`, which is plain
+  text. A bool or number that fails to parse is left out. The editor joins arrays with `<br>` and saves
+  the result. Opening and saving a choice note therefore deletes the images and the formatting in its
+  options, and an unparseable bool or number field is saved empty. Migration 0012 kept images in options
+  on purpose. M17-16 already defines the note payload's field values as HTML strings.
+  *Work:*
+  - Every note response returns each field's stored HTML string unchanged: REST note get, list and
+    search, and the MCP note tools. The keys stay as they are today.
+  - Delete `LegacyNoteFields` and `transitionalFields` from the response path.
+  - The editor loads a field value as the string it receives. It does no array, bool or number
+    conversion.
+
+  *Acceptance:*
+  - A handler test: a `choice_single` note whose option holds `<img src="x.png">` and `<b>` returns the
+    stored HTML string for `options`.
+  - A client test: loading that note into the editor and saving it without changes sends the same HTML.
+  - The REST and MCP tests pass.
+
+  *Verify:* `go test ./internal/api/... ./internal/mcp/... ./internal/store/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
+- [ ] **M17-50 A note type update removes only the cards of removed templates** — empty cards are not
+  removed by a note type update.
+  *Files:* `internal/store/card.go` (`regenerateNoteTypeCards`); `internal/store/notetype_test.go`;
+  `internal/api/note_types_test.go`.
+  *Problem:* `regenerateNoteTypeCards` calls `syncCardsWithChange`, which soft-deletes every card the
+  new config no longer generates. That includes a card whose template still exists but whose front now
+  renders empty. M17-40 asked only for the cards of a template that the new config no longer declares.
+  *Work:*
+  - For a normal note type, the update soft-deletes exactly the cards whose template id the new config
+    does not declare. For a cloze note type, it soft-deletes no card.
+  - The update creates every card the new config generates that the note lacks, and restores a
+    soft-deleted card of a declared template when the new config generates it.
+  - The impact counts follow the same rule.
+  - M17-45 changes the note write path only. This rule for note type updates stays as written here.
+
+  *Acceptance:*
+  - A store test: changing a template so that its front references an empty field keeps those cards and
+    reports `cards_removed = 0`.
+  - The existing M17-40 tests pass.
+
+  *Verify:* `go test ./internal/store/... ./internal/api/...`.
+- [ ] **M17-51 A structural re-import removes the cards of missing templates** — a moved note must not
+  keep a card its new note type cannot render.
+  *Files:* `internal/store/anki_import.go`; `internal/store/package_import.go` (`PackageImportReport`);
+  `internal/store/anki_import_test.go`; `schema/` if the report is described there.
+  *Problem:* when a re-imported note type has a different field or template structure, the import
+  creates a new note type and moves the matched notes to it, remapping cards by ordinal. A stored card
+  whose ordinal has no template in the new note type keeps its old `template` value. That id does not
+  exist in the new type, so rendering or rating the card returns 500.
+  *Work:*
+  - After a note moves to a new note type, each of its cards whose `template` the new type does not
+    generate is soft-deleted. Its `card_states` and `reviews` rows stay.
+  - The import report gains `cards_removed`, which counts those cards. A dry run reports the count and
+    writes nothing.
+
+  *Acceptance:* a store test re-imports a package whose note type lost one template. The cards of that
+  template are soft-deleted, their `card_states` rows remain, and `cards_removed` equals their count.
+  Every remaining card of the deck renders without error.
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+- [ ] **M17-52 Index package notes by id during an `.apkg` import** — the card loop must not scan every
+  note for every card.
+  *Files:* `internal/store/anki_import.go` (`importAnkiInTx`).
+  *Problem:* for each package card, the card loop searches `pkg.Notes` linearly for the card's note.
+  The work grows with cards × notes: a package with 30 000 notes and 60 000 cards makes about 1.8
+  billion comparisons.
+  *Work:* build a map from package note id to package note once, before the card loop, and look notes
+  up in it.
+  *Acceptance:* the existing import tests and goldens pass unchanged.
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+- [ ] **M17-53 Stream large `.apkg` packages** — import a package of any realistic size with memory
+  that does not grow with its media.
+  *Files:* `internal/anki/`; `internal/store/anki_import.go`; `internal/store/package_import.go`;
+  `internal/store/media_*.go`; `internal/media/media.go`; `internal/api/package.go`,
+  `package_upload.go` and `package_url.go`; `internal/urlfetch/`; `internal/anki/limits_test.go`;
+  `ARCHITECTURE.md`.
+  *Problem:*
+  - The REST multipart import and the URL import cap the package at `media_max_bytes`, the single-media
+    upload limit (default 10 MiB). With the defaults, the 12 MB Ultimate Geography package is refused
+    with 413 from the Import page.
+  - The reader allows at most 2000 entries, 32 MiB per entry and 128 MiB in total. It holds the whole
+    archive and every decompressed media file in memory. Many shared Anki decks with audio have more
+    than 2000 files or more than 128 MiB of media.
+
+  *Work:*
+  - Three new settings, each resolved as environment variable, then settings table, then default, the
+    way `media_max_bytes` is resolved:
+    - `package_max_bytes` / `PACKAGE_MAX_BYTES`: the largest package a transport accepts, default
+      2 GiB;
+    - `package_max_entries` / `PACKAGE_MAX_ENTRIES`: the most zip entries an `.apkg` may have, default
+      100 000;
+    - `package_max_unpacked_bytes` / `PACKAGE_MAX_UNPACKED_BYTES`: the decompressed total of an
+      `.apkg`, default 4 GiB.
+  - A per-entry decompressed cap of 512 MiB stays a constant, because it guards one allocation and is
+    not a deployment choice.
+  - The multipart, URL and upload-ticket transports cap the body at `package_max_bytes` and spool it to
+    a temporary file. The reader opens the zip from that file. Every temporary file is removed when the
+    import ends, on every path.
+  - The collection entry is decompressed into a temporary file, as today, without first holding it in
+    memory.
+  - `anki.MediaEntry` carries no byte slice. The reader exposes each media entry's name, its declared
+    size and a function that opens its decompressed stream.
+  - The import makes one pass over the media that hashes each stream (SHA-1 and SHA-256) and counts its
+    size. The clash rename and the quota check use these results, before any media write.
+  - A media write streams the entry into the content-addressed store through a temporary file and a
+    rename. Under `dry_run` nothing is written.
+  - The `.edeck` reader keeps its in-memory reading and its current caps. `TestDefaultLimitsMatchDeckPackageReader`
+    is deleted, because the two readers no longer share caps.
+
+  *Acceptance:*
+  - Tests with the three caps set low: each cap rejects with `package_too_large`, and no deck row,
+    media row or file is left.
+  - A test imports a generated package with 2500 media entries.
+  - A handler test imports a 12 MB package through `POST /api/v1/decks/import` with the default
+    settings.
+  - A test checks that the temporary files are gone after a successful import and after a failed one.
+  - The existing import tests and goldens pass.
+
+  *Verify:* `go test ./internal/anki/... ./internal/store/... ./internal/api/... ./internal/media/... ./internal/urlfetch/...`.
+- [ ] **M17-54 Import the note types Anki imports** — no empty note type is added for a package's
+  unused note types.
+  *Files:* `internal/store/anki_import.go` (`resolveAnkiNoteTypes`); `tools/anki-oracle/` if the
+  oracle must record the result; `internal/store/anki_import_test.go`.
+  *Problem:* every note type in the package is created in the deck. Importing Ultimate Geography adds a
+  `Basic` note type that no note uses.
+  *Work:*
+  - First, extend the oracle with a fixture package that contains one note type no note uses. The
+    oracle records which note types Anki `26.09.3` adds when it imports that package into an empty
+    collection.
+  - The import then creates exactly the note types Anki adds.
+  - If Anki also adds the unused note type, the task closes with the committed fixture, the golden and
+    the test, and with no change to the import code.
+
+  *Acceptance:* the fixture and its golden are committed under `internal/notetype/testdata/anki/`. An
+  import test asserts that engram's imported note type names equal the golden.
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 
 **Phase 6–9 — remaining capabilities**
