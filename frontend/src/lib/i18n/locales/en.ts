@@ -1595,4 +1595,12 @@ export const en: LocaleCatalog = {
   'notetype.change.not_found': 'The note type or the target note type was not found.',
   'notetype.change.done': 'Note type changed.',
   'notetype.preview.failed': 'Could not render the preview. Check the fields and templates.',
+  // ---- Note type delete: purging the notes that are only soft-deleted ----
+  'notetype.purge.title': 'Delete the deleted notes too?',
+  'notetype.purge.description': 'This note type is only used by deleted notes. Deleting it permanently removes {notes} deleted notes and {cards} cards; {reviews} reviews stay.',
+  'notetype.purge.notes': 'Deleted notes',
+  'notetype.purge.cards': 'Cards',
+  'notetype.purge.reviews': 'Reviews kept',
+  'notetype.purge.confirm': 'Delete notes and type',
+  'notetype.purge.unconfirmed': 'This note type is only used by deleted notes; confirm their removal to delete it.',
 };

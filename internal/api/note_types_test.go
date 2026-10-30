@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
@@ -142,6 +143,102 @@ func TestNoteTypeCRUD(t *testing.T) {
 	code, raw = doJSON(t, router, http.MethodGet, sparePath, key, "")
 	if code != http.StatusNotFound {
 		t.Fatalf("GET deleted note type = %d, want 404 (body %s)", code, raw)
+	}
+}
+
+// TestNoteTypeDeletePurgesSoftDeletedNotes covers the purge path over REST: a type used only by soft-deleted
+// notes is refused with the three counts until confirm_purge=true is sent, a reader is refused, the confirmed
+// delete removes the type and its note, the review row stays, and the audit row records the counts.
+func TestNoteTypeDeletePurgesSoftDeletedNotes(t *testing.T) {
+	env := newTestEnv(t, 1000, 1000)
+	router := env.router()
+	owner := seedUser(t, env.db, "note_type_purge_owner", store.RoleUser)
+	reader := seedUser(t, env.db, "note_type_purge_reader", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	if err := store.NewGrantStore(env.db).Grant(context.Background(), deck.ID, reader.ID, store.RoleReader, store.Ptr(owner.ID)); err != nil {
+		t.Fatalf("grant reader: %v", err)
+	}
+	ownerKey := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	readerKey := seedKey(t, env.keys, reader.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	typesBase := fmt.Sprintf("/api/v1/decks/%s/note-types", deck.PublicID)
+
+	nt := createNoteTypeREST(t, router, typesBase, ownerKey, "Deleted notes only", testNoteTypeConfig())
+	createNotesREST(t, router, deck.PublicID, nt.ID, ownerKey, []map[string]string{{"Front": "Q", "Back": "A"}})
+	var typeRow store.NoteType
+	if err := env.db.Where("public_id = ?", nt.ID).First(&typeRow).Error; err != nil {
+		t.Fatalf("load note type: %v", err)
+	}
+	var note store.Note
+	if err := env.db.Where("note_type_id = ?", typeRow.ID).First(&note).Error; err != nil {
+		t.Fatalf("load note: %v", err)
+	}
+	var card store.Card
+	if err := env.db.Where("note_id = ?", note.ID).First(&card).Error; err != nil {
+		t.Fatalf("load card: %v", err)
+	}
+	if err := env.db.Create(&store.Review{
+		CardID: card.ID, UserID: owner.ID, Rating: 3, GradeSource: "self",
+		ReviewedAt: time.Now().UTC(), ReviewDay: "2026-10-31", StateBefore: 2,
+	}).Error; err != nil {
+		t.Fatalf("create review: %v", err)
+	}
+	// Soft-delete the note: the only remaining reference to the type is now a deleted note.
+	if err := env.db.Delete(&store.Note{}, note.ID).Error; err != nil {
+		t.Fatalf("soft delete note: %v", err)
+	}
+	onePath := typesBase + "/" + nt.ID
+
+	// A reader is refused even when the request would confirm the purge, before any check of the note state.
+	code, raw := doJSON(t, router, http.MethodDelete, onePath+"?confirm_purge=true", readerKey, "")
+	if code != http.StatusForbidden {
+		t.Fatalf("reader DELETE = %d, want 403 (body %s)", code, raw)
+	}
+	assertErrorCode(t, raw, CodeInsufficientRole)
+
+	// Without confirmation: 409 with the stable code and the counts, and nothing is written.
+	code, raw = doJSON(t, router, http.MethodDelete, onePath, ownerKey, "")
+	if code != http.StatusConflict {
+		t.Fatalf("DELETE soft-deleted-only type = %d, want 409 (body %s)", code, raw)
+	}
+	assertErrorCode(t, raw, CodeNoteTypePurgeUnconfirmed)
+	for _, want := range []string{`"deleted_notes":1`, `"cards":1`, `"reviews":1`} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("refusal body %s does not carry %s", raw, want)
+		}
+	}
+	code, raw = doJSON(t, router, http.MethodGet, onePath, ownerKey, "")
+	if code != http.StatusOK {
+		t.Fatalf("GET after refused purge = %d, want 200 (body %s)", code, raw)
+	}
+
+	// The confirmation removes the type and its note.
+	code, raw = doJSON(t, router, http.MethodDelete, onePath+"?confirm_purge=true", ownerKey, "")
+	if code != http.StatusOK {
+		t.Fatalf("confirmed DELETE = %d, want 200 (body %s)", code, raw)
+	}
+	code, raw = doJSON(t, router, http.MethodGet, onePath, ownerKey, "")
+	if code != http.StatusNotFound {
+		t.Fatalf("GET purged type = %d, want 404 (body %s)", code, raw)
+	}
+
+	// The audit row records the three counts.
+	var audit store.AuditLog
+	if err := env.db.Where("action = ?", store.ActionNoteTypeDelete).Order("id DESC").First(&audit).Error; err != nil {
+		t.Fatalf("load audit row: %v", err)
+	}
+	for _, want := range []string{`"deleted_notes":1`, `"cards":1`, `"reviews":1`} {
+		if audit.DetailJSON == nil || !strings.Contains(*audit.DetailJSON, want) {
+			t.Errorf("audit detail = %v, want %s", audit.DetailJSON, want)
+		}
+	}
+
+	// The review log survives the purge.
+	var reviews int64
+	if err := env.db.Model(&store.Review{}).Where("card_id = ?", card.ID).Count(&reviews).Error; err != nil {
+		t.Fatalf("count reviews: %v", err)
+	}
+	if reviews != 1 {
+		t.Errorf("reviews after purge = %d, want 1", reviews)
 	}
 }
 

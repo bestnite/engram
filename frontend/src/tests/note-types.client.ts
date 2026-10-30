@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import NoteTypesView from '../lib/views/NoteTypesView.svelte';
 import { routeStore, matchRoute } from '../lib/router';
-import { apiClient, type NoteType, type UpdateNoteTypeResponse } from '../lib/api';
+import { apiClient, ApiClientError, type NoteType, type UpdateNoteTypeResponse } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 
 function noteType(): NoteType {
@@ -104,6 +104,47 @@ describe('NoteTypesView editor', () => {
       confirm_card_removal: true,
       version: 4,
     });
+  });
+
+  it('shows the purge counts and repeats the delete with confirm_purge after the refusal', async () => {
+    await setup();
+    const del = vi.spyOn(apiClient, 'deleteNoteType').mockRejectedValueOnce(
+      new ApiClientError('HTTP 409: note_type_purge_unconfirmed', {
+        status: 409,
+        code: 'note_type_purge_unconfirmed',
+        details: {
+          error: { code: 'note_type_purge_unconfirmed', message: '' },
+          deleted_notes: 3,
+          cards: 4,
+          reviews: 5,
+        },
+      }),
+    );
+
+    const open = document.body.querySelector('[data-testid="notetype-delete-open"]') as HTMLButtonElement | null;
+    expect(open).not.toBeNull();
+    open!.click();
+    await flush();
+    const confirm = document.body.querySelector('[data-testid="notetype-delete-confirm"]') as HTMLButtonElement | null;
+    expect(confirm).not.toBeNull();
+    confirm!.click();
+    await flush();
+
+    // The first request carries no confirmation; the refusal only reports the counts and writes nothing.
+    expect(del).toHaveBeenCalledTimes(1);
+    expect(del.mock.calls[0]).toEqual(['d1', 'nt-1', false]);
+    expect(document.body.querySelector('[data-testid="notetype-delete-dialog"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="notetype-purge-notes"]')?.textContent).toBe('3');
+    expect(document.body.querySelector('[data-testid="notetype-purge-cards"]')?.textContent).toBe('4');
+    expect(document.body.querySelector('[data-testid="notetype-purge-reviews"]')?.textContent).toBe('5');
+
+    del.mockResolvedValueOnce();
+    const confirmAgain = document.body.querySelector('[data-testid="notetype-delete-confirm"]') as HTMLButtonElement | null;
+    confirmAgain!.click();
+    await flush();
+
+    expect(del).toHaveBeenCalledTimes(2);
+    expect(del.mock.calls[1]).toEqual(['d1', 'nt-1', true]);
   });
 
   it('saves immediately when the dry run reports no card impact', async () => {

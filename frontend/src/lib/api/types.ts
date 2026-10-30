@@ -470,6 +470,17 @@ export interface UpdateNoteTypeResponse extends NoteType, NoteTypeImpact {
   dry_run: boolean;
 }
 
+/**
+ * The effect of deleting a note type whose notes are all soft-deleted (Go store.NoteTypePurgeImpact).
+ * A DELETE without confirm_purge answers 409 note_type_purge_unconfirmed with these counts; the
+ * confirmed request hard-deletes the notes and their cards, while the review rows stay.
+ */
+export interface NoteTypePurgeImpact {
+  deleted_notes: number;
+  cards: number;
+  reviews: number;
+}
+
 /** One card the empty-card cleanup found (Go internal/api.EmptyCardJSON). */
 export interface EmptyCard {
   /** Public card id. */

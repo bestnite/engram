@@ -464,12 +464,17 @@ export class ApiClient {
     });
   }
 
-  /** Delete a note type (DELETE /api/v1/decks/:id/note-types/:type_id); the server refuses one a note still uses. */
-  async deleteNoteType(deckId: string, typeId: string): Promise<void> {
+  /**
+   * Delete a note type (DELETE /api/v1/decks/:id/note-types/:type_id); the server refuses one a live note still uses.
+   * A type used only by soft-deleted notes answers 409 note_type_purge_unconfirmed with the impact counts; repeat the
+   * call with confirmPurge to hard-delete those notes and their cards. The review rows always stay.
+   */
+  async deleteNoteType(deckId: string, typeId: string, confirmPurge = false): Promise<void> {
     if (!this.csrfToken) await this.getSession();
     const id = encodeURIComponent(String(deckId));
     const type = encodeURIComponent(String(typeId));
-    await this.notifying('cards', this.request<void>(`/api/v1/decks/${id}/note-types/${type}`, {
+    const query = confirmPurge ? '?confirm_purge=true' : '';
+    await this.notifying('cards', this.request<void>(`/api/v1/decks/${id}/note-types/${type}${query}`, {
       method: 'DELETE',
     }));
   }

@@ -14,9 +14,12 @@ import (
 )
 
 var (
-	// ErrNoteTypeInUse means a note type still backs at least one note, soft-deleted ones included: a soft-deleted note
-	// can be restored and would then lack the field and template definitions its content relies on.
+	// ErrNoteTypeInUse means a note type still backs at least one live note: deleting it would orphan that note's content.
 	ErrNoteTypeInUse = errors.New("note type is in use by one or more notes")
+	// ErrNoteTypePurgeUnconfirmed means the note type is only used by soft-deleted notes, and the caller did not confirm
+	// hard-deleting them. The store returns it together with the computed impact, so the caller can report the counts
+	// before asking again with confirmation.
+	ErrNoteTypePurgeUnconfirmed = errors.New("note type purge is not confirmed")
 	// ErrVersionConflict means the version the caller read no longer matches the stored row: another writer committed
 	// in between. Callers should map it to HTTP 409. It is the one optimistic-lock sentinel of the repository;
 	// internal/schedule aliases it for card_states instead of defining a second value.
@@ -259,22 +262,69 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 	return impact, nil
 }
 
-// Delete removes a note type. It refuses with ErrNoteTypeInUse while any note references it, soft-deleted notes
-// included: a soft-deleted note can be restored, and it kept its note type through the soft delete for that reason.
-// Deleting the type would leave a restored note without the field and template definitions its content relies on.
+// NoteTypeDeleteOptions carries the safety switch of a note type delete.
+type NoteTypeDeleteOptions struct {
+	// ConfirmPurge allows hard-deleting the notes of the type when every note that references it is soft-deleted.
+	// Without it such a delete reports the impact with ErrNoteTypePurgeUnconfirmed and writes nothing.
+	ConfirmPurge bool
+}
+
+// NoteTypePurgeImpact is what a note type delete removes besides the type itself.
 //
-// The reference count and the delete share one transaction, so a note inserted mid-delete cannot slip past the check
-// within the transaction's isolation on either database.
-func (s *NoteTypeStore) Delete(ctx context.Context, id uint64) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var using int64
-		// Unscoped keeps soft-deleted notes in the count: they are restorable content, not gone content. Every other
-		// condition is unchanged.
-		if err := tx.Unscoped().Model(&Note{}).Where("note_type_id = ?", id).Count(&using).Error; err != nil {
+// DeletedNotes counts the soft-deleted notes the delete hard-removed, Cards counts their card rows (soft-deleted
+// cards included), and Reviews counts the review rows kept behind, which the delete never removes.
+type NoteTypePurgeImpact struct {
+	DeletedNotes int
+	Cards        int
+	Reviews      int
+}
+
+// Delete removes a note type together with the notes that only exist as soft-deleted rows.
+//
+// A live note still referencing the type refuses the delete with ErrNoteTypeInUse: deleting then would orphan
+// content the user still studies. Soft-deleted notes do not block it, because nothing restores them except a
+// re-import of the same guid; they are purged only when opts.ConfirmPurge is set, and an unconfirmed delete
+// returns ErrNoteTypePurgeUnconfirmed with the impact and writes nothing.
+//
+// The reference counts and every write share one transaction, so a note inserted mid-delete cannot slip past the
+// check within the transaction's isolation on either database. A confirmed purge hard-deletes the notes, their
+// cards, card_states and media_notes rows through the shared cascade; the reviews rows stay, as they do when a
+// deck is deleted.
+func (s *NoteTypeStore) Delete(ctx context.Context, id uint64, opts NoteTypeDeleteOptions) (NoteTypePurgeImpact, error) {
+	var impact NoteTypePurgeImpact
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var live int64
+		if err := tx.Model(&Note{}).Where("note_type_id = ?", id).Count(&live).Error; err != nil {
 			return fmt.Errorf("check note type %d usage: %w", id, err)
 		}
-		if using > 0 {
-			return fmt.Errorf("%w: %d note(s) use note type %d", ErrNoteTypeInUse, using, id)
+		if live > 0 {
+			return fmt.Errorf("%w: %d note(s) use note type %d", ErrNoteTypeInUse, live, id)
+		}
+		// The default scope hides soft-deleted notes, so this count is exactly the set the purge would remove.
+		var deletedNotes int64
+		if err := tx.Unscoped().Model(&Note{}).Where("note_type_id = ?", id).Count(&deletedNotes).Error; err != nil {
+			return fmt.Errorf("check soft-deleted notes of note type %d: %w", id, err)
+		}
+		if deletedNotes > 0 {
+			var cards, reviews int64
+			// Unscoped: cards a template change soft-deleted are rows the purge removes all the same.
+			if err := tx.Unscoped().Model(&Card{}).
+				Where("note_id IN (SELECT id FROM notes WHERE note_type_id = ?)", id).
+				Count(&cards).Error; err != nil {
+				return fmt.Errorf("count cards of note type %d: %w", id, err)
+			}
+			if err := tx.Model(&Review{}).
+				Where("card_id IN (SELECT id FROM cards WHERE note_id IN (SELECT id FROM notes WHERE note_type_id = ?))", id).
+				Count(&reviews).Error; err != nil {
+				return fmt.Errorf("count reviews of note type %d: %w", id, err)
+			}
+			impact = NoteTypePurgeImpact{DeletedNotes: int(deletedNotes), Cards: int(cards), Reviews: int(reviews)}
+			if !opts.ConfirmPurge {
+				return fmt.Errorf("%w: %d soft-deleted note(s) of note type %d", ErrNoteTypePurgeUnconfirmed, deletedNotes, id)
+			}
+			if err := deleteNotesTx(tx, "SELECT id FROM notes WHERE note_type_id = ?", id); err != nil {
+				return err
+			}
 		}
 		res := tx.Delete(&NoteType{}, "id = ?", id)
 		if res.Error != nil {
@@ -289,4 +339,8 @@ func (s *NoteTypeStore) Delete(ctx context.Context, id uint64) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return impact, err
+	}
+	return impact, nil
 }

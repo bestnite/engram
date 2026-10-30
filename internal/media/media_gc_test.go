@@ -146,7 +146,7 @@ func TestCollectGarbageKeepsNoteTypeMedia(t *testing.T) {
 	}
 
 	// Deleting the type drops its references; the next sweep marks the font, and the one after the grace period reclaims it.
-	if err := store.NewNoteTypeStore(s.db).Delete(ctx, nt.ID); err != nil {
+	if _, err := store.NewNoteTypeStore(s.db).Delete(ctx, nt.ID, store.NoteTypeDeleteOptions{}); err != nil {
 		t.Fatalf("delete note type: %v", err)
 	}
 	if removed, err = s.CollectGarbage(ctx, now.Add(4*time.Minute), time.Minute); err != nil {

@@ -14,6 +14,7 @@
     NoteTypeField,
     NoteTypeImpact,
     NoteTypePreviewResponse,
+    NoteTypePurgeImpact,
     NoteTypeStock,
     NoteTypeTemplate,
   } from '../api';
@@ -83,6 +84,9 @@
   let deleting = $state(false);
   let deleteOpen = $state(false);
   let deleteError = $state('');
+  // Set when the server refuses the delete of a type whose notes are all soft-deleted: the dialog then shows
+  // the counts and the next click repeats the request with confirm_purge=true.
+  let deletePurgeImpact = $state<NoteTypePurgeImpact | null>(null);
 
   let impact = $state<NoteTypeImpact | null>(null);
   let impactOpen = $state(false);
@@ -533,8 +537,29 @@
 
   function deleteErrorKey(err: unknown): string {
     if (err instanceof ApiClientError && err.code === 'note_type_in_use') return 'notetype.type.delete.in_use';
+    if (err instanceof ApiClientError && err.code === 'note_type_purge_unconfirmed') return 'notetype.purge.unconfirmed';
     if (err instanceof ApiClientError && err.isForbidden) return 'notetype.error.forbidden';
     return 'notetype.type.delete.failed';
+  }
+
+  /** The counts of a 409 note_type_purge_unconfirmed body; the client keeps the whole body in details. */
+  function purgeImpactFromError(err: ApiClientError): NoteTypePurgeImpact | null {
+    const body = err.details as Partial<NoteTypePurgeImpact> | undefined;
+    if (
+      !body ||
+      typeof body.deleted_notes !== 'number' ||
+      typeof body.cards !== 'number' ||
+      typeof body.reviews !== 'number'
+    ) {
+      return null;
+    }
+    return { deleted_notes: body.deleted_notes, cards: body.cards, reviews: body.reviews };
+  }
+
+  function closeDeleteDialog(): void {
+    deleteOpen = false;
+    deleteError = '';
+    deletePurgeImpact = null;
   }
 
   async function confirmDelete(): Promise<void> {
@@ -542,14 +567,21 @@
     deleting = true;
     deleteError = '';
     try {
-      await apiClient.deleteNoteType(deckId, draft.id);
+      await apiClient.deleteNoteType(deckId, draft.id, deletePurgeImpact !== null);
       const remaining = noteTypes.filter((entry) => entry.id !== draft?.id);
       noteTypes = remaining;
       draft = null;
-      deleteOpen = false;
+      closeDeleteDialog();
       const next = remaining[0];
       if (next) selectType(next);
     } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'note_type_purge_unconfirmed') {
+        const counts = purgeImpactFromError(err);
+        if (counts) {
+          deletePurgeImpact = counts;
+          return;
+        }
+      }
       deleteError = deleteErrorKey(err);
     } finally {
       deleting = false;
@@ -1002,7 +1034,7 @@
               <Button variant="outline" onclick={openChange} disabled={changeTargets.length === 0} testId="notetype-change-open">
                 <span>{$t('notetype.change.action')}</span>
               </Button>
-              <Button variant="danger-outline" onclick={() => { deleteError = ''; deleteOpen = true; }} testId="notetype-delete-open">
+              <Button variant="danger-outline" onclick={() => { deleteError = ''; deletePurgeImpact = null; deleteOpen = true; }} testId="notetype-delete-open">
                 <Trash2 class="size-4" aria-hidden="true" />
                 <span>{$t('notetype.type.delete')}</span>
               </Button>
@@ -1643,23 +1675,46 @@
     </div>
   </Dialog>
 
-  <!-- Delete confirmation. -->
+  <!-- Delete confirmation. A type whose notes are all soft-deleted first answers with the counts of the purge;
+       the same dialog then asks for the confirmation again and repeats the delete with confirm_purge=true. -->
   <Dialog
     open={deleteOpen}
-    onOpenChange={(open) => { if (!open) deleteOpen = false; }}
-    title={$t('notetype.type.delete.title')}
-    description={$t('notetype.type.delete.confirm', { name: draft?.name ?? '' })}
+    onOpenChange={(open) => { if (!open) closeDeleteDialog(); }}
+    title={deletePurgeImpact ? $t('notetype.purge.title') : $t('notetype.type.delete.title')}
+    description={deletePurgeImpact
+      ? $t('notetype.purge.description', {
+          notes: deletePurgeImpact.deleted_notes,
+          cards: deletePurgeImpact.cards,
+          reviews: deletePurgeImpact.reviews,
+        })
+      : $t('notetype.type.delete.confirm', { name: draft?.name ?? '' })}
     testId="notetype-delete-dialog"
   >
+    {#if deletePurgeImpact}
+      <dl class="mt-3 grid grid-cols-1 gap-1 text-sm sm:grid-cols-3" data-testid="notetype-purge-impact">
+        <div>
+          <dt class="text-muted-foreground">{$t('notetype.purge.notes')}</dt>
+          <dd data-testid="notetype-purge-notes">{deletePurgeImpact.deleted_notes}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">{$t('notetype.purge.cards')}</dt>
+          <dd data-testid="notetype-purge-cards">{deletePurgeImpact.cards}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">{$t('notetype.purge.reviews')}</dt>
+          <dd data-testid="notetype-purge-reviews">{deletePurgeImpact.reviews}</dd>
+        </div>
+      </dl>
+    {/if}
     {#if deleteError}
       <p role="alert" data-testid="notetype-delete-error" class="text-sm text-destructive-foreground">{$t(deleteError)}</p>
     {/if}
     <div class="mt-4 flex justify-end gap-2">
-      <Button variant="outline" onclick={() => (deleteOpen = false)} testId="notetype-delete-cancel">
+      <Button variant="outline" onclick={closeDeleteDialog} testId="notetype-delete-cancel">
         <span>{$t('notetype.impact.cancel')}</span>
       </Button>
       <Button variant="danger" onclick={() => void confirmDelete()} loading={deleting} testId="notetype-delete-confirm">
-        <span>{$t('notetype.type.delete')}</span>
+        <span>{deletePurgeImpact ? $t('notetype.purge.confirm') : $t('notetype.type.delete')}</span>
       </Button>
     </div>
   </Dialog>

@@ -40,8 +40,11 @@ const (
 	// CodeMediaNotReadable means a note write referenced media the writer cannot read, so the write was rejected (pre-write check).
 	// Same value as store.CodeMediaNotReadable.
 	CodeMediaNotReadable = "media_not_readable"
-	// CodeNoteTypeInUse means a note type still backs at least one note, so deleting it would orphan that content.
+	// CodeNoteTypeInUse means a note type still backs at least one live note, so deleting it would orphan that content.
 	CodeNoteTypeInUse = "note_type_in_use"
+	// CodeNoteTypePurgeUnconfirmed means the note type only backs soft-deleted notes, and the request carried no
+	// confirm_purge=true. The response carries the counts so the caller can decide whether to confirm the purge.
+	CodeNoteTypePurgeUnconfirmed = "note_type_purge_unconfirmed"
 	// CodeCardRemovalUnconfirmed means a note type update would soft-delete at least one card, and the body did not
 	// set confirm_card_removal. The response carries the counts so the caller can decide whether to confirm.
 	CodeCardRemovalUnconfirmed = "card_removal_unconfirmed"
@@ -130,6 +133,9 @@ var errorMessages = map[string]string{
 
 	// Stable code for deleting a note type that notes still use.
 	CodeNoteTypeInUse: "The note type is still used by one or more notes.",
+
+	// Stable code for deleting a note type whose notes are all soft-deleted.
+	CodeNoteTypePurgeUnconfirmed: "The note type is only used by deleted notes; resend the request with confirm_purge=true to delete them permanently.",
 
 	// Stable code for a note type update that would remove cards without confirmation.
 	CodeCardRemovalUnconfirmed: "The update would remove cards from existing notes; resend it with confirm_card_removal set.",

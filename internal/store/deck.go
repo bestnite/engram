@@ -308,21 +308,35 @@ func (s *DeckStore) DeleteMany(ctx context.Context, ids []uint64, dryRun bool) (
 	return affected, nil
 }
 
+// deleteNotesTx hard-deletes the notes selected by noteQuery together with the rows that depend on them.
+//
+// noteQuery must be a SELECT of note ids from the notes table; args are its parameters. The string is built only
+// from static SQL in this package, never from caller input, and the query is repeated per dependent table so both
+// databases run the same statements regardless of their foreign-key PRAGMA settings. The reviews rows are
+// deliberately kept: the review log is append-only progress, and removing content never erases it.
+//
+// Deck deletion and note-type purge share this helper, so the note cascade has one implementation.
+func deleteNotesTx(tx *gorm.DB, noteQuery string, args ...any) error {
+	if err := tx.Exec("DELETE FROM media_notes WHERE note_id IN ("+noteQuery+")", args...).Error; err != nil {
+		return fmt.Errorf("delete media_notes: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM card_states WHERE card_id IN (SELECT id FROM cards WHERE note_id IN ("+noteQuery+"))", args...).Error; err != nil {
+		return fmt.Errorf("delete card_states: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM cards WHERE note_id IN ("+noteQuery+")", args...).Error; err != nil {
+		return fmt.Errorf("delete cards: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM notes WHERE id IN ("+noteQuery+")", args...).Error; err != nil {
+		return fmt.Errorf("delete notes: %w", err)
+	}
+	return nil
+}
+
 // deleteDeckTx hard-deletes a deck and all its related rows inside the given transaction (no permission check).
 // Deck deletion and user deletion (removing every deck under a user) share this one cascade, so both clean up the same scope.
 func deleteDeckTx(tx *gorm.DB, deckID uint64) error {
-	// explicitly cascade-clean the related tables so both databases behave exactly the same regardless of their foreign-key PRAGMA settings (AGENTS.md §2.3 item 4)
-	if err := tx.Exec("DELETE FROM media_notes WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Error; err != nil {
-		return fmt.Errorf("delete media_notes: %w", err)
-	}
-	if err := tx.Exec("DELETE FROM card_states WHERE card_id IN (SELECT id FROM cards WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?))", deckID).Error; err != nil {
-		return fmt.Errorf("delete card_states: %w", err)
-	}
-	if err := tx.Exec("DELETE FROM cards WHERE note_id IN (SELECT id FROM notes WHERE deck_id = ?)", deckID).Error; err != nil {
-		return fmt.Errorf("delete cards: %w", err)
-	}
-	if err := tx.Exec("DELETE FROM notes WHERE deck_id = ?", deckID).Error; err != nil {
-		return fmt.Errorf("delete notes: %w", err)
+	if err := deleteNotesTx(tx, "SELECT id FROM notes WHERE deck_id = ?", deckID); err != nil {
+		return err
 	}
 	if err := tx.Exec("DELETE FROM deck_grants WHERE deck_id = ?", deckID).Error; err != nil {
 		return fmt.Errorf("delete deck_grants: %w", err)

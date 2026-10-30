@@ -440,18 +440,18 @@ func TestNoteTypeUpdateRemovalFollowsDeclaredTemplates(t *testing.T) {
 	}
 }
 
-// TestNoteTypeDelete covers the refused delete. Any note that references the type blocks it, a soft-deleted note
-// included, because a soft-deleted note can be restored into a type that no longer exists; the type is deletable only
-// once no note of any state references it.
+// TestNoteTypeDelete covers the refused delete. A live note blocks it outright; a type whose notes are all
+// soft-deleted is refused until the caller confirms the purge; a type with no note at all is deletable.
 func TestNoteTypeDelete(t *testing.T) {
 	cases := []struct {
 		name string
 		// noteState is how the type's single note is stored: "live", "soft-deleted", or "" for a type with no note at all.
 		noteState string
 		wantGone  bool
+		wantErr   error
 	}{
-		{name: "live note blocks the delete", noteState: "live"},
-		{name: "soft-deleted note blocks the delete", noteState: "soft-deleted"},
+		{name: "live note blocks the delete", noteState: "live", wantErr: ErrNoteTypeInUse},
+		{name: "soft-deleted note needs purge confirmation", noteState: "soft-deleted", wantErr: ErrNoteTypePurgeUnconfirmed},
 		{name: "no note allows the delete", wantGone: true},
 	}
 
@@ -492,13 +492,13 @@ func TestNoteTypeDelete(t *testing.T) {
 						}
 					}
 
-					err := types.Delete(ctx, nt.ID)
+					_, err := types.Delete(ctx, nt.ID, NoteTypeDeleteOptions{})
 					if test.wantGone {
 						if err != nil {
 							t.Fatalf("Delete(no note) error = %v, want nil", err)
 						}
-					} else if !errors.Is(err, ErrNoteTypeInUse) {
-						t.Fatalf("Delete() error = %v, want ErrNoteTypeInUse", err)
+					} else if !errors.Is(err, test.wantErr) {
+						t.Fatalf("Delete() error = %v, want %v", err, test.wantErr)
 					}
 
 					// A refused delete leaves the type in place; a permitted one removes it.
@@ -515,10 +515,109 @@ func TestNoteTypeDelete(t *testing.T) {
 			}
 
 			// Deleting an absent type reports not found.
-			if err := types.Delete(ctx, deletedID); !errors.Is(err, gorm.ErrRecordNotFound) {
+			if _, err := types.Delete(ctx, deletedID, NoteTypeDeleteOptions{}); !errors.Is(err, gorm.ErrRecordNotFound) {
 				t.Errorf("Delete(absent) error = %v, want gorm.ErrRecordNotFound", err)
 			}
 		})
+	}
+}
+
+// TestNoteTypeDeletePurgesSoftDeletedNotes proves a confirmed purge removes the soft-deleted notes of the type
+// with their cards, card_states and media_notes rows, keeps the review log, and that the unconfirmed call
+// writes nothing while reporting the same counts.
+func TestNoteTypeDeletePurgesSoftDeletedNotes(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			owner := seedUsers(t, db, "note_type_purge_owner")[0]
+			deckID := seedDeck(t, db, owner)
+			types := NewNoteTypeStore(db)
+			nt := seedNoteType(t, db, deckID, "Purge me")
+
+			now := time.Now().UTC()
+			note := Note{DeckID: deckID, NoteTypeID: &nt.ID,
+				FieldsJSON: `{"f-front":"q","f-back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+			if err := db.Create(&note).Error; err != nil {
+				t.Fatalf("create note: %v", err)
+			}
+			live := Card{NoteID: note.ID, Template: "t-card", CreatedAt: now}
+			if err := db.Create(&live).Error; err != nil {
+				t.Fatalf("create card: %v", err)
+			}
+			removed := Card{NoteID: note.ID, Template: "t-old", CreatedAt: now}
+			if err := db.Create(&removed).Error; err != nil {
+				t.Fatalf("create soft-deleted card: %v", err)
+			}
+			// A card a template change soft-deleted is still a row the purge removes; it counts too.
+			if err := db.Delete(&Card{}, removed.ID).Error; err != nil {
+				t.Fatalf("soft delete card: %v", err)
+			}
+			seedProgress(t, db, owner, live.ID)
+			if err := db.Create(&MediaNote{MediaSha: strings.Repeat("a", 64), NoteID: note.ID, CreatedAt: now}).Error; err != nil {
+				t.Fatalf("create media note: %v", err)
+			}
+			if err := db.Delete(&Note{}, note.ID).Error; err != nil {
+				t.Fatalf("soft delete note: %v", err)
+			}
+
+			want := NoteTypePurgeImpact{DeletedNotes: 1, Cards: 2, Reviews: 1}
+			impact, err := types.Delete(ctx, nt.ID, NoteTypeDeleteOptions{})
+			if !errors.Is(err, ErrNoteTypePurgeUnconfirmed) {
+				t.Fatalf("Delete(unconfirmed) error = %v, want ErrNoteTypePurgeUnconfirmed", err)
+			}
+			if impact != want {
+				t.Errorf("Delete(unconfirmed) impact = %+v, want %+v", impact, want)
+			}
+
+			// The unconfirmed call writes nothing: the type, the soft-deleted note and every dependent row stay.
+			if _, err := types.ByID(ctx, nt.ID); err != nil {
+				t.Errorf("note type missing after unconfirmed delete: %v", err)
+			}
+			assertNoteTypePurgeRows(t, db, note.ID, nt.ID, []uint64{live.ID, removed.ID}, 1, 2, 1, 1, 1)
+
+			impact, err = types.Delete(ctx, nt.ID, NoteTypeDeleteOptions{ConfirmPurge: true})
+			if err != nil {
+				t.Fatalf("Delete(confirmed) error = %v, want nil", err)
+			}
+			if impact != want {
+				t.Errorf("Delete(confirmed) impact = %+v, want %+v", impact, want)
+			}
+			if _, err := types.ByID(ctx, nt.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+				t.Errorf("ByID() after purge error = %v, want gorm.ErrRecordNotFound", err)
+			}
+			// Notes, cards, card_states and media_notes are gone; the review row survives the purge.
+			assertNoteTypePurgeRows(t, db, note.ID, nt.ID, []uint64{live.ID, removed.ID}, 0, 0, 0, 0, 1)
+		})
+	}
+}
+
+// assertNoteTypePurgeRows checks the row counts a note type purge leaves behind. Notes and cards are counted
+// unscoped, because the purge removes soft-deleted rows too. cardStates and reviews are counted by the card ids
+// captured before the purge, so a deleted card row cannot hide a surviving progress row.
+func assertNoteTypePurgeRows(t *testing.T, db *gorm.DB, noteID, noteTypeID uint64, cardIDs []uint64, wantNotes, wantCards, wantStates, wantMedia, wantReviews int64) {
+	t.Helper()
+	counts := []struct {
+		name  string
+		query *gorm.DB
+		want  int64
+	}{
+		{"notes", db.Unscoped().Model(&Note{}).Where("note_type_id = ?", noteTypeID), wantNotes},
+		{"cards", db.Unscoped().Model(&Card{}).Where("note_id = ?", noteID), wantCards},
+		{"card_states", db.Model(&CardState{}).Where("card_id IN ?", cardIDs), wantStates},
+		{"media_notes", db.Model(&MediaNote{}).Where("note_id = ?", noteID), wantMedia},
+		{"reviews", db.Model(&Review{}).Where("card_id IN ?", cardIDs), wantReviews},
+	}
+	for _, c := range counts {
+		var got int64
+		if err := c.query.Count(&got).Error; err != nil {
+			t.Fatalf("count %s: %v", c.name, err)
+		}
+		if got != c.want {
+			t.Errorf("%s after delete = %d, want %d", c.name, got, c.want)
+		}
 	}
 }
 

@@ -1594,4 +1594,12 @@ export const zhCN: LocaleCatalog = {
   'notetype.change.not_found': '找不到笔记类型或目标笔记类型。',
   'notetype.change.done': '已更改笔记类型。',
   'notetype.preview.failed': '无法渲染预览。请检查字段与模板。',
+  // ---- 笔记类型删除：同时清除只处于软删除状态的笔记 ----
+  'notetype.purge.title': '同时删除这些已删除的笔记？',
+  'notetype.purge.description': '此笔记类型只被已删除的笔记使用。删除它会永久移除 {notes} 条已删除笔记和 {cards} 张卡片；{reviews} 条复习记录会保留。',
+  'notetype.purge.notes': '已删除笔记',
+  'notetype.purge.cards': '卡片',
+  'notetype.purge.reviews': '保留的复习记录',
+  'notetype.purge.confirm': '删除笔记和类型',
+  'notetype.purge.unconfirmed': '此笔记类型只被已删除的笔记使用；确认删除这些笔记后才能删除它。',
 };

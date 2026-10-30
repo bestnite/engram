@@ -264,26 +264,33 @@ func (a *API) UpdateNoteType(ctx context.Context, userID, deckID uint64, publicI
 	return result, nil
 }
 
-// DeleteNoteType removes a note type (scope: write, editor role). It is refused with 409
-// note_type_in_use while a note still references it, because deleting then would orphan the note's content.
-func (a *API) DeleteNoteType(ctx context.Context, userID, deckID uint64, publicID string, apiKeyID *uint64) error {
+// DeleteNoteType removes a note type (scope: write, editor role). It is refused with 409 note_type_in_use
+// while a live note still references it, because deleting then would orphan the note's content. A type used
+// only by soft-deleted notes is refused with 409 note_type_purge_unconfirmed and the impact counts until the
+// caller repeats the request with confirmPurge, which hard-deletes those notes and their cards.
+func (a *API) DeleteNoteType(ctx context.Context, userID, deckID uint64, publicID string, apiKeyID *uint64, confirmPurge bool) (store.NoteTypePurgeImpact, error) {
+	empty := store.NoteTypePurgeImpact{}
 	d, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleEditor)
 	if err != nil {
-		return err
+		return empty, err
 	}
 	nt, err := a.noteTypeInDeck(ctx, d.ID, publicID)
 	if err != nil {
-		return err
+		return empty, err
 	}
-	if err := a.noteTypes.Delete(ctx, nt.ID); err != nil {
+	impact, err := a.noteTypes.Delete(ctx, nt.ID, store.NoteTypeDeleteOptions{ConfirmPurge: confirmPurge})
+	if err != nil {
 		if errors.Is(err, store.ErrNoteTypeInUse) {
-			return newServiceError(http.StatusConflict, CodeNoteTypeInUse, err.Error())
+			return impact, newServiceError(http.StatusConflict, CodeNoteTypeInUse, err.Error())
+		}
+		if errors.Is(err, store.ErrNoteTypePurgeUnconfirmed) {
+			return impact, newServiceError(http.StatusConflict, CodeNoteTypePurgeUnconfirmed, "")
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return newServiceError(http.StatusNotFound, CodeNotFound, "note type not found")
+			return empty, newServiceError(http.StatusNotFound, CodeNotFound, "note type not found")
 		}
 		a.logger.Error("delete note type failed", "note_type_id", nt.ID, "error", err)
-		return newServiceError(http.StatusInternalServerError, CodeInternal, "failed to delete note type")
+		return empty, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to delete note type")
 	}
 	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),
@@ -291,9 +298,15 @@ func (a *API) DeleteNoteType(ctx context.Context, userID, deckID uint64, publicI
 		Action:     store.ActionNoteTypeDelete,
 		TargetType: "note_type",
 		TargetID:   store.Ptr(nt.ID),
-		Detail:     map[string]any{"deck_id": d.PublicID, "name": nt.Name},
+		Detail: map[string]any{
+			"deck_id":       d.PublicID,
+			"name":          nt.Name,
+			"deleted_notes": impact.DeletedNotes,
+			"cards":         impact.Cards,
+			"reviews":       impact.Reviews,
+		},
 	})
-	return nil
+	return impact, nil
 }
 
 // noteTypeInDeck resolves a note type by public id and requires it to belong to deckID. A type of
@@ -488,7 +501,18 @@ func (a *API) updateNoteType(c *gin.Context) {
 	})
 }
 
+// noteTypePurgeUnconfirmedResponse carries the standard error envelope plus the impact counts, so the caller
+// sees exactly what confirming the purge would remove and what it would keep.
+type noteTypePurgeUnconfirmedResponse struct {
+	Error        errorBody `json:"error"`
+	DeletedNotes int       `json:"deleted_notes"`
+	Cards        int       `json:"cards"`
+	Reviews      int       `json:"reviews"`
+}
+
 // deleteNoteType is DELETE /api/v1/decks/:id/note-types/:type_id, scope: write, editor role.
+// The query parameter confirm_purge=true allows the delete to hard-delete the notes of a type that only
+// soft-deleted notes still reference.
 func (a *API) deleteNoteType(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	publicID, ok := pathPublicID(c, "id")
@@ -504,7 +528,21 @@ func (a *API) deleteNoteType(c *gin.Context) {
 		abortNotFound(c)
 		return
 	}
-	if err := a.DeleteNoteType(c.Request.Context(), u.ID, d.ID, typePublicID, CurrentAPIKeyID(c)); err != nil {
+	impact, err := a.DeleteNoteType(c.Request.Context(), u.ID, d.ID, typePublicID, CurrentAPIKeyID(c), c.Query("confirm_purge") == "true")
+	if err != nil {
+		var se *ServiceError
+		if errors.As(err, &se) && se.Code == CodeNoteTypePurgeUnconfirmed {
+			c.JSON(se.Status, noteTypePurgeUnconfirmedResponse{
+				Error: errorBody{
+					Code:    se.Code,
+					Message: formatErrorMessage(c.Request.Context(), se.Code, se.Message),
+				},
+				DeletedNotes: impact.DeletedNotes,
+				Cards:        impact.Cards,
+				Reviews:      impact.Reviews,
+			})
+			return
+		}
 		writeServiceError(c, err)
 		return
 	}
