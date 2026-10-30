@@ -275,29 +275,9 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
 
 **Phase 5 follow-up — defects found in the review of M17-22 to M17-24, M17-35 and M17-40 (on `main`)**
 
-These tasks land on `main` directly. M17-48 fixes a wrong result and comes first. The local Ultimate Geography package (`testdata/local/Ultimate-Geography.apkg`) is the
+These tasks land on `main` directly. The local Ultimate Geography package (`testdata/local/Ultimate-Geography.apkg`) is the
 evidence named below. It is gitignored, so a test that reads it skips when the file is absent.
 
-- [ ] **M17-48 Re-importing an `.apkg` restores soft-deleted notes** — a guid that matches a deleted
-  note must not break the import.
-  *Files:* `internal/store/anki_import.go` (`importAnkiInTx`, `writeAnkiNote`);
-  `internal/store/anki_import_test.go`.
-  *Problem:* existing notes are looked up without soft-deleted rows, but the unique index on
-  `(deck_id, external_ref)` covers them. Two cases fail with `UNIQUE constraint failed:
-  notes.deck_id, notes.external_ref` and roll the whole import back (measured with the Ultimate
-  Geography package):
-  - `into_deck` after the user deleted one imported note;
-  - `replace_deck` on a deck that already holds the package, because it soft-deletes every note first
-    and then creates notes with the same guids.
-
-  The `.edeck` import restores a soft-deleted match with `RestoreInTx` before updating it; the `.apkg`
-  path does not.
-  *Work:* the lookup includes soft-deleted notes of the target deck. A soft-deleted note whose
-  `external_ref` matches is restored with `RestoreInTx` and then updated like a live match. It keeps its
-  id, its cards and their `card_states`. `on_conflict` applies to it as to a live match.
-  *Acceptance:* store tests for both cases: the import succeeds; the matched note keeps its id; and a
-  card that had a `card_states` row before still has it.
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 - [ ] **M17-51 A structural re-import removes the cards of missing templates** — a moved note must not
   keep a card its new note type cannot render.
   *Files:* `internal/store/anki_import.go`; `internal/store/package_import.go` (`PackageImportReport`);
@@ -395,20 +375,6 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
 
 **Phase 6–9 — remaining capabilities**
 
-- [ ] **M17-26 Type-in in the frame** — Anki's `{{type:F}}` without an answer spec.
-  *Depends on:* M17-17.
-  *Files:* `frontend/src/cardframe/`; `internal/web/review_api.go`.
-  *Work:*
-  - The front renders `input#typeans` in the field's font and size, and Enter posts
-    `answer {typed}`.
-  - The back is rendered with M17-11's comparison.
-  - The rating stays self-chosen.
-
-  *Acceptance:*
-  - A handler test renders the back for a typed value and matches the golden comparison.
-  - A client test covers Enter posting `answer`.
-
-  *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run test:client`.
 - [ ] **M17-28 Empty-card cleanup and note type change** — Anki's "Empty Cards" and "Change Note
   Type".
   *Depends on:* M17-45.
@@ -426,16 +392,6 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
   - Negative cases: a target note type in another deck is rejected; a reader is refused.
 
   *Verify:* `go test ./internal/api/... ./internal/store/...`.
-- [ ] **M17-29 Deck description as HTML or Markdown** — Anki's `markdown_description`.
-  *Files:* `internal/store/models.go` (the deck column `description_markdown`, a `*bool` defaulting to
-  false); the deck settings and deck detail views.
-  *Work:* the description is HTML by default, and Markdown when the flag is set (rendered with
-  goldmark). It is shown in the frame.
-  *Acceptance:*
-  - Tests: an HTML description with a `<script>` runs only inside the frame.
-  - Tests: the flag switches the rendering.
-
-  *Verify:* `go test ./internal/store/... ./internal/web/...`; `npm --prefix frontend run test:client`.
 - [ ] **M17-30 Image occlusion in review** — port Anki's `ts/routes/image-occlusion/review.ts`.
   *Depends on:* M17-17.
   *Files:* `frontend/src/cardframe/`.
@@ -572,6 +528,9 @@ bluemonday-sanitised `internal/render` are gone.
 | Anki `.apkg` import (M17-23, M17-24) | `internal/anki` reads all three Anki package layouts (legacy `collection.anki2`, `collection.anki21`, and zstd-compressed `collection.anki21b` with protobuf note type/deck configuration) under the deck package's entry, per-file and total caps. The import page, `POST` package import, upload tickets and the MCP `import_deck` accept `.apkg`: the top-level package deck becomes one engram deck, subdecks fill `cards.deck_path`, note types arrive unchanged with no answer spec, notes carry `external_ref = "anki:<guid>"`, media is registered by name, and the package's cards are created as they exist. Re-importing into the same deck matches notes by guid and note types by `anki_origin.notetype_id`, keeping cards and progress; an equal field/template structure is overwritten in place, a changed one creates a new note type and moves the notes. The report lists missing media, unplayable video, external scripts/stylesheets and missing LaTeX images. | No — a new input format is accepted and the import report gains four lists |
 | Anki import deck choice (M17-47) | An `.apkg` is named after its real deck tree, not Anki's usually empty `Default` deck: only decks that hold package cards take part, the top name is the longest `::` component prefix they share (or the largest branch when they share none), cards in it get no subdeck path, and the package description is adopted only when the deck rules accept it. | No |
 | Note field HTML in responses and note type card removal (M17-49, M17-50) | Every note response (REST get/list/search, MCP note tools, due-card fields) returns each field's stored HTML string unchanged instead of reshaping stock-kind fields into arrays, booleans and numbers, so opening and saving a choice note no longer deletes the formatting of its options. A note type update soft-deletes only the cards of templates the new config no longer declares; a declared template whose front is now empty keeps its cards, and a cloze update removes none. | Yes — note response field values are HTML strings for every note type where some stock kinds used to return arrays, booleans or numbers |
+| Type-in in the frame (M17-26) | A template with `{{type:F}}` and no answer spec draws `input#typeans` in the frame, in the field's font and size, and posts the typed value on Enter or input; revealing renders the back through Anki's comparison (good/bad/missed) while the rating stays one of the four self-ratings. The render request takes an optional `answer` and the response reports `type_in`. | No — two optional fields on the review render request/response |
+| Deck description as Markdown (M17-29) | A deck's description is HTML by default and Markdown (goldmark, with TeX protection) when the new owner-only flag is set; the server renders it and the deck page shows it inside the sandboxed frame, never in the parent page. The deck response gains `description_markdown` and `description_html`, the settings page has the toggle, and a clone keeps the format. | No — a deck column and two response fields are added |
+| `.apkg` re-import restores deleted notes (M17-48) | A re-import matches a guid against soft-deleted notes of the target deck, restores the row in the transaction and updates it, so `into_deck` after a delete and `replace_deck` both succeed instead of failing on the unique external reference; the note keeps its id, cards and progress. | No |
 | Editor on note types (M17-35, M17-40) | The note editor lists the deck's note types, builds the form from the selected type's fields in config order (field options included) and saves `{note_type, fields}` without a kind; the preview renders the stored type's own templates and CSS and answers 404 for a type of another deck. A note type update regenerates the cards of every live note of the type in one transaction: an added template creates the missing cards, a removed template soft-deletes their cards while `card_states` and `reviews` stay. The edit body takes `dry_run` and `confirm_card_removal`; a removal without confirmation is 409 `card_removal_unconfirmed` with the three counts, a kind change is 400, and a successful update writes one audit row with the counts. | Yes — the note preview request takes `note_type` instead of `kind`; the note type update response gains four fields and a new 409 code |
 | Audio, video and TTS playback (M17-25) | The review frame plays the server's AV tag list: the question side autoplays its tags in order, the answer side plays only the tags it adds (audio inserted by `{{FrontSide}}` is not replayed), and both follow the deck's new `autoplay` setting (default on, owner-only). `r` and `F5` replay; an mp4 or webm `[sound:]` plays in an inline video; TTS maps `lang`, `voices`, `speed` and `cloze_blank` onto `speechSynthesis`; `span.engram-sound` start/end/rate/loop reach the player, and the editor's insert-audio dialog sets them. | No — a deck field is added and the card-face payload gains `av_tags` and `autoplay` |
 | Note type management (M17-27) | A deck page lists, creates (from a stock definition or by copying) and edits note types: fields with options and Anki-style template-reference rewriting, templates with browser variants, CSS, the answer-spec control and its field bindings, and live sandboxed previews. A save previews the card impact with `dry_run` and asks before removing cards. Stock definitions and answer controls come from two additive read endpoints. | No — a page and two read endpoints are added |
