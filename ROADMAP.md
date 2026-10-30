@@ -134,35 +134,10 @@ it.
 
 **Phase 3 follow-up — defects found in the review of the P3 merge (on `main`)**
 
-These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly. M17-34,
-M17-35 and M17-41 must land before M17-24, because every imported Anki note type
-is a note type whose shape matches no engram stock kind.
+These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly. M17-35
+must land before M17-24, because every imported Anki note type is a note type whose shape matches
+no engram stock kind.
 
-- [ ] **M17-34 The review page works for any note type** — the review page stops reading the
-  card-kind catalog.
-  *Files:* `frontend/src/lib/views/ReviewView.svelte` (single-writer hotspot);
-  `frontend/src/lib/review-shortcuts.ts`; `internal/web/review.go`; `internal/web/review_api.go`;
-  `internal/api/service.go` (`DueCard`).
-  *Problem:* the review page derives `desc` from `descriptionOf($cardTypes, current.kind)` and shows
-  the loading skeleton while `desc` is null. A note type whose shape matches no engram stock kind
-  gives `kind = ""`, so its cards stay on the skeleton forever. Such note types can already be
-  created through `POST /api/v1/decks/:id/note-types`.
-  *Work:*
-  - The review card response carries `answer_control`, which is the control name of the card's
-    template answer spec, or null when the template has none. It also carries `machine_graded`, a
-    boolean computed by the same rule the submit path uses.
-  - The review page decides between self-rating, the essay flow and machine grading from those two
-    fields only. It reads no card-kind description.
-  - The plain-text fallback that is shown when the card face fails to load lists the note's field
-    values in the order of the note type's fields.
-
-  *Acceptance:*
-  - A handler test: a card of a note type created through the API, with a shape that matches no
-    stock kind, returns `answer_control: null` and `machine_graded: false`.
-  - A client test: that card reaches reveal and rating with no catalog loaded.
-  - Client tests: one machine-graded card and one `short_answer` card behave as before.
-
-  *Verify:* `go test ./internal/web/... ./internal/api/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
 - [ ] **M17-35 The note editor works on note types** — create, edit and preview a note of any note
   type of the deck.
   *Files:* `frontend/src/lib/views/NoteEditView.svelte` (single-writer hotspot);
@@ -192,7 +167,7 @@ is a note type whose shape matches no engram stock kind.
   *Verify:* `go test ./internal/web/... ./internal/i18n/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
 - [ ] **M17-36 Remove the transitional card-kind layer** — delete every payload field and endpoint
   that exists only for the old SPA.
-  *Depends on:* M17-34, M17-35.
+  *Depends on:* M17-35.
   *Files:* `internal/api/card_types.go`; `internal/api/card_catalog.go`; `internal/api/notes.go`;
   `internal/api/note_view.go`; `internal/api/service.go`; `internal/api/server.go`;
   `internal/web/review.go`; `internal/store/note.go`; `frontend/src/lib/card-types.ts` and its
@@ -298,26 +273,6 @@ is a note type whose shape matches no engram stock kind.
   - a reader is refused, and a stale version returns 409.
 
   *Verify:* `go test ./internal/api/... ./internal/store/... && go vet ./internal/api/... ./internal/store/...`.
-- [ ] **M17-41 Validate answer specs on every note type write** — one validation for the API, package
-  import and migration.
-  *Files:* `internal/store/notetype.go` (`NoteType.SetConfig`); `internal/store/note.go`;
-  `internal/store/migrate_notes.go`; `internal/store/package_import.go`; `internal/answer/answer.go`.
-  *Problem:* only migration 0012 and `ensureStockNoteType` call `answer.ValidateSpec`. A note type
-  created or updated through REST, or imported from an `.edeck`, can name a registered control and
-  bind a role to a field that does not exist. Submitting a rating for such a card returns 500 from
-  `ResolveBindings`, so the card cannot be rated.
-  *Work:*
-  - `NoteType.SetConfig` validates every template's answer spec. The control must be registered, every
-    required role must be bound, and every bound field id must be declared by the config.
-  - Remove the now-duplicate `ValidateSpec` calls from `ensureStockNoteType` and migration 0012.
-
-  *Acceptance:* tests with three cases: an unknown control, a missing required role, and a role bound to
-  an undeclared field id.
-  - Through REST create and update, each case returns 400, and the message names the template and the
-    role.
-  - Through `.edeck` import, each case is rejected with `package_bad_format`, and no row is written.
-
-  *Verify:* `go test ./internal/store/... ./internal/api/... ./internal/answer/...`.
 - [ ] **M17-42 The editing frame runs no inline script** — a field value cannot execute code in the
   editor.
   *Files:* `internal/web/edit_frame.go`; `internal/web/card_frame.go`; `internal/web/*_test.go`;
@@ -381,7 +336,7 @@ is a note type whose shape matches no engram stock kind.
 **Phase 5 — `.apkg` import**
 
 - [ ] **M17-24 `.apkg` import into a deck** — map the decoded package onto the data model.
-  *Depends on:* M17-34, M17-35, M17-41.
+  *Depends on:* M17-35.
   *Files:* `internal/anki/import.go`; `internal/api/package*.go`; `internal/mcp/mcp.go`;
   `frontend/src/lib/views/ImportView.svelte`; the locale catalogs (append a block with the prefix
   `import.apkg.`).
@@ -633,6 +588,7 @@ bluemonday-sanitised `internal/render` are gone.
 | Anki-compatible content model (M17 phases 1–3) | Note types as data with eight registered answer controls; the `{note_type, fields}` REST/MCP note payload, the note type endpoints, the sandboxed card and edit frames, `/fm/` media tokens; migrations 0012–0014; `.edeck` format 2 and the regenerated bundled decks. Details above. | Yes — HTTP API, MCP, database schema, file format |
 | Media by file name and by any type (M17-22) | Media is classified (image, audio, video, font, script, style, other) instead of allowlisted; upload and import accept every class within the quota. `/fm/<token>/<name>` resolves a deck-scoped name through `media_names`, so CSS-only `_` assets are served. Every media response carries `Content-Security-Policy: sandbox` and everything not image/audio/video is an attachment. Note-type `_`-prefixed references are kept by garbage collection (migration 0015 backfills them) and travel with an export. An import whose name holds different bytes renames the new file as Anki does. A note write turns the editor's `/media/<sha256>` and `[sound:<sha256>]` into deck media names, so the frame, references, garbage collection and export resolve them. | Yes — the `media_allowed_mimes` configuration key and its environment variable are removed; every `/media/` and `/fm/` response gains a sandbox CSP and a download disposition for non-inline classes |
 | Note type styles and deck special fields in review (M17-33, M17-44) | Every card frame in the review page and the note preview now takes its HTML, body class and media base from the server's per-side face object, and its style is the engram face sheet followed by the note type's CSS, so a note type rule overrides the default typography. `{{Deck}}` renders the deck name joined with the card's subdeck path (`Lesson 1::Verbs`) and `{{Subdeck}}` its last component; a card outside a subdeck renders the deck name for both. | No — response shapes are unchanged |
+| Review of any note type (M17-34, M17-41) | The due-card payload carries `answer_control`, `machine_graded` and `field_order`, and the review page chooses the self-rating, essay or machine-graded flow from them instead of the card-kind catalog, so a note type that matches no stock kind reviews normally. A note type write (REST create/update, package import, stock creation, migration) now validates every template's answer spec: the control must be registered, every required role bound, and every binding must name a declared field; a bad REST write returns 400 naming the template and role, and a bad package is `package_bad_format` with no rows written. | No — three fields added to the due-card response; previously accepted invalid note types are now rejected |
 | Deck progress | The deck list, the home deck list and the deck detail header show how many of the deck's cards the user has studied and how many new cards are left, as `Studied N · Left M`. On the home deck list each deck gets a second line of numbers: today's new and review counts as badges, which turn grey at zero, and a progress bar beside the studied and remaining text, which turns to the success colour once no new card is left. The counts are per user, so a shared deck never shows another member's progress, and they ignore the daily limits. A suspended new card is not counted as left; a suspended studied card still counts as studied. | No — two fields added to a session-only response |
 | Deck pause | A user pauses a deck for themselves from the deck list (a toggle beside delete or leave) or the deck detail header; the owner and every member, readers included, decide alone. A paused deck keeps a `Paused` badge on the deck list and disappears from the home deck list and the sidebar. It stays out of the default review queue, the home due count, the unfiltered forecast, the weekly digest and the reminder mail, while naming it (`/review?deck=…`, batch review, a stats deck filter) still studies or shows it. Progress is kept and cards keep falling due. Pausing and resuming write the audit actions `deck.pause` and `deck.resume`. | No — additive route, tool, table and field; nothing changes until a user pauses a deck |
 | Note search on field text | Note search (`GET /api/v1/decks/:id/notes?q=`, `search_notes` and the card list) matches the text of the fields instead of their JSON encoding. A field key such as `front` no longer matches every note; `<`, `>`, `&`, quotes and text across a line break can be found; case folding of non-ASCII letters is the same on SQLite and PostgreSQL. A query is split on whitespace and every term must occur, in any order. | No — results change, the request and response shapes do not |
