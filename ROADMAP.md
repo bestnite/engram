@@ -134,65 +134,12 @@ it.
 
 **Phase 3 follow-up — defects found in the review of the P3 merge (on `main`)**
 
-These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly. M17-33,
-M17-34, M17-35, M17-41 and M17-44 must land before M17-24, because every imported Anki note type
+These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly. M17-34,
+M17-35 and M17-41 must land before M17-24, because every imported Anki note type
 is a note type whose shape matches no engram stock kind.
 
-- [ ] **M17-32 Keep `notes.note_type_id` NOT NULL** — the constraint that migration 0013 adds must
-  survive every later start.
-  *Files:* `internal/store/models.go` (single-writer hotspot); `internal/store/migrate.go`;
-  `internal/store/migrate_notes.go`; `internal/store/migrate_notes_test.go`; `ARCHITECTURE.md`.
-  *Problem:* `Sync` runs AutoMigrate again after the versioned migrations. The model declares
-  `NoteTypeID *uint64` without `not null`, so GORM sees a NOT NULL column against a nullable model
-  field and alters the column back to nullable. Measured on SQLite: after `Sync` reaches version 14,
-  the `notes` DDL reads `note_type_id integer` with no NOT NULL. GORM never tightens a column in the
-  other direction, so a database that is already at version 14 keeps the nullable column even after
-  the model changes.
-  *Work:*
-  - The `Note` model declares `note_type_id` with `not null`.
-  - The first AutoMigrate pass of `Sync` must not add `note_type_id` as NOT NULL to a `notes` table
-    that already holds rows, because SQLite and PostgreSQL both refuse that. While the stored schema
-    version is below 13, that pass migrates `notes` from a pre-0013 model shape in which
-    `note_type_id` is nullable. From version 13 on, it migrates the real `Note` model.
-  - Append a new versioned migration that applies the same change as 0013 (NOT NULL on
-    `note_type_id`; drop `kind` when it still exists). It repairs databases that reached version 14
-    with the nullable column. Migration 0013 itself stays unchanged.
-  - Correct the test comment in `migrate_notes_test.go` that claims a NOT NULL check the test does
-    not make.
-
-  *Acceptance:*
-  - A table-driven SQLite test runs `Sync` on three databases: a fresh one, one with the pre-M17
-    schema and notes, and one at version 14 with a nullable column. After `Sync`, and again after a
-    second `Sync`, `note_type_id` is NOT NULL. The test reads the nullability from the database
-    catalog (`PRAGMA table_info` on SQLite, `information_schema.columns` on PostgreSQL), not from the
-    model.
-  - The same test passes with `TEST_PG_DSN` set, run by hand.
-  - Inserting a note without a note type fails at the database level.
-
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-- [ ] **M17-33 Card faces carry the note type's CSS and body class** — the review page and the note
-  preview send the server's per-side face objects to the frame.
-  *Files:* `frontend/src/lib/views/ReviewView.svelte` and `frontend/src/lib/views/NoteEditView.svelte`
-  (single-writer hotspot); `frontend/src/lib/card-frame.ts`; `frontend/src/lib/api/`.
-  *Problem:* the server returns `front` and `back` objects `{html, css, body_class, side,
-  media_base}`. The SPA reads only `front_html` and `back_html`, and passes the fixed
-  `REVIEW_FRONT_CSS`, `REVIEW_BACK_CSS` or `REVIEW_ANSWER_CSS` constant and `bodyClass="card"` to every
-  `CardFrame`. No note type's CSS ever reaches a frame.
-  *Work:*
-  - Every `CardFrame` in the review page and in the note preview takes `html`, `body_class` and
-    `media_base` from the matching `front` or `back` object.
-  - The frame's style is the engram face constant followed by the object's `css`, in that order, so
-    a note type rule overrides the engram default.
-
-  *Acceptance:*
-  - A client test: a note type whose CSS contains `.card { color: rgb(1, 2, 3); }` renders that colour
-    in the review frame and in the preview frame.
-  - A client test: the frame `<body>` carries the class list that the server returned.
-
-  *Verify:* `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
 - [ ] **M17-34 The review page works for any note type** — the review page stops reading the
   card-kind catalog.
-  *Depends on:* M17-33.
   *Files:* `frontend/src/lib/views/ReviewView.svelte` (single-writer hotspot);
   `frontend/src/lib/review-shortcuts.ts`; `internal/web/review.go`; `internal/web/review_api.go`;
   `internal/api/service.go` (`DueCard`).
@@ -218,7 +165,6 @@ is a note type whose shape matches no engram stock kind.
   *Verify:* `go test ./internal/web/... ./internal/api/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
 - [ ] **M17-35 The note editor works on note types** — create, edit and preview a note of any note
   type of the deck.
-  *Depends on:* M17-33.
   *Files:* `frontend/src/lib/views/NoteEditView.svelte` (single-writer hotspot);
   `frontend/src/lib/components/NoteFieldsForm.svelte`; `frontend/src/lib/api/`;
   `internal/web/note_preview.go`; the locale catalogs (append a block with the prefix `note_edit.type.`).
@@ -399,20 +345,6 @@ is a note type whose shape matches no engram stock kind.
   *Work:* the usage count includes soft-deleted notes.
   *Acceptance:* a store test: a note type whose only note is soft-deleted returns `ErrNoteTypeInUse`.
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-- [ ] **M17-44 `{{Deck}}` and `{{Subdeck}}` follow the card's subdeck path** — the special fields
-  render as they do in Anki.
-  *Files:* `internal/web/review.go` (`renderCard`); `internal/web/note_preview.go`; the tests beside them.
-  *Problem:* `renderCard` sets both `DeckName` and `SubdeckName` to the deck name and ignores
-  `cards.deck_path`.
-  *Work:*
-  - `DeckName` is the deck name when `deck_path` is null. Otherwise it is the deck name, then `::`,
-    then `deck_path`.
-  - `SubdeckName` is the last `::`-separated component of `DeckName`.
-
-  *Acceptance:* a handler test with `deck_path = "Lesson 1::Verbs"` renders `{{Deck}}` as
-  `<deck>::Lesson 1::Verbs` and `{{Subdeck}}` as `Verbs`. A card without `deck_path` renders both as the
-  deck name.
-  *Verify:* `go test ./internal/web/... && go vet ./internal/web/...`.
 - [ ] **M17-45 A note write keeps cards that became empty** — Anki's rule: editing a note adds cards
   and never removes one.
   *Files:* `internal/store/card.go` (`syncCards`); `internal/web/review.go`; `internal/store/*_test.go`;
@@ -449,7 +381,7 @@ is a note type whose shape matches no engram stock kind.
 **Phase 5 — `.apkg` import**
 
 - [ ] **M17-24 `.apkg` import into a deck** — map the decoded package onto the data model.
-  *Depends on:* M17-33, M17-34, M17-35, M17-41, M17-44.
+  *Depends on:* M17-34, M17-35, M17-41.
   *Files:* `internal/anki/import.go`; `internal/api/package*.go`; `internal/mcp/mcp.go`;
   `frontend/src/lib/views/ImportView.svelte`; the locale catalogs (append a block with the prefix
   `import.apkg.`).
@@ -668,9 +600,11 @@ bluemonday-sanitised `internal/render` are gone.
 - **MCP.** `list_card_types` is replaced by `list_note_types` (deck-scoped) and `get_note_type`;
   `create_notes` and `update_note` take `note_type`, and field values are HTML.
 - **Database schema.** New `note_types`, `media_names` and `media_note_types`; `notes` gains
-  `note_type_id` (not null after `0013`), `source_url` and `extra_json`, and loses `kind`;
+  `note_type_id` (not null after `0013`, re-tightened by `0016` when an earlier start
+  loosened it), `source_url` and `extra_json`, and loses `kind`;
   `notes.fields_json` is a field-id → HTML map; `cards` gains `deck_path`. Migrations `0012` and
-  `0013` convert existing notes; `0014` converts stored custom mail templates from Markdown to HTML.
+  `0013` convert existing notes; `0014` converts stored custom mail templates from Markdown to HTML;
+  `0016` re-tightens `notes.note_type_id` on a database where a later start loosened it.
 - **File format.** `.edeck` is format 2 only (`note_types.json`, notes by field id, `cards.deck_path`,
   media names); format 1 is rejected. This is the one-time exception to the N-1 rule in
   `schema/README.md`.
@@ -698,6 +632,7 @@ bluemonday-sanitised `internal/render` are gone.
 |---|---|---|
 | Anki-compatible content model (M17 phases 1–3) | Note types as data with eight registered answer controls; the `{note_type, fields}` REST/MCP note payload, the note type endpoints, the sandboxed card and edit frames, `/fm/` media tokens; migrations 0012–0014; `.edeck` format 2 and the regenerated bundled decks. Details above. | Yes — HTTP API, MCP, database schema, file format |
 | Media by file name and by any type (M17-22) | Media is classified (image, audio, video, font, script, style, other) instead of allowlisted; upload and import accept every class within the quota. `/fm/<token>/<name>` resolves a deck-scoped name through `media_names`, so CSS-only `_` assets are served. Every media response carries `Content-Security-Policy: sandbox` and everything not image/audio/video is an attachment. Note-type `_`-prefixed references are kept by garbage collection (migration 0015 backfills them) and travel with an export. An import whose name holds different bytes renames the new file as Anki does. A note write turns the editor's `/media/<sha256>` and `[sound:<sha256>]` into deck media names, so the frame, references, garbage collection and export resolve them. | Yes — the `media_allowed_mimes` configuration key and its environment variable are removed; every `/media/` and `/fm/` response gains a sandbox CSP and a download disposition for non-inline classes |
+| Note type styles and deck special fields in review (M17-33, M17-44) | Every card frame in the review page and the note preview now takes its HTML, body class and media base from the server's per-side face object, and its style is the engram face sheet followed by the note type's CSS, so a note type rule overrides the default typography. `{{Deck}}` renders the deck name joined with the card's subdeck path (`Lesson 1::Verbs`) and `{{Subdeck}}` its last component; a card outside a subdeck renders the deck name for both. | No — response shapes are unchanged |
 | Deck progress | The deck list, the home deck list and the deck detail header show how many of the deck's cards the user has studied and how many new cards are left, as `Studied N · Left M`. On the home deck list each deck gets a second line of numbers: today's new and review counts as badges, which turn grey at zero, and a progress bar beside the studied and remaining text, which turns to the success colour once no new card is left. The counts are per user, so a shared deck never shows another member's progress, and they ignore the daily limits. A suspended new card is not counted as left; a suspended studied card still counts as studied. | No — two fields added to a session-only response |
 | Deck pause | A user pauses a deck for themselves from the deck list (a toggle beside delete or leave) or the deck detail header; the owner and every member, readers included, decide alone. A paused deck keeps a `Paused` badge on the deck list and disappears from the home deck list and the sidebar. It stays out of the default review queue, the home due count, the unfiltered forecast, the weekly digest and the reminder mail, while naming it (`/review?deck=…`, batch review, a stats deck filter) still studies or shows it. Progress is kept and cards keep falling due. Pausing and resuming write the audit actions `deck.pause` and `deck.resume`. | No — additive route, tool, table and field; nothing changes until a user pauses a deck |
 | Note search on field text | Note search (`GET /api/v1/decks/:id/notes?q=`, `search_notes` and the card list) matches the text of the fields instead of their JSON encoding. A field key such as `front` no longer matches every note; `<`, `>`, `&`, quotes and text across a line break can be found; case folding of non-ASCII letters is the same on SQLite and PostgreSQL. A query is split on whitespace and every term must occur, in any order. | No — results change, the request and response shapes do not |
