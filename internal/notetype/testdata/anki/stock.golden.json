@@ -31,113 +31,389 @@
   "fixture": "stock",
   "note_types": [
     {
+      "css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
       "fields": [
-        "Front",
-        "Back"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Basic",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
       "fields": [
-        "Front",
-        "Back"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Basic (and reversed card)",
+      "original_stock_kind": "basic_and_reversed",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}"
         },
         {
           "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Front}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 2",
-          "ordinal": 1,
+          "ord": 1,
           "qfmt": "{{Back}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
       "fields": [
-        "Front",
-        "Back",
-        "Add Reverse"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Add Reverse",
+          "ord": 2,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Basic (optional reversed card)",
+      "original_stock_kind": "basic_optional_reversed",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}"
         },
         {
           "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Front}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 2",
-          "ordinal": 1,
+          "ord": 1,
           "qfmt": "{{#Add Reverse}}{{Back}}{{/Add Reverse}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
       "fields": [
-        "Front",
-        "Back"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Basic (type in the answer)",
+      "original_stock_kind": "basic_typing",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{Front}}\n\n<hr id=answer>\n\n{{type:Back}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}\n\n{{type:Back}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n.cloze {\n    font-weight: bold;\n    color: blue;\n}\n.nightMode .cloze {\n    color: lightblue;\n}\n",
       "fields": [
-        "Text",
-        "Back Extra"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Text",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": true,
+          "rtl": false,
+          "sticky": false,
+          "tag": 0
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back Extra",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": 1
+        }
       ],
       "kind": "cloze",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Cloze",
+      "original_stock_kind": "cloze",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{cloze:Text}}<br>\n{{Back Extra}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Cloze",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{cloze:Text}}"
         }
       ]
     },
     {
+      "css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
       "fields": [
-        "Occlusion",
-        "Image",
-        "Header",
-        "Back Extra",
-        "Comments"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Occlusion",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": true,
+          "rtl": false,
+          "sticky": false,
+          "tag": 0
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Image",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": true,
+          "rtl": false,
+          "sticky": false,
+          "tag": 1
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Header",
+          "ord": 2,
+          "plain_text": false,
+          "prevent_deletion": true,
+          "rtl": false,
+          "sticky": false,
+          "tag": 2
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back Extra",
+          "ord": 3,
+          "plain_text": false,
+          "prevent_deletion": true,
+          "rtl": false,
+          "sticky": false,
+          "tag": 3
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Comments",
+          "ord": 4,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": 4
+        }
       ],
       "kind": "cloze",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Image Occlusion",
+      "original_stock_kind": "image_occlusion",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{#Header}}<div>{{Header}}</div>{{/Header}}\n<div style=\"display: none\">{{cloze:Occlusion}}</div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    {{Image}}\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n{{#Back Extra}}<div>{{Back Extra}}</div>{{/Back Extra}}\n",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Image Occlusion",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{#Header}}<div>{{Header}}</div>{{/Header}}\n<div style=\"display: none\">{{cloze:Occlusion}}</div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    {{Image}}\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
         }
       ]

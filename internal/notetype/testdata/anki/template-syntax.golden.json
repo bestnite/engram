@@ -3,156 +3,451 @@
   "fixture": "template-syntax",
   "note_types": [
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule Card Id",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}|{{CardID}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Text"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Text",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "cloze",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule Cloze Conditional",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{cloze:Text}}<br>{{#c1}}[c1-on]{{/c1}}{{^c1}}[c1-off]{{/c1}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{cloze:Text}}{{#c1}} [c1-on]{{/c1}}{{^c1}} [c1-off]{{/c1}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule Comment",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}-before<!-- {{Front}} -->after"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule Conditional",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "[{{#Front}}{{Front}}{{/Front}}]"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front",
-        "Back"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule Delimiter Change",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{=<% %>=}}<%FrontSide%>",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{=<% %>=}}<%Front%>|<%Back%>"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front",
-        "Back"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule Field Replacement",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front",
-        "Tags",
-        "Deck"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Tags",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Deck",
+          "ord": 2,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule Field Shadowing",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}|{{Tags}}|{{Deck}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front",
-        "Back"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule FrontSide",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}+{{Back}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule Inverted Conditional",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "[{{^Front}}empty{{/Front}}]"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Rule Special Fields",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}|{{Tags}}|{{Type}}|{{Deck}}|{{Subdeck}}|{{Card}}|{{CardFlag}}"
         }
       ]

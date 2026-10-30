@@ -134,8 +134,30 @@ One file per fixture group, UTF-8, keys sorted, two-space indent, one trailing n
   "fixture": "stock",
   "packages": ["stock.anki2.apkg", "stock.anki21.apkg", "stock.anki21b.apkg"],
   "note_types": [
-    {"name": "…", "kind": "normal | cloze", "fields": ["…"],
-     "templates": [{"ordinal": 0, "name": "…", "qfmt": "…", "afmt": "…"}]}
+    {
+      "name": "…",
+      "kind": "normal | cloze",
+      "css": "…",
+      "sort_field_index": 0,
+      "latex_pre": "…",
+      "latex_post": "…",
+      "latex_svg": false,
+      "original_stock_kind": "basic | basic_and_reversed | basic_optional_reversed | basic_typing | cloze | image_occlusion | null",
+      "fields": [
+        {
+          "name": "…", "ord": 0, "sticky": false, "rtl": false,
+          "font": "Arial", "font_size": 20, "description": "",
+          "plain_text": false, "collapsed": false,
+          "exclude_from_search": false, "tag": null, "prevent_deletion": false
+        }
+      ],
+      "templates": [
+        {
+          "name": "…", "ord": 0, "qfmt": "…", "afmt": "…",
+          "bqfmt": "", "bafmt": "", "browser_font": "", "browser_font_size": 0
+        }
+      ]
+    }
   ],
   "notes": [
     {
@@ -175,7 +197,12 @@ Fields:
 - `source` is the pinned package version the values came from.
 - `fixture` is the file-name stem; `packages` lists the package files built from it.
 - `note_types` repeats the note type definition the fixture needs to be rendered. A Go test can
-  build the note type from this block instead of importing a package.
+  build the note type from this block instead of importing a package. An entry carries the full
+  legacy config Anki reports: the CSS, the sort field index, the LaTeX pre/post strings and
+  `latex_svg`, the Anki stock kind it was created from (or `null`), and every field and template
+  option. Anki's numeric note type, field and template ids are omitted because engram assigns its
+  own ids; the order is the `ord` value on each entry. `fields` is ordered by `ord`, and `templates`
+  likewise. `tag` is Anki's nullable field tag value (`null` or a non-negative integer).
 - `notes` is sorted by guid. `fields` maps field name to the stored field value.
 - `cards` is sorted by ordinal and has one entry per card that exists in the package.
   - `id` is the card id, so a renderer test can feed `{{CardID}}` the same value.

@@ -3,121 +3,305 @@
   "fixture": "template-filters",
   "note_types": [
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Filter Chain",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{text:hint:Front}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Filter Empty Field Name",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{text:}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Filter Furigana",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{furigana:Front}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Filter Hint",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{hint:Front}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Filter Kana",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{kana:Front}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Filter Kanji",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{kanji:Front}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Filter Text",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{text:Front}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Filter Unknown",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{unknown:Front}}"
         }
       ]

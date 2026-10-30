@@ -3,55 +3,167 @@
   "fixture": "cardgen",
   "note_types": [
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Text",
-        "Extra"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Text",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Extra",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "cloze",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Cardgen Cloze",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{cloze:Text}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{cloze:Text}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front",
-        "Back"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Cardgen Empty Existing",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Card 1",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}"
         }
       ]
     },
     {
+      "css": ".card {\n    font-family: arial;\n    text-align: left;\n}\n",
       "fields": [
-        "Front",
-        "Back"
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Front",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": null
+        }
       ],
       "kind": "normal",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
       "name": "Cardgen Normal",
+      "original_stock_kind": "basic",
+      "sort_field_index": 0,
       "templates": [
         {
           "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Always",
-          "ordinal": 0,
+          "ord": 0,
           "qfmt": "{{Front}}"
         },
         {
           "afmt": "{{Back}}",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
           "name": "Conditional",
-          "ordinal": 1,
+          "ord": 1,
           "qfmt": "{{#Back}}{{Front}}{{/Back}}"
         }
       ]

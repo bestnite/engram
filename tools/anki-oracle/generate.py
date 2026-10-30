@@ -46,6 +46,7 @@ from anki.import_export_pb2 import (
     ImportAnkiPackageRequest,
     MediaEntries,
 )
+from anki.notetypes_pb2 import Notetype
 from anki.sound import SoundOrVideoTag
 from anki.utils import to_json_bytes
 
@@ -1570,17 +1571,59 @@ def compare_entries(col: Collection, note, spec: FixtureNote, notetype_name: str
     return results
 
 
+def original_stock_kind_name(value: int) -> str | None:
+    """Map Anki's enum to the name engram stores, or None for an unknown kind."""
+    field = Notetype.Config.DESCRIPTOR.fields_by_name["original_stock_kind"]
+    enum_value = field.enum_type.values_by_number.get(value)
+    if enum_value is None:
+        return None
+    return {
+        "ORIGINAL_STOCK_KIND_BASIC": "basic",
+        "ORIGINAL_STOCK_KIND_BASIC_AND_REVERSED": "basic_and_reversed",
+        "ORIGINAL_STOCK_KIND_BASIC_OPTIONAL_REVERSED": "basic_optional_reversed",
+        "ORIGINAL_STOCK_KIND_BASIC_TYPING": "basic_typing",
+        "ORIGINAL_STOCK_KIND_CLOZE": "cloze",
+        "ORIGINAL_STOCK_KIND_IMAGE_OCCLUSION": "image_occlusion",
+    }.get(enum_value.name)
+
+
 def notetype_entry(notetype) -> dict:
     return {
         "name": notetype["name"],
         "kind": "cloze" if notetype["type"] == 1 else "normal",
-        "fields": [field["name"] for field in notetype["flds"]],
+        "css": notetype["css"],
+        "sort_field_index": notetype["sortf"],
+        "latex_pre": notetype["latexPre"],
+        "latex_post": notetype["latexPost"],
+        "latex_svg": notetype["latexsvg"],
+        "original_stock_kind": original_stock_kind_name(notetype["originalStockKind"]),
+        "fields": [
+            {
+                "name": field["name"],
+                "ord": field["ord"],
+                "sticky": field["sticky"],
+                "rtl": field["rtl"],
+                "font": field["font"],
+                "font_size": field["size"],
+                "description": field["description"],
+                "plain_text": field["plainText"],
+                "collapsed": field["collapsed"],
+                "exclude_from_search": field["excludeFromSearch"],
+                "tag": field["tag"],
+                "prevent_deletion": field["preventDeletion"],
+            }
+            for field in notetype["flds"]
+        ],
         "templates": [
             {
-                "ordinal": template["ord"],
                 "name": template["name"],
+                "ord": template["ord"],
                 "qfmt": template["qfmt"],
                 "afmt": template["afmt"],
+                "bqfmt": template["bqfmt"],
+                "bafmt": template["bafmt"],
+                "browser_font": template["bfont"],
+                "browser_font_size": template["bsize"],
             }
             for template in notetype["tmpls"]
         ],

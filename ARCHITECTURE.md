@@ -54,6 +54,7 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/config` | Startup configuration. Precedence is environment variable, then the `settings` table, then the built-in default; every accessor can report which source won. |
 | `internal/store` | GORM models (`AllModels` in `models.go`) and the concrete stores that wrap database access, including deck package import and export. `MediaStore.Put` is the single content-addressed media write (`<sha256[:2]>/<sha256>.<ext>`, temp file + rename, dedup-hit rules) used by both upload and import. |
 | `internal/cardtype` | The card type registry and one file per card type. Field names match `schema/note-import.schema.json`. |
+| `internal/notetype` | The note type data model, validation and Anki's six stock definitions. |
 | `internal/reviewday` | Leaf package with the single definition of a user's review day: timezone resolution (unknown names fall back to UTC), the day cutoff hour, the review-day boundaries, and the `YYYY-MM-DD` day string written to `reviews.review_day`. Grading, burying, budgets, statistics, reminders and digests all read it. |
 | `internal/schedule` | The go-fsrs wrapper: card state machine, queue builder, daily budgets, review submission, and undo. |
 | `internal/auth` | Local accounts, password hashing, sessions, CSRF, TOTP, OIDC, API keys, roles, and deck access checks. |
@@ -94,7 +95,7 @@ store      → cardtype, mediatype, reviewday
 cardtype   → texmath
 render     → texmath
 retention  → worker
-config, i18n, mediatype, reviewday, texmath, urlfetch, worker, pgtest → (no internal imports)
+config, i18n, mediatype, notetype, reviewday, texmath, urlfetch, worker, pgtest → (no internal imports)
 ```
 
 Regenerate it with
