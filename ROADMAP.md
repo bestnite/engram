@@ -240,28 +240,6 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   *Work:* the usage count includes soft-deleted notes.
   *Acceptance:* a store test: a note type whose only note is soft-deleted returns `ErrNoteTypeInUse`.
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-- [ ] **M17-45 A note write keeps cards that became empty** — Anki's rule: editing a note adds cards
-  and never removes one.
-  *Files:* `internal/store/card.go` (`syncCards`); `internal/web/review.go`; `internal/store/*_test.go`;
-  `internal/web/*_test.go`; `internal/i18n/locales/` (append a block with the prefix
-  `review.empty_card.`).
-  *Problem:* `syncCards` soft-deletes every card the note no longer generates, for example the reverse
-  card after its field is cleared, or the `c2` card after `{{c2::…}}` is removed. Anki keeps such
-  cards as empty cards until the user runs Empty Cards, and M17-28 is written on that premise.
-  *Work:*
-  - A note write creates the cards that `GenerateCards` requires and restores a soft-deleted card that
-    it requires again. It soft-deletes no card.
-  - Cards that an earlier version soft-deleted stay soft-deleted until the note requires them again.
-  - When `notetype.EmptyExistingCards` reports a card as empty, the review and preview responses
-    replace its front HTML with a localised notice. The notice says that the card is empty and that
-    the empty-card cleanup removes it.
-
-  *Acceptance:*
-  - Store tests: clearing the reverse field of a `basic_optional_reversed` note keeps the reverse card
-    and its `card_states`; removing `c2` keeps the `cloze:2` card.
-  - A handler test: the empty card returns the notice in both locales.
-
-  *Verify:* `go test ./internal/store/... ./internal/web/... ./internal/i18n/...`.
 - [ ] **M17-46 `check-migration` reads a database without public ids** — the pre-flight check must
   not fail on the schema it inspects.
   *Files:* `internal/store/migrate_notes.go` (`deckPublicIDs`); `internal/store/migrate_notes_test.go`.
@@ -278,24 +256,6 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
 These tasks land on `main` directly. The local Ultimate Geography package (`testdata/local/Ultimate-Geography.apkg`) is the
 evidence named below. It is gitignored, so a test that reads it skips when the file is absent.
 
-- [ ] **M17-51 A structural re-import removes the cards of missing templates** — a moved note must not
-  keep a card its new note type cannot render.
-  *Files:* `internal/store/anki_import.go`; `internal/store/package_import.go` (`PackageImportReport`);
-  `internal/store/anki_import_test.go`; `schema/` if the report is described there.
-  *Problem:* when a re-imported note type has a different field or template structure, the import
-  creates a new note type and moves the matched notes to it, remapping cards by ordinal. A stored card
-  whose ordinal has no template in the new note type keeps its old `template` value. That id does not
-  exist in the new type, so rendering or rating the card returns 500.
-  *Work:*
-  - After a note moves to a new note type, each of its cards whose `template` the new type does not
-    generate is soft-deleted. Its `card_states` and `reviews` rows stay.
-  - The import report gains `cards_removed`, which counts those cards. A dry run reports the count and
-    writes nothing.
-
-  *Acceptance:* a store test re-imports a package whose note type lost one template. The cards of that
-  template are soft-deleted, their `card_states` rows remain, and `cards_removed` equals their count.
-  Every remaining card of the deck renders without error.
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 - [ ] **M17-52 Index package notes by id during an `.apkg` import** — the card loop must not scan every
   note for every card.
   *Files:* `internal/store/anki_import.go` (`importAnkiInTx`).
@@ -377,7 +337,6 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
 
 - [ ] **M17-28 Empty-card cleanup and note type change** — Anki's "Empty Cards" and "Change Note
   Type".
-  *Depends on:* M17-45.
   *Files:* `internal/api/` (service methods and routes); `internal/store/`; the note type view.
   *Work:*
   - Cleanup lists the cards whose front renders empty (M17-9) and deletes them after confirmation,
@@ -392,22 +351,7 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
   - Negative cases: a target note type in another deck is rejected; a reader is refused.
 
   *Verify:* `go test ./internal/api/... ./internal/store/...`.
-- [ ] **M17-30 Image occlusion in review** — port Anki's `ts/routes/image-occlusion/review.ts`.
-  *Depends on:* M17-17.
-  *Files:* `frontend/src/cardframe/`.
-  *Work:*
-  - `anki.imageOcclusion.setup()` (and the deprecated `anki.setupImageCloze`) draws rect, ellipse,
-    polygon and text shapes on a canvas over the image.
-  - Both modes are supported: hide all, guess one; and hide one, guess one (`oi=1`).
-  - The toggle-masks button.
-
-  *Acceptance:*
-  - The image-occlusion fixtures from M17-5 render through the server and the frame. A client test
-    asserts the drawn shape list for each card.
-
-  *Verify:* `npm --prefix frontend run test:client`.
 - [ ] **M17-31 Image occlusion editor** — create and edit occlusion notes.
-  *Depends on:* M17-30.
   *Files:* a new editor component; `frontend/package.json` (dependency `fabric`. Reason: Anki's mask
   editor is built on it, and using the same library keeps the stored shape data identical).
   *Work:*
@@ -529,6 +473,9 @@ bluemonday-sanitised `internal/render` are gone.
 | Anki import deck choice (M17-47) | An `.apkg` is named after its real deck tree, not Anki's usually empty `Default` deck: only decks that hold package cards take part, the top name is the longest `::` component prefix they share (or the largest branch when they share none), cards in it get no subdeck path, and the package description is adopted only when the deck rules accept it. | No |
 | Note field HTML in responses and note type card removal (M17-49, M17-50) | Every note response (REST get/list/search, MCP note tools, due-card fields) returns each field's stored HTML string unchanged instead of reshaping stock-kind fields into arrays, booleans and numbers, so opening and saving a choice note no longer deletes the formatting of its options. A note type update soft-deletes only the cards of templates the new config no longer declares; a declared template whose front is now empty keeps its cards, and a cloze update removes none. | Yes — note response field values are HTML strings for every note type where some stock kinds used to return arrays, booleans or numbers |
 | Type-in in the frame (M17-26) | A template with `{{type:F}}` and no answer spec draws `input#typeans` in the frame, in the field's font and size, and posts the typed value on Enter or input; revealing renders the back through Anki's comparison (good/bad/missed) while the rating stays one of the four self-ratings. The render request takes an optional `answer` and the response reports `type_in`. | No — two optional fields on the review render request/response |
+| Empty cards survive a note edit (M17-45) | A note write creates the cards the note requires and restores a previously removed one, but soft-deletes nothing: clearing the reverse field or removing a cloze marker keeps the card and its progress. When an existing card's front renders empty, the review response shows a localised notice saying the card is empty and that the Empty Cards cleanup removes it. | No |
+| Structural re-import removes stale cards (M17-51) | A re-import that moves a note to a new note type soft-deletes that note's cards whose template the new type no longer declares, keeping their `card_states` and `reviews`; the import report gains `cards_removed`, and a dry run reports the count. | No — one report field is added |
+| Image occlusion in review (M17-30) | Ported Anki's image-occlusion review runtime into the card frame: `anki.imageOcclusion.setup()` (and `anki.setupImageCloze`) draws rectangle, ellipse, polygon and text masks on a canvas over the image, supports hide-all-guess-one and hide-one-guess-one (`oi=1`), and wires the toggle-masks button and `M`. | No |
 | Deck description as Markdown (M17-29) | A deck's description is HTML by default and Markdown (goldmark, with TeX protection) when the new owner-only flag is set; the server renders it and the deck page shows it inside the sandboxed frame, never in the parent page. The deck response gains `description_markdown` and `description_html`, the settings page has the toggle, and a clone keeps the format. | No — a deck column and two response fields are added |
 | `.apkg` re-import restores deleted notes (M17-48) | A re-import matches a guid against soft-deleted notes of the target deck, restores the row in the transaction and updates it, so `into_deck` after a delete and `replace_deck` both succeed instead of failing on the unique external reference; the note keeps its id, cards and progress. | No |
 | Editor on note types (M17-35, M17-40) | The note editor lists the deck's note types, builds the form from the selected type's fields in config order (field options included) and saves `{note_type, fields}` without a kind; the preview renders the stored type's own templates and CSS and answers 404 for a type of another deck. A note type update regenerates the cards of every live note of the type in one transaction: an added template creates the missing cards, a removed template soft-deletes their cards while `card_states` and `reviews` stay. The edit body takes `dry_run` and `confirm_card_removal`; a removal without confirmation is 409 `card_removal_unconfirmed` with the three counts, a kind change is 400, and a successful update writes one audit row with the counts. | Yes — the note preview request takes `note_type` instead of `kind`; the note type update response gains four fields and a new 409 code |
