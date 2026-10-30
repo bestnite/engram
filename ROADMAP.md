@@ -165,15 +165,6 @@ it.
   `6865a54`.
 **Phase 2 — `internal/notetype`, the Anki engine (on `main`; not wired into any request path)**
 
-- [ ] **M17-11 Type-in comparison** — port `rslib/src/typeanswer.rs`.
-  *Depends on:* M17-10.
-  *Files:* `internal/notetype/typeanswer.go` and its tests.
-  *Work:* the `compare_answer` output (`code#typeans` with `typeGood`, `typeBad` and `typeMissed`),
-  the combining and non-combining (`nc`) variants, and the expected-text extraction for
-  `type:cloze`.
-  *Acceptance:* every type-in fixture input equals the golden output.
-  *Verify:* `go test ./internal/notetype/...`.
-
 **Phase 3 — the switch (integration branch `feat/m17-p3`; one breaking release)**
 
 - [ ] **M17-12 Schema for note types and media names** — add the tables and columns of the shared
