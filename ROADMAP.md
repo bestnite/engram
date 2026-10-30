@@ -267,6 +267,42 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   *Work:* the usage count includes soft-deleted notes.
   *Acceptance:* a store test: a note type whose only note is soft-deleted returns `ErrNoteTypeInUse`.
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+- [ ] **M17-59 Purge deleted notes when their note type is deleted** — a note type whose notes were
+  all deleted can still be deleted, after a confirmation.
+  *Depends on:* M17-43.
+  *Files:* `internal/store/notetype.go` (`NoteTypeStore.Delete`); `internal/store/deck.go`
+  (`deleteDeckTx`); `internal/api/note_types.go`; `internal/api/errors.go`;
+  `frontend/src/lib/views/NoteTypesView.svelte` (single-writer hotspot); `frontend/src/lib/api/`; the
+  frontend locale catalogs (append a block with the prefix `notetype.purge.`); the tests beside them.
+  *Problem:* every note deletion is a soft delete, and no page restores a deleted note: only a
+  re-import with the same guid brings one back. Since M17-43, a soft-deleted note blocks the deletion of
+  its note type. A note type whose notes were all deleted therefore can never be deleted.
+  *Work:*
+  - A note type that at least one live note uses is refused as today, with 409 `note_type_in_use`.
+  - A note type that only soft-deleted notes use is deleted only when the request carries the query
+    parameter `confirm_purge=true`. Without it, the delete writes nothing and returns 409 with the new
+    code `note_type_purge_unconfirmed` and the counts `deleted_notes`, `cards` and `reviews` of those
+    notes.
+  - A confirmed delete hard-deletes, in one transaction: the `media_notes`, `card_states` and `cards`
+    rows of those notes, the notes themselves, the note type and its `media_note_types` rows. The
+    `reviews` rows stay, as they do when a deck is deleted.
+  - The note cascade has one implementation: `deleteDeckTx` and this delete call the same helper,
+    which deletes a given set of notes and their dependent rows.
+  - The audit row of the delete records the three counts.
+  - The note type view shows the three counts in a confirmation dialog and repeats the delete with
+    `confirm_purge=true` after the user confirms.
+
+  *Acceptance:*
+  - Store tests: a note type used only by soft-deleted notes is deleted after confirmation; its notes,
+    cards and `card_states` rows are gone; its `reviews` rows remain. Without confirmation nothing
+    changes. A note type with one live note is still refused.
+  - Handler tests: the 409 response carries `note_type_purge_unconfirmed` and the three counts; a
+    reader is refused.
+  - The existing deck deletion tests pass unchanged.
+  - The two frontend locale catalogs keep identical key sets.
+
+  *Verify:* `go test ./internal/store/... ./internal/api/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
+
 **Phase 5 follow-up — defects found in the review of M17-22 to M17-24, M17-35 and M17-40 (on `main`)**
 
 These tasks land on `main` directly. The local Ultimate Geography package (`testdata/local/Ultimate-Geography.apkg`) is the
