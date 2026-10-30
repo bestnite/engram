@@ -586,7 +586,7 @@ export interface PackageImportReport {
   notes_skipped: number;
   cards_created: number;
   /** Cards soft-deleted by a structural .apkg re-import (their progress rows stay). */
-  cards_removed: number;
+  cards_removed?: number;
   media_new: number;
   media_missing: number;
   progress_applied: number;
