@@ -23,6 +23,7 @@
     "bits-ui": "^2.20.1",
     "chart.js": "^4.6.1",
     "clsx": "^2.1.1",
+    "fabric": "^7.4.0",
     "jquery": "^3.7.1",
     "svelte": "^5.57.2",
     "svelte-sonner": "^1.2.1",

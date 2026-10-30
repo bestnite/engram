@@ -7,6 +7,8 @@
   import { apiClient, ApiClientError } from '../api';
   import type { Note, NotePreviewCard, NoteType, NoteTypeField } from '../api';
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
+  import ImageOcclusionEditor from '../components/ImageOcclusionEditor.svelte';
+  import { firstImageSource } from '../image-occlusion/markup';
   import Select from '../components/ui/Select.svelte';
   import Button from '../components/ui/Button.svelte';
   import Dialog from '../components/ui/Dialog.svelte';
@@ -81,10 +83,59 @@
   /** The selected type's fields in manifest order; the form and the save payload follow this order. */
   const fieldDefs = $derived(selectedType?.config.fields ?? []);
 
+  /**
+   * Whether the type is Anki's image-occlusion type. The template of the stock type carries the canvas
+   * container; the name and the two mandatory fields cover a renamed or hand-made copy. The stored markup
+   * alone is not enough, because during creation the occlusion field is still empty.
+   */
+  function isImageOcclusionType(type: NoteType | null): boolean {
+    if (!type) return false;
+    if (type.config.templates.some((template) => `${template.qfmt}${template.afmt}`.includes('image-occlusion-container'))) {
+      return true;
+    }
+    if (type.name.trim().toLowerCase() === 'image occlusion') return true;
+    const names = new Set(type.config.fields.map((field) => field.name));
+    return names.has('Occlusion') && names.has('Image');
+  }
+
+  const occlusionType = $derived(isImageOcclusionType(selectedType));
+
+  /**
+   * The field the mask editor owns. The stock type calls it "Occlusion"; a copy that renamed it is found by
+   * the markup it already stores, and the first field is the fallback for an empty hand-made type.
+   */
+  const occlusionField = $derived.by(() => {
+    if (!occlusionType || !selectedType) return '';
+    const fieldsOfType = selectedType.config.fields;
+    const withMarkup = fieldsOfType.find(
+      (field) => typeof fields[field.name] === 'string' && (fields[field.name] as string).includes('image-occlusion:')
+    );
+    if (withMarkup) return withMarkup.name;
+    return (
+      fieldsOfType.find((field) => /occlusion|mask/i.test(field.name))?.name ?? fieldsOfType[0]?.name ?? ''
+    );
+  });
+
+  /** The image under the masks: the type's "Image" field, or the first field that holds an image. */
+  const occlusionImageSrc = $derived.by(() => {
+    if (!occlusionField || !selectedType) return '';
+    const fieldsOfType = selectedType.config.fields.filter((field) => field.name !== occlusionField);
+    const named = fieldsOfType.find((field) => field.name === 'Image');
+    if (named) return firstImageSource(String(fields[named.name] ?? ''));
+    for (const field of fieldsOfType) {
+      const source = firstImageSource(String(fields[field.name] ?? ''));
+      if (source) return source;
+    }
+    return '';
+  });
+
   // Every note-type field is an HTML value, so the form uses one text control per field and every field gets the
   // rich-text editor. A field whose option says plain_text still renders as plain text inside that editor.
+  // The occlusion field is left out while the mask editor owns it, so one value is not edited by two controls.
   const specs = $derived<FieldSpec[]>(
-    fieldDefs.map((field) => ({ key: field.name, control: 'textarea', required: false }))
+    fieldDefs
+      .filter((field) => field.name !== occlusionField)
+      .map((field) => ({ key: field.name, control: 'textarea', required: false }))
   );
   const fieldLabels = $derived(
     Object.fromEntries(fieldDefs.map((field) => [field.name, field.name]))
@@ -515,6 +566,16 @@
               testIdPrefix="note-field"
               upload={uploadFieldMedia}
             />
+
+            {#if occlusionField}
+              <ImageOcclusionEditor
+                value={typeof fields[occlusionField] === 'string' ? (fields[occlusionField] as string) : ''}
+                imageSrc={occlusionImageSrc}
+                onchange={(next) => {
+                  fields[occlusionField] = next;
+                }}
+              />
+            {/if}
 
             <label class="block text-sm font-medium text-foreground">{$t('note_edit.tags')}
               <input data-testid="note-tags-editor" bind:value={tagsText} class="field-input text-sm mt-1.5 w-full" />
