@@ -45,7 +45,7 @@ func TestNoteListHugePageAndSizeIsSafe(t *testing.T) {
 			notes := NewNoteStore(db)
 			// Build one card more than the per-page cap, so the "cap" is observable.
 			for i := 0; i < MaxNotePageSize+1; i++ {
-				n := &Note{DeckID: deckID, Kind: "basic"}
+				n := noteOfKind(t, db, deckID, "basic")
 				if _, err := notes.Create(ctx, n, map[string]any{"front": "q", "back": "a"}); err != nil {
 					t.Fatalf("create note %d: %v", i, err)
 				}

@@ -96,6 +96,22 @@ func (s *NoteTypeStore) ByPublicID(ctx context.Context, publicID string) (*NoteT
 	return firstByPublicID[NoteType](ctx, s.db, publicID)
 }
 
+// ByIDs loads the note types with the given primary keys, keyed by id. Missing ids are simply absent from the result.
+func (s *NoteTypeStore) ByIDs(ctx context.Context, ids []uint64) (map[uint64]NoteType, error) {
+	out := make(map[uint64]NoteType, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var types []NoteType
+	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&types).Error; err != nil {
+		return nil, fmt.Errorf("load note types by id: %w", err)
+	}
+	for _, nt := range types {
+		out[nt.ID] = nt
+	}
+	return out, nil
+}
+
 // ListByDeck lists one deck's note types ordered by name, then id (a deterministic order for two identically named types).
 func (s *NoteTypeStore) ListByDeck(ctx context.Context, deckID uint64) ([]NoteType, error) {
 	var types []NoteType

@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"html"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/api"
 	"git.nite07.com/nite/engram/internal/auth"
-	"git.nite07.com/nite/engram/internal/cardtype"
-	"git.nite07.com/nite/engram/internal/render"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -33,7 +33,7 @@ type reviewRequest struct {
 //
 // Action decides the semantics of this request:
 //   - "": normal grading, writes reviews (grade_source=typed);
-//   - "reveal": only returns the sanitized correct answer, no grading, no DB write (read-only preview before revealing);
+//   - "reveal": only returns the card's back face with the answer breakdown, no grading, no DB write (read-only preview);
 //   - "give_up": give up after the answer was revealed, logging one self-assessment entry as Again (grade_source=self).
 type gradeRequest struct {
 	CardID          string          `json:"card_id"`
@@ -100,8 +100,14 @@ func (s *Server) reviewGrade(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if _, graded := graderFor(note.Kind); !graded {
-		// A self-assessed type on the wrong entry point: rejected, so a four-grade score cannot pass itself off as machine grading.
+	graded, err := s.cardIsMachineGraded(c.Request.Context(), card)
+	if err != nil {
+		s.logger.Error("resolve card template failed", "card_id", card.ID, "error", err)
+		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
+		return
+	}
+	if !graded {
+		// A self-assessed template on the wrong entry point: rejected, so a four-grade score cannot pass itself off as machine grading.
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
@@ -133,7 +139,7 @@ func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card,
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	feedback, err := s.gradeFeedback(ctx, user, card, note, result.Grade, frameOutputRequested(c))
+	feedback, err := s.gradeFeedback(ctx, user, card, req.Answer, result.Grade, frameOutputRequested(c))
 	if err != nil {
 		s.logger.Error("build spa grade feedback failed", "card_id", card.ID, "error", err)
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
@@ -142,23 +148,20 @@ func (s *Server) gradeSubmit(c *gin.Context, user *store.User, card *store.Card,
 	s.writeReviewResult(c, user, scope, result, gin.H{"feedback": feedback})
 }
 
-// gradeReveal returns the sanitized correct answer, no grading and no DB write (revealing is a read-only preview).
+// gradeReveal returns the card's back face with the answer breakdown, no grading and no DB write (revealing is a read-only preview).
 // After revealing, the frontend switches to the "give up answering" state; only when the user clicks the button again does give_up log Again.
 func (s *Server) gradeReveal(c *gin.Context, user *store.User, card *store.Card) {
-	view, err := s.cardFaceView(c.Request.Context(), user, card)
+	view, err := s.cardFaceView(c.Request.Context(), user, card, nil, nil, frameOutputRequested(c))
 	if err != nil {
 		s.logger.Error("render spa graded answer failed", "card_id", card.ID, "error", err)
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	answerHTML := view.BackHTML
-	if frameOutputRequested(c) && view.MediaBase != "" {
-		answerHTML = rewriteFrameMediaRefs(answerHTML)
-	}
 	c.JSON(http.StatusOK, gin.H{
 		"revealed":    true,
 		"card_id":     card.PublicID,
-		"answer_html": answerHTML,
+		"answer_html": view.BackHTML,
+		"back":        view.Back,
 		"media_base":  view.MediaBase,
 	})
 }
@@ -274,10 +277,11 @@ func (s *Server) reviewUndo(c *gin.Context) {
 	s.writeQueue(c, user, scope, gin.H{"undone_card_id": result.CardID})
 }
 
-// reviewRender returns server-sanitized HTML of both sides of a card and of each choice option: the SPA only hands the HTML returned here
-// to {@html}, never sending raw fields as Markdown into the HTML sink. It reuses cardView, guaranteeing the same
-// goldmark → bluemonday sanitizing path as SSR; edit_href is for the review page's edit entry to jump to;
-// intervals are the next interval for each of the four grades (api.PreviewIntervals).
+// reviewRender returns both sides of a card and each choice option's HTML.
+//
+// front and back carry the card-view contract (html, css, body_class, side, media_base); front_html and back_html repeat
+// their HTML for the SPA until it reads the objects. edit_href is the review page's edit entry; intervals are the next
+// interval for each of the four grades (api.PreviewIntervals).
 func (s *Server) reviewRender(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -293,7 +297,7 @@ func (s *Server) reviewRender(c *gin.Context) {
 	if !ok {
 		return
 	}
-	view, err := s.cardView(c.Request.Context(), user, schedule.QueueItem{CardID: card.ID})
+	view, err := s.cardViewWithAnswer(c.Request.Context(), user, schedule.QueueItem{CardID: card.ID}, nil, nil, frameOutputRequested(c))
 	if err != nil {
 		s.logger.Error("render spa review card failed", "card_id", card.ID, "error", err)
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
@@ -306,17 +310,12 @@ func (s *Server) reviewRender(c *gin.Context) {
 		s.logger.Warn("preview review intervals failed", "card_id", card.ID, "error", err)
 		intervals = []api.RatingInterval{}
 	}
-	// The card face (front and back) moves into the frame when the caller says so, and only then may it carry relative
-	// media names. Options stay in the parent SPA until the frame draws them itself, so they always keep absolute URLs.
-	frontHTML, backHTML := view.FrontHTML, view.BackHTML
-	if frameOutputRequested(c) && view.MediaBase != "" {
-		frontHTML = rewriteFrameMediaRefs(frontHTML)
-		backHTML = rewriteFrameMediaRefs(backHTML)
-	}
 	c.JSON(http.StatusOK, gin.H{
 		"card_id":      card.PublicID,
-		"front_html":   frontHTML,
-		"back_html":    backHTML,
+		"front":        view.Front,
+		"back":         view.Back,
+		"front_html":   view.FrontHTML,
+		"back_html":    view.BackHTML,
 		"options_html": view.OptionsHTML,
 		"option_order": view.OptionOrder,
 		"blanks":       view.Blanks,
@@ -402,74 +401,82 @@ func (s *Server) writeQueue(c *gin.Context, user *store.User, scope reviewScope,
 	c.JSON(http.StatusOK, body)
 }
 
-// gradeFeedback assembles the grading feedback: the verdict, score and answer text come from the service's grading result, the correct answer uses
-// server-sanitized HTML; numeric questions additionally carry the parsed number; per-item graded types additionally carry the per-item results.
-func (s *Server) gradeFeedback(ctx context.Context, user *store.User, card *store.Card, note *store.Note, grade *api.GradeResult, forFrame bool) (gin.H, error) {
+// gradeFeedback assembles the grading feedback: the verdict, score and answer text come from the service's grading
+// result, and the correct answer is the card's back face rendered with that result. Numeric answers additionally carry
+// the parsed number; per-item answers additionally carry the per-item results.
+func (s *Server) gradeFeedback(ctx context.Context, user *store.User, card *store.Card, submitted json.RawMessage, grade *api.GradeResult, forFrame bool) (gin.H, error) {
 	if grade == nil {
 		return nil, errors.New("graded submission returned no grade result")
 	}
-	view, err := s.cardFaceView(ctx, user, card)
+	result := &answer.GradeResult{
+		Score:  grade.Score,
+		Rating: grade.Rating,
+		Detail: grade.Detail,
+		Given:  grade.Given,
+	}
+	view, err := s.cardFaceView(ctx, user, card, submitted, result, forFrame)
 	if err != nil {
 		return nil, err
-	}
-	answerHTML := view.BackHTML
-	if forFrame && view.MediaBase != "" {
-		answerHTML = rewriteFrameMediaRefs(answerHTML)
 	}
 	out := gin.H{
 		"verdict":     grade.Verdict,
 		"score":       grade.Score,
 		"rating":      grade.Rating,
-		"answer_html": answerHTML,
+		"answer_html": view.BackHTML,
+		"back":        view.Back,
 		"media_base":  view.MediaBase,
 		"given":       grade.Given,
 	}
 	if parsed, ok := grade.Detail["parsed_answer"]; ok {
 		out["parsed"] = numberText(parsed)
 	}
-	breakdown, err := gradeBreakdown(note.Kind, grade.Detail)
-	if err != nil {
-		return nil, err
-	}
-	if breakdown != nil {
+	if breakdown := gradeBreakdown(grade.Detail); breakdown != nil {
 		out["breakdown"] = breakdown
 	}
 	return out, nil
 }
 
-// gradeBreakdowner is the optional capability of per-item graded types: turn the grading detail back into per-item results, from which the review page marks each item right or wrong.
-type gradeBreakdowner interface {
-	Breakdown(detail map[string]any) []cardtype.BreakdownItem
-}
-
-// gradeBreakdown renders the per-item results the question type gives into sanitized HTML; returns nil when the type lacks this capability.
-// Each item is written as Markdown/TeX source and goes through the same sanitizing pipeline as the card face before reaching the SPA's HTML sink.
-func gradeBreakdown(kind string, detail map[string]any) ([]gin.H, error) {
-	t, ok := cardtype.Lookup(kind)
+// gradeBreakdown turns the per-item part of a grading detail into one entry per item, which the review page marks right
+// or wrong. The list control writes "items", the cloze control writes "answers"; both store the acceptable wordings of
+// each item and a parallel correctness slice. The recognised keys mirror those two controls; a control without them
+// yields no breakdown.
+func gradeBreakdown(detail map[string]any) []gin.H {
+	items, ok := detailItems(detail)
 	if !ok {
-		return nil, nil
+		return nil
 	}
-	b, ok := t.(gradeBreakdowner)
-	if !ok {
-		return nil, nil
+	correct, _ := detail["correct"].([]bool)
+	if len(correct) != len(items) {
+		return nil
 	}
-	items := b.Breakdown(detail)
 	out := make([]gin.H, 0, len(items))
-	for _, item := range items {
-		html, err := render.RenderMarkdown(item.Answer)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, gin.H{"answer_html": html, "correct": item.Correct})
+	for i, wordings := range items {
+		out = append(out, gin.H{
+			"answer_html": html.EscapeString(strings.Join(wordings, " / ")),
+			"correct":     correct[i],
+		})
 	}
-	return out, nil
+	return out
 }
 
-// cardFaceView renders the back side of a card and sanitizes it via internal/render, for the SPA to show the correct answer.
-// Reuses cardView, guaranteeing the same sanitizing path as SSR, and carries the frame media base that the relative media
-// names in the HTML need in order to resolve.
-func (s *Server) cardFaceView(ctx context.Context, user *store.User, card *store.Card) (*ReviewCardView, error) {
-	return s.cardView(ctx, user, schedule.QueueItem{CardID: card.ID})
+// detailItems reads the per-item wording lists out of a grading detail.
+func detailItems(detail map[string]any) ([][]string, bool) {
+	for _, key := range []string{"items", "answers"} {
+		value, ok := detail[key]
+		if !ok {
+			continue
+		}
+		items, ok := value.([][]string)
+		if ok {
+			return items, true
+		}
+	}
+	return nil, false
+}
+
+// cardFaceView renders both sides of a card for the SPA, with the submitted answer and its result when there is one.
+func (s *Server) cardFaceView(ctx context.Context, user *store.User, card *store.Card, submitted json.RawMessage, result *answer.GradeResult, forFrame bool) (*ReviewCardView, error) {
+	return s.cardViewWithAnswer(ctx, user, schedule.QueueItem{CardID: card.ID}, submitted, result, forFrame)
 }
 
 // gradeAction* are the three semantics of a grading request (see gradeRequest).

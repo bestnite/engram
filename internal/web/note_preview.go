@@ -16,7 +16,7 @@ type notePreviewRequest struct {
 	Fields map[string]any `json:"fields"`
 }
 
-// notePreview returns only card-face HTML sanitized by internal/render.
+// notePreview returns the card faces the submitted payload would produce.
 func (s *Server) notePreview(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok || user.Status != store.StatusActive {
@@ -42,19 +42,25 @@ func (s *Server) notePreview(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	result := make([]gin.H, 0, len(cards))
 	// Preview renders the same card faces as the review path. The base travels on every response; the relative media
 	// names are handed out only when the caller declares the HTML is for the frame, because without the frame's <base> a
 	// relative name would resolve against the SPA page.
 	mediaBase := s.frameMediaBase(c.Request.Context(), user.ID, deck.ID)
 	forFrame := frameOutputRequested(c) && mediaBase != ""
+	result := make([]gin.H, 0, len(cards))
 	for _, card := range cards {
-		frontHTML, backHTML := card.FrontHTML, card.BackHTML
-		if forFrame {
-			frontHTML = rewriteFrameMediaRefs(frontHTML)
-			backHTML = rewriteFrameMediaRefs(backHTML)
+		front, back := card.Front, card.Back
+		front.MediaBase, back.MediaBase = mediaBase, mediaBase
+		if !forFrame {
+			front.HTML = absoluteMediaRefs(front.HTML)
+			back.HTML = absoluteMediaRefs(back.HTML)
 		}
-		result = append(result, gin.H{"front_html": frontHTML, "back_html": backHTML})
+		result = append(result, gin.H{
+			"front":      front,
+			"back":       back,
+			"front_html": front.HTML,
+			"back_html":  back.HTML,
+		})
 	}
 	c.JSON(http.StatusOK, gin.H{"cards": result, "media_base": mediaBase})
 }

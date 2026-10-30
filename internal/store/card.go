@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/notetype"
 )
 
 // CardStore wraps GORM access to the cards table.
@@ -38,7 +38,7 @@ func (s *CardStore) ByID(ctx context.Context, id uint64) (*Card, error) {
 }
 
 // ByNote lists a note's visible cards, ordered by ordinal, then id ascending; returns an empty slice when the note is soft-deleted.
-// The returned card templates and ordinals line up with cardtype's output.
+// The returned card templates and ordinals line up with notetype's card generation.
 func (s *CardStore) ByNote(ctx context.Context, noteID uint64) ([]Card, error) {
 	var cards []Card
 	if err := s.visibleCards(ctx).Select("cards.*").
@@ -49,19 +49,23 @@ func (s *CardStore) ByNote(ctx context.Context, noteID uint64) ([]Card, error) {
 	return cards, nil
 }
 
-// syncCards aligns a note's card set with the wanted set produced by cardtype.
+// syncCards aligns a note's card set with the wanted set produced by notetype.GenerateCards.
 //
 // Invariants (AGENTS.md §2.3 item 1, content and progress kept separate):
 //   - an existing card and its id are always kept: progress hangs off the card, deleting the row loses progress with it;
 //   - an existing template reuses the original row (a soft-deleted one is restored here, ordinal aligned), the id stays unchanged;
 //   - only newly appearing templates are inserted;
-//   - a template that exists but no longer appears in wanted is **soft-deleted**: after removing {{c2::}} the cloze:2 can no longer
+//   - a template that exists but is no longer generated is **soft-deleted**: after removing {{c2::}} the cloze:2 card can no longer
 //     enter the review queue (it renders no blank at all). Soft delete writes only cards.deleted_at; card_states and reviews
 //     stay as they are, and when the template reappears the reuse branch above restores the same row, bringing the progress back.
+//     No row is ever hard-deleted here, and the explicit empty-card cleanup is a separate user action.
 //
-// If a duplicate template shows up within one sync, that is an error — this is the Go-side
-// guard for the (note_id, template) unique constraint; the DB unique index is the final backstop.
-func syncCards(tx *gorm.DB, noteID uint64, wanted []cardtype.Card, now time.Time) ([]Card, error) {
+// The stored template value is the card's identity inside a note, not the ordinal: a normal note type's ordinals shift when a
+// template in the middle is removed, while cards.template keeps naming the same card. The (note_id, template) unique index is
+// the database backstop for that rule.
+//
+// If a duplicate template shows up within one sync, that is an error.
+func syncCards(tx *gorm.DB, noteID uint64, wanted []notetype.GeneratedCard, now time.Time) ([]Card, error) {
 	// soft-deleted rows must be included: the unique index does not exclude them, so only reusing by template avoids hitting the unique constraint.
 	var existing []Card
 	if err := tx.Unscoped().Where("note_id = ?", noteID).Find(&existing).Error; err != nil {

@@ -142,9 +142,9 @@ func newFrameMediaFixture(t *testing.T) *frameMediaFixture {
 	f.readable = saveFrameMedia(t, db, srv, f.readableRaw, f.owner.ID)
 	// The note makes the medium readable for everyone who can see the deck, including the reader.
 	if _, err := store.NewNoteStore(db).Create(context.Background(), &store.Note{
-		DeckID: f.deck.ID, Kind: "basic", CreatedBy: store.Ptr(f.owner.ID),
+		DeckID: f.deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, f.deck.ID, "basic")), CreatedBy: store.Ptr(f.owner.ID),
 	}, map[string]any{
-		"front": fmt.Sprintf("![](/media/%s)", f.readable.Sha256),
+		"front": fmt.Sprintf(`<img src="%s.png">`, f.readable.Sha256),
 		"back":  "back",
 	}); err != nil {
 		t.Fatalf("create media note: %v", err)
@@ -229,9 +229,9 @@ type framePreviewResponse struct {
 }
 
 // preview posts to the editor preview endpoint as the deck owner, optionally marking the request as frame output.
-func (f *frameMediaFixture) preview(t *testing.T, fields map[string]any, forFrame bool) framePreviewResponse {
+func (f *frameMediaFixture) preview(t *testing.T, kind string, fields map[string]any, forFrame bool) framePreviewResponse {
 	t.Helper()
-	payload, err := json.Marshal(notePreviewRequest{Kind: "basic", Fields: fields})
+	payload, err := json.Marshal(notePreviewRequest{Kind: kind, Fields: fields})
 	if err != nil {
 		t.Fatalf("encode preview request: %v", err)
 	}
@@ -586,8 +586,8 @@ func TestCardFaceCarriesFrameMediaBase(t *testing.T) {
 	}
 
 	// The editor preview carries the same fields and follows the same rule.
-	fields := map[string]any{"front": fmt.Sprintf("![](/media/%s)", f.readable.Sha256), "back": "back"}
-	preview := f.preview(t, fields, false)
+	fields := map[string]any{"front": fmt.Sprintf(`<img src="%s.png">`, f.readable.Sha256), "back": "back"}
+	preview := f.preview(t, "basic", fields, false)
 	if preview.MediaBase == "" || !strings.HasPrefix(preview.MediaBase, "/fm/") {
 		t.Errorf("preview media_base = %q, want a /fm/ base", preview.MediaBase)
 	}
@@ -604,11 +604,11 @@ func TestCardFaceFrameOutputRewritesFaces(t *testing.T) {
 	// A choice card whose option carries media: its options must survive a frame request unchanged.
 	choiceFields := map[string]any{
 		"question": "pick one",
-		"options":  []any{fmt.Sprintf("![](/media/%s)", f.readable.Sha256), "plain"},
+		"options":  []any{fmt.Sprintf(`<img src="%s.png">`, f.readable.Sha256), "plain"},
 		"answer":   1,
 	}
 	choiceCards, err := store.NewNoteStore(f.db).Create(ctx, &store.Note{
-		DeckID: f.deck.ID, Kind: "choice_single", CreatedBy: store.Ptr(f.owner.ID),
+		DeckID: f.deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, f.db, f.deck.ID, "choice_single")), CreatedBy: store.Ptr(f.owner.ID),
 	}, choiceFields)
 	if err != nil || len(choiceCards) == 0 {
 		t.Fatalf("create choice note: %v (%d cards)", err, len(choiceCards))
@@ -633,8 +633,8 @@ func TestCardFaceFrameOutputRewritesFaces(t *testing.T) {
 	}
 
 	// The preview path follows the same marker: only a marked request receives relative names.
-	fields := map[string]any{"front": fmt.Sprintf("![](/media/%s)", f.readable.Sha256), "back": "back"}
-	framePreview := f.preview(t, fields, true)
+	fields := map[string]any{"front": fmt.Sprintf(`<img src="%s.png">`, f.readable.Sha256), "back": "back"}
+	framePreview := f.preview(t, "basic", fields, true)
 	if len(framePreview.Cards) != 1 {
 		t.Fatalf("marked preview cards = %d, want 1", len(framePreview.Cards))
 	}
@@ -649,35 +649,30 @@ func TestCardFaceFrameOutputRewritesFaces(t *testing.T) {
 	}
 }
 
-// TestRewriteFrameMediaRefs pins the rewrite boundary: only a site-local /media/<64 lowercase hex> path is rewritten, and
-// only where the path can start a URL (start of string, after a quote, an opening parenthesis, "=" or whitespace).
-func TestRewriteFrameMediaRefs(t *testing.T) {
+// TestAbsoluteMediaRefs pins the rewrite boundary in the direction the SPA needs: a deck-scoped media name in a src
+// attribute or a CSS url() becomes the absolute /media/<sha256> route, and nothing else is touched.
+func TestAbsoluteMediaRefs(t *testing.T) {
 	sha := strings.Repeat("ab", 32)
 	cases := []struct {
 		name string
 		in   string
 		want string
 	}{
-		{"double-quoted src", `<img src="/media/` + sha + `">`, `<img src="` + sha + `">`},
-		{"single-quoted css url", `<div style="background:url('/media/` + sha + `')">`, `<div style="background:url('` + sha + `')">`},
-		{"bare at start", `/media/` + sha, sha},
-		{"unquoted attribute", `<img src=/media/` + sha + `>`, `<img src=` + sha + `>`},
-		{"css url without quotes", `<div style="background:url(/media/` + sha + `)">`, `<div style="background:url(` + sha + `)">`},
-		{"extension", `<img src="/media/` + sha + `.png">`, `<img src="` + sha + `.png">`},
-		{"query", `<img src="/media/` + sha + `?x=1">`, `<img src="` + sha + `?x=1">`},
-		{"fragment", `<img src="/media/` + sha + `#top">`, `<img src="` + sha + `#top">`},
-		{"external host", `<img src="https://cdn.example.com/media/` + sha + `">`, `<img src="https://cdn.example.com/media/` + sha + `">`},
-		{"not a sha", `<img src="/media/abc">`, `<img src="/media/abc">`},
-		{"uppercase hex", `<img src="/media/` + strings.ToUpper(sha) + `">`, `<img src="/media/` + strings.ToUpper(sha) + `">`},
-		{"63 hex", `<img src="/media/` + sha[:63] + `">`, `<img src="/media/` + sha[:63] + `">`},
-		{"65 hex", `<img src="/media/` + sha + `b">`, `<img src="/media/` + sha + `b">`},
-		{"preceded by a letter", `x/media/` + sha, `x/media/` + sha},
-		{"no media reference", `<p>no images here</p>`, `<p>no images here</p>`},
+		{"double-quoted src with extension", `<img src="` + sha + `.png">`, `<img src="/media/` + sha + `">`},
+		{"single-quoted src", `<img src='` + sha + `.png'>`, `<img src='/media/` + sha + `'>`},
+		{"bare sha", `<img src="` + sha + `">`, `<img src="/media/` + sha + `">`},
+		{"css url", `<div style="background:url(` + sha + `.jpg)">`, `<div style="background:url(/media/` + sha + `)">`},
+		{"quoted css url", `<div style="background:url('` + sha + `.jpg')">`, `<div style="background:url('/media/` + sha + `')">`},
+		{"external host untouched", `<img src="https://cdn.example.com/a.png">`, `<img src="https://cdn.example.com/a.png">`},
+		{"absolute media path untouched", `<img src="/media/` + sha + `">`, `<img src="/media/` + sha + `">`},
+		{"plain text untouched", `<p>` + sha + `.png</p>`, `<p>` + sha + `.png</p>`},
+		{"not a sha", `<img src="abc.png">`, `<img src="abc.png">`},
+		{"uppercase hex untouched", `<img src="` + strings.ToUpper(sha) + `.png">`, `<img src="` + strings.ToUpper(sha) + `.png">`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := rewriteFrameMediaRefs(tc.in); got != tc.want {
-				t.Fatalf("rewriteFrameMediaRefs(%q) = %q, want %q", tc.in, got, tc.want)
+			if got := absoluteMediaRefs(tc.in); got != tc.want {
+				t.Fatalf("absoluteMediaRefs(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
@@ -696,7 +691,7 @@ func TestFrameMediaWithoutSecretsDegrades(t *testing.T) {
 		t.Errorf("GET /fm/ without secrets = %d, want 404", rec.Code)
 	}
 	payload, _ := json.Marshal(notePreviewRequest{Kind: "basic", Fields: map[string]any{
-		"front": "![](/media/" + strings.Repeat("ab", 32) + ")", "back": "back",
+		"front": `<img src="` + strings.Repeat("ab", 32) + `.png">`, "back": "back",
 	}})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes/preview", strings.NewReader(string(payload)))
 	req.Header.Set("Content-Type", "application/json")

@@ -41,7 +41,7 @@ func saveMedia(t *testing.T, db *gorm.DB, root string, owner uint64, raw []byte)
 // not construct a privilege-escalation scenario.
 func saveRefNote(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, front string) uint64 {
 	t.Helper()
-	n := Note{DeckID: deckID, Kind: "basic", CreatedBy: author}
+	n := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deckID, "basic")), CreatedBy: author}
 	fields := map[string]any{"front": front, "back": "x"}
 	if _, err := NewNoteStore(db).Save(context.Background(), &n, fields); err != nil {
 		t.Fatalf("save referencing note: %v", err)
@@ -49,10 +49,11 @@ func saveRefNote(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, front
 	return n.ID
 }
 
+// refFront builds field HTML that references each sha by the deck-scoped name the migration writes (<sha>.png).
 func refFront(shas ...string) string {
 	parts := make([]string, 0, len(shas))
 	for _, sha := range shas {
-		parts = append(parts, "![](/media/"+sha+")")
+		parts = append(parts, `<img src="`+sha+`.png">`)
 	}
 	return strings.Join(parts, " ")
 }
@@ -83,11 +84,20 @@ func fieldsShas(t *testing.T, db *gorm.DB, userID uint64) map[string]bool {
 	}
 	out := map[string]bool{}
 	for i := range notes {
-		fields, err := ParseFields(notes[i].FieldsJSON)
-		if err != nil {
-			continue
+		for _, name := range mediaNamesInHTML(strings.Join(fieldValueList(NoteFieldValues(notes[i].FieldsJSON)), "\n")) {
+			if match := mediaShaNameRE.FindStringSubmatch(name); match != nil {
+				out[match[1]] = true
+			}
 		}
-		scanMediaRefs(fields, out)
+	}
+	return out
+}
+
+// fieldValueList lists the values of a stored field map.
+func fieldValueList(values map[string]string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, value)
 	}
 	return out
 }
@@ -143,16 +153,16 @@ func TestMediaMappingInvariantMatchesFieldsScan(t *testing.T) {
 			for _, id := range noteIDs {
 				switch rng.Intn(3) {
 				case 0:
-					nA := Note{ID: id, Kind: "basic"}
+					nA := Note{ID: id}
 					if _, err := ns.Save(ctx, &nA, map[string]any{"front": refFront(uniqueSha()), "back": "x"}); err != nil {
 						t.Fatalf("update note %d: %v", id, err)
 					}
-					nB := Note{ID: id, Kind: "basic"}
+					nB := Note{ID: id}
 					if _, err := ns.Save(ctx, &nB, map[string]any{"front": "no refs", "back": "x"}); err != nil {
 						t.Fatalf("update note %d: %v", id, err)
 					}
 				case 1:
-					n := Note{ID: id, Kind: "basic"}
+					n := Note{ID: id}
 					if _, err := ns.Save(ctx, &n, map[string]any{"front": refFront(pick()), "back": "x"}); err != nil {
 						t.Fatalf("update note %d: %v", id, err)
 					}
@@ -218,7 +228,7 @@ func TestMediaMappingRebuiltOnReferenceRemoval(t *testing.T) {
 				t.Fatalf("reader before removal: readable=%v err=%v, want true", ok, err)
 			}
 
-			n := Note{ID: id, Kind: "basic"}
+			n := Note{ID: id}
 			if _, err := NewNoteStore(db).Save(ctx, &n, map[string]any{"front": "no refs", "back": "x"}); err != nil {
 				t.Fatalf("update note: %v", err)
 			}
@@ -329,7 +339,7 @@ func TestMediaWriteValidationRejectsUnreadableReference(t *testing.T) {
 			sha := saveMedia(t, db, t.TempDir(), a, mediaBytes("writeval"))
 
 			// create: B references A's media inside B's own deck → rejected.
-			n := Note{DeckID: deckB, Kind: "basic", CreatedBy: Ptr(b)}
+			n := Note{DeckID: deckB, NoteTypeID: Ptr(stockNoteTypeID(t, db, deckB, "basic")), CreatedBy: Ptr(b)}
 			_, err := NewNoteStore(db).Save(WithActor(ctx, b), &n, map[string]any{
 				"front": refFront(sha), "back": "x",
 			})
@@ -357,7 +367,7 @@ func TestMediaWriteValidationRejectsUnreadableReference(t *testing.T) {
 
 			// update: first create an ordinary note for B (actor 0), then have B inject A's media reference → rejected, fields unchanged.
 			id := saveRefNote(t, db, deckB, Ptr(b), "plain")
-			n2 := Note{ID: id, Kind: "basic"}
+			n2 := Note{ID: id}
 			_, err = NewNoteStore(db).Save(WithActor(ctx, b), &n2, map[string]any{
 				"front": refFront(sha), "back": "x",
 			})
@@ -460,9 +470,9 @@ func TestImportPackageRejectsUnreadableMediaRef(t *testing.T) {
 			srcDeck := seedPresetDeck(t, db, owner)
 			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("pkgforbid"))
 			// the source note references the media in in-package form; export with media disabled → the package carries no bytes.
-			srcNote := Note{DeckID: srcDeck, Kind: "basic", CreatedBy: Ptr(owner)}
+			srcNote := Note{DeckID: srcDeck, NoteTypeID: Ptr(stockNoteTypeID(t, db, srcDeck, "basic")), CreatedBy: Ptr(owner)}
 			if _, err := NewNoteStore(db).Save(ctx, &srcNote, map[string]any{
-				"front": "q?", "back": "media/" + sha + ".png",
+				"front": "q?", "back": `<img src="` + sha + `.png">`,
 			}); err != nil {
 				t.Fatalf("create source note: %v", err)
 			}

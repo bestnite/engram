@@ -222,6 +222,11 @@ func ResolveBindings(spec notetype.AnswerSpec, fields map[string]string) (Bindin
 			}
 			continue
 		}
+		// An optional role bound to a blank field is simply not bound: a note leaves an optional tolerance or unit
+		// empty, and parsing "" as a number would make the whole card ungradable.
+		if !role.Required && strings.TrimSpace(notetype.PlainText(html)) == "" {
+			continue
+		}
 		value, err := parseValue(role.Kind, html)
 		if err != nil {
 			return nil, fmt.Errorf("answer: role %q: %w", role.Name, err)

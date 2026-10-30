@@ -55,7 +55,7 @@ func TestReviewRenderPublishesOptionOrder(t *testing.T) {
 	if !validOptionOrder(first.OptionOrder, 3) {
 		t.Fatalf("option_order = %v, want a permutation of 0..2", first.OptionOrder)
 	}
-	if len(first.OptionsHTML) != 3 || first.OptionsHTML[1] != "<p>opt-beta</p>\n" {
+	if len(first.OptionsHTML) != 3 || first.OptionsHTML[1] != "opt-beta" {
 		t.Errorf("options_html = %#v, want stored option order", first.OptionsHTML)
 	}
 	second := renderReviewCard(t, srv, deck.PublicID, cardID, cookies, csrf)

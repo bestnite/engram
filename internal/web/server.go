@@ -383,7 +383,7 @@ func New(addr string, deps Deps) (*Server, error) {
 			router.POST("/api/v1/review/answer", s.sessions.CSRFMiddleware(), s.reviewAnswer)
 			// Answer types go through the grading entry point: the server grades and writes grade_source=typed.
 			router.POST("/api/v1/review/grade", s.sessions.CSRFMiddleware(), s.reviewGrade)
-			// Bury and card render: write only the caller's own progress / read sanitized HTML; still web endpoints protected by session + CSRF,
+			// Bury and card render: write only the caller's own progress / read the card face; still web endpoints protected by session + CSRF,
 			// with bury's scheduling logic reusing internal/schedule.
 			router.POST("/api/v1/review/bury", s.sessions.CSRFMiddleware(), s.reviewBury)
 			router.POST("/api/v1/review/suspend", s.sessions.CSRFMiddleware(), s.reviewSuspend)

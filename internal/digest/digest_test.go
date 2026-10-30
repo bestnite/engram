@@ -106,7 +106,7 @@ func seedCard(t *testing.T, db *gorm.DB, userID uint64) uint64 {
 		t.Fatalf("create deck: %v", err)
 	}
 	note := store.Note{
-		DeckID: deck.ID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`,
+		DeckID: deck.ID, FieldsJSON: `{"front":"q","back":"a"}`,
 		TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
 	}
 	if err := db.Create(&note).Error; err != nil {

@@ -173,8 +173,9 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	}
 }
 
-// TestReviewRenderReturnsSanitizedHTML asserts the card render endpoint returns server-sanitized HTML: scripts and
-// event attributes are stripped, legal content is kept, edit_href points at the card's edit page; missing session/CSRF and an out-of-scope request are all rejected.
+// TestReviewRenderReturnsStoredHTML asserts the card render endpoint returns the stored field HTML unchanged: the server
+// no longer sanitises (the sandboxed frame is the security boundary), edit_href points at the card's edit page, and
+// missing session/CSRF and an out-of-scope request are all rejected.
 func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Render deck")
@@ -202,15 +203,13 @@ func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
 	if body.FrontHTML == "" || body.BackHTML == "" {
 		t.Fatalf("render returned empty HTML: %+v", body)
 	}
-	for name, frag := range map[string]string{"front": body.FrontHTML, "back": body.BackHTML} {
-		for _, bad := range []string{"<script", "onerror", "onclick"} {
-			if strings.Contains(frag, bad) {
-				t.Errorf("render %s HTML still contains %q: %s", name, bad, frag)
-			}
-		}
+	// The stored markup is returned as it is stored. Sanitising here would be a second, divergent rule: the frame is
+	// sandboxed and is the only place the HTML is ever executed.
+	if !strings.Contains(body.FrontHTML, "<script>alert(1)</script> front-text") {
+		t.Errorf("render front HTML is not the stored HTML: %s", body.FrontHTML)
 	}
-	if !strings.Contains(body.FrontHTML, "front-text") || !strings.Contains(body.BackHTML, "back-text") {
-		t.Errorf("render dropped benign content: %+v", body)
+	if !strings.Contains(body.BackHTML, `<img src=x onerror=alert(1)> back-text`) {
+		t.Errorf("render back HTML is not the stored HTML: %s", body.BackHTML)
 	}
 	if body.EditHref != "/decks/"+deck.PublicID+"/notes/"+note.PublicID {
 		t.Errorf("render edit_href = %q, want the note edit path", body.EditHref)
@@ -276,10 +275,10 @@ func TestReviewRenderOmitsChoiceOptionsFromFront(t *testing.T) {
 	}
 }
 
-// TestReviewRenderReturnsSanitizedOptionHTML asserts the render response carries one sanitized HTML fragment per choice option, in option
-// order: the answer controls inject these fragments, so a formula option keeps its TeX delimiters for typesetting while injected markup is
-// removed. It also asserts a card type without options returns JSON null, not an empty array.
-func TestReviewRenderReturnsSanitizedOptionHTML(t *testing.T) {
+// TestReviewRenderReturnsOptionHTML asserts the render response carries one stored HTML fragment per choice option, in
+// option order: the answer controls inject these fragments, and a formula option keeps its TeX delimiters for
+// typesetting. It also asserts a card type without options returns JSON null, not an empty array.
+func TestReviewRenderReturnsOptionHTML(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Choice option HTML deck")
 	note := seedGradedNote(t, db, deck.ID, "choice_single", map[string]any{
@@ -303,13 +302,11 @@ func TestReviewRenderReturnsSanitizedOptionHTML(t *testing.T) {
 	if !strings.Contains(body.OptionsHTML[0], `\(x^2\)`) {
 		t.Errorf("option 0 lost its TeX delimiters, MathJax cannot typeset it: %s", body.OptionsHTML[0])
 	}
-	if body.OptionsHTML[1] != "<p>opt-beta</p>\n" {
-		t.Errorf("option 1 = %q, want it rendered in option order", body.OptionsHTML[1])
+	if body.OptionsHTML[1] != "opt-beta" {
+		t.Errorf("option 1 = %q, want the stored option in option order", body.OptionsHTML[1])
 	}
-	for _, bad := range []string{"<script", "alert("} {
-		if strings.Contains(body.OptionsHTML[2], bad) {
-			t.Errorf("option HTML still contains %q: %s", bad, body.OptionsHTML[2])
-		}
+	if body.OptionsHTML[2] != "<script>alert(1)</script>" {
+		t.Errorf("option 2 = %q, want the stored HTML (the server does not sanitise)", body.OptionsHTML[2])
 	}
 	for _, option := range []string{`\(x^2\)`, "opt-beta"} {
 		if strings.Contains(body.FrontHTML, option) {
@@ -361,8 +358,10 @@ func TestReviewRenderReturnsClozeBlanks(t *testing.T) {
 	if !ok || len(blanks) != 2 || blanks[0] != "" || blanks[1] != "city" {
 		t.Errorf("cloze blanks = %#v, want [\"\", \"city\"]", body["blanks"])
 	}
-	if front, _ := body["front_html"].(string); strings.Contains(front, "Paris") || strings.Contains(front, "Rome") {
-		t.Errorf("cloze front_html leaks the answers: %s", front)
+	// The visible text of the active deletion is masked. Its content stays in the data-cloze attribute, which is the
+	// engine's markup contract for animating the answer back in.
+	if front, _ := body["front_html"].(string); !strings.Contains(front, `data-cloze="Paris"`) {
+		t.Errorf("cloze front_html = %s, want the active deletion carried as data-cloze", front)
 	}
 	if got := render(basic.ID)["blanks"]; got != nil {
 		t.Errorf("basic blanks = %#v, want null", got)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -20,6 +21,10 @@ import (
 //
 // Both read authorization (read side) and pre-write validation (write side) derive from these two facts, so that 'what counts as readable'
 // cannot be implemented twice and drift.
+//
+// Field values are HTML that refers to media by file name, the way Anki does: an img/video/audio src attribute, a [sound:name]
+// tag and a CSS url(name) are the three forms a field or template can carry. A name resolves to content through media_names
+// for the note's deck; a name with no row refers to no stored bytes and contributes no reference.
 
 // CodeMediaNotReadable is the stable English code returned when a note write is rejected by pre-write validation (item level, see MediaWriteError).
 // It is also registered in the api's English error code table (internal/api's errorMessages, same value as CodeMediaNotReadable).
@@ -57,15 +62,86 @@ func RecordMediaUploader(ctx context.Context, db *gorm.DB, mediaSha string, user
 	return nil
 }
 
-// mediaRefsIn returns every media sha256 appearing in the field map (both URL form and in-package form are recognized).
-// It reuses scanMediaRefs from media_quota.go, so reference recognition has only one implementation.
-func mediaRefsIn(fields map[string]any) map[string]bool {
-	refs := map[string]bool{}
-	if fields == nil {
-		return refs
+// Field media reference patterns. Each one captures the file name a field writes; every other part of the match is skipped.
+var (
+	// mediaSrcRE matches an HTML src attribute in any of the three valid quoting forms.
+	mediaSrcRE = regexp.MustCompile(`(?is)\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))`)
+	// mediaSoundRE matches Anki's [sound:name] tag.
+	mediaSoundRE = regexp.MustCompile(`(?is)\[sound:([^\]]+)\]`)
+	// mediaCSSURLRE matches a CSS url(...) reference in any of the three valid quoting forms.
+	mediaCSSURLRE = regexp.MustCompile(`(?is)\burl\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s]*))\s*\)`)
+	// mediaShaNameRE matches a name that already carries the content sha, the form the migration writes (<sha>.<ext>).
+	mediaShaNameRE = regexp.MustCompile(`^([0-9a-f]{64})(?:\.[^/]*)?$`)
+)
+
+// mediaNamesInHTML returns every media name a piece of field HTML refers to, in order of appearance and without duplicates.
+//
+// A reference that is an absolute URL (any scheme, or a root-relative path) is not a deck-scoped file name and is skipped:
+// the frame may load an external https image, but that image is not this deck's media.
+func mediaNamesInHTML(html string) []string {
+	if !strings.Contains(html, "src") && !strings.Contains(html, "[sound:") && !strings.Contains(html, "url(") {
+		return nil
 	}
-	scanMediaRefs(fields, refs)
-	return refs
+	var names []string
+	seen := make(map[string]struct{})
+	add := func(raw string) {
+		name := strings.TrimSpace(raw)
+		name = strings.TrimPrefix(name, "./")
+		if name == "" || strings.Contains(name, "://") || strings.HasPrefix(name, "/") || strings.HasPrefix(name, "data:") {
+			return
+		}
+		name = normaliseMediaName(name)
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	for _, match := range mediaSrcRE.FindAllStringSubmatch(html, -1) {
+		add(match[1] + match[2] + match[3])
+	}
+	for _, match := range mediaSoundRE.FindAllStringSubmatch(html, -1) {
+		add(match[1])
+	}
+	for _, match := range mediaCSSURLRE.FindAllStringSubmatch(html, -1) {
+		add(match[1] + match[2] + match[3])
+	}
+	return names
+}
+
+// mediaRefsIn resolves every media reference in the note's field values to a content sha256.
+//
+// A name that media_names does not know contributes no reference: the lookup is what makes 'the note references these bytes'
+// true, so an unknown name can neither leak a medium nor authorize a read.
+func mediaRefsIn(ctx context.Context, db *gorm.DB, deckID uint64, values map[string]string) (map[string]bool, error) {
+	refs := map[string]bool{}
+	var names []string
+	for _, html := range values {
+		names = append(names, mediaNamesInHTML(html)...)
+	}
+	if len(names) == 0 {
+		return refs, nil
+	}
+	// A name that already carries the sha (<sha>.<ext>) needs no lookup; every other name is resolved in one query.
+	pending := make([]string, 0, len(names))
+	for _, name := range names {
+		if match := mediaShaNameRE.FindStringSubmatch(name); match != nil {
+			refs[match[1]] = true
+			continue
+		}
+		pending = append(pending, name)
+	}
+	if len(pending) == 0 {
+		return refs, nil
+	}
+	var rows []MediaName
+	if err := db.WithContext(ctx).Where("deck_id = ? AND name IN ?", deckID, pending).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("store: resolve media names for deck %d: %w", deckID, err)
+	}
+	for _, row := range rows {
+		refs[row.Sha256] = true
+	}
+	return refs, nil
 }
 
 // mediaReadableByUser decides whether the media for sha may be read by userID (two branches).
@@ -94,22 +170,30 @@ func mediaReadableByUser(ctx context.Context, db *gorm.DB, userID uint64, mediaS
 // checkNewMediaRefs validates before the write that every 'newly introduced reference this time' is readable by the writer (actor).
 //
 // Rules ('validate at write time'):
-//   - only validate shas that appear in newFields but not in oldFields (old references already passed validation, re-checking is pointless);
+//   - only validate shas that appear in newValues but not in oldValues (old references already passed validation, re-checking is pointless);
 //   - validation is evaluated against the **state before the write**: callers must call it before writing media/mappings, otherwise the mapping satisfies itself the moment it is created;
 //   - a reference whose bytes are not in the DB at all (no media row) passes: it can leak nothing, and it is the normal shape of existing flows such as
 //     'export with media disabled, then import / reference media that has since been deleted';
 //   - actor 0 means a server-side write (no named writer), and validation is skipped.
 //
 // Returns *MediaWriteError (item level, stable code) so callers can map it to an HTTP/MCP error.
-func checkNewMediaRefs(ctx context.Context, db *gorm.DB, actor uint64, oldFields, newFields map[string]any) error {
+func checkNewMediaRefs(ctx context.Context, db *gorm.DB, actor, deckID uint64, oldValues, newValues map[string]string) error {
 	if actor == 0 {
 		return nil
 	}
-	newRefs := mediaRefsIn(newFields)
+	newRefs, err := mediaRefsIn(ctx, db, deckID, newValues)
+	if err != nil {
+		return err
+	}
 	if len(newRefs) == 0 {
 		return nil
 	}
-	oldRefs := mediaRefsIn(oldFields)
+	oldRefs := map[string]bool{}
+	if len(oldValues) > 0 {
+		if oldRefs, err = mediaRefsIn(ctx, db, deckID, oldValues); err != nil {
+			return err
+		}
+	}
 	var entries []string
 	for sha := range newRefs {
 		if oldRefs[sha] {
@@ -139,15 +223,19 @@ func checkNewMediaRefs(ctx context.Context, db *gorm.DB, actor uint64, oldFields
 	return &MediaWriteError{Code: CodeMediaNotReadable, Entries: entries}
 }
 
-// rebuildMediaNotes rebuilds a note's media_notes mapping: it deletes every old row for that note, then inserts by the new fields.
+// rebuildMediaNotes rebuilds a note's media_notes mapping: it deletes every old row for that note, then inserts the references
+// of the new field values.
 //
 // It must **rebuild** rather than append: appending would make 'removing a reference' no longer revoke read access — the old row stays in the table and
 // read authorization still hits it. It runs in the same transaction, living and dying with the note write.
-func rebuildMediaNotes(ctx context.Context, tx *gorm.DB, noteID uint64, fields map[string]any) error {
+func rebuildMediaNotes(ctx context.Context, tx *gorm.DB, noteID, deckID uint64, values map[string]string) error {
 	if err := tx.WithContext(ctx).Where("note_id = ?", noteID).Delete(&MediaNote{}).Error; err != nil {
 		return fmt.Errorf("store: clear media notes for note %d: %w", noteID, err)
 	}
-	refs := mediaRefsIn(fields)
+	refs, err := mediaRefsIn(ctx, tx, deckID, values)
+	if err != nil {
+		return err
+	}
 	if len(refs) == 0 {
 		return nil
 	}

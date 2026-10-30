@@ -3,12 +3,13 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/notetype"
 )
 
 // seedDeck creates a deck owned by the given user (together with the preset it references) and returns the deck primary key.
@@ -32,7 +33,7 @@ func cardTemplates(cards []Card) map[string]uint64 {
 	return out
 }
 
-// TestNoteCreateGeneratesCards covers the first half: creating a note generates cards through cardtype.
+// TestNoteCreateGeneratesCards covers the first half: creating a note generates cards through the note type.
 func TestNoteCreateGeneratesCards(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -59,7 +60,7 @@ func TestNoteCreateGeneratesCards(t *testing.T) {
 
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
-					n := &Note{DeckID: deckID, Kind: tc.kind}
+					n := noteOfKind(t, db, deckID, tc.kind)
 					created, err := notes.Create(ctx, n, tc.fields)
 					if err != nil {
 						t.Fatalf("Create() error = %v", err)
@@ -95,6 +96,39 @@ func TestNoteCreateGeneratesCards(t *testing.T) {
 	}
 }
 
+// TestNoteWriteStoresFieldIDsAndSearchText covers the stored shape: values keyed by field id, and the search text taken
+// from the plain text of the searchable fields.
+func TestNoteWriteStoresFieldIDsAndSearchText(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			owner := seedUsers(t, db, "note_fields_owner")[0]
+			deckID := seedDeck(t, db, owner)
+			notes := NewNoteStore(db)
+
+			n := noteOfKind(t, db, deckID, "basic")
+			if _, err := notes.Create(ctx, n, map[string]any{
+				"front": "<p>What is <strong>bold</strong>?</p>", "back": "Paris",
+			}); err != nil {
+				t.Fatalf("Create() error = %v", err)
+			}
+			values, err := ParseFieldValues(n.FieldsJSON)
+			if err != nil {
+				t.Fatalf("ParseFieldValues() error = %v", err)
+			}
+			if values["front"] != "<p>What is <strong>bold</strong>?</p>" || values["back"] != "Paris" {
+				t.Errorf("stored values = %+v, want the HTML keyed by field id", values)
+			}
+			if !strings.Contains(n.SearchText, "what is bold?") || !strings.Contains(n.SearchText, "paris") {
+				t.Errorf("search_text = %q, want the plain text of both fields, lowered", n.SearchText)
+			}
+		})
+	}
+}
+
 // TestNoteUpdateKeepsCardIDs is the acceptance case:
 // after the note's fields are updated, the existing cards and their ids stay unchanged.
 func TestNoteUpdateKeepsCardIDs(t *testing.T) {
@@ -109,8 +143,9 @@ func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 			notes := NewNoteStore(db)
 			cards := NewCardStore(db)
 
-			// Bidirectional card: two cards, the easiest way to expose an id change caused by \"delete the old, insert the new\".
-			n := &Note{DeckID: deckID, Kind: "basic_both"}
+			// Bidirectional card: two cards, the easiest way to expose an id change caused by "delete the old, insert the new".
+			n := noteOfKind(t, db, deckID, "basic_both")
+			noteTypeID := *n.NoteTypeID
 			created, err := notes.Create(ctx, n, map[string]any{"front": "q1", "back": "a1"})
 			if err != nil {
 				t.Fatalf("Create() error = %v", err)
@@ -121,7 +156,7 @@ func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 			}
 
 			// Change the fields (the content changes, the template does not).
-			n2 := &Note{ID: n.ID, Kind: "basic_both"}
+			n2 := &Note{ID: n.ID, DeckID: deckID, NoteTypeID: Ptr(noteTypeID)}
 			updated, err := notes.Update(ctx, n2, map[string]any{"front": "q1-edited", "back": "a1-edited"})
 			if err != nil {
 				t.Fatalf("Update() error = %v", err)
@@ -153,7 +188,7 @@ func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 			}
 
 			// Idempotent: updating with the same fields again leaves the ids unchanged.
-			if _, err := notes.Update(ctx, &Note{ID: n.ID, Kind: "basic_both"},
+			if _, err := notes.Update(ctx, &Note{ID: n.ID, DeckID: deckID, NoteTypeID: Ptr(noteTypeID)},
 				map[string]any{"front": "q1-edited", "back": "a1-edited"}); err != nil {
 				t.Fatalf("second Update() error = %v", err)
 			}
@@ -170,8 +205,8 @@ func TestNoteUpdateKeepsCardIDs(t *testing.T) {
 	}
 }
 
-// TestNoteUpdateGrowingClozeAddsCardsOnly covers a change of the template set caused by the kind:
-// a new ordinal only adds a card; existing cards and their ids are unaffected.
+// TestNoteUpdateGrowingClozeAddsCardsOnly covers a change of the generated card set:
+// a new cloze number only adds a card; existing cards and their ids are unaffected.
 func TestNoteUpdateGrowingClozeAddsCardsOnly(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -184,7 +219,8 @@ func TestNoteUpdateGrowingClozeAddsCardsOnly(t *testing.T) {
 			notes := NewNoteStore(db)
 			cards := NewCardStore(db)
 
-			n := &Note{DeckID: deckID, Kind: "cloze"}
+			n := noteOfKind(t, db, deckID, "cloze")
+			noteTypeID := *n.NoteTypeID
 			created, err := notes.Create(ctx, n, map[string]any{"text": "a {{c1::x}} b {{c2::y}}"})
 			if err != nil {
 				t.Fatalf("Create() error = %v", err)
@@ -195,7 +231,7 @@ func TestNoteUpdateGrowingClozeAddsCardsOnly(t *testing.T) {
 			}
 
 			// Add a third ordinal: cloze:1 / cloze:2 must keep their original ids, only cloze:3 is added.
-			if _, err := notes.Update(ctx, &Note{ID: n.ID, Kind: "cloze"},
+			if _, err := notes.Update(ctx, &Note{ID: n.ID, DeckID: deckID, NoteTypeID: Ptr(noteTypeID)},
 				map[string]any{"text": "a {{c1::x}} b {{c2::y}} c {{c3::z}}"}); err != nil {
 				t.Fatalf("Update() error = %v", err)
 			}
@@ -233,7 +269,8 @@ func TestNoteUpdateShrinkingClozeSoftDeletesCards(t *testing.T) {
 			notes := NewNoteStore(db)
 			cards := NewCardStore(db)
 
-			n := &Note{DeckID: deckID, Kind: "cloze"}
+			n := noteOfKind(t, db, deckID, "cloze")
+			noteTypeID := *n.NoteTypeID
 			created, err := notes.Create(ctx, n, map[string]any{"text": "a {{c1::x}} b {{c2::y}}"})
 			if err != nil {
 				t.Fatalf("Create() error = %v", err)
@@ -253,7 +290,7 @@ func TestNoteUpdateShrinkingClozeSoftDeletesCards(t *testing.T) {
 				{"bring c2 back", "a {{c1::x}} b {{c2::y}}", []string{"cloze:1", "cloze:2"}},
 			}
 			for _, step := range steps {
-				synced, err := notes.Update(ctx, &Note{ID: n.ID, Kind: "cloze"}, map[string]any{"text": step.text})
+				synced, err := notes.Update(ctx, &Note{ID: n.ID, DeckID: deckID, NoteTypeID: Ptr(noteTypeID)}, map[string]any{"text": step.text})
 				if err != nil {
 					t.Fatalf("%s: Update() error = %v", step.name, err)
 				}
@@ -300,7 +337,7 @@ func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 			notes := NewNoteStore(db)
 			cards := NewCardStore(db)
 
-			n := &Note{DeckID: deckID, Kind: "basic_both"}
+			n := noteOfKind(t, db, deckID, "basic_both")
 			created, err := notes.Create(ctx, n, map[string]any{"front": "q", "back": "a"})
 			if err != nil {
 				t.Fatalf("Create() error = %v", err)
@@ -367,7 +404,7 @@ func TestNoteSoftDeleteHidesCardsAndRestore(t *testing.T) {
 	}
 }
 
-// TestNoteCardTemplateUniqueness covers \"enforce (note_id, template) uniqueness\":
+// TestNoteCardTemplateUniqueness covers "enforce (note_id, template) uniqueness":
 // the database unique index is the backstop, and the pipeline itself produces no duplicate template either.
 func TestNoteCardTemplateUniqueness(t *testing.T) {
 	for driver, db := range testDatabases(t) {
@@ -380,7 +417,7 @@ func TestNoteCardTemplateUniqueness(t *testing.T) {
 			deckID := seedDeck(t, db, owner)
 			notes := NewNoteStore(db)
 
-			n := &Note{DeckID: deckID, Kind: "basic"}
+			n := noteOfKind(t, db, deckID, "basic")
 			if _, err := notes.Create(ctx, n, map[string]any{"front": "q", "back": "a"}); err != nil {
 				t.Fatalf("Create() error = %v", err)
 			}
@@ -393,7 +430,7 @@ func TestNoteCardTemplateUniqueness(t *testing.T) {
 
 			// Pipeline-side defence: a duplicate template within one note is rejected before the write.
 			err := db.Transaction(func(tx *gorm.DB) error {
-				wanted := []cardtype.Card{
+				wanted := []notetype.GeneratedCard{
 					{Template: "forward", Ordinal: 0},
 					{Template: "forward", Ordinal: 1},
 				}
@@ -422,7 +459,8 @@ func TestNoteCardTemplateUniqueness(t *testing.T) {
 	}
 }
 
-// TestNoteValidationRejectsInvalid covers the negative cases of the create path: missing deck, unknown kind, illegal fields.
+// TestNoteValidationRejectsInvalid covers the negative cases of the write path: missing deck, missing note type,
+// an unknown field name (named in the error) and an unknown stock kind.
 func TestNoteValidationRejectsInvalid(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -434,17 +472,18 @@ func TestNoteValidationRejectsInvalid(t *testing.T) {
 			deckID := seedDeck(t, db, owner)
 			notes := NewNoteStore(db)
 
-			if _, err := notes.Create(ctx, &Note{Kind: "basic"}, map[string]any{"front": "q", "back": "a"}); !errors.Is(err, ErrNoteDeckRequired) {
+			if _, err := notes.Create(ctx, &Note{NoteTypeID: Ptr(uint64(1))}, map[string]any{"front": "q", "back": "a"}); !errors.Is(err, ErrNoteDeckRequired) {
 				t.Errorf("Create(no deck) error = %v, want ErrNoteDeckRequired", err)
 			}
-			if _, err := notes.Create(ctx, &Note{DeckID: deckID}, map[string]any{"front": "q", "back": "a"}); !errors.Is(err, ErrNoteKindRequired) {
-				t.Errorf("Create(no kind) error = %v, want ErrNoteKindRequired", err)
+			if _, err := notes.Create(ctx, &Note{DeckID: deckID}, map[string]any{"front": "q", "back": "a"}); !errors.Is(err, ErrNoteTypeRequired) {
+				t.Errorf("Create(no note type) error = %v, want ErrNoteTypeRequired", err)
 			}
-			if _, err := notes.Create(ctx, &Note{DeckID: deckID, Kind: "nope"}, map[string]any{"front": "q"}); err == nil {
-				t.Error("Create(unknown kind) error = nil, want an error")
+			if _, err := NewNoteStore(db).EnsureStockNoteType(ctx, deckID, "nope"); err == nil {
+				t.Error("EnsureStockNoteType(unknown kind) error = nil, want an error")
 			}
-			if _, err := notes.Create(ctx, &Note{DeckID: deckID, Kind: "basic"}, map[string]any{"front": "q"}); err == nil {
-				t.Error("Create(missing back) error = nil, want a validation error")
+			if _, err := notes.Create(ctx, noteOfKind(t, db, deckID, "basic"), map[string]any{"front": "q", "nosuch": "x"}); err == nil ||
+				!strings.Contains(err.Error(), "nosuch") {
+				t.Errorf("Create(unknown field) error = %v, want an error naming the field", err)
 			}
 
 			// Illegal content must never reach the database.

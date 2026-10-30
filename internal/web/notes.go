@@ -9,8 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/auth"
-	"git.nite07.com/nite/engram/internal/cardtype"
-	"git.nite07.com/nite/engram/internal/render"
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -176,52 +175,67 @@ func (s *Server) noteNewRoute(c *gin.Context) {
 
 // previewCard is the rendered front and back of one card.
 type previewCard struct {
+	Front     CardFace
+	Back      CardFace
 	FrontHTML string
 	BackHTML  string
 }
 
-// buildPreview renders the front and back of every card with internal/render, for the SPA preview JSON.
-// It reports false when the kind is unknown or the fields do not produce renderable cards; the endpoint answers
-// those with one stable invalid_request code, so the cause is not carried along.
+// buildPreview renders the front and back of every card the given payload would produce.
+//
+// The preview shows unsaved content, so it resolves the stock note type from the kind instead of reading a stored one,
+// converts the payload exactly like the note write path, and generates the card list with the same generator. It reports
+// false when the kind is unknown or the payload cannot be rendered; the endpoint answers those with one stable
+// invalid_request code, so the cause is not carried along.
 func buildPreview(kind string, fields map[string]any) ([]previewCard, bool) {
-	t, ok := cardtype.Lookup(kind)
+	stock, ok := notetype.EngramStockByKind(kind)
 	if !ok {
 		return nil, false
 	}
-	cards, err := cardtype.Cards(cardtype.Note{Kind: kind, Fields: fields})
+	cfg := stock.Config
+	values, err := store.PayloadFieldValues(cfg, fields)
 	if err != nil {
 		return nil, false
 	}
-	out := make([]previewCard, 0, len(cards))
-	for _, card := range cards {
-		front, err := t.Render(card, cardtype.SideFront)
+	data := notetype.RenderData{Fields: values, TypeName: stock.Name}
+	generated, err := notetype.GenerateCards(cfg, data)
+	if err != nil {
+		return nil, false
+	}
+	faces := &cardFace{config: cfg, values: values}
+	out := make([]previewCard, 0, len(generated))
+	for _, want := range generated {
+		tmpl, clozeOrdinal, err := notetype.CardTemplate(cfg, want.Template)
 		if err != nil {
 			return nil, false
 		}
-		back, err := t.Render(card, cardtype.SideBack)
+		data.ClozeOrdinal = clozeOrdinal
+		data.CardName = tmpl.Name
+		front, err := notetype.Render(cfg, tmpl, notetype.SideFront, data)
 		if err != nil {
 			return nil, false
 		}
-		frontHTML, err := renderSide(front)
+		back, err := notetype.Render(cfg, tmpl, notetype.SideBack, data)
 		if err != nil {
 			return nil, false
 		}
-		backHTML, err := renderSide(back)
-		if err != nil {
-			return nil, false
-		}
-		out = append(out, previewCard{FrontHTML: frontHTML, BackHTML: backHTML})
+		faces.template = tmpl
+		faces.spec = tmpl.Answer
+		faces.ordinal = clozeOrdinal
+		faces.front = front
+		faces.back = back
+		out = append(out, previewCard{
+			Front:     CardFace{HTML: typeMarkerPattern.ReplaceAllString(front, ""), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideFront.String()},
+			Back:      CardFace{HTML: faces.staticBackHTML(), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideBack.String()},
+			FrontHTML: typeMarkerPattern.ReplaceAllString(front, ""),
+			BackHTML:  faces.staticBackHTML(),
+		})
 	}
 	return out, true
 }
 
-// renderSide renders one side's Markdown text into sanitized HTML, with a choice card's options appended after the body.
-// It serves the pages that show the options as text (note preview and public share); the review page draws them as answer
-// controls instead and therefore renders the body alone.
-func renderSide(side cardtype.RenderResult) (string, error) {
-	body := side.Body
-	if len(side.Options) > 0 {
-		body = strings.Join(append([]string{body}, side.Options...), "\n\n")
-	}
-	return render.RenderMarkdown(body)
+// staticBackHTML replaces the back side's type marker with the answer control's breakdown, and strips the marker when
+// there is no control. It is the no-answer form used by the preview.
+func (f *cardFace) staticBackHTML() string {
+	return backFaceHTML(f, nil, nil, nil)
 }

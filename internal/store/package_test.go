@@ -53,7 +53,7 @@ func seedPackageDeck(t *testing.T, db *gorm.DB, owner uint64) (deckID uint64, no
 		{"typed", map[string]any{"prompt": "spell", "answer": "ok"}, "", []string{"lang"}},
 	}
 	for _, s := range seeds {
-		n := Note{DeckID: d.ID, Kind: s.kind, TagsJSON: TagsJSON(s.tags), CreatedBy: Ptr(owner), Source: Ptr("manual")}
+		n := Note{DeckID: d.ID, NoteTypeID: Ptr(stockNoteTypeID(t, db, d.ID, s.kind)), TagsJSON: TagsJSON(s.tags), CreatedBy: Ptr(owner), Source: Ptr("manual")}
 		if s.ref != "" {
 			n.ExternalRef = Ptr(s.ref)
 		}
@@ -166,9 +166,9 @@ func TestExportMediaOffDeclaresHonestly(t *testing.T) {
 			owner := seedUsers(t, db, "pkg_media_owner")[0]
 			deckID := seedPresetDeck(t, db, owner)
 			// One note referencing media, so the "media off" path is really exercised.
-			n := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(owner)}
+			n := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deckID, "basic")), TagsJSON: "[]", CreatedBy: Ptr(owner)}
 			if _, err := NewNoteStore(db).Create(context.Background(), &n, map[string]any{
-				"front": "img?", "back": "media/0000000000000000000000000000000000000000000000000000000000000000.png",
+				"front": "img?", "back": `<img src="0000000000000000000000000000000000000000000000000000000000000000.png">`,
 			}); err != nil {
 				t.Fatalf("create note: %v", err)
 			}

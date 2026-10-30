@@ -22,8 +22,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"git.nite07.com/nite/engram/internal/cardtype"
 	"git.nite07.com/nite/engram/internal/mediatype"
+	"git.nite07.com/nite/engram/internal/notetype"
 )
 
 // Deck package import.
@@ -333,7 +333,7 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	// An unknown kind must error and be listed entry by entry (silently dropping it would make the user think the import succeeded while cards are missing).
 	var unknown []string
 	for i := range pkg.Notes {
-		if _, ok := cardtype.Lookup(pkg.Notes[i].Kind); !ok {
+		if _, ok := notetype.EngramStockByKind(pkg.Notes[i].Kind); !ok {
 			unknown = append(unknown, fmt.Sprintf("notes[%d] kind=%s", i, pkg.Notes[i].Kind))
 		}
 	}
@@ -651,7 +651,11 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 				continue
 			}
 			// update: keep the card rows and everyone's progress, change the content only (NoteStore.SaveInTx keeps the ids unchanged).
-			n := Note{ID: existing.ID, Kind: pn.Kind, TagsJSON: TagsJSON(pn.Tags)}
+			noteType, err := ensureStockNoteType(ctx, tx, deckID, pn.Kind)
+			if err != nil {
+				return fmt.Errorf("import note %d: %w", i, err)
+			}
+			n := Note{ID: existing.ID, DeckID: deckID, NoteTypeID: Ptr(noteType.ID), TagsJSON: TagsJSON(pn.Tags)}
 			if _, err := notesStore.SaveInTx(ctx, tx, &n, pn.Fields); err != nil {
 				return fmt.Errorf("import note %d: %w", i, asPackageMediaForbidden(err))
 			}
@@ -660,7 +664,11 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 			continue
 		}
 
-		n := Note{DeckID: deckID, Kind: pn.Kind, TagsJSON: TagsJSON(pn.Tags), CreatedBy: Ptr(actorUserID), Source: Ptr("import")}
+		noteType, err := ensureStockNoteType(ctx, tx, deckID, pn.Kind)
+		if err != nil {
+			return fmt.Errorf("import note %d: %w", i, err)
+		}
+		n := Note{DeckID: deckID, NoteTypeID: Ptr(noteType.ID), TagsJSON: TagsJSON(pn.Tags), CreatedBy: Ptr(actorUserID), Source: Ptr("import")}
 		if pn.ExternalRef != "" {
 			n.ExternalRef = Ptr(pn.ExternalRef)
 		}
@@ -915,7 +923,15 @@ func (s *DeckStore) existingNoteIndex(ctx context.Context, tx *gorm.DB, deckID u
 		if n.ExternalRef != nil && *n.ExternalRef != "" {
 			byRef[*n.ExternalRef] = n
 		}
-		byFP[NoteFingerprint(n.Kind, n.FieldsJSON)] = n
+		if kind := kindOfNote(ctx, tx, n); kind != "" {
+			// The fingerprint compares the format-1 package form of the content, so a note exported from this deck and
+			// imported again matches the row it came from.
+			raw, err := json.Marshal(LegacyNoteFields(kind, NoteFieldValues(n.FieldsJSON)))
+			if err != nil {
+				return nil, nil, fmt.Errorf("encode existing fields of note %d: %w", n.ID, err)
+			}
+			byFP[NoteFingerprint(kind, string(raw))] = n
+		}
 	}
 	return byRef, byFP, nil
 }

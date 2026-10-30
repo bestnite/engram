@@ -52,10 +52,9 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | Package | Responsibility |
 |---|---|
 | `internal/config` | Startup configuration. Precedence is environment variable, then the `settings` table, then the built-in default; every accessor can report which source won. |
-| `internal/store` | GORM models (`AllModels` in `models.go`) and the concrete stores that wrap database access, including deck package import and export. `MediaStore.Put` is the single content-addressed media write (`<sha256[:2]>/<sha256>.<ext>`, temp file + rename, dedup-hit rules) used by both upload and import. |
-| `internal/cardtype` | The card type registry and one file per card type. Field names match `schema/note-import.schema.json`. |
-| `internal/answer` | The answer-control registry and one file per control: the input markup a card face shows at its type placeholder, the result breakdown on the back, the four field-value parses, and the grading rules with their `grade_detail_json` shape. A control declares the roles its answer spec binds and registers itself, so the registry needs no change when one is added. |
-| `internal/notetype` | The note type data model, validation and Anki's six stock definitions, plus the template engine that renders one side of a card (template syntax and special fields, the built-in filters, the cloze and image-occlusion markup) card generation (which cards a note requires and which stored cards are now empty), the audio/TTS, LaTeX and plain-text transforms, and type-in answer comparison. |
+| `internal/store` | GORM models (`AllModels` in `models.go`) and the concrete stores that wrap database access, including deck package import and export. `MediaStore.Put` is the single content-addressed media write (`<sha256[:2]>/<sha256>.<ext>`, temp file + rename, dedup-hit rules) used by both upload and import. `NoteStore` is the one note write path: it resolves the note type, converts the payload field map to field-id keyed HTML, derives `search_text` from the searchable fields' plain text, regenerates the note's cards, and rebuilds the media mapping. `migrate_markdown.go` holds the temporary goldmark step the note type migration needs. |
+| `internal/answer` | The answer-control registry and one file per control: the input markup a card face shows at its type placeholder, the result breakdown on the back, the four field-value parses, and the grading rules with their `grade_detail_json` shape. A control declares the roles its answer spec binds and registers itself, so the registry needs no change when one is added. It also owns the score-to-rating mapping a preset stores. |
+| `internal/notetype` | The note type data model, validation and the definitions of Anki's stock note types and engram's ten stock note types, plus the template engine that renders one side of a card (template syntax and special fields, the built-in filters, the cloze and image-occlusion markup), card generation (which cards a note requires and which stored cards are now empty), the audio/TTS, LaTeX and plain-text transforms, and type-in answer comparison. |
 | `internal/reviewday` | Leaf package with the single definition of a user's review day: timezone resolution (unknown names fall back to UTC), the day cutoff hour, the review-day boundaries, and the `YYYY-MM-DD` day string written to `reviews.review_day`. Grading, burying, budgets, statistics, reminders and digests all read it. |
 | `internal/schedule` | The go-fsrs wrapper: card state machine, queue builder, daily budgets, review submission, and undo. |
 | `internal/auth` | Local accounts, password hashing, sessions, CSRF, TOTP, OIDC, API keys, roles, and deck access checks. |
@@ -64,10 +63,9 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/web` | The gin router: security headers, session and locale middleware, the session-and-CSRF JSON endpoints the SPA uses, the admin API, media proxying, the SPA shell, and the not-found fallback. It mounts `internal/api` and `internal/mcp`. |
 | `internal/media` | Local media storage around `store.MediaStore.Put`: streaming and validating uploads, serving files, and reclaiming orphans. |
 | `internal/mediatype` | Leaf package with the media type detection, the mime-to-extension table and the allowlist shared by `internal/media` and `internal/store`. |
-| `internal/render` | Markdown to HTML (goldmark), including the `{{name:body|key=value}}` shortcode form, followed by allowlist sanitising (bluemonday). Card content and mail bodies share the pipeline; the mail allowlist additionally permits headings, and the mail renderer turns a shortcode into plain text instead of an element. |
-| `internal/texmath` | The single rule for locating TeX math, shared by `internal/render` and `internal/cardtype`. |
+| `internal/texmath` | The single rule for locating TeX math, shared by `internal/mail` and the store's migration Markdown step. |
 | `internal/i18n` | Server-side translation catalogs (`internal/i18n/locales/*.yaml`), request language resolution, and the localiser placed in the request context. |
-| `internal/mail` | Mail templates (built-in defaults and admin overrides share one Markdown renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. `Mailer` is the single send path: it checks SMTP and the recipient's preference, resolves the site name and template, adds the footer and the unsubscribe link, and enqueues. The web layer builds the process's one `Mailer` and the reminder and digest workers receive it from `cmd/engram`. |
+| `internal/mail` | Mail templates (built-in defaults and admin overrides share one renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. `Mailer` is the single send path: it checks SMTP and the recipient's preference, resolves the site name and template, adds the footer and the unsubscribe link, and enqueues. The web layer builds the process's one `Mailer` and the reminder and digest workers receive it from `cmd/engram`. Its Markdown step (`markdown.go`) is a private, temporary copy of the old shared pipeline: no sanitising, and a shortcode degrades to its visible text. It is replaced when administrators write mail templates as HTML. |
 | `internal/reminder` | Worker that emails users who have due cards. |
 | `internal/digest` | Worker that sends the weekly digest email. |
 | `internal/retention` | Worker that deletes expired sessions, used or expired action tokens, expired invites, and old login fingerprints. |
@@ -82,20 +80,18 @@ Imports between internal packages, as reported by `go list`:
 
 ```
 cmd/engram → web, api, mcp, auth, config, digest, i18n, jobs, mail, media, reminder, retention, store
-web        → api, mcp, auth, cardtype, config, i18n, jobs, mail, media, mediatype, reminder, render, reviewday, schedule, store
+web        → api, mcp, auth, config, i18n, jobs, mail, media, mediatype, notetype, reminder, reviewday, schedule, store
 mcp        → api, store
-api        → auth, cardtype, media, reviewday, schedule, store, urlfetch
+api        → auth, media, notetype, reviewday, schedule, store, urlfetch
 digest     → i18n, mail, reminder, reviewday, schedule, store, worker
 reminder   → i18n, mail, reviewday, schedule, store, worker
 jobs       → schedule, store
-mail       → config, render, store, worker
+mail       → config, store, texmath, worker
 schedule   → reviewday, store
 auth       → store
 media      → mediatype, store
-store      → cardtype, mediatype, notetype, reviewday
-cardtype   → texmath
+store      → answer, mediatype, notetype, reviewday, texmath
 answer     → notetype
-render     → texmath
 retention  → worker
 config, i18n, mediatype, notetype, reviewday, texmath, urlfetch, worker, pgtest → (no internal imports)
 ```
@@ -119,12 +115,32 @@ change.
   expiry)`; its key lives in the encrypted settings channel under `frame_media_key` and is
   created on first use. Each request checks the signature, the expiry, the token user's current
   status, the user's current read access to the token's deck and the media readability rule, and
-  every failure is the same bare 404. Tokens live six hours. A card-face endpoint that is asked
-  for frame output with the request header `X-Engram-Frame: 1` renders its front and back HTML
-  with relative media names; the response also carries `media_base` (`/fm/<token>/`), which the
-  frame document sets as its `<base href>`. A request without that header keeps the absolute
-  `/media/<sha256>` URLs, because the SPA has no base element to resolve a relative name against.
-  Choice options stay absolute in both cases: they remain in the parent page in this phase.
+  every failure is the same bare 404. Tokens live six hours. A field stores media by deck-scoped
+  file name (`<sha256>.<ext>`), which is what the frame resolves against `media_base`
+  (`/fm/<token>/`), the document's `<base href>`. A card-face response to a request without the
+  `X-Engram-Frame: 1` header rewrites those names into the absolute `/media/<sha256>` URLs the
+  SPA needs, because the SPA has no base element. Choice options are always absolute: they remain
+  in the parent page in this phase.
+- **Card view.** A card-face response carries one `{html, css, body_class, side, media_base}`
+  object per side (`front` and `back`). The HTML is the note type's template rendered against the
+  note's field values. The back side substitutes the answer control's breakdown for the
+  `[[type:...]]` marker once a graded answer result exists; the front side has the marker
+  stripped, because the input markup is the frame runtime's job. Until the SPA reads the two
+  objects, `front_html`/`back_html` repeat their HTML and `options_html`, `option_order` and
+  `blanks` describe the answer controls the old review page draws itself. Those flat fields, and
+  the card-kind vocabulary the REST/MCP payloads still use (`kind` in a note, the transitional
+  description catalog in `internal/api/card_catalog.go`), are removed when the note-type payload
+  and the frame runtime land.
+- **Note write and review.** `NoteStore.Save` resolves the note type (deck and note type id),
+  rejects a field name the config does not declare, converts the payload values to HTML keyed by
+  field id, recomputes `search_text` from the plain text of every field not marked
+  `exclude_from_search`, regenerates the cards with `notetype.GenerateCards` (existing cards keep
+  their rows and progress; a card the note no longer generates is soft-deleted), and rebuilds the
+  `media_notes` mapping from the `src`, `[sound:]` and CSS `url()` references of the field HTML.
+  Submitting a review resolves the card's template answer spec: a grading control decodes the
+  submitted answer, grades it, and maps its score through the preset's mapping; a template with no
+  spec, or the self-assessed short answer control, takes the four-grade self-assessment. A
+  self-graded template refuses a machine answer, and a stale `expected_version` is `409`.
 - **REST clients.** `/api/v1` (`internal/api`) accepts either the session channel or a bearer API
   key. An API key carries scopes, and each route declares the scope it requires.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on
@@ -158,15 +174,21 @@ change.
   version it read and increments it, so a stale writer gets `ErrVersionConflict` instead of
   overwriting a newer edit. A note type still used by a note that is not soft-deleted cannot be
   deleted (`ErrNoteTypeInUse`).
-- **Notes and note types.** `notes` carries `note_type_id`, `source_url` and `extra_json`.
-  Migration 0012 creates one engram stock note type per (deck, kind) and rewrites every note's
-  field values from Markdown to HTML, moving `source_url` and `extra` to their columns. Migration
-  0013 then makes `note_type_id` NOT NULL and drops `notes.kind`. The Go model still carries
-  `Kind` until the note write path moves to note types; AutoMigrate masks that column once 0013
-  has run, so it does not add the dropped column back. `cmd/engram check-migration` runs the
-  same read-only pre-flight check migration 0012 enforces and reports blocking and warning notes
-  without writing.
-  `source_url` and `extra_json` are nullable TEXT.
+- **Notes and note types.** `notes` carries `note_type_id`, `fields_json`, `source_url` and
+  `extra_json`, and no kind column: every read and write path works through the note type.
+  `fields_json` maps a field id to that field's HTML value, and `search_text` is derived from the
+  plain text of the fields not marked `exclude_from_search`. Migration 0012 creates one engram
+  stock note type per (deck, kind) and rewrites every note's field values from Markdown to HTML,
+  moving `source_url` and `extra` to their columns; migration 0013 makes `note_type_id` NOT NULL
+  and drops `notes.kind`. The Go model keeps `note_type_id` nullable because AutoMigrate adds the
+  column before the versioned migration runs, and the write path rejects a note that names no
+  type. `cmd/engram check-migration` runs the same read-only pre-flight check migration 0012
+  enforces and reports blocking and warning notes without writing. `source_url` and `extra_json`
+  are nullable TEXT.
+- **Field values are HTML.** A field value is an HTML string; nothing else is stored. The
+  transitional REST/MCP payloads still send the old typed shapes (a string array for options, a
+  boolean, a number) and still receive them back, and the format-1 deck package writes them; the
+  store converts between the two (`legacy_fields.go`) for as long as those shapes exist.
 - **Cards and subdecks.** `cards.deck_path` is a nullable TEXT path relative to the imported root
   deck (for example `Lesson 1::Verbs`); a card without it sits directly in the note's deck. A
   subdeck is stored only as this path and never as a deck row.
@@ -174,7 +196,10 @@ change.
   `sha256`, so a field or template can refer to media by name the way Anki does. `(deck_id, name)`
   is the primary key, which puts the uniqueness in the schema, and names are stored
   NFC-normalised. An upsert (`clause.OnConflict`) repoints a name to new content instead of adding
-  a row.
+  a row. A field refers to media in three forms, and the note write path scans exactly those: an
+  `src` attribute, a `[sound:name]` tag, and a CSS `url(name)`. A name that already carries the
+  sha (`<sha256>.<ext>`, the form the migration writes) needs no lookup; any other name resolves
+  through `media_names` for the note's deck.
 - **Note type media references.** `media_note_types` records which media names a note type's
   templates and CSS refer to, keyed by `(note_type_id, media_name)`. The set is derived data,
   replaced as a whole, and exists for read access checks and media garbage collection.

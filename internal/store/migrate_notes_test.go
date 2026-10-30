@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -14,9 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/answer"
-	"git.nite07.com/nite/engram/internal/cardtype"
 	"git.nite07.com/nite/engram/internal/notetype"
-	"git.nite07.com/nite/engram/internal/render"
 )
 
 // openMigrationDB opens a fresh SQLite database for one migration case.
@@ -44,16 +43,70 @@ type seededNote struct {
 	Fields map[string]any
 }
 
-// seedOldNote writes one note through the old kind-based write path, so its cards are exactly the ones the old model
-// would have produced.
+// seedOldNote writes one note the way the pre-migration model wrote it: notes.kind carries the kind, the field values
+// are the old typed JSON, and there is no note type. The note row is inserted directly, because the current model no
+// longer has a kind column.
 func seedOldNote(t *testing.T, db *gorm.DB, deckID uint64, kind string, fields map[string]any) seededNote {
 	t.Helper()
-	note := Note{DeckID: deckID, Kind: kind}
-	cards, err := NewNoteStore(db).Save(context.Background(), &note, fields)
+	requireLegacyKindColumn(t, db)
+	raw, err := json.Marshal(fields)
 	if err != nil {
-		t.Fatalf("seed note kind %q: %v", kind, err)
+		t.Fatalf("encode old fields for kind %q: %v", kind, err)
+	}
+	now := time.Now().UTC()
+	note := Note{DeckID: deckID, FieldsJSON: string(raw), TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+	note.PublicID = NewPublicID()
+	if err := db.Exec(
+		`INSERT INTO notes (public_id, deck_id, kind, fields_json, search_text, tags_json, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		note.PublicID, deckID, kind, note.FieldsJSON, "", note.TagsJSON, now, now,
+	).Error; err != nil {
+		t.Fatalf("insert old note kind %q: %v", kind, err)
+	}
+	if err := db.Model(&Note{}).Where("public_id = ?", note.PublicID).Pluck("id", &note.ID).Error; err != nil || note.ID == 0 {
+		t.Fatalf("read back old note kind %q: %v", kind, err)
+	}
+	cards := make([]Card, 0, 2)
+	for ordinal, template := range legacyCardTemplates(kind, fields) {
+		card := Card{NoteID: note.ID, Template: template, Ordinal: ordinal, CreatedAt: now}
+		if err := db.Create(&card).Error; err != nil {
+			t.Fatalf("insert old card %q of kind %q: %v", template, kind, err)
+		}
+		cards = append(cards, card)
 	}
 	return seededNote{Kind: kind, ID: note.ID, Cards: cards, Fields: fields}
+}
+
+// requireLegacyKindColumn adds notes.kind on a database built by the current models: the migration under test reads
+// that column, and AutoMigrate no longer creates it.
+func requireLegacyKindColumn(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	if db.Migrator().HasColumn("notes", "kind") {
+		return
+	}
+	if err := db.Exec(`ALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT ''`).Error; err != nil {
+		t.Fatalf("add legacy notes.kind column: %v", err)
+	}
+}
+
+// legacyCardTemplates returns the card templates the old model generated for a kind, in ordinal order.
+func legacyCardTemplates(kind string, fields map[string]any) []string {
+	switch kind {
+	case "basic_both":
+		return []string{"forward", "reverse"}
+	case "cloze":
+		text, _ := fields["text"].(string)
+		var templates []string
+		for number := 1; number <= 499; number++ {
+			marker := "{{c" + strconv.Itoa(number) + "::"
+			if strings.Contains(text, marker) {
+				templates = append(templates, "cloze:"+strconv.Itoa(number))
+			}
+		}
+		return templates
+	default:
+		return []string{"forward"}
+	}
 }
 
 // assertBlocksMigration runs Sync and expects migration 0012 to refuse because of a blocking note.
@@ -526,13 +579,12 @@ func TestMigrationConvertsNotesToNoteTypes(t *testing.T) {
 	}
 }
 
-// TestMigrationPreservesCardPlainText compares the old card faces with the new engine's faces for every seeded card.
-// The comparison fixture has no audio, TTS or media: those forms change the visible text by design (an Anki sound tag
-// is not shown, a TTS directive is spoken), and their conversion is asserted exactly by the main case.
+// TestMigrationPreservesCardPlainText pins the plain text of every seeded card after the conversion.
 //
-// Two presentation differences are normalised and named, because they are not content:
-//   - a cloze used to display "|" as " / " between accepted wordings; the new model keeps "|" as ordinary text;
-//   - the old list back wrote "- " or "N. " in front of each item; the new answer control renders a <ul>/<ol> instead.
+// The expectations are the old engine's output at the switch-over, frozen here: the old card type package is gone, so
+// the table is the only surviving reference for what the migrated content must still read as. The fixture has no audio,
+// TTS or media: those forms change the visible text by design (a sound tag is not shown, a TTS directive is spoken), and
+// their conversion is asserted exactly by the main case.
 func TestMigrationPreservesCardPlainText(t *testing.T) {
 	for driver, db := range migrationDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -574,32 +626,6 @@ func TestMigrationPreservesCardPlainText(t *testing.T) {
 				seedOldNote(t, db, deckID, "short_answer", map[string]any{
 					"prompt": "Why phases?", "reference": "The Sun lights half of the Moon.",
 				}),
-			}
-
-			// Old faces: the old card type's body through the old Markdown pipeline, keyed by the card's template so a
-			// two-template note keeps both cards' faces.
-			oldText := map[string]map[notetype.Side]string{}
-			for _, note := range notes {
-				cardType, ok := cardtype.Lookup(note.Kind)
-				if !ok {
-					t.Fatalf("old card type %q is not registered", note.Kind)
-				}
-				for _, card := range note.Cards {
-					key := note.Kind + "/" + card.Template
-					oldText[key] = map[notetype.Side]string{}
-					ct := cardtype.Card{Template: card.Template, Ordinal: card.Ordinal, Fields: note.Fields}
-					for _, side := range []notetype.Side{notetype.SideFront, notetype.SideBack} {
-						result, err := cardType.Render(ct, cardtype.Side(side))
-						if err != nil {
-							t.Fatalf("old render %q %s: %v", note.Kind, side, err)
-						}
-						html, err := render.RenderMarkdown(result.Body)
-						if err != nil {
-							t.Fatalf("old markdown %q %s: %v", note.Kind, side, err)
-						}
-						oldText[key][side] = notetype.PlainText(html)
-					}
-				}
 			}
 
 			if _, err := Sync(ctx, db, BuiltinMigrations); err != nil {
@@ -655,16 +681,42 @@ func TestMigrationPreservesCardPlainText(t *testing.T) {
 							}
 						}
 						got := notetype.PlainText(face)
-						want := oldText[note.Kind+"/"+card.Template][side]
-						want, got = normalizePlainText(note.Kind, side, want, got)
+						want := plainTextExpectations[note.Kind+"/"+card.Template+"/"+side.String()]
 						if got != want {
-							t.Errorf("kind %q card %q %s plain text changed:\n old: %q\n new: %q", note.Kind, card.Template, side, want, got)
+							t.Errorf("kind %q card %q %s plain text changed:\n want %q\n got  %q", note.Kind, card.Template, side, want, got)
 						}
 					}
 				}
 			}
 		})
 	}
+}
+
+// plainTextExpectations is the plain text of every card face the migration fixture produces, keyed by
+// "<kind>/<template>/<side>". See the test comment for why the values are frozen here.
+var plainTextExpectations = map[string]string{
+	"basic/forward/front":         "What is bold?",
+	"basic/forward/back":          `An answer with \(x^2\).`,
+	"basic_both/forward/front":    "der Hund",
+	"basic_both/forward/back":     "the dog",
+	"basic_both/reverse/front":    "the dog",
+	"basic_both/reverse/back":     "der Hund",
+	"cloze/cloze:1/front":         "[hint] is in France.",
+	"cloze/cloze:1/back":          "Paris|City is in France.",
+	"typed/forward/front":         "Which element is Au?",
+	"typed/forward/back":          "gold / aurum",
+	"numeric/forward/front":       "Standard gravity?",
+	"numeric/forward/back":        "9.80665 m/s²",
+	"choice_single/forward/front": "Closest planet?",
+	"choice_single/forward/back":  "Mercury",
+	"choice_multi/forward/front":  "Which are prime?",
+	"choice_multi/forward/back":   "2, 5",
+	"true_false/forward/front":    "Water boils at 100 °C.",
+	"true_false/forward/back":     "false",
+	"list/forward/front":          "Name a primary colour.",
+	"list/forward/back":           "red",
+	"short_answer/forward/front":  "Why phases?",
+	"short_answer/forward/back":   "The Sun lights half of the Moon.",
 }
 
 // configFieldPlainText reports whether the named field carries the plain_text flag.
@@ -756,18 +808,4 @@ func renderAnswerControl(spec notetype.AnswerSpec, face string, fields map[strin
 	return answer.RenderSide(control, answer.RenderContext{
 		Marker: marker, Side: notetype.SideBack, Bindings: bindings, ClozeOrdinal: clozeOrdinal,
 	}, face)
-}
-
-// normalizePlainText applies the two named presentation normalisations described on the test.
-func normalizePlainText(kind string, side notetype.Side, want, got string) (string, string) {
-	if kind == "cloze" && side == notetype.SideBack {
-		// The old back listed accepted wordings separated by " / "; the new model keeps the pipe.
-		got = strings.ReplaceAll(got, "|", " / ")
-	}
-	if kind == "list" && side == notetype.SideBack {
-		// The old back synthesised a bullet/number; the new control renders a list element.
-		want = strings.TrimPrefix(want, "- ")
-		want = regexp.MustCompile(`^\d+\. `).ReplaceAllString(want, "")
-	}
-	return want, got
 }

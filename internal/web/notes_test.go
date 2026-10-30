@@ -118,7 +118,7 @@ func seedDeck(t *testing.T, db *gorm.DB, ownerID uint64, name string) *store.Dec
 // seedBasic creates a basic note; tags are written to tags_json when non-empty.
 func seedBasic(t *testing.T, db *gorm.DB, deckID uint64, front, back string, tags ...string) *store.Note {
 	t.Helper()
-	note := &store.Note{DeckID: deckID, Kind: "basic"}
+	note := &store.Note{DeckID: deckID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deckID, "basic"))}
 	if len(tags) > 0 {
 		raw, _ := jsonMarshalStrings(tags)
 		note.TagsJSON = raw

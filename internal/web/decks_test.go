@@ -26,7 +26,7 @@ func TestDeckListRedirectsAnonymousToLogin(t *testing.T) {
 // Shared by several test files related to decks and card settings.
 func seedCardRow(t *testing.T, db *gorm.DB, deckID uint64, front string, createdAt time.Time) uint64 {
 	t.Helper()
-	note := store.Note{DeckID: deckID, Kind: "basic",
+	note := store.Note{DeckID: deckID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deckID, "basic")),
 		FieldsJSON: `{"front":"` + front + `","back":"b"}`, TagsJSON: "[]",
 		CreatedAt: createdAt, UpdatedAt: createdAt}
 	if err := db.Create(&note).Error; err != nil {

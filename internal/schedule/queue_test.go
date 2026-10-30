@@ -44,7 +44,7 @@ func seedDeck(t *testing.T, db *gorm.DB, now time.Time) uint64 {
 // seedCard creates a basic note and one of its cards, returning the card id.
 func seedCard(t *testing.T, db *gorm.DB, deckID uint64, template string, createdAt time.Time) uint64 {
 	t.Helper()
-	n := store.Note{DeckID: deckID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: createdAt, UpdatedAt: createdAt}
+	n := store.Note{DeckID: deckID, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: createdAt, UpdatedAt: createdAt}
 	if err := db.Create(&n).Error; err != nil {
 		t.Fatalf("create note: %v", err)
 	}

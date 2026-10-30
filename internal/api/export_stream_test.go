@@ -69,7 +69,7 @@ func seedBulkNotes(t *testing.T, env *testEnv, deckID uint64, n int) {
 	for i := 0; i < n; i++ {
 		notes = append(notes, store.Note{
 			DeckID:     deckID,
-			Kind:       "basic",
+			NoteTypeID: store.Ptr(stockNoteTypeID(t, env.db, deckID, "basic")),
 			FieldsJSON: fmt.Sprintf(`{"front":"f%d","back":"%s"}`, i, back),
 			TagsJSON:   "[]",
 			CreatedAt:  now,
@@ -145,7 +145,7 @@ func TestExportFormatsAndProgressColumns(t *testing.T) {
 	router := env.router()
 
 	now := time.Now().UTC()
-	n := store.Note{DeckID: deck.ID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+	n := store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, env.db, deck.ID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 	if err := env.db.Create(&n).Error; err != nil {
 		t.Fatalf("create note: %v", err)
 	}

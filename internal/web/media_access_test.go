@@ -66,7 +66,7 @@ func uploadToDeckAndSha(t *testing.T, srv *Server, deckPublicID string, cookies 
 // Going through the write path is required: the media_notes mapping is created by the write methods, and inserting the note directly would bypass the logic under test.
 func noteBy(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, fields map[string]any) *store.Note {
 	t.Helper()
-	note := &store.Note{DeckID: deckID, Kind: "basic", CreatedBy: author}
+	note := &store.Note{DeckID: deckID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deckID, "basic")), CreatedBy: author}
 	if _, err := store.NewNoteStore(db).Create(context.Background(), note, fields); err != nil {
 		t.Fatalf("create note: %v", err)
 	}
@@ -77,7 +77,7 @@ func noteBy(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, fields map
 func referenceMediaBy(t *testing.T, db *gorm.DB, deckID uint64, author *uint64, mediaSha string) *store.Note {
 	t.Helper()
 	return noteBy(t, db, deckID, author, map[string]any{
-		"front": fmt.Sprintf("![](/media/%s)", mediaSha),
+		"front": fmt.Sprintf(`<img src="%s.png">`, mediaSha),
 		"back":  "x",
 	})
 }

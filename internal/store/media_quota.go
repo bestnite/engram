@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"regexp"
 
 	"gorm.io/gorm"
 )
@@ -29,14 +28,6 @@ type MediaUsage struct {
 	Sha256 map[string]bool
 }
 
-// mediaRefByURLRE matches the media URL `/media/<sha256>` written by the editor (it may appear several times in one field).
-// It is bounded on both sides by non-hex characters so that a longer hex string is not cut to 64 characters and matched by mistake.
-var mediaRefByURLRE = regexp.MustCompile(`(?:^|[^0-9a-f])/media/([0-9a-f]{64})(?:[^0-9a-f]|$)`)
-
-// mediaRefByShaRE matches the deck-package form `media/<sha256>.<ext>`; it is bounded on both sides by non-hex characters
-// so a longer string is not mistaken for a sha256.
-var mediaRefByShaRE = regexp.MustCompile(`(?:^|[^0-9a-f])media/([0-9a-f]{64})\.([A-Za-z0-9]+)`)
-
 // UserMediaUsage computes the user's used media (rule in the MediaUsage comment). Returns empty usage when db is nil.
 // Both sets are subqueries over indexes, so the cost is independent of the user's total note count.
 func UserMediaUsage(ctx context.Context, db *gorm.DB, userID uint64) (MediaUsage, error) {
@@ -61,25 +52,4 @@ func UserMediaUsage(ctx context.Context, db *gorm.DB, userID uint64) (MediaUsage
 		usage.Bytes += m.Bytes
 	}
 	return usage, nil
-}
-
-// scanMediaRefs recursively scans note fields and collects the media sha256 references in them (both URL form and in-package form are recognized).
-func scanMediaRefs(v any, shas map[string]bool) {
-	switch x := v.(type) {
-	case string:
-		for _, m := range mediaRefByURLRE.FindAllStringSubmatch(x, -1) {
-			shas[m[1]] = true
-		}
-		for _, m := range mediaRefByShaRE.FindAllStringSubmatch(x, -1) {
-			shas[m[1]] = true
-		}
-	case map[string]any:
-		for _, child := range x {
-			scanMediaRefs(child, shas)
-		}
-	case []any:
-		for _, child := range x {
-			scanMediaRefs(child, shas)
-		}
-	}
 }

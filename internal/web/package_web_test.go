@@ -122,8 +122,8 @@ func seedMediaDeck(t *testing.T, srv *Server, db *gorm.DB, ownerID uint64, name 
 	if err != nil {
 		t.Fatalf("SaveBytes: %v", err)
 	}
-	if _, err := store.NewNoteStore(db).Create(context.Background(), &store.Note{DeckID: deck.ID, Kind: "basic"},
-		map[string]any{"front": "img?", "back": "media/" + m.Sha256 + ".png"}); err != nil {
+	if _, err := store.NewNoteStore(db).Create(context.Background(), &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deck.ID, "basic"))},
+		map[string]any{"front": "img?", "back": `<img src="` + m.Sha256 + `.png">`}); err != nil {
 		t.Fatalf("create media note: %v", err)
 	}
 	return deck, raw

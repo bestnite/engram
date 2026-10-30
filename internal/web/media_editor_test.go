@@ -94,8 +94,10 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 		t.Fatalf("GET %s Content-Type = %q, want image/png", saved.URL, ct)
 	}
 
-	// 3) Insert a Markdown image reference into the front field; the SPA preview endpoint should render an <img>.
-	ref := "![](" + saved.URL + ")"
+	// 3) Insert a media reference into the front field. A field value is HTML, and media is referenced by its deck-scoped
+	// file name (the upload URL's sha with the stored extension).
+	name := strings.TrimPrefix(saved.URL, "/media/")
+	ref := `<img src="` + name + `">`
 	prev := postJSONWithCSRF(t, srv, "/api/v1/decks/"+deck.PublicID+"/notes/preview", map[string]any{
 		"kind":   "basic",
 		"fields": map[string]any{"front": "see " + ref, "back": "back"},
@@ -111,13 +113,19 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	if err := json.Unmarshal(prev.Body.Bytes(), &prevBody); err != nil {
 		t.Fatalf("decode preview: %v", err)
 	}
-	if len(prevBody.Cards) == 0 || !strings.Contains(prevBody.Cards[0].FrontHTML, `<img src="`+saved.URL+`"`) {
-		t.Fatalf("preview did not render the uploaded image: %s", snippet(prev.Body.String()))
+	if len(prevBody.Cards) == 0 || !strings.Contains(prevBody.Cards[0].FrontHTML, `<img src="`+saved.URL+`">`) {
+		t.Fatalf("preview did not resolve the uploaded image to its absolute URL: %s", snippet(prev.Body.String()))
 	}
 
 	// 4) Save the reference (SPA card updates go through PATCH /api/v1/notes/:id).
-	save := jsonRequest(t, srv, http.MethodPatch, "/api/v1/notes/"+note.PublicID,
-		`{"kind":"basic","fields":{"front":"see `+ref+`","back":"back"}}`, cookies, csrf)
+	saveBody, err := json.Marshal(map[string]any{
+		"kind":   "basic",
+		"fields": map[string]any{"front": "see " + ref, "back": "back"},
+	})
+	if err != nil {
+		t.Fatalf("encode save body: %v", err)
+	}
+	save := jsonRequest(t, srv, http.MethodPatch, "/api/v1/notes/"+note.PublicID, string(saveBody), cookies, csrf)
 	if save.Code != http.StatusOK {
 		t.Fatalf("save status = %d, want 200 (body %s)", save.Code, save.Body.String())
 	}
@@ -145,7 +153,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	if !strings.Contains(body, saved.URL) {
 		t.Errorf("reloaded preview lost the /media reference: %s", snippet(body))
 	}
-	if !strings.Contains(body, `<img src="`+saved.URL+`"`) {
+	if !strings.Contains(body, `<img src="`+saved.URL+`">`) {
 		t.Errorf("reloaded preview lost the <img>: %s", snippet(body))
 	}
 	if strings.Contains(body, "data:image") {
@@ -161,8 +169,8 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse fields: %v", err)
 	}
-	if front, _ := fields["front"].(string); !strings.Contains(front, saved.URL) {
-		t.Errorf("stored front %q does not contain the reference %q", front, saved.URL)
+	if front, _ := fields["front"].(string); !strings.Contains(front, name) {
+		t.Errorf("stored front %q does not contain the media name %q", front, name)
 	}
 }
 

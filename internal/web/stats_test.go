@@ -91,7 +91,7 @@ func seedStatsFixture(t *testing.T, db *gorm.DB, userID uint64) {
 		t.Fatalf("create deck: %v", err)
 	}
 	note := store.Note{
-		DeckID: deck.ID, Kind: "basic", FieldsJSON: `{"front":"f","back":"b"}`,
+		DeckID: deck.ID, FieldsJSON: `{"front":"f","back":"b"}`,
 		TagsJSON: `["algebra"]`, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := db.Create(&note).Error; err != nil {

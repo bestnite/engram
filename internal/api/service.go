@@ -12,8 +12,9 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/auth"
-	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
@@ -554,8 +555,8 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 			hasFailure = true
 			continue
 		}
-		if err := cardtype.Validate(item.Kind, item.Fields); err != nil {
-			resp.Errors = append(resp.Errors, ImportError{i, err.Error()})
+		if _, ok := notetype.EngramStockByKind(item.Kind); !ok {
+			resp.Errors = append(resp.Errors, ImportError{i, unknownKindText(item.Kind)})
 			hasFailure = true
 			continue
 		}
@@ -589,12 +590,18 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 			existing = found
 		}
 
+		noteTypeID, err := a.noteTypeIDFor(ctx, d.ID, item.Kind)
+		if err != nil {
+			resp.Errors = append(resp.Errors, ImportError{i, err.Error()})
+			hasFailure = true
+			continue
+		}
 		n := store.Note{
-			DeckID:    d.ID,
-			Kind:      item.Kind,
-			TagsJSON:  store.TagsJSON(item.Tags),
-			CreatedBy: store.Ptr(userID),
-			Source:    store.Ptr("api"),
+			DeckID:     d.ID,
+			NoteTypeID: store.Ptr(noteTypeID),
+			TagsJSON:   store.TagsJSON(item.Tags),
+			CreatedBy:  store.Ptr(userID),
+			Source:     store.Ptr("api"),
 		}
 		if ref != "" {
 			n.ExternalRef = store.Ptr(ref)
@@ -731,13 +738,23 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	}
 	kind := strings.TrimSpace(in.Kind)
 	if kind == "" {
-		kind = existing.Kind
+		kind = a.noteKindOf(ctx, existing)
 	}
-	// REST/MCP errors uniformly return stable English text and do not vary with Accept-Language.
-	if err := cardtype.Validate(kind, in.Fields); err != nil {
-		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
+	noteTypeID := uint64(0)
+	if kind != "" {
+		resolved, err := a.noteTypeIDFor(ctx, existing.DeckID, kind)
+		if err != nil {
+			return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
+		}
+		noteTypeID = resolved
 	}
-	n := store.Note{ID: existing.ID, Kind: kind}
+	if noteTypeID == 0 && existing.NoteTypeID != nil {
+		noteTypeID = *existing.NoteTypeID
+	}
+	if noteTypeID == 0 {
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "note type is required")
+	}
+	n := store.Note{ID: existing.ID, DeckID: existing.DeckID, NoteTypeID: store.Ptr(noteTypeID)}
 	if in.Tags != nil {
 		n.TagsJSON = store.TagsJSON(*in.Tags)
 	} else {
@@ -1219,19 +1236,22 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to build review queue")
 	}
 
+	types := newNoteTypeCache(a.db)
 	for _, it := range items {
 		note, ok := notesByID[it.NoteID]
 		if !ok {
 			// The note is not visible (soft-deleted): consistent with dropping the card when a per-card read fails.
 			continue
 		}
+		view := types.load(ctx, note)
+		values := store.NoteFieldValues(note.FieldsJSON)
 		entry := DueCard{
 			NoteID:         note.PublicID,
 			State:          it.State.String(),
 			DueAt:          it.DueAt,
 			Retrievability: it.Retrievability,
-			Kind:           note.Kind,
-			Fields:         store.FieldsOrEmpty(note.FieldsJSON),
+			Kind:           view.kind,
+			Fields:         transitionalFields(view.kind, values),
 			Tags:           store.TagsOrEmpty(note.TagsJSON),
 		}
 		// Missing card_states / card / deck stay zero-valued, consistent with the result of a failed per-card read.
@@ -1245,10 +1265,10 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		if d, ok := decksByID[note.DeckID]; ok {
 			entry.DeckID = d.PublicID
 		}
-		// Only card kinds declaring an options field have option controls to shuffle; every other kind stays null.
-		if t, ok := cardtype.Lookup(note.Kind); ok {
-			if field := t.Describe().OptionsField; field != "" {
-				entry.OptionOrder = OptionOrder(cardtype.OptionCount(entry.Fields, field), u.ID, it.CardID, entry.Version)
+		// Only an answer control that reads options has a display order to shuffle; every other card stays null.
+		if spec, _, err := templateAnswer(view.config, entry.Template); err == nil {
+			if count := optionCount(spec, values); count > 0 {
+				entry.OptionOrder = OptionOrder(count, u.ID, it.CardID, entry.Version)
 			}
 		}
 		out = append(out, entry)
@@ -1306,17 +1326,18 @@ func dedupeDeckIDs(ids []uint64) []uint64 {
 // SubmitReviewInput is the grade submission input. CardID is the card's external id (an opaque string),
 // resolved to a primary key by SubmitReview before it enters scheduling.
 //
-// The grade source is decided by the server and cannot be set by the caller: self-graded card types send Rating; answer card types (cardtype.Grader)
-// send Answer for server-side grading, or GiveUp to abandon the answer (recorded as Again). Among self-graded card types only those that can store an answer
-// (short answer) accept an Answer alongside Rating, stored verbatim in the review record without affecting the grade.
+// The grade source is decided by the server and cannot be set by the caller: a template without a grading answer control
+// takes Rating; a template whose answer control grades sends Answer for server-side grading, or GiveUp to abandon the
+// answer (recorded as Again). The self-assessed short answer control accepts an Answer alongside Rating and records it,
+// without letting it affect the grade.
 type SubmitReviewInput struct {
 	CardID string
-	// Rating is the self-grade (1-4), used only for self-graded card types; for answer card types it must be 0.
+	// Rating is the self-grade (1-4), used only for a template without machine grading; for a graded template it must be 0.
 	Rating int
-	// Answer is the raw answer of an answer card type (JSON), decoded per the card type; among self-graded card types only
-	// those that can store an answer accept it, archived along with the self-grade.
+	// Answer is the raw answer of a graded template (JSON), decoded by its answer control. A self-assessed template that
+	// records a written answer (short answer) accepts it too, archived with the self-grade.
 	Answer json.RawMessage
-	// GiveUp means an answer card type abandons the answer: no grading, a self-graded log entry is recorded as Again.
+	// GiveUp means a graded template abandons the answer: no grading, a self-assessed log entry is recorded as Again.
 	GiveUp          bool
 	ExpectedVersion int
 	ElapsedMS       *int
@@ -1374,7 +1395,7 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 		return SubmitReviewResult{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load deck scheduler")
 	}
 
-	rating, source, detailJSON, grade, err := a.resolveRating(card, note, preset, in)
+	rating, source, detailJSON, grade, err := a.resolveRating(ctx, card, note, preset, in)
 	if err != nil {
 		return SubmitReviewResult{}, err
 	}
@@ -1424,16 +1445,24 @@ func (a *API) SubmitReview(ctx context.Context, u *store.User, apiKeyID *uint64,
 }
 
 // resolveRating decides the grade, source and grading detail written by this submission (rules in SubmitReview).
-func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Preset, in SubmitReviewInput) (int, string, *string, *GradeResult, error) {
-	ct, ok := cardtype.Lookup(note.Kind)
-	if !ok {
-		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "unknown card type")
+//
+// The template's answer spec decides the path: no spec, or the self-assessed short answer control, takes the four-grade
+// self-assessment; every other control grades the submitted answer and the preset's mapping turns its score into a rating.
+// A machine-graded template refuses a self-grade, so the client cannot hand the grading back to itself.
+func (a *API) resolveRating(ctx context.Context, card *store.Card, note *store.Note, preset *store.Preset, in SubmitReviewInput) (int, string, *string, *GradeResult, error) {
+	_, cfg, err := a.notes.NoteTypeFor(ctx, note)
+	if err != nil {
+		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read the note type")
+	}
+	spec, clozeOrdinal, err := templateAnswer(cfg, card.Template)
+	if err != nil {
+		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to resolve the card template")
 	}
 	hasAnswer := len(bytes.TrimSpace(in.Answer)) > 0
-	g, graded := ct.(cardtype.Grader)
-	if !graded {
+
+	if !isMachineGraded(spec) {
 		if in.GiveUp {
-			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "give_up applies only to card types graded by the server")
+			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "give_up applies only to templates graded by the server")
 		}
 		if !schedule.Rating(in.Rating).Valid() {
 			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "rating must be between 1 and 4")
@@ -1441,14 +1470,36 @@ func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Pr
 		if !hasAnswer {
 			return in.Rating, schedule.GradeSourceSelf, nil, nil, nil
 		}
-		detail, err := recordSelfAnswer(ct, in.Answer)
-		if err != nil {
-			return 0, "", nil, nil, err
+		if spec == nil {
+			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "answer applies only to a template that grades or records it")
 		}
-		return in.Rating, schedule.GradeSourceSelf, detail, nil, nil
+		control, ok := answer.Lookup(spec.Control)
+		if !ok {
+			return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "unknown answer control")
+		}
+		values := store.NoteFieldValues(note.FieldsJSON)
+		bindings, err := answer.ResolveBindings(*spec, values)
+		if err != nil {
+			return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read the answer bindings")
+		}
+		result, err := control.Grade(answer.GradeContext{Bindings: bindings, Answer: in.Answer, ClozeOrdinal: clozeOrdinal})
+		if err != nil {
+			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "the answer cannot be recorded")
+		}
+		// A written answer that was blank leaves no detail: the old record stored nothing at all, and an empty
+		// self-assessment marker carries no information.
+		if len(result.Detail) == 1 && result.Detail["self_assessed"] == true {
+			return in.Rating, schedule.GradeSourceSelf, nil, nil, nil
+		}
+		raw, err := json.Marshal(result.Detail)
+		if err != nil {
+			return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to encode grade detail")
+		}
+		detail := string(raw)
+		return in.Rating, schedule.GradeSourceSelf, &detail, nil, nil
 	}
 	if in.Rating != 0 {
-		return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeGradingRequired, "this card type is graded by the server: send answer or give_up instead of rating")
+		return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeGradingRequired, "this template is graded by the server: send answer or give_up instead of rating")
 	}
 	if in.GiveUp {
 		if hasAnswer {
@@ -1457,18 +1508,28 @@ func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Pr
 		// Abandoning the answer involves no machine grading at all: record Again with source self.
 		return int(schedule.Again), schedule.GradeSourceSelf, nil, nil, nil
 	}
-	fields, err := store.ParseFields(note.FieldsJSON)
+	control, ok := answer.Lookup(spec.Control)
+	if !ok {
+		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "unknown answer control")
+	}
+	values := store.NoteFieldValues(note.FieldsJSON)
+	bindings, err := answer.ResolveBindings(*spec, values)
 	if err != nil {
-		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read note fields")
+		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read the answer bindings")
 	}
-	gc := cardtype.GradeContext{Fields: fields, Template: card.Template}
-	if m, err := preset.GradeMapping(); err == nil {
-		gc.Mapping = &m
+	gc := answer.GradeContext{
+		Bindings:     bindings,
+		Answer:       in.Answer,
+		Mapping:      gradeMappingFor(preset),
+		ClozeOrdinal: clozeOrdinal,
 	}
-	out, err := cardtype.GradeAnswer(g, gc, in.Answer)
+	out, err := control.Grade(gc)
 	if err != nil {
 		// A decode failure and an ungradable answer both write nothing, letting the user answer again.
 		return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "the answer cannot be graded")
+	}
+	if out.Rating < int(schedule.Again) || out.Rating > int(schedule.Easy) {
+		return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "the answer control returned no rating")
 	}
 	raw, err := json.Marshal(out.Detail)
 	if err != nil {
@@ -1476,34 +1537,18 @@ func (a *API) resolveRating(card *store.Card, note *store.Note, preset *store.Pr
 	}
 	detail := string(raw)
 	return out.Rating, schedule.GradeSourceTyped, &detail, &GradeResult{
-		Rating: out.Rating, Score: out.Score, Verdict: out.Verdict, Given: out.Given, Detail: out.Detail,
+		Rating: out.Rating, Score: out.Score, Verdict: verdictFor(out.Score), Given: out.Given, Detail: out.Detail,
 	}, nil
 }
 
-// answerRecorder is an optional capability of self-graded card types: it decodes the answer the learner wrote before self-grading into detail stored with the review record.
-// The grade is still a self-grade and the source is still self, recorded as self; the answer is stored so a future LLM grading has the raw text to work from.
-type answerRecorder interface {
-	RecordAnswer(raw json.RawMessage) (map[string]any, error)
-}
-
-// recordSelfAnswer encodes the answer attached to a self-grade into grade_detail_json. Self-graded card types that do not accept answers reject it,
-// so the client does not think the answer was saved; it returns nil when nothing was written, storing no empty answer.
-func recordSelfAnswer(ct cardtype.CardType, raw json.RawMessage) (*string, error) {
-	rec, ok := ct.(answerRecorder)
-	if !ok {
-		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "answer applies only to card types that grade or record it")
+// verdictFor names the outcome of a machine grade in the stable English words the SPA maps to its own copy.
+func verdictFor(score float64) string {
+	switch {
+	case score >= 1:
+		return "correct"
+	case score <= 0:
+		return "incorrect"
+	default:
+		return "partial"
 	}
-	detail, err := rec.RecordAnswer(raw)
-	if err != nil {
-		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "the answer must be a string")
-	}
-	if detail == nil {
-		return nil, nil
-	}
-	b, err := json.Marshal(detail)
-	if err != nil {
-		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to encode grade detail")
-	}
-	out := string(b)
-	return &out, nil
 }

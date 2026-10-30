@@ -347,11 +347,11 @@ func TestBuiltinBackfillMediaNotesMigration(t *testing.T) {
 			shaA := strings.Repeat("a", 64)
 			shaB := strings.Repeat("b", 64)
 			now := time.Now().UTC()
-			live := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
+			live := Note{DeckID: deckID, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
 				FieldsJSON: `{"front":"![](/media/` + shaA + `)","back":"![](media/` + shaB + `.png)"}`}
-			gone := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
+			gone := Note{DeckID: deckID, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
 				FieldsJSON: `{"front":"![](/media/` + shaB + `)","back":"x"}`}
-			plain := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
+			plain := Note{DeckID: deckID, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
 				FieldsJSON: `{"front":"no media","back":"x"}`}
 			for _, n := range []*Note{&live, &gone, &plain} {
 				if err := db.Create(n).Error; err != nil {
@@ -487,7 +487,7 @@ func TestBuiltinPerUserSuspensionMigration(t *testing.T) {
 			deckID := seedDeck(t, db, owner)
 			now := time.Now().UTC().Truncate(time.Second)
 			mk := func() uint64 {
-				note := Note{DeckID: deckID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+				note := Note{DeckID: deckID, FieldsJSON: `{"front":"q","back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 				if err := db.Create(&note).Error; err != nil {
 					t.Fatal(err)
 				}

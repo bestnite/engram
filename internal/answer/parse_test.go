@@ -207,4 +207,20 @@ func TestResolveBindings(t *testing.T) {
 		map[string]string{"bad": "five"}); err == nil {
 		t.Fatal("ResolveBindings with an unparseable number = nil error, want an error")
 	}
+
+	// An optional role bound to a blank field is not bound: a note leaves an optional tolerance empty, and parsing
+	// "" as a number would make the whole card ungradable.
+	numeric := notetype.AnswerSpec{Control: "numeric", Bindings: map[string]string{
+		"value": "v", "tolerance_absolute": "ta", "unit": "u",
+	}}
+	bindings, err = ResolveBindings(numeric, map[string]string{"v": "50", "ta": "", "u": ""})
+	if err != nil {
+		t.Fatalf("ResolveBindings with blank optional roles: %v", err)
+	}
+	if bindings.Bound("tolerance_absolute") || bindings.Bound("unit") {
+		t.Errorf("blank optional roles resolved: %+v", bindings)
+	}
+	if got, _ := bindings.RequiredNumber("value"); got != 50 {
+		t.Errorf("value = %v, want 50", got)
+	}
 }

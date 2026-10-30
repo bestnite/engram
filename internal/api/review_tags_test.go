@@ -20,7 +20,7 @@ import (
 func seedTaggedNewCard(t *testing.T, db *gorm.DB, deckID uint64, tags ...string) string {
 	t.Helper()
 	now := time.Now().UTC()
-	n := store.Note{DeckID: deckID, Kind: "basic", FieldsJSON: `{"front":"q","back":"a"}`,
+	n := store.Note{DeckID: deckID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deckID, "basic")), FieldsJSON: `{"front":"q","back":"a"}`,
 		TagsJSON: store.TagsJSON(tags), CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(&n).Error; err != nil {
 		t.Fatalf("create note: %v", err)

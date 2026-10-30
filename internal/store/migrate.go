@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -110,11 +112,6 @@ var BuiltinMigrations = []Migration{
 	},
 }
 
-// notesKindDroppedAt is the 1-based position of the migration that drops notes.kind in BuiltinMigrations. AutoMigrate reads it to
-// stop managing that column once the migration has run: the Note model still carries Kind until the server paths stop using it,
-// and AutoMigrate would otherwise re-add the column the migration just dropped.
-const notesKindDroppedAt = 13
-
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).
 // Rows are read in primary-key batches, so memory use is independent of the note count. A note whose fields fail to parse gets an
 // empty search text: it cannot match a search, which is how the rest of the code treats corrupt fields.
@@ -138,7 +135,7 @@ func backfillNoteSearchText(tx *gorm.DB) error {
 			last = n.ID
 			text := ""
 			if fields, err := ParseFields(n.FieldsJSON); err == nil {
-				text = noteSearchText(fields)
+				text = legacyNoteSearchText(fields)
 			}
 			if err := tx.Unscoped().Model(&Note{}).Where("id = ?", n.ID).
 				UpdateColumn("search_text", text).Error; err != nil {
@@ -146,6 +143,38 @@ func backfillNoteSearchText(tx *gorm.DB) error {
 			}
 		}
 	}
+}
+
+// legacyNoteSearchText is the search text rule migration 0011 used on the pre-conversion field map: every non-empty
+// string value, in sorted key order, lowered and joined with a newline. The live write path builds the column from the
+// note type's searchable fields instead (see note_search.go); this helper exists only so a database migrated through 0011
+// keeps the value that migration wrote.
+func legacyNoteSearchText(fields map[string]any) string {
+	var parts []string
+	var collect func(v any)
+	collect = func(v any) {
+		switch x := v.(type) {
+		case string:
+			if x != "" {
+				parts = append(parts, x)
+			}
+		case map[string]any:
+			keys := make([]string, 0, len(x))
+			for key := range x {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				collect(x[key])
+			}
+		case []any:
+			for _, child := range x {
+				collect(child)
+			}
+		}
+	}
+	collect(fields)
+	return strings.ToLower(strings.Join(parts, "\n"))
 }
 
 // dropDeckArchivedAt drops the decks.archived_at column.
@@ -342,7 +371,7 @@ func backfillMediaNotes(tx *gorm.DB) error {
 			if err != nil {
 				continue
 			}
-			for sha := range mediaRefsIn(fields) {
+			for sha := range legacyMediaRefsIn(fields) {
 				rows = append(rows, MediaNote{MediaSha: sha, NoteID: n.ID, CreatedAt: now})
 			}
 		}
@@ -352,6 +381,44 @@ func backfillMediaNotes(tx *gorm.DB) error {
 			}
 		}
 	}
+}
+
+// The legacy reference scanner below belongs to migration 0002: that backfill reads rows written before the note type
+// conversion, where a field value was Markdown and a media reference was written as /media/<sha256> or media/<sha256>.<ext>.
+// The current write path scans HTML instead (see media_mapping.go), so this scanner is kept only so a database created
+// before the conversion is still backfilled the same way; it is not a second definition of a live rule.
+
+// legacyMediaRefByURLRE matches the old media URL /media/<sha256> written by the Markdown editor.
+var legacyMediaRefByURLRE = regexp.MustCompile(`(?:^|[^0-9a-f])/media/([0-9a-f]{64})(?:[^0-9a-f]|$)`)
+
+// legacyMediaRefByShaRE matches the old deck-package form media/<sha256>.<ext>.
+var legacyMediaRefByShaRE = regexp.MustCompile(`(?:^|[^0-9a-f])media/([0-9a-f]{64})\.([A-Za-z0-9]+)`)
+
+// legacyMediaRefsIn collects the sha256 references of a pre-conversion field map.
+func legacyMediaRefsIn(fields map[string]any) map[string]bool {
+	refs := map[string]bool{}
+	var scan func(v any)
+	scan = func(v any) {
+		switch x := v.(type) {
+		case string:
+			for _, m := range legacyMediaRefByURLRE.FindAllStringSubmatch(x, -1) {
+				refs[m[1]] = true
+			}
+			for _, m := range legacyMediaRefByShaRE.FindAllStringSubmatch(x, -1) {
+				refs[m[1]] = true
+			}
+		case map[string]any:
+			for _, child := range x {
+				scan(child)
+			}
+		case []any:
+			for _, child := range x {
+				scan(child)
+			}
+		}
+	}
+	scan(fields)
+	return refs
 }
 
 // dropDeckVisibility drops the decks.visibility column.
@@ -490,16 +557,6 @@ type additiveUserSchema struct {
 
 func (additiveUserSchema) TableName() string { return "users" }
 
-// additiveNoteSchema is the notes shape AutoMigrate sees after migration 0013 has dropped notes.kind. The outer Kind field
-// shadows the embedded Note.Kind and is hidden from the schema manager (-:migration), so AutoMigrate neither creates nor
-// re-adds the column; normal reads and writes still use the field until the note write path moves to note types.
-type additiveNoteSchema struct {
-	Note
-	Kind string `gorm:"column:kind;-:migration"`
-}
-
-func (additiveNoteSchema) TableName() string { return "notes" }
-
 // nullableDayCutoff only relaxes the column constraint and converts no existing value: the old 0 now explicitly means midnight, and the old 4 stays as it is.
 func nullableDayCutoff(tx *gorm.DB) error {
 	if !tx.Migrator().HasTable("users") || !tx.Migrator().HasColumn("users", "day_cutoff_hour") {
@@ -536,23 +593,9 @@ func nullableDayCutoff(tx *gorm.DB) error {
 // so they were merged back into one.
 func AutoMigrate(ctx context.Context, db *gorm.DB) error {
 	models := AllModels()
-	// Migration 0013 drops notes.kind, but the Note model still carries Kind until the server paths stop reading it. Once the
-	// migration has run, AutoMigrate must not add the column back; the masked shape keeps the model usable while hiding the
-	// column from the schema manager. Before 0013 the mask stays off, because 0012 still reads the column.
-	maskNoteKind := false
-	if db.Migrator().HasTable("schema_version") {
-		if version, err := CurrentVersion(ctx, db); err == nil && version >= notesKindDroppedAt {
-			maskNoteKind = true
-		}
-	}
 	for i, model := range models {
-		switch model.(type) {
-		case *User:
+		if _, ok := model.(*User); ok {
 			models[i] = &additiveUserSchema{}
-		case *Note:
-			if maskNoteKind {
-				models[i] = &additiveNoteSchema{}
-			}
 		}
 	}
 	if err := db.WithContext(ctx).AutoMigrate(models...); err != nil {

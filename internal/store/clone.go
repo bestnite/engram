@@ -69,9 +69,19 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 			if err != nil {
 				return fmt.Errorf("clone note %d: decode fields: %w", original.ID, err)
 			}
+			// The clone lives in another deck, so it needs that deck's note type for the same stock kind; the source
+			// note type is not reused, because a note type belongs to exactly one deck.
+			kind := kindOfNote(ctx, tx, &original)
+			if kind == "" {
+				return fmt.Errorf("clone note %d: its note type is not an engram stock type", original.ID)
+			}
+			noteType, err := ensureStockNoteType(ctx, tx, dst.ID, kind)
+			if err != nil {
+				return fmt.Errorf("clone note %d: %w", original.ID, err)
+			}
 			note := &Note{
 				DeckID:        dst.ID,
-				Kind:          original.Kind,
+				NoteTypeID:    Ptr(noteType.ID),
 				TagsJSON:      original.TagsJSON,
 				ExternalRef:   original.ExternalRef,
 				Source:        original.Source,

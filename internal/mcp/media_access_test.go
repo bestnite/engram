@@ -34,7 +34,7 @@ func TestMCPUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 		t.Fatalf("grant editor: %v", err)
 	}
 	sha := seedMCPMedia(t, db, owner.ID)
-	note := store.Note{DeckID: deck.ID, Kind: "basic", CreatedBy: store.Ptr(owner.ID)}
+	note := store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deck.ID, "basic")), CreatedBy: store.Ptr(owner.ID)}
 	if _, err := store.NewNoteStore(db).Save(context.Background(), &note, map[string]any{"front": "plain", "back": "x"}); err != nil {
 		t.Fatalf("save note: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestMCPUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 	cs := connect(t, ts.URL, key)
 	_, isErr, text := callTool(t, cs, "update_note", map[string]any{
 		"note_id": note.PublicID,
-		"fields":  map[string]any{"front": "![](/media/" + sha + ")", "back": "x"},
+		"fields":  map[string]any{"front": `<img src="` + sha + `.png">`, "back": "x"},
 	})
 	if !isErr {
 		t.Fatalf("MCP update_note accepted an unreadable media reference (text %q)", text)

@@ -48,8 +48,8 @@ var cspScriptHash = func() string {
 //     'unsafe-inline' is needed because the SPA renders inline style attributes: the bar widths on the stats page
 //     (StatsView.svelte) and the placeholder widths of the skeleton screens (Skeleton.svelte) are both written in that attribute, and CSP's
 //     hash/nonce cannot cover style attributes, so 'unsafe-inline' is the only workable value.
-//   - img-src 'self' https:: images come from /media (self); the card-face sanitizing allowlist permits https external images
-//     (imgSrcPattern in internal/render), hence https is allowed; otherwise external images in card faces would be blocked.
+//   - img-src 'self' https:: card faces may reference this site's media (self) and external https images, which the
+//     frame contract permits; blocking https would remove images the content is allowed to carry.
 //   - connect-src 'self': the SPA's XHR/fetch (API, uploads, service worker registration) are all same-origin.
 //   - object-src 'none' / frame-src 'self': no <object> or <embed> appears in the shipped pages, and the only <iframe>
 //     is the same-origin card frame (/card-frame/<version>) that renders card faces in a sandbox. A third-party frame

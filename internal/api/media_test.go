@@ -18,8 +18,8 @@ import (
 // It goes through NoteStore's write method so the media_notes mapping is built by the write path (a fixture convention).
 func seedRefNote(t *testing.T, env *testEnv, deckID, authorID uint64, sha string) *store.Note {
 	t.Helper()
-	n := store.Note{DeckID: deckID, Kind: "basic", CreatedBy: store.Ptr(authorID)}
-	fields := map[string]any{"front": "![](/media/" + sha + ")", "back": "x"}
+	n := store.Note{DeckID: deckID, NoteTypeID: store.Ptr(stockNoteTypeID(t, env.db, deckID, "basic")), CreatedBy: store.Ptr(authorID)}
+	fields := map[string]any{"front": `<img src="` + sha + `.png">`, "back": "x"}
 	if _, err := store.NewNoteStore(env.db).Save(context.Background(), &n, fields); err != nil {
 		t.Fatalf("save referencing note: %v", err)
 	}

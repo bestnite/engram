@@ -34,10 +34,10 @@ func TestBulkImportReportsInvalidRowIndexAndImportsValidRows(t *testing.T) {
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
-	// Index 1 is missing the required back field (invalid); indexes 0 and 2 are valid.
+	// Index 1 names a field its note type does not declare, so its write is rejected; indexes 0 and 2 are valid.
 	body := `{"notes":[` +
 		`{"kind":"basic","fields":{"front":"q0","back":"a0"},"external_ref":"r:0"},` +
-		`{"kind":"basic","fields":{"front":"q1"},"external_ref":"r:1"},` +
+		`{"kind":"basic","fields":{"front":"q1","nosuch":"x"},"external_ref":"r:1"},` +
 		`{"kind":"basic","fields":{"front":"q2","back":"a2"},"external_ref":"r:2"}]}`
 
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, body)
@@ -152,7 +152,7 @@ func TestBulkImportResumesAfterPartialFailure(t *testing.T) {
 
 	broken := `{"notes":[` +
 		`{"kind":"basic","fields":{"front":"a","back":"A"},"external_ref":"r:0"},` +
-		`{"kind":"basic","fields":{"front":"b"},"external_ref":"r:1"},` +
+		`{"kind":"basic","fields":{"front":"b","nosuch":"x"},"external_ref":"r:1"},` +
 		`{"kind":"basic","fields":{"front":"c","back":"C"},"external_ref":"r:2"}]}`
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, broken)
 	if status != http.StatusOK {

@@ -225,7 +225,7 @@ func TestNoteTypeDelete(t *testing.T) {
 			nt := seedNoteType(t, db, deckID, "Used Type")
 
 			now := time.Now().UTC()
-			note := Note{DeckID: deckID, NoteTypeID: &nt.ID, Kind: "basic",
+			note := Note{DeckID: deckID, NoteTypeID: &nt.ID,
 				FieldsJSON: `{"f-front":"q","f-back":"a"}`, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 			if err := db.Create(&note).Error; err != nil {
 				t.Fatalf("create note: %v", err)
@@ -241,7 +241,7 @@ func TestNoteTypeDelete(t *testing.T) {
 
 			// A note without a note type does not block anything.
 			unused := seedNoteType(t, db, deckID, "Unused Type")
-			plain := Note{DeckID: deckID, Kind: "basic", FieldsJSON: "{}", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+			plain := Note{DeckID: deckID, FieldsJSON: "{}", TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 			if err := db.Create(&plain).Error; err != nil {
 				t.Fatalf("create note without note type: %v", err)
 			}

@@ -117,6 +117,42 @@ func EngramStockByKind(kind string) (EngramStock, bool) {
 	return EngramStock{}, false
 }
 
+// EngramStockKindFor reports which engram stock kind a config matches, or the
+// empty string when it matches none.
+//
+// The match is the note type's kind, its field-id sequence and its template-id
+// sequence. Those are the parts that decide what a note of this type can hold
+// and which cards it generates, so a config that matches them is the stock type
+// for every practical purpose. The transitional server payload still speaks the
+// old kind names, and this is the only place that derives one from a config.
+func EngramStockKindFor(cfg Config) string {
+	for _, stock := range EngramStockConfigs() {
+		if sameStockShape(stock.Config, cfg) {
+			return stock.Kind
+		}
+	}
+	return ""
+}
+
+// sameStockShape compares the structural parts of two configs: kind, field ids
+// in order and template ids in order.
+func sameStockShape(a, b Config) bool {
+	if a.Kind != b.Kind || len(a.Fields) != len(b.Fields) || len(a.Templates) != len(b.Templates) {
+		return false
+	}
+	for i, field := range a.Fields {
+		if field.ID != b.Fields[i].ID {
+			return false
+		}
+	}
+	for i, template := range a.Templates {
+		if template.ID != b.Templates[i].ID {
+			return false
+		}
+	}
+	return true
+}
+
 // engramBasicStock is today's basic card: front on the question side, back on
 // the answer side. The back template repeats only the answer because the review
 // view already shows the front above the back; adding {{FrontSide}} would show

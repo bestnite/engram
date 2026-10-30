@@ -4,19 +4,19 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-
-	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
 // CardTypesResponse is the response body of card-type metadata; kinds are sorted by kind, so the result is stable.
 type CardTypesResponse struct {
-	Kinds []cardtype.Description `json:"kinds"`
+	Kinds []cardKindDescription `json:"kinds"`
 }
 
-// CardTypes returns the self-description of every card type (static metadata, no user state); shared by REST and MCP.
-// The frontend renders edit forms and review controls from it, and agents learn which fields each card type has and which are required.
+// CardTypes returns the self-description of every card kind (static metadata, no user state); shared by REST and MCP.
+// The frontend renders edit forms and review controls from it, and agents learn which fields each card kind has and which
+// are required. The catalog is transitional: the note-type endpoint replaces it, and it is the only place the old kind
+// vocabulary survives in this package.
 func (a *API) CardTypes() CardTypesResponse {
-	return CardTypesResponse{Kinds: cardtype.Descriptions()}
+	return CardTypesResponse{Kinds: cardKindCatalog()}
 }
 
 // cardTypes is GET /api/v1/card-types, scope: read.

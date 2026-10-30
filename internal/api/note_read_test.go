@@ -13,7 +13,7 @@ import (
 // seedNote creates a basic note under the deck and returns it (already carrying its external id).
 func seedNote(t *testing.T, env *testEnv, deckID, ownerID uint64, front string) *store.Note {
 	t.Helper()
-	n := &store.Note{DeckID: deckID, Kind: "basic", CreatedBy: store.Ptr(ownerID)}
+	n := &store.Note{DeckID: deckID, NoteTypeID: store.Ptr(stockNoteTypeID(t, env.db, deckID, "basic")), CreatedBy: store.Ptr(ownerID)}
 	if _, err := store.NewNoteStore(env.db).Create(context.Background(), n,
 		map[string]any{"front": front, "back": "a"}); err != nil {
 		t.Fatalf("create note: %v", err)

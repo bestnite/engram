@@ -14,7 +14,7 @@ func TestGetNoteToolReadsByPublicID(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "note_reader")
 	deck := seedDeck(t, db, u.ID)
-	note := &store.Note{DeckID: deck.ID, Kind: "basic", CreatedBy: store.Ptr(u.ID)}
+	note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deck.ID, "basic")), CreatedBy: store.Ptr(u.ID)}
 	if _, err := store.NewNoteStore(db).Create(context.Background(), note,
 		map[string]any{"front": "q", "back": "a"}); err != nil {
 		t.Fatalf("create note: %v", err)

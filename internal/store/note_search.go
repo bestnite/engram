@@ -1,47 +1,61 @@
 package store
 
 import (
-	"sort"
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	"gorm.io/gorm"
+
+	"git.nite07.com/nite/engram/internal/notetype"
 )
 
-// noteSearchText builds the value of notes.search_text from a note's fields.
+// ParseFields decodes fields_json into its generic map form, used where a caller works with a value of any JSON type.
 //
-// Search matches field text, not the JSON encoding of the fields: on the encoding a search for a field key hits every note,
-// and characters JSON escapes (<, >, &, quotes, newlines) can never be found. Only string values are collected, recursively
-// through maps and arrays; keys, numbers and booleans are left out, because they are field names, choice indexes, tolerances
-// or true/false answers rather than text a user would search for. Map keys are visited in sorted order so the same fields
-// always produce the same text. Lowering happens here in Go: SQLite's LOWER only folds ASCII, so lowering in SQL would make
-// the two databases disagree on non-ASCII letters.
-func noteSearchText(fields map[string]any) string {
-	var parts []string
-	collectSearchStrings(fields, &parts)
-	return strings.ToLower(strings.Join(parts, "\n"))
+// Stored values are HTML strings in the current model; this decode stays generic because the one-time migration and the
+// deck package format still read rows written under the old model, where a value could be an array, a boolean or a number.
+func ParseFields(raw string) (map[string]any, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}, nil
+	}
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return nil, fmt.Errorf("decode fields_json: %w", err)
+	}
+	return fields, nil
 }
 
-// collectSearchStrings appends every non-empty string value found under v to parts.
-func collectSearchStrings(v any, parts *[]string) {
-	switch x := v.(type) {
-	case string:
-		if x != "" {
-			*parts = append(*parts, x)
+// FieldsOrEmpty decodes fields_json; corrupt data or null collapses into an empty object, so a response never carries null.
+// The list, due-card and export read paths share it, so the same row yields the same shape at every exit.
+func FieldsOrEmpty(raw string) map[string]any {
+	fields, err := ParseFields(raw)
+	if err != nil || fields == nil {
+		return map[string]any{}
+	}
+	return fields
+}
+
+// noteSearchText builds the value of notes.search_text from a note's field values.
+//
+// Only the fields the note type marks searchable contribute; a field with exclude_from_search set is left out, because
+// its content is machine syntax or a hint the learner should not find a card by. The text is the field's plain-text form:
+// searching the stored HTML would make a search for a tag name hit every note that styles it, and characters HTML escapes
+// (<, >, &, quotes) could never be found. Fields are visited in config order so the same note always produces the same text.
+// Lowering happens here in Go: SQLite's LOWER only folds ASCII, so lowering in SQL would make the two databases disagree on
+// non-ASCII letters.
+func noteSearchText(cfg notetype.Config, values map[string]string) string {
+	parts := make([]string, 0, len(cfg.Fields))
+	for _, field := range cfg.Fields {
+		if field.ExcludeFromSearch {
+			continue
 		}
-	case map[string]any:
-		keys := make([]string, 0, len(x))
-		for k := range x {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			collectSearchStrings(x[k], parts)
-		}
-	case []any:
-		for _, child := range x {
-			collectSearchStrings(child, parts)
+		text := notetype.PlainText(values[field.ID])
+		if text != "" {
+			parts = append(parts, text)
 		}
 	}
+	return strings.ToLower(strings.Join(parts, "\n"))
 }
 
 // whereNoteSearch restricts q to notes whose search_text contains every whitespace-separated term of query.

@@ -376,7 +376,7 @@ func TestGradeRevealAndGiveUp(t *testing.T) {
 func TestGradeListFeedbackBreakdown(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA list")
-	note := seedGradedNote(t, db, deck.ID, "list", map[string]any{"prompt": "primary colours", "items": []string{"red", "green", "**blue**|violet"}})
+	note := seedGradedNote(t, db, deck.ID, "list", map[string]any{"prompt": "primary colours", "items": []string{"red", "green", "<strong>blue</strong>|violet"}})
 	cardPub := cardPublicIDOfNote(t, db, note.ID)
 
 	rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardPub, "deck": []string{deck.PublicID}}, cookies, csrf)
@@ -414,7 +414,7 @@ func TestGradeListFeedbackBreakdown(t *testing.T) {
 	want := []struct {
 		html    string
 		correct bool
-	}{{"red", true}, {"green", false}, {"<strong>blue</strong> / violet", true}}
+	}{{"red", true}, {"green", false}, {"blue / violet", true}}
 	if len(fb.Breakdown) != len(want) {
 		t.Fatalf("breakdown = %+v, want %d items", fb.Breakdown, len(want))
 	}
@@ -441,7 +441,7 @@ func TestSelfReviewStoresShortAnswer(t *testing.T) {
 		t.Fatalf("POST answer = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	rev := reviewRowForCard(t, srv, cardIDOfNote(t, db, short.ID))
-	if rev.GradeSource != schedule.GradeSourceSelf || rev.Rating != 3 || derefDetail(rev.GradeDetailJSON) != `{"answer":"because of X"}` {
+	if rev.GradeSource != schedule.GradeSourceSelf || rev.Rating != 3 || derefDetail(rev.GradeDetailJSON) != `{"answer":"because of X","self_assessed":true}` {
 		t.Errorf("review = source %q rating %d detail %s, want self/3 with the written answer", rev.GradeSource, rev.Rating, derefDetail(rev.GradeDetailJSON))
 	}
 

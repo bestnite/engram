@@ -21,11 +21,11 @@ func TestDeckCloneCopiesContentWithoutProgress(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "Source deck")
 	// Three note types: basic (1 card), basic_both (2 cards), cloze (2 cards) — covering one note with multiple cards.
 	seedBasic(t, db, deck.ID, "Q1", "A1", "tag-one")
-	both := &store.Note{DeckID: deck.ID, Kind: "basic_both"}
+	both := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deck.ID, "basic_both"))}
 	if _, err := store.NewNoteStore(db).Create(context.Background(), both, map[string]any{"front": "Q2", "back": "A2"}); err != nil {
 		t.Fatalf("create basic_both: %v", err)
 	}
-	cloze := &store.Note{DeckID: deck.ID, Kind: "cloze"}
+	cloze := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deck.ID, "cloze"))}
 	if _, err := store.NewNoteStore(db).Create(context.Background(), cloze, map[string]any{"text": "{{c1::one}} and {{c2::two}}"}); err != nil {
 		t.Fatalf("create cloze: %v", err)
 	}

@@ -70,6 +70,9 @@ func (a *API) listDeckTags(c *gin.Context) {
 //
 // id is the note's own external id; deck_id is the external id of the deck it belongs to - numeric primary keys are never exposed.
 // suspended means the caller suspended the cards under this note (suspension is personal), fetched for a whole page of notes in one query.
+//
+// kind and the per-field value shapes are transitional: they are derived from the note type and its catalog entry so the
+// SPA editor keeps working until the note-type payload replaces them.
 func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) []map[string]any {
 	ids := make([]uint64, 0, len(notes))
 	for i := range notes {
@@ -81,6 +84,7 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 		suspended = map[uint64]bool{}
 	}
 	deckPublic := map[uint64]string{}
+	types := newNoteTypeCache(a.db)
 	out := make([]map[string]any, 0, len(notes))
 	for i := range notes {
 		n := &notes[i]
@@ -91,11 +95,13 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 			}
 			deckPublic[n.DeckID] = pid
 		}
+		view := types.load(ctx, n)
 		out = append(out, map[string]any{
 			"id":           n.PublicID,
 			"deck_id":      pid,
-			"kind":         n.Kind,
-			"fields":       store.FieldsOrEmpty(n.FieldsJSON),
+			"kind":         view.kind,
+			"note_type_id": noteTypePublicID(view.noteType),
+			"fields":       transitionalFields(view.kind, store.NoteFieldValues(n.FieldsJSON)),
 			"tags":         store.TagsOrEmpty(n.TagsJSON),
 			"created_at":   n.CreatedAt,
 			"updated_at":   n.UpdatedAt,
@@ -104,6 +110,14 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 		})
 	}
 	return out
+}
+
+// noteTypePublicID returns a note type's external id, or nil when the note has no type.
+func noteTypePublicID(nt *store.NoteType) any {
+	if nt == nil {
+		return nil
+	}
+	return nt.PublicID
 }
 
 // getNote reads a single note (GET /api/v1/notes/:id, scope: read).

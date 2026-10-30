@@ -27,7 +27,7 @@ func seedMedia(t *testing.T, env *testEnv, ownerID uint64, payload string) strin
 // seedPlainNote creates a note with no media reference through the write method.
 func seedPlainNote(t *testing.T, env *testEnv, deckID, authorID uint64) *store.Note {
 	t.Helper()
-	n := store.Note{DeckID: deckID, Kind: "basic", CreatedBy: store.Ptr(authorID)}
+	n := store.Note{DeckID: deckID, NoteTypeID: store.Ptr(stockNoteTypeID(t, env.db, deckID, "basic")), CreatedBy: store.Ptr(authorID)}
 	if _, err := store.NewNoteStore(env.db).Save(context.Background(), &n, map[string]any{"front": "plain", "back": "x"}); err != nil {
 		t.Fatalf("save note: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestRESTUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 
 	k := seedKey(t, env.keys, attacker.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	body := fmt.Sprintf(`{"fields":{"front":"![](/media/%s)","back":"x"}}`, sha)
+	body := fmt.Sprintf(`{"fields":{"front":"<img src=\"%s.png\">","back":"x"}}`, sha)
 
 	status, raw := doJSON(t, router, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", note.PublicID), k.Plaintext, body)
 	if status != http.StatusForbidden {
@@ -96,7 +96,7 @@ func TestRESTBulkImportRejectsUnreadableMediaInjection(t *testing.T) {
 
 	k := seedKey(t, env.keys, attacker.ID, []string{store.ScopeWrite, store.ScopeRead}, nil)
 	router := env.router()
-	body := fmt.Sprintf(`{"notes":[{"kind":"basic","fields":{"front":"![](/media/%s)","back":"x"}}]}`, sha)
+	body := fmt.Sprintf(`{"notes":[{"kind":"basic","fields":{"front":"<img src=\"%s.png\">","back":"x"}}]}`, sha)
 
 	status, raw := doJSON(t, router, http.MethodPost, fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID), k.Plaintext, body)
 	if status != http.StatusOK {

@@ -8,7 +8,7 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// This file gives a sanitized mail body its inline styles and derives the plain-text part from the
+// This file gives a rendered mail body its inline styles and derives the plain-text part from the
 // same tree.
 //
 // Why inline styles and not a stylesheet: Gmail drops <style> both on the web and in the apps, so a
@@ -60,10 +60,10 @@ var plainBlockTags = map[string]bool{
 	"ul": true, "ol": true, "table": true, "tr": true, "hr": true,
 }
 
-// styleFragment adds the fixed inline styles to a sanitized mail body and derives the plain-text
+// styleFragment adds the fixed inline styles to a rendered mail body and derives the plain-text
 // part from the same tree.
 //
-// The input is already sanitized and has its variables substituted, so every element here is one the
+// The input has its variables substituted already, so every element here is one the
 // allowlist kept. The fragment is parsed with a div context node: the body is a fragment, not a
 // document, and parsing it as a document would invent html/head/body elements around it.
 func styleFragment(fragment string) (htmlOut, plain string, err error) {

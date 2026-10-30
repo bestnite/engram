@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"testing"
 
-	"git.nite07.com/nite/engram/internal/cardtype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -31,7 +30,7 @@ func TestCardTypesEndpointReturnsRegistryDescriptions(t *testing.T) {
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("card-types response is not JSON: %v (%s)", err, raw)
 	}
-	if want := len(cardtype.Kinds()); len(body.Kinds) != want {
+	if want := len(cardKindCatalog()); len(body.Kinds) != want {
 		t.Fatalf("kinds has %d entries, want %d", len(body.Kinds), want)
 	}
 	for _, k := range body.Kinds {

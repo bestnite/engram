@@ -100,6 +100,57 @@ func renderError(code ErrorCode, field, format string, args ...any) *RenderError
 	return &RenderError{Code: code, Field: field, Detail: fmt.Sprintf(format, args...)}
 }
 
+// CardTemplate resolves the template a stored card uses.
+//
+// cardTemplate is the value of cards.template: a template id for a normal note
+// type and "cloze:<n>" for a cloze note type. The returned clozeNumber is the
+// 1-based cloze number of a cloze card and zero for every other card. A
+// template the config does not declare, or a cloze value that does not name a
+// positive number, is an error.
+func CardTemplate(cfg Config, cardTemplate string) (Template, int, error) {
+	if cfg.Kind == KindCloze {
+		if len(cfg.Templates) == 0 {
+			return Template{}, 0, fmt.Errorf("notetype: cloze note type declares no template")
+		}
+		digits, ok := strings.CutPrefix(cardTemplate, clozeTemplatePrefix)
+		if !ok {
+			return Template{}, 0, fmt.Errorf("notetype: card template %q is not a cloze card", cardTemplate)
+		}
+		number, err := strconv.Atoi(digits)
+		if err != nil || number < 1 {
+			return Template{}, 0, fmt.Errorf("notetype: card template %q has no positive cloze number", cardTemplate)
+		}
+		return cfg.Templates[0], number, nil
+	}
+	for _, template := range cfg.Templates {
+		if template.ID == cardTemplate {
+			return template, 0, nil
+		}
+	}
+	return Template{}, 0, fmt.Errorf("notetype: note type declares no template %q", cardTemplate)
+}
+
+// Clone returns a copy of the config whose slices can be modified without
+// affecting the receiver. The renderer and the store only read a config, so a
+// clone is needed only where a caller edits a decoded copy.
+func (c Config) Clone() Config {
+	clone := c
+	clone.Fields = append([]Field(nil), c.Fields...)
+	clone.Templates = make([]Template, len(c.Templates))
+	for i, template := range c.Templates {
+		clone.Templates[i] = template
+		if template.Answer != nil {
+			answer := *template.Answer
+			answer.Bindings = make(map[string]string, len(template.Answer.Bindings))
+			for role, fieldID := range template.Answer.Bindings {
+				answer.Bindings[role] = fieldID
+			}
+			clone.Templates[i].Answer = &answer
+		}
+	}
+	return clone
+}
+
 // Render expands one side of a card template.
 //
 // The front side is the question. The back side is the answer, and it renders

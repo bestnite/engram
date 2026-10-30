@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/notetype"
 )
 
 // TestCardStoreByNoteScopesToNote covers that ByNote returns only the target note's cards, in ascending ordinal order.
@@ -23,11 +23,11 @@ func TestCardStoreByNoteScopesToNote(t *testing.T) {
 			notes := NewNoteStore(db)
 			cards := NewCardStore(db)
 
-			noteA := &Note{DeckID: deckID, Kind: "basic_both"}
+			noteA := noteOfKind(t, db, deckID, "basic_both")
 			if _, err := notes.Create(ctx, noteA, map[string]any{"front": "qa", "back": "aa"}); err != nil {
 				t.Fatalf("Create(noteA) error = %v", err)
 			}
-			noteB := &Note{DeckID: deckID, Kind: "basic"}
+			noteB := noteOfKind(t, db, deckID, "basic")
 			if _, err := notes.Create(ctx, noteB, map[string]any{"front": "qb", "back": "ab"}); err != nil {
 				t.Fatalf("Create(noteB) error = %v", err)
 			}
@@ -71,7 +71,7 @@ func TestCardStoreHidesCardsOfSoftDeletedNote(t *testing.T) {
 			notes := NewNoteStore(db)
 			cards := NewCardStore(db)
 
-			n := &Note{DeckID: deckID, Kind: "basic_both"}
+			n := noteOfKind(t, db, deckID, "basic_both")
 			created, err := notes.Create(ctx, n, map[string]any{"front": "q", "back": "a"})
 			if err != nil {
 				t.Fatalf("Create() error = %v", err)
@@ -121,13 +121,13 @@ func TestSyncCardsRejectsUnknownTemplateShape(t *testing.T) {
 			deckID := seedDeck(t, db, owner)
 			notes := NewNoteStore(db)
 
-			n := &Note{DeckID: deckID, Kind: "basic"}
+			n := noteOfKind(t, db, deckID, "basic")
 			if _, err := notes.Create(ctx, n, map[string]any{"front": "q", "back": "a"}); err != nil {
 				t.Fatalf("Create() error = %v", err)
 			}
 
 			emptyErr := db.Transaction(func(tx *gorm.DB) error {
-				_, err := syncCards(tx, n.ID, []cardtype.Card{{Template: ""}}, time.Now().UTC())
+				_, err := syncCards(tx, n.ID, []notetype.GeneratedCard{{Template: ""}}, time.Now().UTC())
 				return err
 			})
 			if emptyErr == nil {
@@ -135,7 +135,7 @@ func TestSyncCardsRejectsUnknownTemplateShape(t *testing.T) {
 			}
 
 			dupErr := db.Transaction(func(tx *gorm.DB) error {
-				_, err := syncCards(tx, n.ID, []cardtype.Card{
+				_, err := syncCards(tx, n.ID, []notetype.GeneratedCard{
 					{Template: "reverse", Ordinal: 0},
 					{Template: "reverse", Ordinal: 1},
 				}, time.Now().UTC())

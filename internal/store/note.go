@@ -11,14 +11,15 @@ import (
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/answer"
+	"git.nite07.com/nite/engram/internal/notetype"
 )
 
 var (
 	// ErrNoteDeckRequired means the note names no owning deck.
 	ErrNoteDeckRequired = errors.New("note deck is required")
-	// ErrNoteKindRequired means the note names no kind.
-	ErrNoteKindRequired = errors.New("note kind is required")
+	// ErrNoteTypeRequired means the note names no note type.
+	ErrNoteTypeRequired = errors.New("note type is required")
 	// ErrNoteTagRequired means a bulk tag operation was given no tag name.
 	ErrNoteTagRequired = errors.New("note tag is required")
 )
@@ -55,7 +56,8 @@ type NoteListOptions struct {
 	Query string
 	// Tag matches a tag in tags_json exactly (quoted boundaries, so a prefix does not match).
 	Tag string
-	// Kind filters by kind; an empty string means no filter.
+	// Kind filters by the engram stock kind the note's note type was created from; an empty string means no filter.
+	// The note row itself stores only note_type_id, so the filter is translated into a note type id set first.
 	Kind string
 	// Status takes the constants above; an empty string equals NoteStatusActive.
 	Status string
@@ -81,42 +83,334 @@ func NormalizeNoteListOptions(opts NoteListOptions) NoteListOptions {
 	return opts
 }
 
-// NoteStore wraps the notes table and implements the \"generate cards from the kind\" pipeline.
+// NoteStore wraps the notes table and implements the "generate cards from the note type" pipeline.
 //
 // Separating content from progress is the most important design principle of this project: note/card describe content only,
 // the user's FSRS progress hangs off the card. So updating content must never rebuild a card (delete the old, insert a new one),
 // or the progress is lost with it -- see the invariant notes on syncCards.
 type NoteStore struct {
-	db       *gorm.DB
-	registry *cardtype.Registry
+	db *gorm.DB
 }
 
-// NewNoteStore builds the note store; kinds come from the built-in registry (cardtype.Default).
-func NewNoteStore(db *gorm.DB) *NoteStore {
-	return &NoteStore{db: db, registry: cardtype.Default}
+// NewNoteStore builds the note store.
+func NewNoteStore(db *gorm.DB) *NoteStore { return &NoteStore{db: db} }
+
+// EnsureStockNoteType returns the deck's note type for one engram stock kind, creating it when the deck has none.
+//
+// This is the transitional entry point for the transports that still name a card kind instead of a note type id
+// (the REST/MCP note payloads and the deck package format). A deck keeps one note type per stock kind, so repeated
+// writes resolve to the same row and their notes stay together. The created note type is validated exactly like one
+// created through the note type store, so an invalid stock definition is rejected instead of stored.
+func (s *NoteStore) EnsureStockNoteType(ctx context.Context, deckID uint64, kind string) (*NoteType, error) {
+	return ensureStockNoteType(ctx, s.db, deckID, kind)
 }
 
-// prepareNoteFields validates the kind's fields, serializes fields into n.FieldsJSON, derives n.SearchText from them
-// and returns the cards this note should produce.
-// Validation completes before the write so illegal content never lands in the database; the returned error is readable English naming the field.
-func (s *NoteStore) prepareNoteFields(n *Note, fields map[string]any) ([]cardtype.Card, error) {
-	if n.Kind == "" {
-		return nil, ErrNoteKindRequired
+// ensureStockNoteType is EnsureStockNoteType on a caller's transaction.
+func ensureStockNoteType(ctx context.Context, tx *gorm.DB, deckID uint64, kind string) (*NoteType, error) {
+	kind = strings.TrimSpace(kind)
+	stock, ok := notetype.EngramStockByKind(kind)
+	if !ok {
+		return nil, fmt.Errorf("unknown note type kind %q", kind)
 	}
-	if err := s.registry.Validate(n.Kind, fields); err != nil {
-		return nil, fmt.Errorf("validate note fields: %w", err)
+	var types []NoteType
+	if err := tx.WithContext(ctx).Where("deck_id = ?", deckID).Order("id ASC").Find(&types).Error; err != nil {
+		return nil, fmt.Errorf("list note types of deck %d: %w", deckID, err)
 	}
-	wanted, err := s.registry.Cards(cardtype.Note{Kind: n.Kind, Fields: fields})
+	for i := range types {
+		cfg, err := types[i].Config()
+		if err != nil {
+			continue
+		}
+		if notetype.EngramStockKindFor(cfg) == kind {
+			return &types[i], nil
+		}
+	}
+	nt := NoteType{DeckID: deckID}
+	if err := nt.SetConfig(stock.Name, stock.Config); err != nil {
+		return nil, fmt.Errorf("create note type for kind %q: %w", kind, err)
+	}
+	for _, template := range stock.Config.Templates {
+		if template.Answer == nil {
+			continue
+		}
+		if err := answer.ValidateSpec(*template.Answer); err != nil {
+			return nil, fmt.Errorf("create note type for kind %q: %w", kind, err)
+		}
+	}
+	now := time.Now().UTC()
+	nt.CreatedAt = now
+	nt.UpdatedAt = now
+	if err := tx.WithContext(ctx).Create(&nt).Error; err != nil {
+		return nil, fmt.Errorf("create note type for kind %q: %w", kind, err)
+	}
+	return &nt, nil
+}
+
+// noteTypeIDsForKind returns the ids of the deck's note types created from an engram stock kind.
+func noteTypeIDsForKind(tx *gorm.DB, deckID uint64, kind string) ([]uint64, error) {
+	var types []NoteType
+	if err := tx.Where("deck_id = ?", deckID).Find(&types).Error; err != nil {
+		return nil, fmt.Errorf("list note types of deck %d: %w", deckID, err)
+	}
+	ids := make([]uint64, 0, len(types))
+	for i := range types {
+		cfg, err := types[i].Config()
+		if err != nil {
+			continue
+		}
+		if notetype.EngramStockKindFor(cfg) == kind {
+			ids = append(ids, types[i].ID)
+		}
+	}
+	return ids, nil
+}
+
+// NoteTypeFor resolves the note type of a note and decodes its config.
+func (s *NoteStore) NoteTypeFor(ctx context.Context, n *Note) (*NoteType, notetype.Config, error) {
+	return noteTypeFor(ctx, s.db, n)
+}
+
+// KindOf returns the engram stock kind a note's note type was created from, or the empty string for a note type that is
+// not one of the stock types.
+//
+// The transitional transports (the old REST/MCP payloads and the deck package format) speak kinds, while a note stores only
+// its note type id, so this is where a kind is derived when one is needed. It is a read-side convenience: nothing that
+// decides behaviour reads a kind.
+func (s *NoteStore) KindOf(ctx context.Context, n *Note) string {
+	return kindOfNote(ctx, s.db, n)
+}
+
+// kindOfNote is KindOf on a caller's transaction.
+func kindOfNote(ctx context.Context, tx *gorm.DB, n *Note) string {
+	_, cfg, err := noteTypeFor(ctx, tx, n)
 	if err != nil {
-		return nil, err
+		return ""
 	}
-	raw, err := json.Marshal(fields)
+	return notetype.EngramStockKindFor(cfg)
+}
+
+// noteTypeFor resolves a note's note type inside the caller's transaction and checks that it belongs to the note's deck.
+func noteTypeFor(ctx context.Context, tx *gorm.DB, n *Note) (*NoteType, notetype.Config, error) {
+	if n.NoteTypeID == nil || *n.NoteTypeID == 0 {
+		return nil, notetype.Config{}, ErrNoteTypeRequired
+	}
+	var nt NoteType
+	if err := tx.WithContext(ctx).First(&nt, "id = ?", *n.NoteTypeID).Error; err != nil {
+		return nil, notetype.Config{}, fmt.Errorf("load note type %d: %w", *n.NoteTypeID, err)
+	}
+	if nt.DeckID != n.DeckID {
+		return nil, notetype.Config{}, fmt.Errorf("note type %d belongs to deck %d, not deck %d", nt.ID, nt.DeckID, n.DeckID)
+	}
+	cfg, err := nt.Config()
 	if err != nil {
-		return nil, fmt.Errorf("encode note fields: %w", err)
+		return nil, notetype.Config{}, err
+	}
+	return &nt, cfg, nil
+}
+
+// ParseFieldValues decodes fields_json into the map of field id to HTML value that the renderer and the media scanner read.
+//
+// An empty column counts as the empty map; corrupt data returns a readable English error, so a caller can decide whether
+// to treat it as empty (the write path does, so pre-existing dirty data does not block an edit).
+func ParseFieldValues(raw string) (map[string]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]string{}, nil
+	}
+	var values map[string]string
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil, fmt.Errorf("decode fields_json: %w", err)
+	}
+	if values == nil {
+		values = map[string]string{}
+	}
+	return values, nil
+}
+
+// NoteFieldValues is ParseFieldValues with corrupt data collapsed to the empty map, for read paths that must still render.
+func NoteFieldValues(raw string) map[string]string {
+	values, err := ParseFieldValues(raw)
+	if err != nil {
+		return map[string]string{}
+	}
+	return values
+}
+
+// extractNoteColumns moves the two optional values that live in their own columns out of the payload field map.
+//
+// The old note payload carried source_url and extra as fields; the new model stores them in notes.source_url and
+// notes.extra_json, and they are not note type fields. A note type that declares a field of either name keeps it.
+func extractNoteColumns(fields map[string]any, n *Note, cfg notetype.Config) map[string]any {
+	declared := make(map[string]bool, len(cfg.Fields))
+	for _, field := range cfg.Fields {
+		declared[field.ID] = true
+		declared[field.Name] = true
+	}
+	if !declared["source_url"] {
+		if value, ok := fields["source_url"]; ok {
+			n.SourceURL = nil
+			if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+				n.SourceURL = Ptr(text)
+			}
+			delete(fields, "source_url")
+		}
+	}
+	if !declared["extra"] {
+		if value, ok := fields["extra"]; ok {
+			n.ExtraJSON = nil
+			if value != nil {
+				if raw, err := json.Marshal(value); err == nil && string(raw) != "null" {
+					n.ExtraJSON = Ptr(string(raw))
+				}
+			}
+			delete(fields, "extra")
+		}
+	}
+	return fields
+}
+
+// PayloadFieldValues converts a transport field map into the stored form the note write path stores, so a preview can
+// render unsaved content with the same field conversion and the same error for an unknown field name.
+func PayloadFieldValues(cfg notetype.Config, fields map[string]any) (map[string]string, error) {
+	return noteFieldValues(cfg, fields)
+}
+
+// noteFieldValues converts the payload field map into the stored form: the value of every field of the note type, keyed by
+// field id, as an HTML string.
+//
+// A payload key may be a field id or a field name; both resolve to the same id, because a field name is the id a stock note
+// type was created with. An unknown key is rejected and named, so a typo cannot silently drop content. A field the payload
+// omits becomes the empty string: the payload describes the note's whole content, not a partial patch.
+//
+// The value conversion accepts the shapes the legacy editor sends: a string is HTML already, a string array becomes its items
+// joined with <br>, and a boolean or number becomes its literal text. The permanent shape is the HTML string; the other
+// shapes exist only while the Markdown editor is still in use and are removed with it.
+func noteFieldValues(cfg notetype.Config, fields map[string]any) (map[string]string, error) {
+	byID := make(map[string]notetype.Field, len(cfg.Fields))
+	byName := make(map[string]string, len(cfg.Fields))
+	for _, field := range cfg.Fields {
+		byID[field.ID] = field
+		byName[field.Name] = field.ID
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	values := make(map[string]string, len(cfg.Fields))
+	for _, key := range keys {
+		fieldID := key
+		field, ok := byID[fieldID]
+		if !ok {
+			if id, named := byName[key]; named {
+				fieldID = id
+				field = byID[id]
+			} else {
+				return nil, fmt.Errorf("unknown field %q", key)
+			}
+		}
+		html, err := fieldValueHTML(fields[key])
+		if err != nil {
+			return nil, fmt.Errorf("field %q: %w", field.Name, err)
+		}
+		values[fieldID] = html
+	}
+	for _, field := range cfg.Fields {
+		if _, ok := values[field.ID]; !ok {
+			values[field.ID] = ""
+		}
+	}
+	return values, nil
+}
+
+// fieldValueHTML converts one payload value to the stored HTML string.
+func fieldValueHTML(value any) (string, error) {
+	switch typed := value.(type) {
+	case nil:
+		return "", nil
+	case string:
+		return typed, nil
+	case []any:
+		return joinFieldItems(typed)
+	case []string:
+		items := make([]any, len(typed))
+		for i, item := range typed {
+			items[i] = item
+		}
+		return joinFieldItems(items)
+	case bool:
+		if typed {
+			return "true", nil
+		}
+		return "false", nil
+	case float64:
+		return jsonNumberText(typed), nil
+	case int:
+		return fmt.Sprintf("%d", typed), nil
+	case int64:
+		return fmt.Sprintf("%d", typed), nil
+	case json.Number:
+		return typed.String(), nil
+	default:
+		return "", fmt.Errorf("unsupported value type %T", value)
+	}
+}
+
+// joinFieldItems converts an array value into one HTML string, one item per line.
+func joinFieldItems(items []any) (string, error) {
+	parts := make([]string, 0, len(items))
+	for i, item := range items {
+		html, err := fieldValueHTML(item)
+		if err != nil {
+			return "", fmt.Errorf("item %d: %w", i+1, err)
+		}
+		parts = append(parts, html)
+	}
+	return strings.Join(parts, "<br>"), nil
+}
+
+// jsonNumberText prints a JSON number in its simplest form, so 50 does not become 50.000000.
+func jsonNumberText(value float64) string {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	return string(raw)
+}
+
+// prepareNoteFields validates the payload against the note type, stores the field values, derives the search text and
+// returns the cards this note should produce.
+//
+// Validation completes before the write so illegal content never lands in the database; the returned error is readable
+// English naming the field. Card generation can fail on a template that does not parse, and that error is returned too,
+// so the user sees the template problem instead of a silently missing card.
+func (s *NoteStore) prepareNoteFields(ctx context.Context, tx *gorm.DB, n *Note, fields map[string]any) ([]notetype.GeneratedCard, map[string]string, error) {
+	nt, cfg, err := noteTypeFor(ctx, tx, n)
+	if err != nil {
+		return nil, nil, err
+	}
+	fields = extractNoteColumns(fields, n, cfg)
+	values, err := noteFieldValues(cfg, fields)
+	if err != nil {
+		return nil, nil, fmt.Errorf("validate note fields: %w", err)
+	}
+	raw, err := json.Marshal(values)
+	if err != nil {
+		return nil, nil, fmt.Errorf("encode note fields: %w", err)
 	}
 	n.FieldsJSON = string(raw)
-	n.SearchText = noteSearchText(fields)
-	return wanted, nil
+	n.SearchText = noteSearchText(cfg, values)
+	data := notetype.RenderData{
+		Fields:   values,
+		Tags:     TagsOrEmpty(n.TagsJSON),
+		TypeName: nt.Name,
+	}
+	wanted, err := notetype.GenerateCards(cfg, data)
+	if err != nil {
+		return nil, nil, fmt.Errorf("generate cards: %w", err)
+	}
+	return wanted, values, nil
 }
 
 // actorKey is the context key used by note write validation: the acting user id of this write.
@@ -184,17 +478,17 @@ func (s *NoteStore) createInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if n.DeckID == 0 {
 		return nil, ErrNoteDeckRequired
 	}
-	wanted, err := s.prepareNoteFields(n, fields)
+	if n.TagsJSON == "" {
+		// String defaults are given explicitly on the Go side by the store layer (models.go package comment).
+		n.TagsJSON = "[]"
+	}
+	wanted, values, err := s.prepareNoteFields(ctx, tx, n, fields)
 	if err != nil {
 		return nil, err
 	}
 	// Pre-write validation: evaluate against the pre-write state (on create the old reference set is empty).
-	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), nil, fields); err != nil {
+	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), n.DeckID, nil, values); err != nil {
 		return nil, err
-	}
-	if n.TagsJSON == "" {
-		// String defaults are given explicitly on the Go side by the store layer (models.go package comment).
-		n.TagsJSON = "[]"
 	}
 	now := time.Now().UTC()
 	if n.CreatedAt.IsZero() {
@@ -209,7 +503,7 @@ func (s *NoteStore) createInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if err != nil {
 		return nil, err
 	}
-	if err := rebuildMediaNotes(ctx, tx, n.ID, fields); err != nil {
+	if err := rebuildMediaNotes(ctx, tx, n.ID, n.DeckID, values); err != nil {
 		return nil, err
 	}
 	return created, nil
@@ -253,20 +547,23 @@ func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if err != nil {
 		return nil, err
 	}
-	if n.Kind == "" {
-		n.Kind = existing.Kind
+	if n.DeckID == 0 {
+		n.DeckID = existing.DeckID
 	}
-	wanted, err := s.prepareNoteFields(n, fields)
+	if n.NoteTypeID == nil {
+		n.NoteTypeID = existing.NoteTypeID
+	}
+	wanted, values, err := s.prepareNoteFields(ctx, tx, n, fields)
 	if err != nil {
 		return nil, err
 	}
 	// Pre-write validation: evaluate against the pre-write state -- the old reference set comes from the fields currently in the database, and the write only happens once it passes.
-	oldFields, perr := ParseFields(existing.FieldsJSON)
+	oldValues, perr := ParseFieldValues(existing.FieldsJSON)
 	if perr != nil {
 		// Corrupt fields count as an empty set: that neither waves new references through nor blocks editing because of pre-existing dirty data.
-		oldFields = nil
+		oldValues = nil
 	}
-	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), oldFields, fields); err != nil {
+	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), n.DeckID, oldValues, values); err != nil {
 		return nil, err
 	}
 	if n.TagsJSON == "" {
@@ -276,11 +573,13 @@ func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	n.UpdatedAt = now
 
 	updates := map[string]any{
-		"kind":        n.Kind,
-		"fields_json": n.FieldsJSON,
-		"search_text": n.SearchText,
-		"tags_json":   n.TagsJSON,
-		"updated_at":  now,
+		"note_type_id": *n.NoteTypeID,
+		"fields_json":  n.FieldsJSON,
+		"search_text":  n.SearchText,
+		"tags_json":    n.TagsJSON,
+		"source_url":   n.SourceURL,
+		"extra_json":   n.ExtraJSON,
+		"updated_at":   now,
 	}
 	if err := tx.WithContext(ctx).Model(&Note{}).Where("id = ?", n.ID).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("update note %d: %w", n.ID, err)
@@ -289,7 +588,7 @@ func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if err != nil {
 		return nil, err
 	}
-	if err := rebuildMediaNotes(ctx, tx, n.ID, fields); err != nil {
+	if err := rebuildMediaNotes(ctx, tx, n.ID, n.DeckID, values); err != nil {
 		return nil, err
 	}
 	return synced, nil
@@ -326,13 +625,26 @@ func (s *NoteStore) RestoreInTx(ctx context.Context, tx *gorm.DB, id uint64) err
 // List pages through a deck's notes by criteria, returning the rows of this page and the total number of matches.
 //
 // Query conventions: paging is always LIMIT/OFFSET; fuzzy matching uses LIKE on a column lowered in Go,
-// never PG-only ILIKE or an expression index. Search runs on search_text, the text of every field
+// never PG-only ILIKE or an expression index. Search runs on search_text, the text of every searchable field
 // (see whereNoteSearch), so front and back both hit; tags use a LIKE with quoted boundaries to match an array element exactly.
 func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int64, error) {
 	opts = NormalizeNoteListOptions(opts)
 	perPage := opts.PerPage
 	page := opts.Page
 	offset := (page - 1) * perPage
+
+	// The kind filter lives in the note type config, not in a notes column, so it is resolved to a note type id set first.
+	var kindTypeIDs []uint64
+	if v := strings.TrimSpace(opts.Kind); v != "" {
+		ids, err := noteTypeIDsForKind(s.db.WithContext(ctx), opts.DeckID, v)
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(ids) == 0 {
+			return []Note{}, 0, nil
+		}
+		kindTypeIDs = ids
+	}
 
 	// The query is rebuilt on every call, so reusing one *gorm.DB does not carry Count's statement state into Find.
 	build := func() *gorm.DB {
@@ -346,8 +658,8 @@ func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int
 			// By default GORM's soft-delete scope excludes rows whose deleted_at is not null.
 		}
 		q = q.Where("notes.deck_id = ?", opts.DeckID)
-		if v := strings.TrimSpace(opts.Kind); v != "" {
-			q = q.Where("notes.kind = ?", v)
+		if len(kindTypeIDs) > 0 {
+			q = q.Where("notes.note_type_id IN ?", kindTypeIDs)
 		}
 		q = whereNoteSearch(q, opts.Query)
 		if v := strings.TrimSpace(opts.Tag); v != "" {
@@ -549,19 +861,6 @@ func ParseTags(raw string) ([]string, error) {
 	return tags, nil
 }
 
-// ParseFields decodes fields_json into a field map, used by the list summary and to prefill the edit page.
-func ParseFields(raw string) (map[string]any, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return map[string]any{}, nil
-	}
-	var fields map[string]any
-	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
-		return nil, fmt.Errorf("decode fields_json: %w", err)
-	}
-	return fields, nil
-}
-
 // TagsJSON serializes a tag slice into notes.tags_json; nil becomes "[]", so the column never holds an empty string.
 // This is the only serialization entry point, shared by deck package export and REST writes (the output matches what writing it by hand at each site produced).
 func TagsJSON(tags []string) string {
@@ -573,16 +872,6 @@ func TagsJSON(tags []string) string {
 		return "[]"
 	}
 	return string(raw)
-}
-
-// FieldsOrEmpty decodes fields_json; corrupt data or null collapses into an empty object, so a response never carries null.
-// The list, due-card and export read paths share it, so the same row yields the same shape at every exit.
-func FieldsOrEmpty(raw string) map[string]any {
-	fields, err := ParseFields(raw)
-	if err != nil || fields == nil {
-		return map[string]any{}
-	}
-	return fields
 }
 
 // TagsOrEmpty decodes tags_json; corrupt data or null collapses into an empty array.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/answer"
 )
 
 // TestPresetGradeMappingRoundTrip is the storage acceptance: the score → rating mapping stored in the new preset
@@ -35,12 +35,12 @@ func TestPresetGradeMappingRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GradeMapping() error = %v", err)
 			}
-			if m.RatingFor(1) != cardtype.RatingGood || m.RatingFor(0.5) != cardtype.RatingHard || m.RatingFor(0) != cardtype.RatingAgain {
+			if m.RatingFor(1) != answer.RatingGood || m.RatingFor(0.5) != answer.RatingHard || m.RatingFor(0) != answer.RatingAgain {
 				t.Errorf("default mapping = %+v, want Good/Hard/Again", m)
 			}
 
 			// Custom: the mapping read back after writing must take effect.
-			custom := cardtype.GradeMapping{Full: cardtype.RatingEasy, Partial: cardtype.RatingGood, None: cardtype.RatingAgain}
+			custom := answer.GradeMapping{Full: answer.RatingEasy, Partial: answer.RatingGood, None: answer.RatingAgain}
 			if err := got.SetGradeMapping(custom); err != nil {
 				t.Fatalf("SetGradeMapping() error = %v", err)
 			}
@@ -58,7 +58,7 @@ func TestPresetGradeMappingRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GradeMapping() after update error = %v", err)
 			}
-			if back.RatingFor(1) != cardtype.RatingEasy || back.RatingFor(0.5) != cardtype.RatingGood {
+			if back.RatingFor(1) != answer.RatingEasy || back.RatingFor(0.5) != answer.RatingGood {
 				t.Errorf("round-trip mapping = %+v, want Easy/Good", back)
 			}
 		})

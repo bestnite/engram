@@ -77,6 +77,35 @@ func ExtractClozeBlanks(field string, clozeNumber int) []string {
 	return parts
 }
 
+// ExtractClozeHints returns the hint written for each deletion carrying
+// clozeNumber, in order of appearance and parallel with ExtractClozeBlanks. A
+// deletion without a hint contributes the empty string; the "..." placeholder
+// the cloze filter shows is not a hint a caller can put in an input.
+func ExtractClozeHints(field string, clozeNumber int) []string {
+	var hints []string
+	for _, node := range parseClozes(field) {
+		collectClozeHints(node, clozeNumber, &hints)
+	}
+	return hints
+}
+
+// collectClozeHints appends the hint of every deletion carrying ordinal.
+func collectClozeHints(node clozeNode, ordinal int, hints *[]string) {
+	if node.cloze == nil {
+		return
+	}
+	if node.cloze.containsOrdinal(ordinal) {
+		hint := ""
+		if node.cloze.hasHint {
+			hint = node.cloze.hint
+		}
+		*hints = append(*hints, hint)
+	}
+	for _, child := range node.cloze.children {
+		collectClozeHints(child, ordinal, hints)
+	}
+}
+
 // typeAnswerLinebreaks matches the markup Anki turns into one space before the
 // expected text is stripped, so a line break separates words instead of joining
 // them.

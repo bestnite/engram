@@ -2,16 +2,18 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/api"
-	"git.nite07.com/nite/engram/internal/cardtype"
-	"git.nite07.com/nite/engram/internal/render"
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -98,8 +100,20 @@ func (s *Server) parseDeckScope(c *gin.Context, user *store.User) (reviewScope, 
 	return s.deckScopeFromValues(c, user, c.QueryArray("deck"), c.QueryArray("tag"))
 }
 
+// CardFace is one rendered side of a card: the HTML to write into the frame, the note type's CSS, the body class,
+// which side it is, and the media base its relative media names resolve against.
+//
+// This object is the card-view contract. The transitional front_html/back_html fields travel next to it until the frame
+// runtime reads this object directly.
+type CardFace struct {
+	HTML      string `json:"html"`
+	CSS       string `json:"css"`
+	BodyClass string `json:"body_class"`
+	Side      string `json:"side"`
+	MediaBase string `json:"media_base"`
+}
+
 // ReviewCardView is the rendered two sides of the current card plus its identity.
-// FrontHTML / BackHTML / OptionsHTML always come from internal/render's allowlist sanitizing, so the SPA can embed them as-is safely.
 type ReviewCardView struct {
 	CardID string
 	NoteID string
@@ -107,18 +121,21 @@ type ReviewCardView struct {
 	// ExpectedVersion is the optimistic-lock version carried on submit ("0" for a new card).
 	ExpectedVersion string
 	Template        string
-	FrontHTML       string
-	BackHTML        string
-	// OptionsHTML holds one sanitized HTML fragment per option of a choice card, in option order; nil for every other card type.
-	// The review page renders these fragments inside its answer controls, so they must go through the same sanitizing Markdown/TeX
-	// path as the card face: the raw option source is Markdown in which formulas carry TeX delimiters, and injecting it into the
-	// controls unsanitized would both show the delimiters literally and open an HTML injection path.
+	// Front and Back are the card faces: HTML, CSS, body class, side and media base.
+	Front CardFace
+	Back  CardFace
+	// FrontHTML / BackHTML are the transitional flat fields the SPA reads until it switches to Front and Back.
+	FrontHTML string
+	BackHTML  string
+	// OptionsHTML holds one HTML fragment per option of a choice card, in option order; nil for every other card kind.
+	// The review page renders these fragments inside its own answer controls, so the answer control's own markup stays
+	// out of the card face.
 	OptionsHTML []string
 	// OptionOrder is the display order of a choice card's options: display slot b shows stored option index OptionOrder[b].
 	// Each OptionsHTML entry stays at its stored index, and the submitted answer stays a stored option index.
 	OptionOrder []int
-	// Blanks holds the hint for each input box of per-blank/per-item answer types (cloze questions, list questions), in order, empty string when there is no hint;
-	// the review page uses it to decide the number of input boxes. nil for other question types.
+	// Blanks holds the hint for each input box of per-blank/per-item answer controls (cloze and list), in order, empty
+	// string when there is no hint; the review page uses it to decide the number of input boxes.
 	Blanks []string
 	// EditHref points at the edit page of that note, for the e-key jump.
 	EditHref string
@@ -129,93 +146,250 @@ type ReviewCardView struct {
 	MediaBase string
 }
 
-// cardView renders both sides of a card and fetches the optimistic-lock version.
-func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.QueueItem) (*ReviewCardView, error) {
-	card, err := s.cards.ByID(ctx, item.CardID)
-	if err != nil {
-		return nil, err
-	}
+// typeMarkerPattern matches the placeholder the type filter renders, in all of its written forms.
+var typeMarkerPattern = regexp.MustCompile(`\[\[type:[^\]]*\]\]`)
+
+// cardFace renders one card and resolves its note type, template and answer bindings.
+type cardFace struct {
+	card     *store.Card
+	note     *store.Note
+	deck     *store.Deck
+	noteType *store.NoteType
+	config   notetype.Config
+	template notetype.Template
+	spec     *notetype.AnswerSpec
+	ordinal  int
+	values   map[string]string
+	front    string
+	back     string
+}
+
+// renderCard loads the card's note, note type and template and renders both sides with the card's current data.
+//
+// The front is rendered without an answer and the back with the given answer result (nil before a submission), so the back
+// can show the answer control's breakdown of what the learner wrote. The raw template output still carries the
+// [[type:...]] marker; callers decide how to replace or strip it.
+func (s *Server) renderCard(ctx context.Context, card *store.Card, submitted json.RawMessage, result *answer.GradeResult) (*cardFace, error) {
 	note, err := s.notes.ByID(ctx, card.NoteID)
 	if err != nil {
 		return nil, err
 	}
-	t, ok := cardtype.Lookup(note.Kind)
-	if !ok {
-		return nil, cardtype.UnknownKindError(note.Kind)
-	}
-	fields, err := store.ParseFields(note.FieldsJSON)
+	nt, cfg, err := s.notes.NoteTypeFor(ctx, note)
 	if err != nil {
 		return nil, err
 	}
-	ct := cardtype.Card{Template: card.Template, Ordinal: card.Ordinal, Fields: fields}
-	version := s.stateVersion(ctx, user.ID, card.ID)
-	// One display order per (user, card, state version): the render response and the reveal both read it, so a
-	// revealed back lists the correct options in the same order the user saw. It changes only after a review.
-	if optionsField := t.Describe().OptionsField; optionsField != "" {
-		ct.OptionOrder = api.OptionOrder(cardtype.OptionCount(fields, optionsField), user.ID, card.ID, version)
-	}
-	front, err := t.Render(ct, cardtype.SideFront)
+	tmpl, clozeOrdinal, err := notetype.CardTemplate(cfg, card.Template)
 	if err != nil {
 		return nil, err
 	}
-	// The front HTML carries the card face only. A choice card's options are drawn as the answer controls below the face, so they
-	// travel in OptionsHTML instead of being joined into the face; joining them would show every option twice.
-	// The controls need sanitized HTML rather than the plain option source: formulas in the options carry TeX delimiters that would
-	// print literally, and injecting unsanitized source would open an HTML injection path. Each option therefore goes through the
-	// same rendering pipeline as the card face, which is why the SPA may inject the result.
-	var optionsHTML []string
-	if t.Describe().OptionsField != "" {
-		optionsHTML = make([]string, 0, len(front.Options))
-		for _, option := range front.Options {
-			optionHTML, err := render.RenderMarkdown(option)
-			if err != nil {
-				return nil, err
-			}
-			optionsHTML = append(optionsHTML, optionHTML)
-		}
-	}
-	back, err := t.Render(ct, cardtype.SideBack)
+	deck, err := s.decks.ByID(ctx, note.DeckID)
 	if err != nil {
 		return nil, err
 	}
-	frontHTML, err := render.RenderMarkdown(front.Body)
+	values := store.NoteFieldValues(note.FieldsJSON)
+	data := notetype.RenderData{
+		Fields:       values,
+		Tags:         store.TagsOrEmpty(note.TagsJSON),
+		TypeName:     nt.Name,
+		DeckName:     deck.Name,
+		SubdeckName:  deck.Name,
+		CardName:     tmpl.Name,
+		CardID:       card.PublicID,
+		ClozeOrdinal: clozeOrdinal,
+	}
+	front, err := notetype.Render(cfg, tmpl, notetype.SideFront, data)
 	if err != nil {
 		return nil, err
 	}
-	// The back has no answer controls, so anything a type put in its Options is shown inline rather than dropped.
-	backHTML, err := renderSide(back)
+	back, err := notetype.Render(cfg, tmpl, notetype.SideBack, data)
 	if err != nil {
 		return nil, err
 	}
-	var blanks []string
-	if b, ok := t.(blankHinter); ok {
-		blanks = b.BlankHints(ct)
-	}
-	deckPublic := s.deckPublicID(ctx, note.DeckID)
-	// The card faces keep their absolute /media/ URLs: only a caller that declares the HTML is for the frame rewrites
-	// them, because the parent SPA has no <base> and a relative name would 404 there. MediaBase still travels with every
-	// card-face response so the frame consumer has the token route at hand.
-	mediaBase := s.frameMediaBase(ctx, user.ID, note.DeckID)
-	return &ReviewCardView{
-		CardID:          card.PublicID,
-		NoteID:          note.PublicID,
-		DeckID:          deckPublic,
-		ExpectedVersion: strconv.Itoa(version),
-		Template:        card.Template,
-		FrontHTML:       frontHTML,
-		BackHTML:        backHTML,
-		OptionsHTML:     optionsHTML,
-		OptionOrder:     ct.OptionOrder,
-		Blanks:          blanks,
-		EditHref:        "/decks/" + deckPublic + "/notes/" + note.PublicID,
-		MediaBase:       mediaBase,
+	return &cardFace{
+		card: card, note: note, deck: deck, noteType: nt, config: cfg, template: tmpl,
+		spec: tmpl.Answer, ordinal: clozeOrdinal, values: values, front: front, back: back,
 	}, nil
 }
 
-// blankHinter is the optional capability of per-blank/per-item answer types: give the hint for each input box of a card.
-// The question type knows how many input boxes a card needs; the review page does not re-parse the fields.
-type blankHinter interface {
-	BlankHints(card cardtype.Card) []string
+// faces renders both sides into the card-view shape.
+//
+// The front side never shows the answer control's input markup: the frame runtime draws the input, and the transitional
+// SPA draws its own controls from options_html and blanks. The back side substitutes the control's
+// breakdown for the marker, so the correct answer is visible with or without a submitted answer.
+func (s *Server) faces(ctx context.Context, user *store.User, item *cardFace, submitted json.RawMessage, result *answer.GradeResult, forFrame bool, optionOrder []int) (CardFace, CardFace) {
+	mediaBase := s.frameMediaBase(ctx, user.ID, item.note.DeckID)
+	frontHTML := typeMarkerPattern.ReplaceAllString(item.front, "")
+	backHTML := backFaceHTML(item, submitted, result, optionOrder)
+	if !forFrame || mediaBase == "" {
+		frontHTML = absoluteMediaRefs(frontHTML)
+		backHTML = absoluteMediaRefs(backHTML)
+	}
+	bodyClass := "card"
+	return CardFace{
+		HTML:      frontHTML,
+		CSS:       item.config.CSS,
+		BodyClass: bodyClass,
+		Side:      notetype.SideFront.String(),
+		MediaBase: mediaBase,
+	}, CardFace{
+		HTML:      backHTML,
+		CSS:       item.config.CSS,
+		BodyClass: bodyClass,
+		Side:      notetype.SideBack.String(),
+		MediaBase: mediaBase,
+	}
+}
+
+// backFaceHTML replaces the back side's type marker with the answer control's breakdown when a control exists, and
+// strips the marker otherwise.
+func backFaceHTML(item *cardFace, submitted json.RawMessage, result *answer.GradeResult, optionOrder []int) string {
+	marker := typeMarkerPattern.FindString(item.back)
+	if item.spec == nil || marker == "" {
+		return typeMarkerPattern.ReplaceAllString(item.back, "")
+	}
+	control, ok := answer.Lookup(item.spec.Control)
+	if !ok {
+		return typeMarkerPattern.ReplaceAllString(item.back, "")
+	}
+	bindings, err := answer.ResolveBindings(*item.spec, item.values)
+	if err != nil {
+		return typeMarkerPattern.ReplaceAllString(item.back, "")
+	}
+	rendered, err := answer.RenderSide(control, answer.RenderContext{
+		Marker:       marker,
+		Side:         notetype.SideBack,
+		Bindings:     bindings,
+		ClozeOrdinal: item.ordinal,
+		OptionOrder:  optionOrder,
+		Answer:       submitted,
+		Result:       result,
+	}, item.back)
+	if err != nil {
+		return typeMarkerPattern.ReplaceAllString(item.back, "")
+	}
+	return rendered
+}
+
+// optionLines splits a stored options field into its entries.
+//
+// The entries are HTML fragments, not answer text, so they are split at the line separator only and kept verbatim: running
+// them through PlainText would strip the markup an option is allowed to carry.
+func optionLines(html string) []string {
+	segments := optionLineBreak.Split(html, -1)
+	out := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		if trimmed := strings.TrimSpace(segment); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+// optionLineBreak matches the separator the write path puts between array entries.
+var optionLineBreak = regexp.MustCompile(`(?i)<br\s*/?>|\r?\n`)
+
+// answerOptionCount returns the number of options an answer control reads, or zero when it reads none.
+func answerOptionCount(spec *notetype.AnswerSpec, values map[string]string) int {
+	control, ok := answer.Lookup(spec.Control)
+	if !ok {
+		return 0
+	}
+	roles, ok := control.(answer.Roles)
+	if !ok {
+		return 0
+	}
+	for _, role := range roles.Roles() {
+		if role.Name != "options" {
+			continue
+		}
+		return len(optionLines(values[spec.Bindings[role.Name]]))
+	}
+	return 0
+}
+
+// optionHTML returns one HTML fragment per option of a choice answer control, in stored order.
+func optionHTML(spec *notetype.AnswerSpec, values map[string]string) []string {
+	if spec == nil {
+		return nil
+	}
+	control, ok := answer.Lookup(spec.Control)
+	if !ok {
+		return nil
+	}
+	roles, ok := control.(answer.Roles)
+	if !ok {
+		return nil
+	}
+	for _, role := range roles.Roles() {
+		if role.Name != "options" {
+			continue
+		}
+		lines := optionLines(values[spec.Bindings[role.Name]])
+		if len(lines) == 0 {
+			return nil
+		}
+		return lines
+	}
+	return nil
+}
+
+// blankHints returns one hint per input box the answer control draws for this card.
+func blankHints(spec *notetype.AnswerSpec, values map[string]string, clozeOrdinal int) []string {
+	if spec == nil {
+		return nil
+	}
+	switch spec.Control {
+	case "cloze_blanks":
+		return notetype.ExtractClozeHints(values[spec.Bindings["text"]], clozeOrdinal)
+	case "list":
+		return make([]string, len(answer.ParseLines(values[spec.Bindings["items"]])))
+	default:
+		return nil
+	}
+}
+
+// cardView renders both sides of a card and fetches the optimistic-lock version.
+func (s *Server) cardView(ctx context.Context, user *store.User, item schedule.QueueItem) (*ReviewCardView, error) {
+	return s.cardViewWithAnswer(ctx, user, item, nil, nil, false)
+}
+
+// cardViewWithAnswer renders both sides and, when an answer result is given, renders the back with that answer.
+func (s *Server) cardViewWithAnswer(ctx context.Context, user *store.User, item schedule.QueueItem, submitted json.RawMessage, result *answer.GradeResult, forFrame bool) (*ReviewCardView, error) {
+	card, err := s.cards.ByID(ctx, item.CardID)
+	if err != nil {
+		return nil, err
+	}
+	rendered, err := s.renderCard(ctx, card, submitted, result)
+	if err != nil {
+		return nil, err
+	}
+	version := s.stateVersion(ctx, user.ID, card.ID)
+	// The choice options stay in the parent page, which has no <base> element, so their media references are always absolute.
+	options := optionHTML(rendered.spec, rendered.values)
+	for i := range options {
+		options[i] = absoluteMediaRefs(options[i])
+	}
+	var optionOrder []int
+	if len(options) > 1 {
+		optionOrder = api.OptionOrder(len(options), user.ID, card.ID, version)
+	}
+	front, back := s.faces(ctx, user, rendered, submitted, result, forFrame, optionOrder)
+	return &ReviewCardView{
+		CardID:          card.PublicID,
+		NoteID:          rendered.note.PublicID,
+		DeckID:          rendered.deck.PublicID,
+		ExpectedVersion: strconv.Itoa(version),
+		Template:        card.Template,
+		Front:           front,
+		Back:            back,
+		FrontHTML:       front.HTML,
+		BackHTML:        back.HTML,
+		OptionsHTML:     options,
+		OptionOrder:     optionOrder,
+		Blanks:          blankHints(rendered.spec, rendered.values, rendered.ordinal),
+		EditHref:        "/decks/" + rendered.deck.PublicID + "/notes/" + rendered.note.PublicID,
+		MediaBase:       front.MediaBase,
+	}, nil
 }
 
 // stateVersion reads the optimistic-lock version for (card_id, user_id); a new card with no state row returns 0.
@@ -228,15 +402,34 @@ func (s *Server) stateVersion(ctx context.Context, userID, cardID uint64) int {
 	return st.Version
 }
 
-// graderFor decides whether a question type supports machine grading by asserting an optional narrow interface.
-// Grading is an optional capability and the core pipeline does not depend on it: a type that does not implement Grader returns false and still goes through the four-grade self-assessment.
-func graderFor(kind string) (cardtype.Grader, bool) {
-	t, ok := cardtype.Lookup(kind)
-	if !ok {
-		return nil, false
+// cardIsMachineGraded reports whether the card's template grades a submitted answer.
+func (s *Server) cardIsMachineGraded(ctx context.Context, card *store.Card) (bool, error) {
+	note, err := s.notes.ByID(ctx, card.NoteID)
+	if err != nil {
+		return false, err
 	}
-	g, ok := t.(cardtype.Grader)
-	return g, ok
+	_, cfg, err := s.notes.NoteTypeFor(ctx, note)
+	if err != nil {
+		return false, err
+	}
+	tmpl, _, err := notetype.CardTemplate(cfg, card.Template)
+	if err != nil {
+		return false, err
+	}
+	if tmpl.Answer == nil {
+		return false, nil
+	}
+	return isMachineGradedSpec(tmpl.Answer), nil
+}
+
+// isMachineGradedSpec reports whether an answer spec names a control that grades a machine answer. The short answer
+// control carries a spec so it can record the written answer, but grading stays self-assessed.
+func isMachineGradedSpec(spec *notetype.AnswerSpec) bool {
+	if spec == nil || spec.Control == "short_answer" {
+		return false
+	}
+	_, ok := answer.Lookup(spec.Control)
+	return ok
 }
 
 // numberText prints a number (a parsed answer) in its simplest form, so 50 does not show up as 50.000000.
@@ -248,6 +441,10 @@ func numberText(v any) string {
 		return strconv.FormatFloat(float64(n), 'g', -1, 64)
 	case int:
 		return strconv.Itoa(n)
+	case int64:
+		return strconv.FormatInt(n, 10)
+	case json.Number:
+		return n.String()
 	default:
 		return fmt.Sprintf("%v", v)
 	}

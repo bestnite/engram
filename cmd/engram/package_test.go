@@ -38,11 +38,15 @@ func seedCLIDeck(t *testing.T, db *gorm.DB) (userID, deckID uint64) {
 		t.Fatalf("create deck: %v", err)
 	}
 	ns := store.NewNoteStore(db)
+	noteType, err := ns.EnsureStockNoteType(ctx, d.ID, "basic")
+	if err != nil {
+		t.Fatalf("create note type: %v", err)
+	}
 	for i, f := range []map[string]any{
 		{"front": "q1", "back": "a1"},
 		{"front": "q2", "back": "a2"},
 	} {
-		n := store.Note{DeckID: d.ID, Kind: "basic", TagsJSON: "[]", CreatedBy: store.Ptr(u.ID)}
+		n := store.Note{DeckID: d.ID, NoteTypeID: store.Ptr(noteType.ID), TagsJSON: "[]", CreatedBy: store.Ptr(u.ID)}
 		if _, err := ns.Create(ctx, &n, f); err != nil {
 			t.Fatalf("create note %d: %v", i, err)
 		}

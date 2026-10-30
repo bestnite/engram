@@ -49,7 +49,8 @@ func seedReviewCard(t *testing.T, db *gorm.DB, deckID, userID uint64, dueAt time
 	t.Helper()
 	now := time.Now().UTC()
 	n := store.Note{
-		DeckID: deckID, Kind: "basic",
+		DeckID:     deckID,
+		NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deckID, "basic")),
 		FieldsJSON: fmt.Sprintf(`{"front":%q,"back":"a"}`, front),
 		TagsJSON:   `["t1","t2"]`, CreatedAt: now, UpdatedAt: now,
 	}
@@ -73,7 +74,8 @@ func seedNewCard(t *testing.T, db *gorm.DB, deckID uint64, front string) store.C
 	t.Helper()
 	now := time.Now().UTC()
 	n := store.Note{
-		DeckID: deckID, Kind: "basic",
+		DeckID:     deckID,
+		NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deckID, "basic")),
 		FieldsJSON: fmt.Sprintf(`{"front":%q,"back":"a"}`, front),
 		TagsJSON:   "[]", CreatedAt: now, UpdatedAt: now,
 	}

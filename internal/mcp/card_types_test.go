@@ -4,12 +4,18 @@ import (
 	"strings"
 	"testing"
 
-	"git.nite07.com/nite/engram/internal/cardtype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Acceptance for list_card_types: it returns the card type self-descriptions consistent with the registry (same source as REST GET /card-types),
-// and is open only to keys with the read scope.
+// Acceptance for list_card_types: it returns one self-description per frozen card kind (the same catalog REST GET /card-types
+// serves), and is open only to keys with the read scope.
+
+// frozenCardKinds is the set of card kinds the payload layer describes. It is written out here so this test fails when the
+// catalog gains or loses a kind without the MCP tool changing.
+var frozenCardKinds = []string{
+	"basic", "basic_both", "choice_multi", "choice_single", "cloze",
+	"list", "numeric", "short_answer", "true_false", "typed",
+}
 
 func TestListCardTypesMatchesRegistry(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
@@ -21,16 +27,23 @@ func TestListCardTypesMatchesRegistry(t *testing.T) {
 		t.Fatalf("list_card_types error: %s", text)
 	}
 	kinds, _ := out["kinds"].([]any)
-	want := cardtype.Descriptions()
-	if len(kinds) != len(want) {
-		t.Fatalf("list_card_types returned %d kinds, want %d", len(kinds), len(want))
+	if len(kinds) != len(frozenCardKinds) {
+		t.Fatalf("list_card_types returned %d kinds, want %d", len(kinds), len(frozenCardKinds))
 	}
-	for i, raw := range kinds {
+	seen := map[string]bool{}
+	for _, raw := range kinds {
 		k, _ := raw.(map[string]any)
+		kind, _ := k["kind"].(string)
+		seen[kind] = true
 		fields, _ := k["fields"].([]any)
 		example, _ := k["example"].(map[string]any)
-		if k["kind"] != want[i].Kind || len(fields) != len(want[i].Fields) || len(example) == 0 {
-			t.Fatalf("kind %d = %v, want kind %q with %d fields and an example", i, k, want[i].Kind, len(want[i].Fields))
+		if kind == "" || len(fields) == 0 || len(example) == 0 {
+			t.Fatalf("kind entry = %v, want a kind, its fields and an example", k)
+		}
+	}
+	for _, kind := range frozenCardKinds {
+		if !seen[kind] {
+			t.Errorf("list_card_types is missing kind %q", kind)
 		}
 	}
 }

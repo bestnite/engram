@@ -48,8 +48,66 @@ func DefaultGradeMapping() GradeMapping {
 
 // withDefaults fills every unset field with its default, so a caller that
 // leaves a field out gets the documented behaviour instead of a zero rating.
+// ParseGradeMapping decodes the mapping stored in a preset. An empty string
+// (the column is NULL) falls back to the default mapping; this is the only
+// entry point for the "missing means default" rule, so every reader agrees.
+func ParseGradeMapping(raw string) (GradeMapping, error) {
+	mapping := DefaultGradeMapping()
+	if raw == "" {
+		return mapping, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &mapping); err != nil {
+		return GradeMapping{}, fmt.Errorf("grade mapping: invalid JSON: %w", err)
+	}
+	if err := mapping.validate(); err != nil {
+		return GradeMapping{}, err
+	}
+	return mapping.withDefaults(), nil
+}
+
+// MarshalGradeMapping encodes a mapping for storage in a preset, filling in
+// every unset field first so the stored value is complete.
+func MarshalGradeMapping(mapping GradeMapping) (string, error) {
+	if err := mapping.validate(); err != nil {
+		return "", err
+	}
+	raw, err := json.Marshal(mapping.withDefaults())
+	if err != nil {
+		return "", fmt.Errorf("grade mapping: marshal: %w", err)
+	}
+	return string(raw), nil
+}
+
+// GradeMappingVersion is the structure version this package understands.
+const GradeMappingVersion = 1
+
+// validate checks the version, the rating range and the threshold ordering.
+// Errors name the offending value so a preset edit can show it.
+func (m GradeMapping) validate() error {
+	if m.Version != 0 && m.Version != GradeMappingVersion {
+		return fmt.Errorf("grade mapping: unsupported version %d", m.Version)
+	}
+	resolved := m.withDefaults()
+	for _, entry := range []struct {
+		name   string
+		rating int
+	}{{"full", resolved.Full}, {"partial", resolved.Partial}, {"none", resolved.None}} {
+		if entry.rating < RatingAgain || entry.rating > RatingEasy {
+			return fmt.Errorf("grade mapping: %s rating %d out of range 1-4", entry.name, entry.rating)
+		}
+	}
+	if resolved.FullThreshold <= resolved.NoneThreshold {
+		return fmt.Errorf("grade mapping: full_threshold (%g) must be greater than none_threshold (%g)",
+			resolved.FullThreshold, resolved.NoneThreshold)
+	}
+	return nil
+}
+
 func (m GradeMapping) withDefaults() GradeMapping {
 	defaults := DefaultGradeMapping()
+	if m.Version == 0 {
+		m.Version = defaults.Version
+	}
 	if m.Full == 0 {
 		m.Full = defaults.Full
 	}

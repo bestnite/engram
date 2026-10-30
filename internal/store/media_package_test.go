@@ -26,9 +26,9 @@ func seedMediaNote(t *testing.T, db *gorm.DB, srcRoot string, owner, deckID uint
 	if err != nil {
 		t.Fatalf("SaveBytes: %v", err)
 	}
-	n := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(owner)}
+	n := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deckID, "basic")), TagsJSON: "[]", CreatedBy: Ptr(owner)}
 	if _, err := NewNoteStore(db).Create(context.Background(), &n, map[string]any{
-		"front": "img?", "back": "media/" + m.Sha256 + "." + ext,
+		"front": "img?", "back": `<img src="` + m.Sha256 + `.` + ext + `">`,
 	}); err != nil {
 		t.Fatalf("create media note: %v", err)
 	}
@@ -112,8 +112,8 @@ func TestImportMissingMediaRespectsSkipFlag(t *testing.T) {
 
 			// the note references a sha whose bytes are not in the package at all (export used include_media=0, the reference is still in the fields).
 			sha := strings.Repeat("a", 64)
-			n := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(owner)}
-			if _, err := NewNoteStore(src).Create(ctx, &n, map[string]any{"front": "x?", "back": "media/" + sha + ".png"}); err != nil {
+			n := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, src, deckID, "basic")), TagsJSON: "[]", CreatedBy: Ptr(owner)}
+			if _, err := NewNoteStore(src).Create(ctx, &n, map[string]any{"front": "x?", "back": `<img src="` + sha + `.png">`}); err != nil {
 				t.Fatalf("create note: %v", err)
 			}
 			raw := exportZip(t, src, owner, deckID, PackageOptions{IncludeMedia: false})
@@ -196,9 +196,9 @@ func TestImportPackageRollbackLeavesNoOrphanMedia(t *testing.T) {
 			if m.Sha256 != sha {
 				t.Fatalf("seeded media sha = %s, want %s", m.Sha256, sha)
 			}
-			srcNote := Note{DeckID: srcDeck, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(owner), ExternalRef: Ptr("ext:conflict")}
+			srcNote := Note{DeckID: srcDeck, NoteTypeID: Ptr(stockNoteTypeID(t, src, srcDeck, "basic")), TagsJSON: "[]", CreatedBy: Ptr(owner), ExternalRef: Ptr("ext:conflict")}
 			if _, err := NewNoteStore(src).Create(ctx, &srcNote, map[string]any{
-				"front": "q?", "back": "media/" + sha + ".png",
+				"front": "q?", "back": `<img src="` + sha + `.png">`,
 			}); err != nil {
 				t.Fatalf("create source note: %v", err)
 			}
@@ -207,7 +207,7 @@ func TestImportPackageRollbackLeavesNoOrphanMedia(t *testing.T) {
 			importer := seedUsers(t, dst, "pkg_orphan_importer")[0]
 			dstDeck := seedPresetDeck(t, dst, importer)
 			// pre-seed a note with the same external_ref so the packaged note hits the conflict (on_conflict=fail → the whole package rolls back).
-			pre := Note{DeckID: dstDeck, Kind: "basic", TagsJSON: "[]", CreatedBy: Ptr(importer), ExternalRef: Ptr("ext:conflict")}
+			pre := Note{DeckID: dstDeck, NoteTypeID: Ptr(stockNoteTypeID(t, dst, dstDeck, "basic")), TagsJSON: "[]", CreatedBy: Ptr(importer), ExternalRef: Ptr("ext:conflict")}
 			if _, err := NewNoteStore(dst).Create(ctx, &pre, map[string]any{"front": "already here", "back": "x"}); err != nil {
 				t.Fatalf("create conflicting note: %v", err)
 			}

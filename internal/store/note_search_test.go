@@ -5,6 +5,8 @@ import (
 	"sort"
 	"testing"
 
+	"git.nite07.com/nite/engram/internal/notetype"
+
 	"gorm.io/gorm"
 )
 
@@ -30,7 +32,7 @@ func seedSearchNotes(t *testing.T, db *gorm.DB, deckID uint64) map[uint64]string
 	notes := NewNoteStore(db)
 	byID := make(map[uint64]string, len(noteSearchSeed))
 	for _, s := range noteSearchSeed {
-		n := &Note{DeckID: deckID, Kind: s.kind}
+		n := noteOfKind(t, db, deckID, s.kind)
 		if _, err := notes.Create(ctx, n, s.fields); err != nil {
 			t.Fatalf("create note %s: %v", s.name, err)
 		}
@@ -61,7 +63,7 @@ var noteSearchCases = []struct {
 	{"array element", "mercury", []string{"choice"}},
 	{"percent is literal", "%", []string{"wildcard"}},
 	{"underscore is literal", "_", []string{"wildcard"}},
-	{"numbers are not indexed", "2", nil},
+	{"a numeric field value is text too", "2", []string{"choice"}},
 	{"blank query matches everything", "   ", []string{"accent", "choice", "cjk", "html", "multiline", "quote", "wildcard"}},
 }
 
@@ -119,7 +121,7 @@ func TestNoteSearchTextFollowsUpdates(t *testing.T) {
 			owner := seedUsers(t, db, "note_search_update_owner")[0]
 			deckID := seedDeck(t, db, owner)
 			notes := NewNoteStore(db)
-			n := &Note{DeckID: deckID, Kind: "basic"}
+			n := noteOfKind(t, db, deckID, "basic")
 			if _, err := notes.Create(ctx, n, map[string]any{"front": "alpha", "back": "beta"}); err != nil {
 				t.Fatalf("create note: %v", err)
 			}
@@ -155,7 +157,7 @@ func TestBackfillNoteSearchText(t *testing.T) {
 			deckID := seedDeck(t, db, owner)
 			byID := seedSearchNotes(t, db, deckID)
 
-			corrupt := Note{DeckID: deckID, Kind: "basic", FieldsJSON: "{not json", TagsJSON: "[]"}
+			corrupt := Note{DeckID: deckID, FieldsJSON: "{not json", TagsJSON: "[]"}
 			if err := db.Create(&corrupt).Error; err != nil {
 				t.Fatalf("create corrupt note: %v", err)
 			}
@@ -208,23 +210,23 @@ func TestBackfillNoteSearchText(t *testing.T) {
 	}
 }
 
-// TestNoteSearchText pins the derivation rule on its own: string values only, sorted keys, nested arrays and maps walked.
+// TestNoteSearchText pins the derivation rule on its own: the plain text of every field the config marks searchable,
+// in config order, lowered; a field with exclude_from_search is left out.
 func TestNoteSearchText(t *testing.T) {
-	cases := []struct {
-		name   string
-		fields map[string]any
-		want   string
-	}{
-		{"nil fields", nil, ""},
-		{"keys sorted, values lowered", map[string]any{"z": "Last", "a": "First"}, "first\nlast"},
-		{"numbers, booleans and empty strings skipped", map[string]any{"a": 1.5, "b": true, "c": "", "d": "Kept"}, "kept"},
-		{"nested arrays and maps", map[string]any{"a": []any{"X", map[string]any{"k": "Y"}, 2.0}}, "x\ny"},
+	cfg := notetype.Config{Fields: []notetype.Field{
+		{ID: "front", Name: "front"},
+		{ID: "back", Name: "back"},
+		{ID: "hidden", Name: "hidden", ExcludeFromSearch: true},
+	}}
+	values := map[string]string{
+		"front":  "<p>What is <strong>bold</strong>?</p>",
+		"back":   "<div>An answer</div>",
+		"hidden": "machine syntax",
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := noteSearchText(tc.fields); got != tc.want {
-				t.Errorf("noteSearchText(%v) = %q, want %q", tc.fields, got, tc.want)
-			}
-		})
+	if got, want := noteSearchText(cfg, values), "what is bold?\nan answer"; got != want {
+		t.Errorf("noteSearchText() = %q, want %q", got, want)
+	}
+	if got := noteSearchText(notetype.Config{}, values); got != "" {
+		t.Errorf("noteSearchText(no fields) = %q, want empty", got)
 	}
 }

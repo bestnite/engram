@@ -16,7 +16,7 @@ import (
 // The fixture goes through the real generation pipeline, so the bulk action tests face notes and cards that are genuinely persisted.
 func seedBasicNote(t *testing.T, env *testEnv, deckID uint64, front, back string, tags []string) *store.Note {
 	t.Helper()
-	n := &store.Note{DeckID: deckID, Kind: "basic", TagsJSON: store.TagsJSON(tags), CreatedAt: time.Now().UTC()}
+	n := &store.Note{DeckID: deckID, NoteTypeID: store.Ptr(stockNoteTypeID(t, env.db, deckID, "basic")), TagsJSON: store.TagsJSON(tags), CreatedAt: time.Now().UTC()}
 	if _, err := store.NewNoteStore(env.db).Create(context.Background(), n, map[string]any{"front": front, "back": back}); err != nil {
 		t.Fatalf("create note: %v", err)
 	}

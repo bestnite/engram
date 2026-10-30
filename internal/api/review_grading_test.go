@@ -16,7 +16,27 @@ import (
 func seedKindCard(t *testing.T, db *gorm.DB, deckID uint64, kind, fieldsJSON, template string) store.Card {
 	t.Helper()
 	now := time.Now().UTC()
-	n := store.Note{DeckID: deckID, Kind: kind, FieldsJSON: fieldsJSON, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+	noteType, err := store.NewNoteStore(db).EnsureStockNoteType(t.Context(), deckID, kind)
+	if err != nil {
+		t.Fatalf("ensure note type %q: %v", kind, err)
+	}
+	cfg, err := noteType.Config()
+	if err != nil {
+		t.Fatalf("decode note type %q: %v", kind, err)
+	}
+	payload, err := store.ParseFields(fieldsJSON)
+	if err != nil {
+		t.Fatalf("decode fixture fields of kind %q: %v", kind, err)
+	}
+	values, err := store.PayloadFieldValues(cfg, payload)
+	if err != nil {
+		t.Fatalf("convert fixture fields of kind %q: %v", kind, err)
+	}
+	raw, err := json.Marshal(values)
+	if err != nil {
+		t.Fatalf("encode fixture fields of kind %q: %v", kind, err)
+	}
+	n := store.Note{DeckID: deckID, NoteTypeID: store.Ptr(noteType.ID), FieldsJSON: string(raw), TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(&n).Error; err != nil {
 		t.Fatalf("create note: %v", err)
 	}
@@ -69,7 +89,7 @@ func TestSubmitReviewGradingRules(t *testing.T) {
 		{name: "self-assessed card rejects an answer", kind: "basic", fields: `{"front":"q","back":"a"}`, template: "forward",
 			body: `"answer":"a"`, wantStatus: http.StatusBadRequest, wantCode: CodeInvalidRequest},
 		{name: "short answer stores the written answer with the self rating", kind: "short_answer", fields: `{"prompt":"why?","reference":"because"}`, template: "forward",
-			body: `"rating":3,"answer":"because of X"`, wantStatus: http.StatusOK, wantSource: "self", wantRating: 3, wantDetail: `{"answer":"because of X"}`},
+			body: `"rating":3,"answer":"because of X"`, wantStatus: http.StatusOK, wantSource: "self", wantRating: 3, wantDetail: `{"answer":"because of X","self_assessed":true}`},
 		{name: "short answer without a written answer stores no detail", kind: "short_answer", fields: `{"prompt":"why?"}`, template: "forward",
 			body: `"rating":2,"answer":"  "`, wantStatus: http.StatusOK, wantSource: "self", wantRating: 2},
 		{name: "short answer still needs a rating", kind: "short_answer", fields: `{"prompt":"why?"}`, template: "forward",

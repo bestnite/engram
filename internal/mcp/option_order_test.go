@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -14,7 +15,27 @@ import (
 func seedNoteMCP(t *testing.T, db *gorm.DB, deckID uint64, kind, fieldsJSON string) string {
 	t.Helper()
 	now := time.Now().UTC()
-	n := store.Note{DeckID: deckID, Kind: kind, FieldsJSON: fieldsJSON, TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
+	noteType, err := store.NewNoteStore(db).EnsureStockNoteType(t.Context(), deckID, kind)
+	if err != nil {
+		t.Fatalf("ensure note type %q: %v", kind, err)
+	}
+	cfg, err := noteType.Config()
+	if err != nil {
+		t.Fatalf("decode note type %q: %v", kind, err)
+	}
+	payload, err := store.ParseFields(fieldsJSON)
+	if err != nil {
+		t.Fatalf("decode fixture fields of kind %q: %v", kind, err)
+	}
+	values, err := store.PayloadFieldValues(cfg, payload)
+	if err != nil {
+		t.Fatalf("convert fixture fields of kind %q: %v", kind, err)
+	}
+	raw, err := json.Marshal(values)
+	if err != nil {
+		t.Fatalf("encode fixture fields of kind %q: %v", kind, err)
+	}
+	n := store.Note{DeckID: deckID, NoteTypeID: store.Ptr(noteType.ID), FieldsJSON: string(raw), TagsJSON: "[]", CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(&n).Error; err != nil {
 		t.Fatalf("create note: %v", err)
 	}

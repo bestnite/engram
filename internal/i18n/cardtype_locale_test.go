@@ -3,8 +3,6 @@ package i18n
 import (
 	"strings"
 	"testing"
-
-	"git.nite07.com/nite/engram/internal/cardtype"
 )
 
 // documentedKinds is the frozen set of ten built-in card types.
@@ -17,31 +15,15 @@ var documentedKinds = []string{
 	"typed", "numeric", "choice_single", "choice_multi", "true_false", "short_answer",
 }
 
-// TestCardTypeLabelsCoverRegistry is the acceptance test: enumerate Registry.Kinds(), and fail if any
-// card type lacks a display name (cardtype.<kind>) in either language pack.
-// It also checks that the ten card types frozen in the docs have labels, so the catalog cannot be
-// quietly trimmed.
+// TestCardTypeLabelsCoverRegistry checks that every frozen card kind has a display name
+// (cardtype.<kind>) in either language pack. The kinds are a literal list because the card kind
+// registry belongs to the server's payload layer, which this leaf package must not import.
 func TestCardTypeLabelsCoverRegistry(t *testing.T) {
 	zh := catalogKeys(t, "locales/zh-CN.yaml")
 	en := catalogKeys(t, "locales/en.yaml")
 	catalogs := map[string]map[string]string{"zh-CN": zh, "en": en}
 
-	// 1) Every card type in the registry must have a cardtype.<kind> label.
-	kinds := cardtype.Kinds()
-	if len(kinds) == 0 {
-		t.Fatal("cardtype.Kinds() is empty; the registry was not loaded")
-	}
-	for _, kind := range kinds {
-		key := "cardtype." + kind
-		for code, catalog := range catalogs {
-			if strings.TrimSpace(catalog[key]) == "" {
-				t.Errorf("locale %s is missing the label %q for registered card type %q", code, key, kind)
-			}
-		}
-	}
-
-	// 2) The ten card types frozen in the docs must have labels too
-	// (including short_answer, which is not registered yet).
+	// Every frozen card kind must have a label in both packs, including short_answer.
 	for _, kind := range documentedKinds {
 		key := "cardtype." + kind
 		for code, catalog := range catalogs {

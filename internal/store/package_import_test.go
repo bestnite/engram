@@ -34,14 +34,15 @@ func TestImportRoundTripIdentical(t *testing.T) {
 			}
 
 			var srcNotes, dstNotes []Note
-			src.Where("deck_id = ?", deckID).Order("kind ASC").Find(&srcNotes)
-			dst.Where("deck_id = ?", report.DeckID).Order("kind ASC").Find(&dstNotes)
+			src.Where("deck_id = ?", deckID).Order("id ASC").Find(&srcNotes)
+			dst.Where("deck_id = ?", report.DeckID).Order("id ASC").Find(&dstNotes)
 			if len(srcNotes) != len(dstNotes) {
 				t.Fatalf("note count: dst=%d src=%d", len(dstNotes), len(srcNotes))
 			}
+			srcStore, dstStore := NewNoteStore(src), NewNoteStore(dst)
 			for i := range srcNotes {
-				if srcNotes[i].Kind != dstNotes[i].Kind {
-					t.Fatalf("note %d kind: %q != %q", i, dstNotes[i].Kind, srcNotes[i].Kind)
+				if srcKind, dstKind := srcStore.KindOf(context.Background(), &srcNotes[i]), dstStore.KindOf(context.Background(), &dstNotes[i]); srcKind != dstKind {
+					t.Fatalf("note %d kind: %q != %q", i, dstKind, srcKind)
 				}
 				if CanonicalFieldsJSON(srcNotes[i].FieldsJSON) != CanonicalFieldsJSON(dstNotes[i].FieldsJSON) {
 					t.Fatalf("note %d fields differ:\n src=%s\n dst=%s", i, srcNotes[i].FieldsJSON, dstNotes[i].FieldsJSON)
@@ -51,7 +52,7 @@ func TestImportRoundTripIdentical(t *testing.T) {
 				}
 			}
 			var formula Note
-			if err := dst.Where("deck_id = ? AND kind = ?", report.DeckID, "basic").First(&formula).Error; err != nil {
+			if err := dst.Where("deck_id = ? AND fields_json LIKE ?", report.DeckID, "%E=mc^2%").First(&formula).Error; err != nil {
 				t.Fatalf("load formula note: %v", err)
 			}
 			if !bytes.Contains([]byte(formula.FieldsJSON), []byte(`\\(E=mc^2\\)`)) {

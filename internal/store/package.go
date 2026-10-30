@@ -223,8 +223,9 @@ var (
 	ErrPackageMediaMissing = errors.New("deck package: media bytes are unavailable")
 )
 
-// mediaRefRE matches media references of the form media/<sha256>.<ext> in note fields (example).
-var mediaRefRE = regexp.MustCompile(`^media/([a-f0-9]{64})\.([A-Za-z0-9]+)$`)
+// mediaRefRE matches a media reference inside a note field: the note type model writes the deck-scoped file name
+// <sha256>.<ext>, and the package document's own convention prefixes it with media/. Both forms name the same bytes.
+var mediaRefRE = regexp.MustCompile(`(?:^|[^0-9a-f])(?:media/)?([0-9a-f]{64})\.([A-Za-z0-9]+)`)
 
 // ExportPackage assembles a deck package.
 //
@@ -277,7 +278,7 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 	refs := map[string]bool{} // referenced media sha256 -> first appearance
 	for i := range notes {
 		n := &notes[i]
-		fields, err := ParseFields(n.FieldsJSON)
+		values, err := ParseFieldValues(n.FieldsJSON)
 		if err != nil {
 			return nil, fmt.Errorf("export package: note %d: %w", n.ID, err)
 		}
@@ -285,7 +286,19 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 		if err != nil {
 			return nil, fmt.Errorf("export package: note %d: %w", n.ID, err)
 		}
-		pn := PackageNote{Kind: n.Kind, Fields: fields, Tags: tags}
+		kind := NewNoteStore(s.db).KindOf(ctx, n)
+		fields := LegacyNoteFields(kind, values)
+		// source_url and extra live in their own columns in the new model; the format-1 document carries them as fields.
+		if n.SourceURL != nil && *n.SourceURL != "" {
+			fields["source_url"] = *n.SourceURL
+		}
+		if n.ExtraJSON != nil {
+			var extra any
+			if err := json.Unmarshal([]byte(*n.ExtraJSON), &extra); err == nil {
+				fields["extra"] = extra
+			}
+		}
+		pn := PackageNote{Kind: kind, Fields: fields, Tags: tags}
 		if n.ExternalRef != nil {
 			pn.ExternalRef = *n.ExternalRef
 		}
@@ -568,11 +581,11 @@ func formatTimePtr(t *time.Time) *string {
 	return &s
 }
 
-// collectMediaRefs recursively scans note fields for references of the form media/<sha256>.<ext> (example convention).
+// collectMediaRefs recursively scans note fields for media references (<sha256>.<ext> or media/<sha256>.<ext>).
 func collectMediaRefs(v any, out map[string]bool) {
 	switch x := v.(type) {
 	case string:
-		if m := mediaRefRE.FindStringSubmatch(x); m != nil {
+		for _, m := range mediaRefRE.FindAllStringSubmatch(x, -1) {
 			out[m[1]] = true
 		}
 	case map[string]any:

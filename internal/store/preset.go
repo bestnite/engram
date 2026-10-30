@@ -9,7 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/cardtype"
+	"git.nite07.com/nite/engram/internal/answer"
 )
 
 // DefaultPresetName is the stable identity and creation name of the default preset.
@@ -244,19 +244,19 @@ func (s *PresetStore) Update(ctx context.Context, actorUserID uint64, p *Preset)
 }
 
 // GradeMapping parses this preset's "score → rating" mapping.
-// When GradeMappingJSON is NULL it falls back to cardtype.DefaultGradeMapping (all correct Good / partial Hard /
+// When GradeMappingJSON is NULL it falls back to answer.DefaultGradeMapping (all correct Good / partial Hard /
 // all wrong Again), so a preset without a configured mapping can still grade.
-func (p *Preset) GradeMapping() (cardtype.GradeMapping, error) {
+func (p *Preset) GradeMapping() (answer.GradeMapping, error) {
 	raw := ""
 	if p.GradeMappingJSON != nil {
 		raw = *p.GradeMappingJSON
 	}
-	return cardtype.ParseGradeMapping(raw)
+	return answer.ParseGradeMapping(raw)
 }
 
 // SetGradeMapping validates and writes the mapping JSON, for the upper layers to call when saving a preset.
-func (p *Preset) SetGradeMapping(m cardtype.GradeMapping) error {
-	raw, err := cardtype.MarshalGradeMapping(m)
+func (p *Preset) SetGradeMapping(m answer.GradeMapping) error {
+	raw, err := answer.MarshalGradeMapping(m)
 	if err != nil {
 		return err
 	}

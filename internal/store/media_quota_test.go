@@ -40,8 +40,8 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 
 	// u1's note: references both m1 (twice) and m2 as /media/<sha>.
 	noteU1 := Note{
-		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
-		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s) /media/%s","back":"![](/media/%s)"}`,
+		DeckID: deckID, TagsJSON: "[]",
+		FieldsJSON: fmt.Sprintf(`{"front":"<img src=\"%s.png\"> <img src=\"%s.png\">","back":"<img src=\"%s.png\">"}`,
 			sha1, sha1, sha2),
 		CreatedBy: &u1, CreatedAt: now, UpdatedAt: now,
 	}
@@ -51,8 +51,8 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	mapNote(t, db, &noteU1)
 	// u2's note: references only m1 (a cross-user duplicate reference must not affect u1's usage).
 	noteU2 := Note{
-		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
-		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s)"}`, sha1),
+		DeckID: deckID, TagsJSON: "[]",
+		FieldsJSON: fmt.Sprintf(`{"front":"<img src=\"%s.png\">"}`, sha1),
 		CreatedBy:  &u2, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := db.Create(&noteU2).Error; err != nil {
@@ -80,8 +80,8 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 
 	// deck-package form references are recognized too: add u1 a sha-form note that references only m2 → still only +500.
 	pkgNote := Note{
-		DeckID: deckID, Kind: "basic", TagsJSON: "[]",
-		FieldsJSON: fmt.Sprintf(`{"front":"![](media/%s.png)"}`, sha2),
+		DeckID: deckID, TagsJSON: "[]",
+		FieldsJSON: fmt.Sprintf(`{"front":"<img src=\"%s.png\">"}`, sha2),
 		CreatedBy:  &u1, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := db.Create(&pkgNote).Error; err != nil {
@@ -120,11 +120,7 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 // while accounting reads the mapping (in production the mapping is maintained by the note write path).
 func mapNote(t *testing.T, db *gorm.DB, n *Note) {
 	t.Helper()
-	fields, err := ParseFields(n.FieldsJSON)
-	if err != nil {
-		t.Fatalf("parse fixture fields: %v", err)
-	}
-	if err := rebuildMediaNotes(context.Background(), db, n.ID, fields); err != nil {
+	if err := rebuildMediaNotes(context.Background(), db, n.ID, n.DeckID, NoteFieldValues(n.FieldsJSON)); err != nil {
 		t.Fatalf("map fixture note: %v", err)
 	}
 }
@@ -162,8 +158,8 @@ func TestUserMediaUsageCountsPendingUploads(t *testing.T) {
 		t.Fatalf("pending upload: uploader usage = %d, want 700", got)
 	}
 
-	ref := Note{DeckID: deckID, Kind: "basic", TagsJSON: "[]", CreatedBy: &referrer, CreatedAt: now, UpdatedAt: now,
-		FieldsJSON: fmt.Sprintf(`{"front":"![](/media/%s)","back":"x"}`, sha)}
+	ref := Note{DeckID: deckID, TagsJSON: "[]", CreatedBy: &referrer, CreatedAt: now, UpdatedAt: now,
+		FieldsJSON: fmt.Sprintf(`{"front":"<img src=\"%s.png\">","back":"x"}`, sha)}
 	if err := db.Create(&ref).Error; err != nil {
 		t.Fatalf("create referencing note: %v", err)
 	}
@@ -183,38 +179,34 @@ func TestUserMediaUsageCountsPendingUploads(t *testing.T) {
 	}
 }
 
-// TestScanMediaRefsForms pins the two reference forms and proves they do not mis-match each other and that the old numeric id form is no longer recognized.
-func TestScanMediaRefsForms(t *testing.T) {
+// TestMediaNamesInHTMLForms pins the three reference forms a field can carry and proves that an absolute
+// URL is not treated as a deck-scoped file name.
+func TestMediaNamesInHTMLForms(t *testing.T) {
 	shaA := strings.Repeat("a", 64)
 	shaB := strings.Repeat("b", 64)
 	cases := []struct {
-		name  string
-		text  string
-		want  []string
-		avoid []string // strings that must not be collected
+		name string
+		html string
+		want []string
 	}{
-		{name: "url form", text: "![](" + "/media/" + shaA + ")", want: []string{shaA}},
-		{name: "package form", text: "![](media/" + shaB + ".png)", want: []string{shaB}},
-		{name: "both forms in one field", text: "/media/" + shaA + " and media/" + shaB + ".jpg",
-			want: []string{shaA, shaB}},
-		{name: "old numeric id ignored", text: "![](/media/123)", want: nil, avoid: []string{"123"}},
-		// a 65-digit hex must not be truncated to 64 and matched by mistake: it records the 64-digit prefix while the whole string is 65 digits.
-		{name: "65 hex not a ref", text: "/media/" + shaA + "f", avoid: []string{shaA}},
-		// a URL-form 64-digit sha followed immediately by an extension (not in-package form, since it has a leading slash) still yields only the same sha.
-		{name: "url form with extension", text: "/media/" + shaB + ".png", want: []string{shaB}},
+		{name: "img src", html: `<img src="` + shaA + `.png">`, want: []string{shaA + ".png"}},
+		{name: "single-quoted video src", html: `<video src='clip.mp4'></video>`, want: []string{"clip.mp4"}},
+		{name: "sound tag", html: "listen [sound:bird.mp3] now", want: []string{"bird.mp3"}},
+		{name: "css url", html: `<div style="background:url(` + shaB + `.jpg)">`, want: []string{shaB + ".jpg"}},
+		{name: "quoted css url", html: `<div style="background:url('` + shaB + `.jpg')">`, want: []string{shaB + ".jpg"}},
+		{name: "external url is not a name", html: `<img src="https://cdn.example.com/a.png">`, want: nil},
+		{name: "site path is not a name", html: `<img src="/media/` + shaA + `">`, want: nil},
+		{name: "duplicate name once", html: `<img src="a.png"><img src="a.png">`, want: []string{"a.png"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := map[string]bool{}
-			scanMediaRefs(tc.text, got)
-			for _, w := range tc.want {
-				if !got[w] {
-					t.Errorf("scanMediaRefs(%q) missed %q; got %v", tc.text, w, got)
-				}
+			got := mediaNamesInHTML(tc.html)
+			if len(got) != len(tc.want) {
+				t.Fatalf("mediaNamesInHTML(%q) = %v, want %v", tc.html, got, tc.want)
 			}
-			for _, a := range tc.avoid {
-				if got[a] {
-					t.Errorf("scanMediaRefs(%q) wrongly collected %q; got %v", tc.text, a, got)
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Errorf("mediaNamesInHTML(%q)[%d] = %q, want %q", tc.html, i, got[i], tc.want[i])
 				}
 			}
 		})

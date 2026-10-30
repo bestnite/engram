@@ -26,17 +26,26 @@ func TestNotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("preview status = %d: %s", rec.Code, rec.Body.String())
 	}
-	body := rec.Body.String()
-	if strings.Contains(body, "onerror") || strings.Contains(body, "<script") || strings.Contains(body, "javascript:") {
-		t.Fatalf("unsafe rendered HTML: %s", body)
+	var preview struct {
+		Cards []struct {
+			FrontHTML string `json:"front_html"`
+			BackHTML  string `json:"back_html"`
+		} `json:"cards"`
 	}
-	if !strings.Contains(body, `\\(x^2\\)`) || !strings.Contains(body, "safe") {
-		t.Fatalf("TeX or safe content missing: %s", body)
+	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil || len(preview.Cards) != 1 {
+		t.Fatalf("decode preview response: %v (body %s)", err, rec.Body.String())
+	}
+	// The preview shows the stored HTML unchanged: the server does not sanitise, and the frame sandbox is the boundary.
+	if !strings.Contains(preview.Cards[0].FrontHTML, "onerror") || !strings.Contains(preview.Cards[0].BackHTML, "<script") {
+		t.Fatalf("preview did not return the stored HTML: %+v", preview.Cards[0])
+	}
+	if !strings.Contains(preview.Cards[0].FrontHTML, `\(x^2\)`) || !strings.Contains(preview.Cards[0].BackHTML, "safe") {
+		t.Fatalf("TeX or content missing: %+v", preview.Cards[0])
 	}
 }
 
-// TestNotePreviewKeepsChoiceOptionsInline asserts the preview keeps showing a choice card's options on the front: the preview has no
-// answer controls, so appending Options to the face is the only path that puts them on the page.
+// TestNotePreviewKeepsChoiceOptionsOutOfTheFace asserts the preview face carries the question only: choice options belong to
+// the answer control's markup, which is drawn by the frame, so the face must not repeat them.
 func TestNotePreviewKeepsChoiceOptionsInline(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Preview choices")
@@ -67,12 +76,13 @@ func TestNotePreviewKeepsChoiceOptionsInline(t *testing.T) {
 		t.Fatalf("preview cards = %d, want 1 (body %s)", len(body.Cards), rec.Body.String())
 	}
 	front := body.Cards[0].FrontHTML
-	alpha, beta := strings.Index(front, "alpha"), strings.Index(front, "beta")
-	if alpha < 0 || beta < 0 {
-		t.Fatalf("preview front is missing an option: %s", front)
+	if !strings.Contains(front, "pick-one") {
+		t.Fatalf("preview front is missing the question: %s", front)
 	}
-	if alpha > beta {
-		t.Errorf("preview front lists the options out of stored order: %s", front)
+	for _, option := range []string{"alpha", "beta"} {
+		if strings.Contains(front, option) {
+			t.Errorf("preview front repeats option %q that the answer control draws: %s", option, front)
+		}
 	}
 	if !strings.Contains(body.Cards[0].BackHTML, "beta") {
 		t.Errorf("preview back = %s, want the correct option", body.Cards[0].BackHTML)
@@ -82,7 +92,7 @@ func TestNotePreviewKeepsChoiceOptionsInline(t *testing.T) {
 func TestNotePreviewRequiresSessionAndCSRF(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Preview")
-	payload, _ := json.Marshal(notePreviewRequest{Kind: "basic", Fields: map[string]any{"front": "a", "back": "b"}})
+	payload, _ := json.Marshal(notePreviewRequest{Fields: map[string]any{"front": "a", "back": "b"}})
 	request := func(withCookie, withCSRF bool) int {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes/preview", bytes.NewReader(payload))
 		req.Header.Set("Content-Type", "application/json")

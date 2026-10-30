@@ -341,26 +341,19 @@ func decodeFrameMediaKey(stored string) ([]byte, error) {
 	return key, nil
 }
 
-// rewriteFrameMediaRefs turns site-local absolute media URLs into the relative names the frame resolves against its
-// <base href>. It is applied only to the HTML that the caller explicitly asks to render for the frame.
+// absoluteMediaRefs turns deck-scoped media names into the absolute /media/<sha256> URLs the parent SPA needs.
 //
-// TEMPORARY: this rewrite exists only until the data migration stores media references in the frame's own name form.
-//
-// Only an occurrence of "/media/" followed by exactly 64 lowercase hex characters is rewritten, and only when the
-// "/media/" starts the string or is immediately preceded by one of: a double quote, a single quote, an opening
-// parenthesis, "=" or a whitespace character. That set covers a quoted src attribute, a quoted CSS url(...) and an
-// unquoted attribute, while excluding a path that belongs to another host: example.com/media/<sha> is preceded by a
-// letter and is left untouched. Everything after the 64 hex characters (a .ext segment, ?query, #fragment) is kept
-// verbatim; only the "/media/" prefix is removed, because the frame base is the token route.
-func rewriteFrameMediaRefs(html string) string {
-	return frameMediaRefRE.ReplaceAllString(html, "${1}${2}${3}")
+// A field stores media by file name (<sha256>.<ext>, the form the data migration writes), because the frame resolves a name
+// against its <base href>. The SPA has no base element, so the same HTML would resolve against the page address and 404.
+// Only an img/video/audio src attribute and a CSS url(...) reference are rewritten; the name must be exactly 64 lowercase
+// hex characters with an optional extension, so ordinary text that happens to contain hex is left alone.
+func absoluteMediaRefs(html string) string {
+	return mediaNameRefRE.ReplaceAllString(html, "${1}/media/${2}")
 }
 
-// frameMediaRefRE matches one rewrite site: the prefix character, "/media/", the 64 lowercase hex sha, and the single
-// character that follows the sha (or the end of the string). The trailing character is part of the match only to prove
-// that the sha is not longer than 64 hex characters — a 65-hex value must not have its first 64 rewritten — and it is
-// written back unchanged. RE2 has no lookahead, so a capturing group is the way to express that boundary.
-var frameMediaRefRE = regexp.MustCompile(`(^|["'(=\s])/media/([0-9a-f]{64})([^0-9a-f]|$)`)
+// mediaNameRefRE matches one media name in a URL position: the attribute or CSS prefix, the 64-hex sha, and the optional
+// extension segment that the /media/ route does not take.
+var mediaNameRefRE = regexp.MustCompile(`(src\s*=\s*["']|url\(\s*["']?)([0-9a-f]{64})(?:\.[^"')\s]*)?`)
 
 // frameOutputHeader tells a card-face endpoint that the HTML is destined for the frame. Its absence is not an error:
 // without the header the response keeps the absolute /media/ URLs the parent SPA needs, because the SPA has no <base>

@@ -13,7 +13,7 @@ import (
 func newDeckWithNote(t *testing.T, env *testEnv, ownerID uint64) (*store.Deck, *store.Note) {
 	t.Helper()
 	deck := seedDeck(t, env.db, ownerID)
-	note := &store.Note{DeckID: deck.ID, Kind: "basic", CreatedBy: store.Ptr(ownerID)}
+	note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, env.db, deck.ID, "basic")), CreatedBy: store.Ptr(ownerID)}
 	if _, err := store.NewNoteStore(env.db).Create(context.Background(), note,
 		map[string]any{"front": "q", "back": "a"}); err != nil {
 		t.Fatalf("create note: %v", err)
@@ -51,7 +51,6 @@ func TestReaderCannotModifyNote(t *testing.T) {
 
 	// Negative: a reader updating card content is rejected, code = insufficient_role.
 	_, err := env.api.UpdateNote(ctx, reader.ID, note.ID, nil, UpdateNoteInput{
-		Kind:   "basic",
 		Fields: map[string]any{"front": "hacked", "back": "hacked"},
 	})
 	status, code := serviceCode(t, err)
@@ -95,7 +94,6 @@ func TestEditorCannotChangeDeckSettingsOrGrants(t *testing.T) {
 
 	// Positive: an editor can change card content.
 	if _, err := env.api.UpdateNote(ctx, editor.ID, note.ID, nil, UpdateNoteInput{
-		Kind:   "basic",
 		Fields: map[string]any{"front": "edited", "back": "edited"},
 	}); err != nil {
 		t.Fatalf("editor UpdateNote error = %v, want nil", err)

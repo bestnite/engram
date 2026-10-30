@@ -173,9 +173,9 @@ func TestMediaQuotaDedupeDoesNotChargeTwice(t *testing.T) {
 // The fixture is built through the note write methods: the media_notes mapping is created by the write path, so the test goes through the production path (L2).
 func referenceMedia(t *testing.T, db *gorm.DB, deckID, ownerID uint64, mediaSha string) *store.Note {
 	t.Helper()
-	note := &store.Note{DeckID: deckID, Kind: "basic", CreatedBy: &ownerID}
+	note := &store.Note{DeckID: deckID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, deckID, "basic")), CreatedBy: &ownerID}
 	if _, err := store.NewNoteStore(db).Create(context.Background(), note,
-		map[string]any{"front": "![](/media/" + mediaSha + ")", "back": "x"}); err != nil {
+		map[string]any{"front": `<img src="` + mediaSha + `.png">`, "back": "x"}); err != nil {
 		t.Fatalf("create referencing note: %v", err)
 	}
 	return note

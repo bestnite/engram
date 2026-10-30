@@ -106,7 +106,7 @@ type Preset struct {
 	WeightsReviewCount *int       `json:"weights_review_count,omitempty"`
 	// GradeMappingJSON is the 'score → grade' mapping for machine grading (JSON).
 	// NULL means the built-in default mapping (all correct Good / partly correct Hard / all wrong Again).
-	// Nullable TEXT with no database default: the default behavior is supplied by cardtype.DefaultGradeMapping on the Go side.
+	// Nullable TEXT with no database default: the default behavior is supplied by answer.DefaultGradeMapping on the Go side.
 	GradeMappingJSON *string   `gorm:"column:grade_mapping_json" json:"grade_mapping_json,omitempty"`
 	CreatedAt        time.Time `gorm:"not null" json:"created_at"`
 	UpdatedAt        time.Time `gorm:"not null" json:"updated_at"`
@@ -135,24 +135,26 @@ func (Deck) TableName() string { return "decks" }
 
 // Note describes \"a fact\" and holds content only, with no user progress at all.
 type Note struct {
-	ID         uint64 `gorm:"primaryKey" json:"-"`
-	PublicID   string `gorm:"column:public_id;uniqueIndex" json:"id"`
-	DeckID     uint64 `gorm:"not null;uniqueIndex:idx_notes_deck_external_ref" json:"deck_id"`
-	Kind       string `gorm:"not null" json:"kind"`
+	ID       uint64 `gorm:"primaryKey" json:"-"`
+	PublicID string `gorm:"column:public_id;uniqueIndex" json:"id"`
+	DeckID   uint64 `gorm:"not null;uniqueIndex:idx_notes_deck_external_ref" json:"deck_id"`
+	// NoteTypeID names the note type that defines this note's fields and templates, and its field ids are the keys of FieldsJSON.
+	// It stays a pointer in the Go model because AutoMigrate runs before the versioned migrations: it adds the column to an
+	// existing table, which cannot be NOT NULL while rows exist. Migration 0013 makes it NOT NULL afterwards, and the write path
+	// rejects a note that names no type.
+	NoteTypeID *uint64 `gorm:"column:note_type_id;index" json:"note_type_id,omitempty"`
+	// FieldsJSON maps a field id to that field's HTML value; internal/notetype.Config declares the ids.
 	FieldsJSON string `gorm:"column:fields_json;not null" json:"fields_json"`
 	TagsJSON   string `gorm:"column:tags_json;not null" json:"tags_json"`
-	// SearchText is a derived column that note search matches against: the note's string field values, lowered (see noteSearchText).
-	// The single source of content stays fields_json: every note write recomputes this column, and no payload carries it.
-	// The column is nullable because AutoMigrate adds it to existing tables, and migration 0011 fills in the existing rows.
+	// SearchText is a derived column that note search matches against: the plain text of the note's searchable fields,
+	// lowered (see NoteStore.prepareNoteFields). The single source of content stays FieldsJSON: every note write
+	// recomputes this column, and no payload carries it. The column is nullable because AutoMigrate adds it to existing
+	// tables, and migration 0011 fills in the existing rows.
 	SearchText string `gorm:"column:search_text" json:"-"`
 	// an idempotency key defined by the caller; NULLs do not participate in uniqueness (both databases allow several NULLs).
 	ExternalRef   *string `gorm:"uniqueIndex:idx_notes_deck_external_ref" json:"external_ref,omitempty"`
 	Source        *string `json:"source,omitempty"` // manual | api | import
 	ReferenceRefs *string `gorm:"column:reference_refs" json:"reference_refs,omitempty"`
-	// NoteTypeID names the note type that defines this note's fields and templates.
-	// It is nullable in this schema version: AutoMigrate only adds columns, existing rows have no note type yet,
-	// and a later migration that drops notes.kind makes it NOT NULL. The pointer keeps "no note type" distinct from id 0.
-	NoteTypeID *uint64 `gorm:"column:note_type_id;index" json:"note_type_id,omitempty"`
 	// SourceURL is the optional origin link of the content, moved out of the field map by a later migration.
 	SourceURL *string `gorm:"column:source_url" json:"source_url,omitempty"`
 	// ExtraJSON is the remaining optional content that has no column of its own, stored as TEXT like every JSON column.
@@ -464,7 +466,7 @@ func AllModels() []any {
 //
 // The unique key is (type, locale): one per language of each type. **No row in the table is a normal state** — it means that type
 // in that language uses the built-in body (the one the sender assembles), so 'deleting the customization' is deleting this row, and the built-in default can never
-// be lost. The body stores the Markdown source rather than the rendered result: rendering, sanitizing and variable substitution all happen at send time, so a template
+// be lost. The body stores the Markdown source rather than the rendered result: rendering and variable substitution both happen at send time, so a template
 // change only affects mail enqueued afterwards.
 type MailTemplate struct {
 	Type      string    `gorm:"primaryKey;size:64" json:"type"`

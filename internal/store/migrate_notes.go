@@ -18,7 +18,6 @@ import (
 	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/notetype"
-	"git.nite07.com/nite/engram/internal/render"
 )
 
 // This file holds the one-time conversion of the old kind-based note content to
@@ -317,7 +316,7 @@ func convertNoteRows(tx *gorm.DB, types map[deckKind]noteTypeRef) error {
 				plainFields: noteType.plainFields,
 			}
 			converted := make(map[string]any, len(fields))
-			search := make(map[string]any, len(fields))
+			var search []string
 			var sourceURL *string
 			var extraJSON *string
 			keys := make([]string, 0, len(fields))
@@ -350,7 +349,9 @@ func convertNoteRows(tx *gorm.DB, types map[deckKind]noteTypeRef) error {
 					return fmt.Errorf("convert notes to note types: note %d: %w", row.ID, err)
 				}
 				converted[key] = html
-				search[key] = notetype.PlainText(html)
+				if text := notetype.PlainText(html); text != "" {
+					search = append(search, text)
+				}
 			}
 			raw, err := json.Marshal(converted)
 			if err != nil {
@@ -358,7 +359,7 @@ func convertNoteRows(tx *gorm.DB, types map[deckKind]noteTypeRef) error {
 			}
 			if err := tx.Unscoped().Model(&Note{}).Where("id = ?", row.ID).Updates(map[string]any{
 				"fields_json":  string(raw),
-				"search_text":  noteSearchText(search),
+				"search_text":  strings.ToLower(strings.Join(search, "\n")),
 				"note_type_id": noteType.ID,
 				"source_url":   sourceURL,
 				"extra_json":   extraJSON,
@@ -470,9 +471,9 @@ func (c *fieldConverter) markdown(src string, inline bool) (string, error) {
 	var html string
 	var err error
 	if inline {
-		html, err = render.RenderMigrationMarkdownInline(src)
+		html, err = renderMigrationMarkdownInline(src)
 	} else {
-		html, err = render.RenderMigrationMarkdown(src)
+		html, err = renderMigrationMarkdown(src)
 	}
 	if err != nil {
 		return "", err

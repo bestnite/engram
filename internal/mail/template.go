@@ -8,15 +8,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"git.nite07.com/nite/engram/internal/render"
 )
 
 // This file is the renderer for mail templates.
 //
 // Rendering happens in five steps, and the order is part of the security; do not swap them:
 //  1. replace the {{var}} in the source with tokens carrying a per-render random salt;
-//  2. render the Markdown and sanitize it against the mail allowlist;
+//  2. render the Markdown;
 //  3. replace the tokens with the values, HTML-escaping in the HTML segment;
 //  4. add the fixed inline styles and derive the plain-text part from the same tree;
 //  5. wrap the result in the fixed shell held by the code.
@@ -120,7 +118,7 @@ func Render(in RenderInput) (Rendered, error) {
 	}
 
 	tokenised, order, salt := tokenise(bodyMD)
-	bodyHTML, err := render.RenderMailMarkdown(tokenised)
+	bodyHTML, err := renderMailMarkdown(tokenised)
 	if err != nil {
 		return Rendered{}, fmt.Errorf("render mail template: %w", err)
 	}
@@ -331,7 +329,7 @@ const shellClose = `</table>
 // {{LANG}} goes into an attribute and {{SITE}} / {{FOOTER_NOTE}} / {{UNSUBSCRIBE_LABEL}} into text, so
 // all of them are escaped. A blank language drops the attribute instead of writing lang="": an empty
 // value claims the document has no language, while an absent attribute leaves the client its default.
-// {{BODY}} is the fragment that has already been sanitized and styled; it is inserted verbatim.
+// {{BODY}} is the fragment that has already been rendered and styled; it is inserted verbatim.
 //
 // The shell placeholders are uppercase while template variables are lowercase, so the two naming
 // schemes cannot collide: tokenise only matches lowercase names, and the strings.Replacer does not
