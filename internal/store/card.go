@@ -83,6 +83,17 @@ func syncCards(tx *gorm.DB, noteID uint64, wanted []notetype.GeneratedCard, now 
 // syncCardsWithChange is syncCards plus the list of cards it made visible or invisible, so a caller
 // that reports the impact of a bulk card change does not have to diff the table afterwards.
 func syncCardsWithChange(tx *gorm.DB, noteID uint64, wanted []notetype.GeneratedCard, now time.Time) ([]Card, cardSyncChange, error) {
+	return syncCardsWithChangeKeeping(tx, noteID, wanted, nil, now)
+}
+
+// syncCardsWithChangeKeeping is syncCardsWithChange with an extra keep rule: a stored card whose
+// template the wanted set omits is soft-deleted only when keep reports false for that template. A nil
+// keep keeps nothing beyond the wanted set, which is what the note write path wants.
+//
+// The note type update passes a keep rule, because it must not decide from the wanted set alone: a
+// template stays declared while it produces no card for a particular note, so removing that card
+// there would discard the progress of a template the user never deleted.
+func syncCardsWithChangeKeeping(tx *gorm.DB, noteID uint64, wanted []notetype.GeneratedCard, keep func(template string) bool, now time.Time) ([]Card, cardSyncChange, error) {
 	// soft-deleted rows must be included: the unique index does not exclude them, so only reusing by template avoids hitting the unique constraint.
 	var existing []Card
 	if err := tx.Unscoped().Where("note_id = ?", noteID).Find(&existing).Error; err != nil {
@@ -131,12 +142,17 @@ func syncCardsWithChange(tx *gorm.DB, noteID uint64, wanted []notetype.Generated
 		out = append(out, card)
 	}
 
-	// wrap-up: soft-delete cards that are still alive but no longer in wanted. Written per primary key, over the same set loaded above.
+	// wrap-up: soft-delete cards that are still alive but no longer in wanted, except the ones the keep
+	// rule protects. Written per primary key, over the same set loaded above.
 	var stale []uint64
 	for i := range existing {
-		if !existing[i].DeletedAt.Valid && !seen[existing[i].Template] {
-			stale = append(stale, existing[i].ID)
+		if existing[i].DeletedAt.Valid || seen[existing[i].Template] {
+			continue
 		}
+		if keep != nil && keep(existing[i].Template) {
+			continue
+		}
+		stale = append(stale, existing[i].ID)
 	}
 	if len(stale) > 0 {
 		if err := tx.Model(&Card{}).Where("id IN ?", stale).Update("deleted_at", now).Error; err != nil {
@@ -150,21 +166,26 @@ func syncCardsWithChange(tx *gorm.DB, noteID uint64, wanted []notetype.Generated
 // regenerateNoteTypeCards aligns the cards of every live note of a note type with the cards the
 // given config generates, and reports what changed.
 //
-// It deliberately reuses the note write path's rule: the wanted set comes from
-// notetype.GenerateCards over the note's stored fields, tags and the note type name, so a template
-// whose front references only empty fields yields no card here either. A note that is soft-deleted
-// is skipped: its cards are already invisible, and touching them would count changes the caller
-// cannot see.
+// Removal follows the config's declaration, not its card output: a normal note type soft-deletes
+// exactly the cards whose template id the new config no longer declares, and a cloze note type
+// soft-deletes no card. The distinction matters because a declared template can produce no card for
+// a note whose fields leave its front empty; such a card is kept, together with its progress, because
+// the user has not removed the template. Creation and restoration do follow the card output: every
+// card notetype.GenerateCards produces for the note is inserted when it is missing and restored when
+// its row is soft-deleted.
 //
-// A card that the config no longer generates (for a normal note type, a template id it no longer
-// declares) is soft-deleted by syncCardsWithChange; its card_states and reviews rows stay.
-// ReviewsOnRemovedCards counts the review log rows attached to the cards this call removed, because
-// the caller must warn the user before silently taking reviewed cards out of circulation.
+// A note that is soft-deleted is skipped: its cards are already invisible, and touching them would
+// count changes the caller cannot see.
+//
+// A removed card's card_states and reviews rows stay. ReviewsOnRemovedCards counts the review log
+// rows attached to the cards this call removed, because the caller must warn the user before
+// silently taking reviewed cards out of circulation.
 func regenerateNoteTypeCards(tx *gorm.DB, noteTypeID uint64, typeName string, cfg notetype.Config, now time.Time) (NoteTypeCardImpact, error) {
 	var notes []Note
 	if err := tx.Where("note_type_id = ?", noteTypeID).Order("id ASC").Find(&notes).Error; err != nil {
 		return NoteTypeCardImpact{}, fmt.Errorf("load notes of note type %d: %w", noteTypeID, err)
 	}
+	keep := noteTypeCardKeepRule(cfg)
 	var impact NoteTypeCardImpact
 	var removedIDs []uint64
 	for i := range notes {
@@ -177,7 +198,7 @@ func regenerateNoteTypeCards(tx *gorm.DB, noteTypeID uint64, typeName string, cf
 		if err != nil {
 			return NoteTypeCardImpact{}, fmt.Errorf("note %d: generate cards: %w", notes[i].ID, err)
 		}
-		_, change, err := syncCardsWithChange(tx, notes[i].ID, wanted, now)
+		_, change, err := syncCardsWithChangeKeeping(tx, notes[i].ID, wanted, keep, now)
 		if err != nil {
 			return NoteTypeCardImpact{}, err
 		}
@@ -189,6 +210,28 @@ func regenerateNoteTypeCards(tx *gorm.DB, noteTypeID uint64, typeName string, cf
 		return NoteTypeCardImpact{}, err
 	}
 	return impact, nil
+}
+
+// noteTypeCardKeepRule returns the rule a note type update uses to protect stored cards from removal
+// when the new config generates no card for the note that holds them.
+//
+// A normal note type declares its card templates by id, so a card is protected when its template id
+// is still declared: the template may produce no card for this particular note, but the user has not
+// removed it. A cloze note type declares no card template ids, because its cards are named after the
+// cloze numbers found in the note's fields; every card of a cloze note is therefore protected and an
+// update removes none.
+func noteTypeCardKeepRule(cfg notetype.Config) func(string) bool {
+	if cfg.Kind == notetype.KindCloze {
+		return func(string) bool { return true }
+	}
+	declared := make(map[string]struct{}, len(cfg.Templates))
+	for _, tmpl := range cfg.Templates {
+		declared[tmpl.ID] = struct{}{}
+	}
+	return func(template string) bool {
+		_, ok := declared[template]
+		return ok
+	}
 }
 
 // countReviewsOnCards sums the review rows of the given cards into *out.

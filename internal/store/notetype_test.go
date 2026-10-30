@@ -273,6 +273,173 @@ func TestNoteTypeSetConfigValidatesAnswerSpec(t *testing.T) {
 	}
 }
 
+// noteTypeUpdateConfig builds a normal note type config with the given templates. Every case leaves the
+// "Extra" field empty, so a template that renders only that field generates no card for the note.
+func noteTypeUpdateConfig(templates ...notetype.Template) notetype.Config {
+	return notetype.Config{
+		Kind: notetype.KindNormal,
+		Fields: []notetype.Field{
+			{ID: "f-front", Name: "Front"},
+			{ID: "f-back", Name: "Back"},
+			{ID: "f-extra", Name: "Extra"},
+		},
+		Templates:   templates,
+		CSS:         ".card { color: black; }",
+		SortFieldID: "f-front",
+	}
+}
+
+// TestNoteTypeUpdateRemovalFollowsDeclaredTemplates covers which cards a note type update removes:
+//   - a card survives when its template id is still declared, even if the template now renders an
+//     empty front for the note, and the update reports cards_removed = 0;
+//   - a card is soft-deleted when its template id is no longer declared;
+//   - a cloze update removes no card;
+//   - a card of a declared template is restored when the new config generates it again.
+func TestNoteTypeUpdateRemovalFollowsDeclaredTemplates(t *testing.T) {
+	front := notetype.Template{ID: "t-front", Name: "Front", QFormat: "{{Front}}", AFormat: "{{Back}}"}
+	extra := notetype.Template{ID: "t-extra", Name: "Extra", QFormat: "{{Extra}}", AFormat: "{{Back}}"}
+	emptyFront := front
+	emptyFront.QFormat = "{{Extra}}"
+	frontAnswer := front
+	frontAnswer.AFormat = "{{Back}} (answer)"
+
+	clozeConfig := func() notetype.Config {
+		cfg := noteTypeUpdateConfig()
+		cfg.Kind = notetype.KindCloze
+		cfg.Fields = []notetype.Field{{ID: "f-front", Name: "Front"}, {ID: "f-back", Name: "Back"}}
+		cfg.Templates = []notetype.Template{
+			{ID: "t-cloze", Name: "Cloze", QFormat: "{{cloze:Front}}", AFormat: "{{Front}}"},
+		}
+		return cfg
+	}
+
+	cases := []struct {
+		name        string
+		initial     notetype.Config
+		fields      map[string]any
+		prepare     func(t *testing.T, db *gorm.DB, noteID uint64)
+		updated     notetype.Config
+		wantAdded   int
+		wantRemoved int
+		wantVisible []string
+		wantDeleted []string
+	}{
+		{
+			name:        "declared template with an empty front keeps its card",
+			initial:     noteTypeUpdateConfig(front),
+			fields:      map[string]any{"Front": "Q1", "Back": "A1", "Extra": ""},
+			updated:     noteTypeUpdateConfig(emptyFront),
+			wantAdded:   0,
+			wantRemoved: 0,
+			wantVisible: []string{"t-front"},
+		},
+		{
+			name:        "undeclared template removes its card",
+			initial:     noteTypeUpdateConfig(front, extra),
+			fields:      map[string]any{"Front": "Q1", "Back": "A1", "Extra": "E1"},
+			updated:     noteTypeUpdateConfig(front),
+			wantAdded:   0,
+			wantRemoved: 1,
+			wantVisible: []string{"t-front"},
+			wantDeleted: []string{"t-extra"},
+		},
+		{
+			name:    "cloze update removes no card",
+			initial: clozeConfig(),
+			fields:  map[string]any{"Front": "{{c1::one}} {{c2::two}}", "Back": ""},
+			prepare: func(t *testing.T, db *gorm.DB, noteID uint64) {
+				t.Helper()
+				// A card the compacted fields no longer produce: the keep rule must leave it alone.
+				stale := Card{NoteID: noteID, Template: "cloze:9", Ordinal: 8, CreatedAt: time.Now().UTC()}
+				if err := db.Create(&stale).Error; err != nil {
+					t.Fatalf("insert a stale cloze card: %v", err)
+				}
+			},
+			updated:     clozeConfig(),
+			wantAdded:   0,
+			wantRemoved: 0,
+			wantVisible: []string{"cloze:1", "cloze:2", "cloze:9"},
+		},
+		{
+			name:    "declared template restores its soft-deleted card",
+			initial: noteTypeUpdateConfig(front),
+			fields:  map[string]any{"Front": "Q1", "Back": "A1"},
+			prepare: func(t *testing.T, db *gorm.DB, noteID uint64) {
+				t.Helper()
+				if err := db.Model(&Card{}).Where("note_id = ?", noteID).Update("deleted_at", time.Now().UTC()).Error; err != nil {
+					t.Fatalf("soft-delete the note's cards: %v", err)
+				}
+			},
+			updated:     noteTypeUpdateConfig(frontAnswer),
+			wantAdded:   1,
+			wantRemoved: 0,
+			wantVisible: []string{"t-front"},
+		},
+	}
+
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			owner := seedUsers(t, db, "note_type_removal_owner")[0]
+			deckID := seedDeck(t, db, owner)
+			types := NewNoteTypeStore(db)
+			notes := NewNoteStore(db)
+
+			for _, test := range cases {
+				t.Run(test.name, func(t *testing.T) {
+					nt := NoteType{DeckID: deckID, Name: test.name}
+					if err := types.Create(ctx, &nt, test.initial); err != nil {
+						t.Fatalf("create note type: %v", err)
+					}
+					note := Note{DeckID: deckID, NoteTypeID: &nt.ID}
+					if _, err := notes.Create(ctx, &note, test.fields); err != nil {
+						t.Fatalf("create note: %v", err)
+					}
+					if test.prepare != nil {
+						test.prepare(t, db, note.ID)
+					}
+
+					update := nt
+					impact, err := types.Update(ctx, &update, test.updated,
+						NoteTypeUpdateOptions{ExpectedVersion: 0, ConfirmCardRemoval: true})
+					if err != nil {
+						t.Fatalf("Update() error = %v", err)
+					}
+					if impact.CardsAdded != test.wantAdded || impact.CardsRemoved != test.wantRemoved {
+						t.Errorf("impact = added %d removed %d, want %d/%d",
+							impact.CardsAdded, impact.CardsRemoved, test.wantAdded, test.wantRemoved)
+					}
+
+					var cards []Card
+					if err := db.Unscoped().Where("note_id = ?", note.ID).Find(&cards).Error; err != nil {
+						t.Fatalf("load cards: %v", err)
+					}
+					if len(cards) != len(test.wantVisible)+len(test.wantDeleted) {
+						t.Fatalf("stored cards = %d, want %d", len(cards), len(test.wantVisible)+len(test.wantDeleted))
+					}
+					visible := make(map[string]bool, len(cards))
+					for _, card := range cards {
+						visible[card.Template] = !card.DeletedAt.Valid
+					}
+					for _, template := range test.wantVisible {
+						if got, ok := visible[template]; !ok || !got {
+							t.Errorf("card %q is not visible after the update (present %v)", template, ok)
+						}
+					}
+					for _, template := range test.wantDeleted {
+						if got, ok := visible[template]; !ok || got {
+							t.Errorf("card %q is not soft-deleted after the update (present %v)", template, ok)
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
 // TestNoteTypeDelete covers the refused delete: a note that is not soft-deleted blocks it, a soft-deleted note does not,
 // and the type is gone once no live note references it.
 func TestNoteTypeDelete(t *testing.T) {
