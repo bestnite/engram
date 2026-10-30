@@ -278,6 +278,124 @@ func TestNotePayloadUsesNoteTypeAndFieldNames(t *testing.T) {
 	assertErrorCode(t, raw, CodeInvalidRequest)
 }
 
+// testAnswerNoteTypeConfig is a valid config whose template carries an answer spec bound to a declared field.
+func testAnswerNoteTypeConfig() notetype.Config {
+	cfg := testNoteTypeConfig()
+	cfg.Templates[0].QFormat = "{{Front}}{{type:Back}}"
+	cfg.Templates[0].Answer = &notetype.AnswerSpec{
+		Control:  "numeric",
+		Bindings: map[string]string{"value": "f-back"},
+	}
+	return cfg
+}
+
+// restErrorMessage decodes the message of one REST error response, so assertions run on the unescaped text.
+func restErrorMessage(t *testing.T, raw []byte) string {
+	t.Helper()
+	var body struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("error response is not JSON: %v (%s)", err, raw)
+	}
+	return body.Error.Message
+}
+
+// TestNoteTypeAnswerSpecValidationRejected covers the three answer-spec violations through create and update: an
+// unknown control, a missing required role and a role bound to an undeclared field id. Each is a 400 whose message
+// names the template and the offending role (the control, when no role exists), and the rejected write changes nothing.
+func TestNoteTypeAnswerSpecValidationRejected(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*notetype.Config)
+		want   []string
+	}{
+		{
+			name:   "unknown control",
+			mutate: func(cfg *notetype.Config) { cfg.Templates[0].Answer.Control = "does_not_exist" },
+			want:   []string{`template "Card 1"`, `"does_not_exist"`},
+		},
+		{
+			name:   "missing required role",
+			mutate: func(cfg *notetype.Config) { cfg.Templates[0].Answer = &notetype.AnswerSpec{Control: "numeric"} },
+			want:   []string{`template "Card 1"`, `role "value"`},
+		},
+		{
+			name:   "role bound to an undeclared field id",
+			mutate: func(cfg *notetype.Config) { cfg.Templates[0].Answer.Bindings["value"] = "f-missing" },
+			want:   []string{`template "Card 1"`, `role "value"`, `"f-missing"`},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			env := newTestEnv(t, 1000, 1000)
+			router := env.router()
+			owner := seedUser(t, env.db, "note_type_answer_spec", store.RoleUser)
+			deck := seedDeck(t, env.db, owner.ID)
+			key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+			base := fmt.Sprintf("/api/v1/decks/%s/note-types", deck.PublicID)
+
+			bad := testAnswerNoteTypeConfig()
+			test.mutate(&bad)
+			code, raw := doJSON(t, router, http.MethodPost, base, key, noteTypeBody("Broken", bad, nil))
+			if code != http.StatusBadRequest {
+				t.Fatalf("POST invalid answer spec = %d, want 400 (body %s)", code, raw)
+			}
+			assertErrorCode(t, raw, CodeInvalidRequest)
+			message := restErrorMessage(t, raw)
+			for _, want := range test.want {
+				if !strings.Contains(message, want) {
+					t.Errorf("POST message = %q, want substring %q", message, want)
+				}
+			}
+			var count int64
+			if err := env.db.Model(&store.NoteType{}).Where("deck_id = ?", deck.ID).Count(&count).Error; err != nil {
+				t.Fatalf("count note types: %v", err)
+			}
+			if count != 0 {
+				t.Fatalf("rejected create wrote %d note type row(s), want 0", count)
+			}
+
+			// Update: start from a valid type, then send the same invalid spec.
+			created := createNoteTypeREST(t, router, base, key, "Answer type", testAnswerNoteTypeConfig())
+			badUpdate := testAnswerNoteTypeConfig()
+			test.mutate(&badUpdate)
+			version := 0
+			onePath := base + "/" + created.ID
+			code, raw = doJSON(t, router, http.MethodPatch, onePath, key, noteTypeBody("Broken", badUpdate, &version))
+			if code != http.StatusBadRequest {
+				t.Fatalf("PATCH invalid answer spec = %d, want 400 (body %s)", code, raw)
+			}
+			assertErrorCode(t, raw, CodeInvalidRequest)
+			message = restErrorMessage(t, raw)
+			for _, want := range test.want {
+				if !strings.Contains(message, want) {
+					t.Errorf("PATCH message = %q, want substring %q", message, want)
+				}
+			}
+
+			code, raw = doJSON(t, router, http.MethodGet, onePath, key, "")
+			if code != http.StatusOK {
+				t.Fatalf("GET after rejected PATCH = %d, want 200 (body %s)", code, raw)
+			}
+			var kept NoteTypeJSON
+			if err := json.Unmarshal(raw, &kept); err != nil {
+				t.Fatalf("GET after rejected PATCH is not JSON: %v (%s)", err, raw)
+			}
+			if kept.Version != 0 {
+				t.Errorf("version after rejected PATCH = %d, want 0", kept.Version)
+			}
+			if len(kept.Config.Templates) != 1 || kept.Config.Templates[0].Answer == nil ||
+				kept.Config.Templates[0].Answer.Control != "numeric" ||
+				kept.Config.Templates[0].Answer.Bindings["value"] != "f-back" {
+				t.Errorf("config after rejected PATCH = %+v, want the original answer spec", kept.Config.Templates)
+			}
+		})
+	}
+}
+
 // TestNoteTypeValidationRejected covers a malformed config: it is a 400 that names the offending
 // field, and nothing is written.
 func TestNoteTypeValidationRejected(t *testing.T) {

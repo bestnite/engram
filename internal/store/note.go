@@ -11,7 +11,6 @@ import (
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/notetype"
 )
 
@@ -128,14 +127,6 @@ func ensureStockNoteType(ctx context.Context, tx *gorm.DB, deckID uint64, kind s
 	nt := NoteType{DeckID: deckID}
 	if err := nt.SetConfig(stock.Name, stock.Config); err != nil {
 		return nil, fmt.Errorf("create note type for kind %q: %w", kind, err)
-	}
-	for _, template := range stock.Config.Templates {
-		if template.Answer == nil {
-			continue
-		}
-		if err := answer.ValidateSpec(*template.Answer); err != nil {
-			return nil, fmt.Errorf("create note type for kind %q: %w", kind, err)
-		}
 	}
 	now := time.Now().UTC()
 	nt.CreatedAt = now

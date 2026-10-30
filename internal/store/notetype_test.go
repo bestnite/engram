@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -207,6 +208,68 @@ func TestNoteTypeValidation(t *testing.T) {
 				t.Errorf("rejected creates left %d row(s), want 0", len(list))
 			}
 		})
+	}
+}
+
+// noteTypeAnswerConfig is noteTypeConfig with an answer spec that binds a role to a declared field.
+func noteTypeAnswerConfig() notetype.Config {
+	cfg := noteTypeConfig("Card 1")
+	cfg.Templates[0].QFormat = "{{Front}}{{type:Back}}"
+	cfg.Templates[0].Answer = &notetype.AnswerSpec{
+		Control:  "numeric",
+		Bindings: map[string]string{"value": "f-back"},
+	}
+	return cfg
+}
+
+// TestNoteTypeSetConfigValidatesAnswerSpec proves SetConfig rejects an answer spec whose control is unknown, whose
+// required role is unbound, or whose bound field id the config does not declare. The error names the template and the
+// role (or the control, when no role can be named), and a rejected config writes nothing.
+func TestNoteTypeSetConfigValidatesAnswerSpec(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*notetype.Config)
+		want   []string
+	}{
+		{
+			name:   "unknown control",
+			mutate: func(cfg *notetype.Config) { cfg.Templates[0].Answer.Control = "does_not_exist" },
+			want:   []string{`template "Card 1"`, `"does_not_exist"`},
+		},
+		{
+			name:   "missing required role",
+			mutate: func(cfg *notetype.Config) { cfg.Templates[0].Answer = &notetype.AnswerSpec{Control: "numeric"} },
+			want:   []string{`template "Card 1"`, `role "value"`},
+		},
+		{
+			name:   "role bound to an undeclared field id",
+			mutate: func(cfg *notetype.Config) { cfg.Templates[0].Answer.Bindings["value"] = "f-missing" },
+			want:   []string{`template "Card 1"`, `role "value"`, `"f-missing"`},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := noteTypeAnswerConfig()
+			test.mutate(&cfg)
+			var nt NoteType
+			err := nt.SetConfig("Answer type", cfg)
+			if err == nil {
+				t.Fatal("SetConfig() = nil, want a rejected answer spec")
+			}
+			for _, want := range test.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("SetConfig() error = %v, want substring %q", err, want)
+				}
+			}
+			if nt.Name != "" || nt.ConfigJSON != "" {
+				t.Errorf("rejected config wrote name %q and config %q, want both empty", nt.Name, nt.ConfigJSON)
+			}
+		})
+	}
+
+	var valid NoteType
+	if err := valid.SetConfig("Answer type", noteTypeAnswerConfig()); err != nil {
+		t.Fatalf("SetConfig(valid answer spec) = %v, want nil", err)
 	}
 }
 

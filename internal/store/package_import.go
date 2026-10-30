@@ -513,9 +513,9 @@ func (pkg *packageModel) hasNoteType(ref string) bool {
 }
 
 // validatePackageNoteTypes rejects a note_types.json whose references are empty or not unique, and whose names or
-// configs the note type rules reject. Both are checked before the transaction opens, so a malformed package has no
-// side effects. The config is decoded by the JSON parser into notetype.Config; Validate is the same rule a note type
-// created through the API runs.
+// configs the note type rules reject. All of it is checked before the transaction opens, so a malformed package has no
+// side effects. The config is decoded by the JSON parser into notetype.Config; Validate and validateAnswerSpecs are the
+// same rules a note type created through the API runs.
 func validatePackageNoteTypes(types []PackageNoteType) error {
 	seen := make(map[string]bool, len(types))
 	for i := range types {
@@ -532,6 +532,11 @@ func validatePackageNoteTypes(types []PackageNoteType) error {
 		}
 		if err := types[i].Config.Validate(); err != nil {
 			return &PackageError{Code: CodePackageBadFormat, Message: "invalid note type config", Entries: []string{fmt.Sprintf("note_types[%d]: %v", i, err)}}
+		}
+		// The answer-spec rule runs here as well as in SetConfig, so a package that violates it is rejected before
+		// the transaction opens and the report names the offending entry. Both calls reach the same implementation.
+		if err := validateAnswerSpecs(types[i].Config); err != nil {
+			return &PackageError{Code: CodePackageBadFormat, Message: "invalid note type answer spec", Entries: []string{fmt.Sprintf("note_types[%d]: %v", i, err)}}
 		}
 	}
 	return nil

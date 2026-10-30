@@ -120,8 +120,10 @@ func TestParseNumber(t *testing.T) {
 	}
 }
 
-// TestValidateSpec covers the control lookup and the required-role rule.
+// TestValidateSpec covers the control lookup, the required-role rule and the
+// rule that every binding names a field the note type declares.
 func TestValidateSpec(t *testing.T) {
+	declaredFields := []string{"f1", "f2"}
 	tests := []struct {
 		name   string
 		spec   notetype.AnswerSpec
@@ -158,10 +160,15 @@ func TestValidateSpec(t *testing.T) {
 			spec: notetype.AnswerSpec{},
 			want: "answer spec has no control",
 		},
+		{
+			name: "role bound to an undeclared field id",
+			spec: notetype.AnswerSpec{Control: "numeric", Bindings: map[string]string{"value": "f-missing"}},
+			want: `binds role "value" to field "f-missing"`,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := ValidateSpec(test.spec)
+			err := ValidateSpec(test.spec, declaredFields)
 			if test.wantOK {
 				if err != nil {
 					t.Fatalf("ValidateSpec() = %v, want nil", err)

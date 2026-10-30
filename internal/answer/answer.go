@@ -17,9 +17,10 @@
 // same declaration drives validation, binding resolution and grading. A
 // template with an answer spec must also carry exactly one type placeholder on
 // its front; notetype.Config.Validate enforces that structural rule, while
-// ValidateSpec here enforces that the control exists and every required role is
-// bound. The two checks are split because notetype cannot import this package
-// without an import cycle, so the note-type write path runs both.
+// ValidateSpec here enforces that the control exists, every required role is
+// bound and every binding names a field the note type declares. The two checks
+// are split because notetype cannot import this package without an import cycle,
+// so the note-type write path runs both.
 //
 // # Field values
 //
@@ -168,10 +169,14 @@ func RenderSide(control Control, ctx RenderContext, face string) (string, error)
 	return strings.Replace(face, ctx.Marker, markup, 1), nil
 }
 
-// ValidateSpec checks that the spec names a registered control and binds every
-// required role. It does not inspect the bound fields, because it has no note
-// to read them from.
-func ValidateSpec(spec notetype.AnswerSpec) error {
+// ValidateSpec checks that the spec names a registered control, binds every
+// required role and binds every role to a field the note type declares.
+//
+// declaredFieldIDs is the field-id set of the note type the spec belongs to.
+// Checking it here keeps a spec whose roles point at fields that do not exist
+// out of the store: such a spec would otherwise resolve to no binding at grading
+// time and make the card impossible to rate.
+func ValidateSpec(spec notetype.AnswerSpec, declaredFieldIDs []string) error {
 	if strings.TrimSpace(spec.Control) == "" {
 		return errors.New("answer: answer spec has no control")
 	}
@@ -189,6 +194,26 @@ func ValidateSpec(spec notetype.AnswerSpec) error {
 		}
 		if strings.TrimSpace(spec.Bindings[role.Name]) == "" {
 			return fmt.Errorf("answer: control %q is missing required role %q", spec.Control, role.Name)
+		}
+	}
+	fields := make(map[string]struct{}, len(declaredFieldIDs))
+	for _, id := range declaredFieldIDs {
+		fields[id] = struct{}{}
+	}
+	// Bindings is a map, so the role names are sorted to keep the reported
+	// offending role deterministic when more than one binding is invalid.
+	roles := make([]string, 0, len(spec.Bindings))
+	for role := range spec.Bindings {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+	for _, role := range roles {
+		fieldID := strings.TrimSpace(spec.Bindings[role])
+		if fieldID == "" {
+			continue
+		}
+		if _, exists := fields[fieldID]; !exists {
+			return fmt.Errorf("answer: control %q binds role %q to field %q, which the note type does not declare", spec.Control, role, fieldID)
 		}
 	}
 	return nil

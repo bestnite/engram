@@ -15,7 +15,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/notetype"
 )
 
@@ -238,9 +237,6 @@ func createEngramNoteTypes(tx *gorm.DB) (map[deckKind]noteTypeRef, error) {
 		if !ok {
 			return nil, fmt.Errorf("convert notes to note types: deck %d uses unknown kind %q", row.DeckID, row.Kind)
 		}
-		if err := validateEngramStock(stock); err != nil {
-			return nil, err
-		}
 		nt := NoteType{DeckID: row.DeckID}
 		if err := nt.SetConfig(stock.Name, stock.Config); err != nil {
 			return nil, fmt.Errorf("convert notes to note types: deck %d kind %q: %w", row.DeckID, row.Kind, err)
@@ -257,25 +253,6 @@ func createEngramNoteTypes(tx *gorm.DB) (map[deckKind]noteTypeRef, error) {
 		out[deckKind{DeckID: row.DeckID, Kind: row.Kind}] = noteTypeRef{ID: nt.ID, plainFields: plainFields}
 	}
 	return out, nil
-}
-
-// validateEngramStock runs both validators the write path runs: the note type
-// rules (fields, templates, placeholder count) and the answer control's role
-// rules. A stock definition that fails would be created by the migration and
-// only fail later when a card is rendered, so it is rejected here instead.
-func validateEngramStock(stock notetype.EngramStock) error {
-	if err := stock.Config.Validate(); err != nil {
-		return fmt.Errorf("convert notes to note types: stock kind %q: %w", stock.Kind, err)
-	}
-	for _, template := range stock.Config.Templates {
-		if template.Answer == nil {
-			continue
-		}
-		if err := answer.ValidateSpec(*template.Answer); err != nil {
-			return fmt.Errorf("convert notes to note types: stock kind %q template %q: %w", stock.Kind, template.Name, err)
-		}
-	}
-	return nil
 }
 
 // convertNoteRows rewrites every note in primary-key batches, so memory use is

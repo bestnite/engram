@@ -164,7 +164,11 @@ func TestEngramStockConfigs(t *testing.T) {
 				if template.Answer.Control != expected.control {
 					t.Errorf("control = %q, want %q", template.Answer.Control, expected.control)
 				}
-				if err := answer.ValidateSpec(*template.Answer); err != nil {
+				fieldIDs := make([]string, 0, len(stock.Config.Fields))
+				for _, field := range stock.Config.Fields {
+					fieldIDs = append(fieldIDs, field.ID)
+				}
+				if err := answer.ValidateSpec(*template.Answer, fieldIDs); err != nil {
 					t.Errorf("answer.ValidateSpec() error = %v", err)
 				}
 				for role, field := range expected.bindings {

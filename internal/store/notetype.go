@@ -9,6 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/notetype"
 )
 
@@ -24,12 +25,17 @@ var (
 // SetConfig validates and stores a note type config in ConfigJSON.
 //
 // Both the name and the config are validated here, before any write, so an illegal note type never reaches the table.
-// The validation error names the offending field or template (notetype.ValidationError.Detail).
+// The structural rules name the offending field or template (notetype.ValidationError.Detail); the answer-spec rule
+// names the template and the role it rejected. Every note type write path (API create/update, package import, stock
+// type creation and migration) funnels through this method, so the answer-spec rule has one implementation point.
 func (nt *NoteType) SetConfig(name string, cfg notetype.Config) error {
 	if err := notetype.ValidateName(name); err != nil {
 		return fmt.Errorf("validate note type name: %w", err)
 	}
 	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("validate note type config: %w", err)
+	}
+	if err := validateAnswerSpecs(cfg); err != nil {
 		return fmt.Errorf("validate note type config: %w", err)
 	}
 	raw, err := json.Marshal(cfg)
@@ -38,6 +44,26 @@ func (nt *NoteType) SetConfig(name string, cfg notetype.Config) error {
 	}
 	nt.Name = name
 	nt.ConfigJSON = string(raw)
+	return nil
+}
+
+// validateAnswerSpecs runs the answer-control rules over every template of a config.
+//
+// The template name is added here rather than inside internal/answer, because the spec alone does not know which
+// template it belongs to and a rejection must let the caller find the offending template.
+func validateAnswerSpecs(cfg notetype.Config) error {
+	fieldIDs := make([]string, 0, len(cfg.Fields))
+	for _, field := range cfg.Fields {
+		fieldIDs = append(fieldIDs, field.ID)
+	}
+	for _, template := range cfg.Templates {
+		if template.Answer == nil {
+			continue
+		}
+		if err := answer.ValidateSpec(*template.Answer, fieldIDs); err != nil {
+			return fmt.Errorf("template %q: %w", template.Name, err)
+		}
+	}
 	return nil
 }
 
