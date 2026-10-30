@@ -160,6 +160,8 @@ it.
     keyboard shortcuts. The evidence is a captured screenshot set from the `run` skill.
 
   *Verify:* `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
+  *Evidence pending:* the screenshot set from the `run` skill is captured by M17-4's browser
+  harness; the component tests and the `{@html}` allowlist test landed in `6865a54`.
 - [ ] **M17-4 Browser isolation tests** — prove the sandbox in a real browser.
   *Depends on:* M17-3.
   *Files:* `frontend/e2e/` (new); `frontend/package.json` (dev dependency `@playwright/test`. Reason:
@@ -178,55 +180,13 @@ it.
 
 **Phase 2 — `internal/notetype`, the Anki engine (on `main`; not wired into any request path)**
 
-- [ ] **M17-6 Note type model and stock definitions** — the Go types for `config_json`, their
-  validation, and Anki's six stock note types.
-  *Depends on:* M17-5.
-  *Files:* `internal/notetype/notetype.go` and `internal/notetype/stock.go` (new).
-  *Work:* validation rejects:
-  - duplicate field names or template names;
-  - an empty name;
-  - a cloze note type with more than one template;
-  - a template whose front references an unknown field.
-
-  Each rejection names the offending item in English. The stock definitions copy Anki's field names,
-  templates and CSS at `26.09.3`.
-  *Acceptance:*
-  - Table-driven tests cover every rejection.
-  - A test renders each stock note type's fixture through M17-7 and compares the result with the
-    golden output (this test lands with M17-7).
-
-  *Verify:* `go test ./internal/notetype/... && go vet ./internal/notetype/...`.
-- [ ] **M17-7 Template engine** — port `rslib/src/template.rs` and `rslib/src/template_filters.rs`.
-  *Depends on:* M17-6.
-  *Files:* `internal/notetype/template.go`, `filters.go` and their tests.
-  *Work:*
-  - **Syntax:**
-    - replacement `{{Field}}`;
-    - the conditionals `{{#F}}…{{/F}}` and `{{^F}}…{{/F}}`. A field counts as empty when it holds
-      only whitespace, `<br>` and `<div>` tags;
-    - `{{…}}` inside `<!-- -->` stays literal;
-    - a template starting with `{{=<% %>=}}` uses the `<% %>` delimiters.
-  - **Special fields:**
-    - `{{FrontSide}}`, `{{Tags}}`, `{{Type}}`, `{{Deck}}`, `{{Subdeck}}`, `{{Card}}`, `{{CardFlag}}`
-      and `{{CardID}}`. A note field with the same name wins over a special field.
-    - `{{CardFlag}}` renders `flag0` in M17.
-    - The cloze conditional `{{#c1}}`.
-  - **Filters:**
-    - `text`, `hint`, `furigana`, `kana`, `kanji`, `cloze`, `cloze-only`;
-    - `type`, `type-cloze` and `type-nc`, with the modifiers `cloze` and `nc` folded as Anki does;
-    - `tts <lang> <options>`;
-    - filter chains;
-    - an unknown filter is skipped without error;
-    - an empty field name with a filter passes an empty string to the filter.
-  - **Errors:** an unknown field, an unclosed conditional, an empty front and a missing cloze number
-    each return a stable English error code. The caller localises the code.
-
-  *Acceptance:* every template fixture's front and back HTML equals the golden output byte for byte.
-  *Verify:* `go test ./internal/notetype/... && go vet ./internal/notetype/...`.
 - [ ] **M17-8 Cloze** — port `rslib/src/cloze.rs`.
   *Depends on:* M17-7.
   *Files:* `internal/notetype/cloze.go` and its tests.
   *Work:*
+  - M17-7 already implements the tokenizer, the side-dependent reveal, the cloze-number set and the
+    image-occlusion markup needed by the template filters and the stock fixtures. This task completes
+    the `cloze.rs` port and owns the `cloze` golden.
   - The forms `{{cN::text}}`, `{{cN::text::hint}}` and `{{c1,2::…}}`.
   - Nested clozes, where the inner cloze also generates a card.
   - A `}}` inside MathJax `\(…\)` or `\[…\]` does not close a cloze.
