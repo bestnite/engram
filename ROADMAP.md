@@ -180,26 +180,6 @@ it.
 
 **Phase 2 — `internal/notetype`, the Anki engine (on `main`; not wired into any request path)**
 
-- [ ] **M17-8 Cloze** — port `rslib/src/cloze.rs`.
-  *Depends on:* M17-7.
-  *Files:* `internal/notetype/cloze.go` and its tests.
-  *Work:*
-  - M17-7 already implements the tokenizer, the side-dependent reveal, the cloze-number set and the
-    image-occlusion markup needed by the template filters and the stock fixtures. This task completes
-    the `cloze.rs` port and owns the `cloze` golden.
-  - The forms `{{cN::text}}`, `{{cN::text::hint}}` and `{{c1,2::…}}`.
-  - Nested clozes, where the inner cloze also generates a card.
-  - A `}}` inside MathJax `\(…\)` or `\[…\]` does not close a cloze.
-  - Anki's output markup: `span.cloze[data-cloze][data-ordinal]` and `span.cloze-inactive[data-ordinal]`.
-  - `cloze-only`.
-  - The cloze numbers present in a set of fields.
-  - The image-occlusion form `{{cN::image-occlusion:<shape>:…}}`, which renders as
-    `div.cloze` / `div.cloze-inactive` / `div.cloze-highlight` with `data-shape` and the shape's data
-    attributes.
-  - `|` is ordinary text.
-
-  *Acceptance:* every cloze fixture equals the golden output.
-  *Verify:* `go test ./internal/notetype/...`.
 - [ ] **M17-9 Card generation** — port `rslib/src/notetype/cardgen.rs`.
   *Depends on:* M17-7, M17-8.
   *Files:* `internal/notetype/cardgen.go` and its tests.
