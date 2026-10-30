@@ -132,33 +132,6 @@ it.
   the single breaking release of M17 (HTTP API, MCP, database schema and file format). The
   remaining M17 tasks are additive and land on `main` directly.
 
-**Phase 6 follow-up — defects found in the review of M17-25 to M17-30, M17-45 and M17-47 to M17-51 (on `main`)**
-
-This task lands on `main` directly.
-
-- [ ] **M17-56 Preview unsaved note type templates on the server** — the note type editor shows what
-  the renderer produces.
-  *Files:* `internal/web/note_preview.go`; `internal/web/notes.go` (route registration);
-  `frontend/src/lib/views/NoteTypesView.svelte` (single-writer hotspot);
-  `frontend/src/lib/note-type-template.ts`; `frontend/src/lib/api/client.ts`; the tests beside them.
-  *Problem:* the note type editor previews templates with `renderPreview` in
-  `frontend/src/lib/note-type-template.ts`, a second template renderer written in the frontend. It
-  skips cloze, filters, type placeholders, LaTeX and media, so the preview differs from the faces the
-  server renders.
-  *Work:*
-  - Add `POST /api/v1/decks/:id/note-types/preview` (session and CSRF, editor role on the deck). The
-    body carries an unsaved note type `config` and a `template_id`. The server validates the config
-    with the rule `NoteType.SetConfig` applies, renders the template with `notetype.Render`, and uses
-    each field's name as that field's value. The response is a `front` and a `back` card-face object.
-  - The note type editor shows the response in its preview frames, with the config's CSS.
-  - Delete `renderPreview` and `resolveConditionals` from `note-type-template.ts`, and their tests.
-
-  *Acceptance:*
-  - Handler tests: a cloze template previews its cloze markup; an invalid config returns 400 naming the
-    template; a reader is refused.
-  - A client test: editing a template sends the preview request and shows its HTML in the frame.
-
-  *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
 **Phase 3 follow-up — defects found in the review of the P3 merge (on `main`)**
 
 These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly.
@@ -220,26 +193,6 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   - The test runs once with `TEST_PG_DSN`.
 
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-- [ ] **M17-39 Delete the dead shortcode UI and the stale sanitising comments** — remove what still
-  describes the old renderer.
-  *Files:* `frontend/src/lib/components/ShortcodeInsert.svelte`; `frontend/src/lib/shortcode-source.ts`;
-  `frontend/src/tests/shortcode-source.test.ts`; `frontend/src/tests/shortcode-insert.client.ts`; the
-  locale catalogs; `frontend/src/lib/api/types.ts`; `frontend/src/lib/components/CardFrame.svelte`;
-  `frontend/src/lib/views/ReviewView.svelte` (single-writer hotspot); `frontend/src/lib/card-frame.ts`;
-  `internal/web/card_frame.go`; `internal/web/review.go`.
-  *Work:*
-  - Delete the shortcode inserter, its source builder, their tests, and every catalog key that only
-    they used. Keep the two catalogs' key sets identical.
-  - Fix every comment that says that card-face HTML is sanitised, that names goldmark or bluemonday as
-    the card-face renderer, or that names shortcode controls in the frame. The list includes
-    `types.ts` ("sanitized by goldmark + bluemonday"), the `html` prop of `CardFrame.svelte`, the
-    "server-sanitized" comments in `ReviewView.svelte`, `card-frame.ts` and `card_frame.go`.
-  - Fix the comment on `ReviewCardView.Ordinal`: a cloze card's ordinal is its cloze number minus
-    one, not zero.
-
-  *Acceptance:* `grep -rn -i "sanitiz\|bluemonday\|shortcode" frontend/src internal --include=*.ts --include=*.svelte --include=*.go`
-  prints only lines in `internal/store/migrate_*.go`, `internal/mailstyle/` and their tests.
-  *Verify:* `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client && go vet ./internal/web/... && go test ./internal/i18n/...`.
 - [ ] **M17-42 The editing frame runs no inline script** — a field value cannot execute code in the
   editor.
   *Files:* `internal/web/edit_frame.go`; `internal/web/card_frame.go`; `internal/web/*_test.go`;
@@ -259,17 +212,8 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   - The editor's client tests still pass.
 
   *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run test:client && npm --prefix frontend run test:e2e`.
-- [ ] **M17-43 A note type used only by deleted notes cannot be deleted** — deletion must not orphan a
-  restorable note.
-  *Files:* `internal/store/notetype.go` (`NoteTypeStore.Delete`); `internal/store/notetype_test.go`.
-  *Problem:* the usage count skips soft-deleted notes, but a soft-deleted note can be restored, and
-  migration 0012 gives soft-deleted notes a note type for exactly that reason.
-  *Work:* the usage count includes soft-deleted notes.
-  *Acceptance:* a store test: a note type whose only note is soft-deleted returns `ErrNoteTypeInUse`.
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 - [ ] **M17-59 Purge deleted notes when their note type is deleted** — a note type whose notes were
   all deleted can still be deleted, after a confirmation.
-  *Depends on:* M17-43.
   *Files:* `internal/store/notetype.go` (`NoteTypeStore.Delete`); `internal/store/deck.go`
   (`deleteDeckTx`); `internal/api/note_types.go`; `internal/api/errors.go`;
   `frontend/src/lib/views/NoteTypesView.svelte` (single-writer hotspot); `frontend/src/lib/api/`; the
@@ -518,3 +462,6 @@ bluemonday-sanitised `internal/render` are gone.
 | Cloze type-in compares its own deletion (M17-55) | `{{type:cloze:F}}` compares the typed value with the deletion the card shows: the web layer's card ordinal is already the 1-based cloze number, so a `c1` card no longer compares the `c2` deletion. | No |
 | Deck description as plain text in the lists (M17-57) | Every deck response gains `description_text`: `description_html` reduced to one line of plain text. The deck list and the home deck list print it, so an imported HTML description no longer shows raw tags, while the deck detail page still renders the description as HTML inside the sandboxed frame. | No — additive response field |
 | Literal field renames (M17-58) | Renaming a field writes the new name verbatim in `{{Old}}`, `{{#Old}}`, `{{/Old}}` and `{{text:Old}}`, so `$&`, `` $` ``, `$'` and `$$` in the new name no longer act as replacement patterns. | No |
+| Server-rendered note type preview (M17-56) | The note type editor previews an unsaved config through `POST /api/v1/decks/:id/note-types/preview` (session and CSRF, editor role): the server validates the config with the rule every note type write applies, renders the selected template for both sides and returns the front and back card-face objects with the config's CSS. The second frontend template renderer (`renderPreview`, `resolveConditionals`) is deleted. | No — one route is added |
+| Dead shortcode inserter and stale sanitising comments (M17-39) | The shortcode inserter, its source builder, the media picker it alone used and the catalog keys that only they read are deleted. Comments that claimed the server, goldmark or bluemonday sanitise card-face HTML now state that the sandboxed frame and its CSP are the only boundary, and the note type's card ordinal comment states that a cloze card's ordinal is its cloze number minus one. The live audio and speech control layer stays and is no longer described as a shortcode renderer. | No |
+| Note type deletion counts soft-deleted notes (M17-43) | A note type used by any note, soft-deleted ones included, is refused with `ErrNoteTypeInUse`, because a soft-deleted note is restorable content and would lose the field and template definitions it relies on. M17-59 adds the confirmed purge path that removes the dead end. | No — a delete that used to succeed is now refused |
