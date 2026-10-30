@@ -16,6 +16,11 @@ export interface Deck {
    * sandboxed frame, never in the parent page.
    */
   description_html?: string;
+  /**
+   * The description reduced to one line of plain text, for the lists that print it as a string
+   * (Go: DeckResponse.DescriptionText). A response from an older server omits it.
+   */
+  description_text?: string;
   new_per_day: number;
   reviews_per_day: number;
   preset_id: string;

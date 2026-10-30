@@ -504,8 +504,8 @@
                 <Badge variant="warning" testId={`deck-paused-badge-${deck.id}`}>{$t('decks.paused_badge')}</Badge>
               {/if}
             </div>
-            {#if deck.description}
-              <span class="truncate text-[13px] text-muted-foreground">{deck.description}</span>
+            {#if deck.description_text}
+              <span class="truncate text-[13px] text-muted-foreground">{deck.description_text}</span>
             {/if}
           </div>
           <span data-testid={`deck-queue-count-${deck.id}`} class="hidden w-36 text-[13px] tabular-nums text-foreground/80 sm:block {deck.paused ? 'opacity-50' : ''}">

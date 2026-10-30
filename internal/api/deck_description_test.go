@@ -16,10 +16,12 @@ type deckDescriptionBody struct {
 	Description         string `json:"description"`
 	DescriptionMarkdown bool   `json:"description_markdown"`
 	DescriptionHTML     string `json:"description_html"`
+	DescriptionText     string `json:"description_text"`
 }
 
 // TestDeckResponseDescriptionRendering pins the flag switch: the stored text stays the source, while DescriptionHTML is the
-// Markdown rendering when the flag is set and the stored HTML passed through when it is not.
+// Markdown rendering when the flag is set and the stored HTML passed through when it is not. DescriptionText is the plain
+// text of whichever of the two DescriptionHTML holds, so a list that prints the description never prints markup.
 func TestDeckResponseDescriptionRendering(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -28,6 +30,7 @@ func TestDeckResponseDescriptionRendering(t *testing.T) {
 		wantHTML   []string
 		denyHTML   []string
 		wantSource string
+		wantText   string
 	}{
 		{
 			name:       "HTML description passes through",
@@ -36,6 +39,7 @@ func TestDeckResponseDescriptionRendering(t *testing.T) {
 			wantHTML:   []string{"<p>plain <strong>HTML</strong></p>"},
 			denyHTML:   []string{"<h1>"},
 			wantSource: "<p>plain <strong>HTML</strong></p>",
+			wantText:   "plain HTML",
 		},
 		{
 			name:       "Markdown description renders",
@@ -44,6 +48,7 @@ func TestDeckResponseDescriptionRendering(t *testing.T) {
 			wantHTML:   []string{"<h1>Heading</h1>", "<strong>bold</strong>"},
 			denyHTML:   []string{"# Heading", "**bold**"},
 			wantSource: "# Heading\n\n**bold**",
+			wantText:   "Heading bold",
 		},
 	}
 	for _, tc := range cases {
@@ -73,6 +78,9 @@ func TestDeckResponseDescriptionRendering(t *testing.T) {
 				if strings.Contains(body.DescriptionHTML, deny) {
 					t.Errorf("description_html = %q, must not contain %q", body.DescriptionHTML, deny)
 				}
+			}
+			if body.DescriptionText != tc.wantText {
+				t.Errorf("description_text = %q, want %q", body.DescriptionText, tc.wantText)
 			}
 		})
 	}

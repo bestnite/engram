@@ -204,8 +204,8 @@
               >
                 <div class="col-span-full flex min-w-0 flex-col sm:col-span-1">
                   <span class="truncate font-medium text-foreground">{deck.name}</span>
-                  {#if deck.description}
-                    <span class="truncate text-[13px] text-muted-foreground">{deck.description}</span>
+                  {#if deck.description_text}
+                    <span class="truncate text-[13px] text-muted-foreground">{deck.description_text}</span>
                   {/if}
                 </div>
                 {#if counts}

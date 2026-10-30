@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"git.nite07.com/nite/engram/internal/markdown"
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -22,6 +23,9 @@ type DeckResponse struct {
 	// DescriptionHTML is the description after rendering: Markdown converted when DescriptionMarkdown is set, the stored HTML
 	// passed through otherwise. It is unsanitised content and clients must show it only inside the sandboxed frame.
 	DescriptionHTML string `json:"description_html"`
+	// DescriptionText is DescriptionHTML reduced to one line of plain text, the form every list that prints the description as a
+	// string shows. It exists so a list never has to strip markup itself and never prints raw tags.
+	DescriptionText string `json:"description_text"`
 	NewPerDay       int    `json:"new_per_day"`
 	ReviewsPerDay   int    `json:"reviews_per_day"`
 	PresetID        string `json:"preset_id"`
@@ -66,6 +70,8 @@ func (a *API) ToDeckResponse(ctx context.Context, userID uint64, d store.Deck, r
 			out.DescriptionHTML = rendered
 		}
 	}
+	// Lists print the description as a single line of text, so the stripping happens once here rather than in every client.
+	out.DescriptionText = notetype.PlainText(out.DescriptionHTML)
 	paused, err := a.decks.IsPaused(ctx, userID, d.ID)
 	if err != nil {
 		a.logger.Error("load deck pause for deck response failed", "deck_id", d.ID, "user_id", userID, "error", err)
