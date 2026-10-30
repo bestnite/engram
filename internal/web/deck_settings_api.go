@@ -15,21 +15,22 @@ import (
 // deck_id / preset_id are public ids: the deck's numeric primary key is not exposed, likewise for presets, and they are passed in by the caller here.
 func deckSettingsPayload(deck *store.Deck, role, presetPublicID string, budget schedule.DeckBudget) deckSettingsResponse {
 	return deckSettingsResponse{
-		DeckID:          deck.PublicID,
-		DeckName:        deck.Name,
-		DeckDescription: deck.Description,
-		Role:            role,
-		PresetID:        presetPublicID,
-		Autoplay:        deck.AutoplayEnabled(),
-		NewPerDay:       budget.NewPerDay,
-		ReviewsPerDay:   budget.ReviewsPerDay,
-		NewExtra:        budget.NewExtra,
-		NewUsed:         budget.NewUsed,
-		ReviewUsed:      budget.ReviewUsed,
-		NewLeft:         budget.NewLeft,
-		ReviewLeft:      budget.ReviewLeft,
-		NewUnlimited:    budget.NewUnlimited,
-		ReviewUnlimited: budget.ReviewUnlimited,
+		DeckID:              deck.PublicID,
+		DeckName:            deck.Name,
+		DeckDescription:     deck.Description,
+		Role:                role,
+		PresetID:            presetPublicID,
+		Autoplay:            deck.AutoplayEnabled(),
+		DescriptionMarkdown: deck.DescriptionIsMarkdown(),
+		NewPerDay:           budget.NewPerDay,
+		ReviewsPerDay:       budget.ReviewsPerDay,
+		NewExtra:            budget.NewExtra,
+		NewUsed:             budget.NewUsed,
+		ReviewUsed:          budget.ReviewUsed,
+		NewLeft:             budget.NewLeft,
+		ReviewLeft:          budget.ReviewLeft,
+		NewUnlimited:        budget.NewUnlimited,
+		ReviewUnlimited:     budget.ReviewUnlimited,
 	}
 }
 
@@ -48,9 +49,11 @@ type deckSettingsResponse struct {
 	Role     string `json:"role"`
 	PresetID string `json:"preset_id"`
 	// Autoplay is the deck-wide setting the review frame reads; only the owner may change it.
-	Autoplay      bool `json:"autoplay"`
-	NewPerDay     int  `json:"new_per_day"`
-	ReviewsPerDay int  `json:"reviews_per_day"`
+	Autoplay bool `json:"autoplay"`
+	// DescriptionMarkdown is the deck-wide setting that selects between HTML and Markdown for the description; only the owner may change it.
+	DescriptionMarkdown bool `json:"description_markdown"`
+	NewPerDay           int  `json:"new_per_day"`
+	ReviewsPerDay       int  `json:"reviews_per_day"`
 	// NewExtra is the extra new-card quota added by today's "one more round"; NewLeft already includes it, NewPerDay does not.
 	NewExtra        int  `json:"new_extra"`
 	NewUsed         int  `json:"new_used"`
@@ -70,6 +73,8 @@ type deckSettingsRequest struct {
 	// Autoplay is optional and deck-wide: omitting it leaves the setting untouched. A sharing member may change their
 	// own quotas but not this column, which belongs to the deck.
 	Autoplay *bool `json:"autoplay"`
+	// DescriptionMarkdown is optional and deck-wide for the same reason: it changes how every reader sees the description.
+	DescriptionMarkdown *bool `json:"description_markdown"`
 }
 
 // registerDeckSettingsAPIRoutes mounts the SPA's deck study settings read/write API (any deck member; writes go through CSRF).
@@ -151,6 +156,12 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 		shareError(c, http.StatusForbidden, "forbidden")
 		return
 	}
+	// The description format is deck-wide in the same way: a request that carries it from anyone but the owner is rejected
+	// before any write.
+	if req.DescriptionMarkdown != nil && role != store.RoleOwner {
+		shareError(c, http.StatusForbidden, "forbidden")
+		return
+	}
 	ctx := c.Request.Context()
 	// The preset is optional: a request that only changes quotas does not carry it.
 	var presetID *uint64
@@ -187,6 +198,20 @@ func (s *Server) deckSettingsPatch(c *gin.Context) {
 			TargetType: "deck",
 			TargetID:   store.Ptr(deck.ID),
 			Detail:     map[string]any{"autoplay": *req.Autoplay},
+		})
+	}
+	if req.DescriptionMarkdown != nil {
+		if err := s.decks.SetDescriptionMarkdown(ctx, user.ID, deck.ID, *req.DescriptionMarkdown); err != nil {
+			s.logger.Error("set deck description format for SPA failed", "deck_id", deck.ID, "error", err)
+			shareError(c, http.StatusInternalServerError, "internal_error")
+			return
+		}
+		s.auditor.Record(ctx, store.AuditEntry{
+			UserID:     store.Ptr(user.ID),
+			Action:     store.ActionDeckDescriptionMarkdown,
+			TargetType: "deck",
+			TargetID:   store.Ptr(deck.ID),
+			Detail:     map[string]any{"description_markdown": *req.DescriptionMarkdown},
 		})
 	}
 	if presetID != nil {

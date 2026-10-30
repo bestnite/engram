@@ -35,11 +35,12 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 	// It uses the same name/description validation as deck creation and rename: cloning used to check only for non-emptiness and then tx.Create, so it could
 	// store a deck over 200 characters long or one containing control characters, which every later rename/import entry point would reject.
 	dst := Deck{
-		OwnerUserID: targetUserID,
-		Name:        newName,
-		Description: src.Description,
-		PresetID:    presetID,
-		CreatedAt:   time.Now().UTC(),
+		OwnerUserID:         targetUserID,
+		Name:                newName,
+		Description:         src.Description,
+		DescriptionMarkdown: src.DescriptionMarkdown,
+		PresetID:            presetID,
+		CreatedAt:           time.Now().UTC(),
 	}
 	if err := validateDeckForWrite(&dst, true); err != nil {
 		return nil, err

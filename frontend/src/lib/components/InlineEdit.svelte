@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import type { Snippet } from 'svelte';
   import { Pencil } from '@lucide/svelte';
   import { cn } from './ui/utils';
 
@@ -23,6 +24,11 @@
     /** Style of the display-state text; the edit-state input keeps the same font size and weight so nothing jumps when switching. */
     class?: string;
     testId?: string;
+    /**
+     * Display-state content that replaces the plain text, such as a sandboxed frame for HTML that must not enter the parent
+     * page. It is used only when the value is non-empty; the edit state still edits the raw value.
+     */
+    display?: Snippet;
   }
 
   let {
@@ -35,6 +41,7 @@
     maxlength,
     class: klass = '',
     testId,
+    display,
   }: Props = $props();
 
   let editing = $state(false);
@@ -115,13 +122,17 @@
   {/if}
 {:else if editable}
   <span class="group/inline flex min-w-0 items-start gap-1.5">
-    <!-- The text itself is clickable too: a small icon should not be the only way into editing. -->
-    <span
-      class={cn('min-w-0 cursor-text break-words rounded-sm', !value && 'text-muted-foreground/70', klass)}
-      onclick={start}
-      role="presentation"
-      data-testid={testId}
-    >{value || placeholder}</span>
+    {#if display && value}
+      <span class="block min-w-0 flex-1">{@render display()}</span>
+    {:else}
+      <!-- The text itself is clickable too: a small icon should not be the only way into editing. -->
+      <span
+        class={cn('min-w-0 cursor-text break-words rounded-sm', !value && 'text-muted-foreground/70', klass)}
+        onclick={start}
+        role="presentation"
+        data-testid={testId}
+      >{value || placeholder}</span>
+    {/if}
     <button
       type="button"
       onclick={start}
@@ -133,6 +144,8 @@
       <Pencil class="size-3.5" aria-hidden="true" />
     </button>
   </span>
+{:else if display && value}
+  <span class="block {klass}" data-testid={testId}>{@render display()}</span>
 {:else if value}
   <span class={klass} data-testid={testId}>{value}</span>
 {/if}

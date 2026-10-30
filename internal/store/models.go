@@ -120,14 +120,18 @@ func (Preset) TableName() string { return "presets" }
 // Both cap columns are integers with database defaults, so a zero value is omitted by GORM and filled in by the database default;
 // to set a cap to 0 explicitly, go through DeckStore.SetCaps (a map update writes 0).
 type Deck struct {
-	ID            uint64 `gorm:"primaryKey" json:"-"`
-	PublicID      string `gorm:"column:public_id;uniqueIndex" json:"id"`
-	OwnerUserID   uint64 `gorm:"not null;index" json:"owner_user_id"`
-	Name          string `gorm:"not null" json:"name"`
-	Description   string `gorm:"not null" json:"description"`
-	NewPerDay     int    `gorm:"not null;default:20" json:"new_per_day"`
-	ReviewsPerDay int    `gorm:"not null;default:200" json:"reviews_per_day"`
-	PresetID      uint64 `gorm:"not null;index" json:"preset_id"`
+	ID          uint64 `gorm:"primaryKey" json:"-"`
+	PublicID    string `gorm:"column:public_id;uniqueIndex" json:"id"`
+	OwnerUserID uint64 `gorm:"not null;index" json:"owner_user_id"`
+	Name        string `gorm:"not null" json:"name"`
+	Description string `gorm:"not null" json:"description"`
+	// DescriptionMarkdown selects how Description is read: false shows it as HTML, true renders it as Markdown.
+	// The column carries the database default false and is a pointer for the same reason as Autoplay: a non-pointer bool
+	// with a default tag would silently drop an explicit false on every write.
+	DescriptionMarkdown *bool  `gorm:"column:description_markdown;not null;default:false" json:"description_markdown"`
+	NewPerDay           int    `gorm:"not null;default:20" json:"new_per_day"`
+	ReviewsPerDay       int    `gorm:"not null;default:200" json:"reviews_per_day"`
+	PresetID            uint64 `gorm:"not null;index" json:"preset_id"`
 	// Autoplay controls whether a card face starts its audio tags without a click. It is a deck-wide presentation
 	// setting, so the column carries the database default true and is a pointer: a non-pointer bool with a default tag
 	// would silently drop an explicit false on every write.
@@ -140,6 +144,12 @@ func (Deck) TableName() string { return "decks" }
 // AutoplayEnabled reports the deck's autoplay setting, treating a missing value as the column default.
 // AutoMigrate adds the column to existing rows with the database default, so nil only appears before that pass.
 func (d Deck) AutoplayEnabled() bool { return d.Autoplay == nil || *d.Autoplay }
+
+// DescriptionIsMarkdown reports whether the deck description is Markdown rather than HTML, treating a missing value as the
+// column default. AutoMigrate adds the column to existing rows with the database default, so nil only appears before that pass.
+func (d Deck) DescriptionIsMarkdown() bool {
+	return d.DescriptionMarkdown != nil && *d.DescriptionMarkdown
+}
 
 // Note describes \"a fact\" and holds content only, with no user progress at all.
 type Note struct {

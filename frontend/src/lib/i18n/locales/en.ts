@@ -1594,4 +1594,9 @@ export const en: LocaleCatalog = {
   'editor.audio.bad_range': 'The end must be later than the start.',
   'editor.audio.insert': 'Insert',
   'editor.audio.cancel': 'Cancel',
+  // ---- Deck settings: description format ----
+  'deck.markdown.heading': 'Description',
+  'deck.markdown.hint': 'When on, the deck description is rendered as Markdown; when off it is shown as HTML. Only the deck owner can change this.',
+  'deck.markdown.label': 'Render the description as Markdown',
+  'deck.markdown.owner_only': 'Only the deck owner can change this setting.',
 };

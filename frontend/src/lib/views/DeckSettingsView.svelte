@@ -41,6 +41,9 @@
   let reviewsPerDay = $state(initialSettings ? String(initialSettings.reviews_per_day) : '');
   // svelte-ignore state_referenced_locally
   let autoplay = $state(initialSettings ? (initialSettings.autoplay ?? true) : true);
+  // Deck-wide description format: false shows the stored HTML, true renders it as Markdown.
+  // svelte-ignore state_referenced_locally
+  let descriptionMarkdown = $state(initialSettings ? (initialSettings.description_markdown ?? false) : false);
   // Preset list: it decides which FSRS parameter set the deck schedules with, so it sits in the same form alongside the daily cap.
   let presets = $state<Array<{ value: string; label: string }>>([]);
   // svelte-ignore state_referenced_locally
@@ -79,6 +82,7 @@
       newPerDay = String(data.new_per_day);
       reviewsPerDay = String(data.reviews_per_day);
       autoplay = data.autoplay ?? true;
+      descriptionMarkdown = data.description_markdown ?? false;
       presetId = String(data.preset_id);
     } catch (err) {
       loadError = err instanceof Error ? err : new Error(String(err));
@@ -109,12 +113,13 @@
         reviews_per_day: r,
         ...(presetId ? { preset_id: presetId } : {}),
         // The setting is deck-wide; the server rejects the field from anyone but the owner, so a member never sends it.
-        ...(settings?.role === 'owner' ? { autoplay } : {}),
+        ...(settings?.role === 'owner' ? { autoplay, description_markdown: descriptionMarkdown } : {}),
       });
       settings = data;
       newPerDay = String(data.new_per_day);
       reviewsPerDay = String(data.reviews_per_day);
       autoplay = data.autoplay ?? true;
+      descriptionMarkdown = data.description_markdown ?? false;
       toast.success($t('deck.settings.saved'));
     } catch (err) {
       toast.error($t(err instanceof ApiClientError && err.isForbidden ? 'deck.settings.error.forbidden' : 'deck.settings.error.failed'));
@@ -213,6 +218,24 @@
             <p class="text-sm font-medium text-foreground">{$t('deck.autoplay.label')}</p>
             {#if settings.role !== 'owner'}
               <p class="mt-1.5 text-xs text-muted-foreground" data-testid="deck-autoplay-owner-only">{$t('deck.autoplay.owner_only')}</p>
+            {/if}
+          </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title={$t('deck.markdown.heading')} description={$t('deck.markdown.hint')}>
+        <div class="flex items-start gap-2.5" data-testid="deck-markdown-row">
+          <Checkbox
+            testId="deck-settings-markdown"
+            checked={descriptionMarkdown}
+            disabled={settings.role !== 'owner'}
+            label={$t('deck.markdown.label')}
+            onCheckedChange={(checked) => (descriptionMarkdown = checked)}
+          />
+          <div>
+            <p class="text-sm font-medium text-foreground">{$t('deck.markdown.label')}</p>
+            {#if settings.role !== 'owner'}
+              <p class="mt-1.5 text-xs text-muted-foreground" data-testid="deck-markdown-owner-only">{$t('deck.markdown.owner_only')}</p>
             {/if}
           </div>
         </div>

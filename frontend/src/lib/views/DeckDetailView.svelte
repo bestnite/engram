@@ -21,6 +21,7 @@
   import { listClasses, menuClasses, selectionBarButton } from '../components/ui/variants';
   import { toast } from '../components/ui/toast';
   import InlineEdit from '../components/InlineEdit.svelte';
+  import CardFrame from '../components/CardFrame.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
   import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, FileText, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, SearchX, Tags, Trash2, X } from '@lucide/svelte';
@@ -170,6 +171,10 @@
   const canEditContent = $derived(deck?.role !== 'reader');
   // Only the owner can change the name and description (the same criterion on the server); other members only see the text.
   const isOwner = $derived(deck?.role === 'owner');
+  // The description is shown in the sandboxed frame, so the server-rendered HTML is the value that reaches it: a Markdown deck
+  // arrives already converted, an HTML deck passes its stored HTML through. The source text stays in `description` for editing.
+  const descriptionHTML = $derived(deck?.description_html ?? deck?.description ?? '');
+  const descriptionValue = $derived(deck?.description ?? '');
 
   /**
    * Save of the header's in-place edit: name and description go through the same endpoint, and the unchanged one is submitted along with its current value.
@@ -185,7 +190,13 @@
     }
     try {
       const updated = await apiClient.updateDeck(deckId, { name, description });
-      deck = { ...deck, name: updated.name, description: updated.description };
+      deck = {
+        ...deck,
+        name: updated.name,
+        description: updated.description,
+        description_markdown: updated.description_markdown ?? deck.description_markdown,
+        description_html: updated.description_html ?? updated.description,
+      };
       toast.success($t('deck.settings.info_saved'));
       return true;
     } catch (err) {
@@ -512,7 +523,7 @@
       {#if deck && (deck.description || isOwner)}
         <div class="mt-1 max-w-3xl text-sm text-muted-foreground">
           <InlineEdit
-            value={deck.description}
+            value={descriptionValue}
             editable={isOwner}
             multiline
             placeholder={$t('deck.add_description')}
@@ -520,7 +531,21 @@
             maxlength={2000}
             testId="deck-description"
             onSave={(description) => saveDeckInfo({ description })}
-          />
+          >
+            {#snippet display()}
+              <!-- The description is stored HTML: the frame renders it in its own sandboxed document, never in this page. -->
+              <span class="block rounded-md border border-border bg-surface px-3 py-2" data-testid="deck-description-rendered">
+                <CardFrame
+                  html={descriptionHTML}
+                  css=""
+                  bodyClass="card"
+                  side="question"
+                  mediaBase=""
+                  title={$t('deck.settings.description')}
+                />
+              </span>
+            {/snippet}
+          </InlineEdit>
         </div>
       {/if}
       {#if deck?.paused}

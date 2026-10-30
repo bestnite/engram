@@ -8,17 +8,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/markdown"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
 // DeckResponse is the external shape of a deck; REST and MCP share the same shape.
 type DeckResponse struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Description   string `json:"description"`
-	NewPerDay     int    `json:"new_per_day"`
-	ReviewsPerDay int    `json:"reviews_per_day"`
-	PresetID      string `json:"preset_id"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// DescriptionMarkdown reports whether Description is Markdown source rather than HTML.
+	DescriptionMarkdown bool `json:"description_markdown"`
+	// DescriptionHTML is the description after rendering: Markdown converted when DescriptionMarkdown is set, the stored HTML
+	// passed through otherwise. It is unsanitised content and clients must show it only inside the sandboxed frame.
+	DescriptionHTML string `json:"description_html"`
+	NewPerDay       int    `json:"new_per_day"`
+	ReviewsPerDay   int    `json:"reviews_per_day"`
+	PresetID        string `json:"preset_id"`
 	// Autoplay is the deck-wide presentation setting the review frame reads: whether a face starts its audio tags
 	// without a click.
 	Autoplay  bool      `json:"autoplay"`
@@ -40,12 +46,25 @@ type deckResponse = DeckResponse
 // study settings on this deck (owners read the deck columns, shared members read their own member settings); the preset's numeric primary key becomes an external id here.
 func (a *API) ToDeckResponse(ctx context.Context, userID uint64, d store.Deck, role string) DeckResponse {
 	out := DeckResponse{
-		ID:          d.PublicID,
-		Name:        d.Name,
-		Description: d.Description,
-		CreatedAt:   d.CreatedAt,
-		Role:        role,
-		Autoplay:    d.AutoplayEnabled(),
+		ID:                  d.PublicID,
+		Name:                d.Name,
+		Description:         d.Description,
+		DescriptionMarkdown: d.DescriptionIsMarkdown(),
+		CreatedAt:           d.CreatedAt,
+		Role:                role,
+		Autoplay:            d.AutoplayEnabled(),
+	}
+	// The description reaches the client as HTML either way: an HTML deck passes its stored text through, a Markdown deck is
+	// rendered here so the server owns the one rendering rule. A render failure falls back to the source text, which the frame
+	// still shows as text instead of losing the description.
+	out.DescriptionHTML = d.Description
+	if out.DescriptionMarkdown {
+		rendered, err := markdown.Render(d.Description)
+		if err != nil {
+			a.logger.Error("render deck description markdown failed", "deck_id", d.ID, "error", err)
+		} else {
+			out.DescriptionHTML = rendered
+		}
 	}
 	paused, err := a.decks.IsPaused(ctx, userID, d.ID)
 	if err != nil {

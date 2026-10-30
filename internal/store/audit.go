@@ -82,6 +82,9 @@ const (
 	// ActionDeckAutoplay records the owner switching the deck's autoplay setting, which changes how every
 	// face of the deck is presented.
 	ActionDeckAutoplay = "deck.autoplay_change"
+	// ActionDeckDescriptionMarkdown records the owner switching the deck description between HTML and Markdown, which changes
+	// how the description of every deck view is read.
+	ActionDeckDescriptionMarkdown = "deck.markdown_change"
 	// 'one more round': append new-card quota for this deck today, for the caller only, recorded at the same tier as daily quota changes.
 	ActionDeckExtraNew = "deck.extra_new"
 	// Pausing and resuming a deck for the caller only: it changes which decks the default queue and the reminder mail cover.

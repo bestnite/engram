@@ -79,6 +79,14 @@ describe('DeckDetailView notes table', () => {
     expect(html).toMatch(/data-testid="deck-title"[\s\S]*日语 N2 词汇/);
   });
 
+  it('shows the description only inside the sandboxed frame', () => {
+    const html = renderView([note('n1')]);
+    expect(html).toContain('data-testid="deck-description-rendered"');
+    expect(html).toMatch(/<iframe[^>]*sandbox="allow-scripts"[^>]*data-card-frame/);
+    // Stored HTML never enters the parent markup: the frame receives it with postMessage.
+    expect(html).not.toContain('N2 核心词汇');
+  });
+
   it('offers an "add a description" prompt to the owner when the deck has none', () => {
     const html = render(DeckDetailView, {
       props: { initialDeck: { ...deck, description: '' }, initialNotes: [], initialTotal: 0, initialLoading: false },

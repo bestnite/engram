@@ -1593,4 +1593,9 @@ export const zhCN: LocaleCatalog = {
   'editor.audio.bad_range': '终点必须晚于起点。',
   'editor.audio.insert': '插入',
   'editor.audio.cancel': '取消',
+  // ---- 卡组设置：描述格式 ----
+  'deck.markdown.heading': '描述',
+  'deck.markdown.hint': '开启后，卡组描述按 Markdown 渲染；关闭时按 HTML 显示。只有卡组所有者可以修改。',
+  'deck.markdown.label': '将描述按 Markdown 渲染',
+  'deck.markdown.owner_only': '只有卡组所有者可以修改此设置。',
 };

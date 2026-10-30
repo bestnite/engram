@@ -25,6 +25,7 @@ describe('DeckSettingsView cap saving', () => {
     role: 'owner',
     preset_id: '3',
     autoplay: true,
+    description_markdown: false,
     new_per_day: 10,
     reviews_per_day: 10,
     new_used: 2,
@@ -65,18 +66,18 @@ describe('DeckSettingsView cap saving', () => {
     await flush();
   }
 
-  async function setup(): Promise<ReturnType<typeof vi.fn>> {
+  async function setup(role: DeckSettings['role'] = 'owner'): Promise<ReturnType<typeof vi.fn>> {
     setLocale('zh-CN');
     routeStore.set(matchRoute('/decks/d1/settings'));
     vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: [] } as never);
     const update = vi
       .spyOn(apiClient, 'updateDeckSettings')
-      .mockResolvedValue({ ...settings, new_per_day: 15, new_left: 13 });
+      .mockResolvedValue({ ...settings, role, new_per_day: 15, new_left: 13 });
     target = document.createElement('div');
     document.body.appendChild(target);
     instance = mount(DeckSettingsView, {
       target,
-      props: { initialLoading: false, initialSettings: settings },
+      props: { initialLoading: false, initialSettings: { ...settings, role } },
     });
     await flush();
     return update as unknown as ReturnType<typeof vi.fn>;
@@ -91,8 +92,38 @@ describe('DeckSettingsView cap saving', () => {
       reviews_per_day: 10,
       preset_id: '3',
       autoplay: true,
+      description_markdown: false,
     });
     expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'deck.settings.saved'));
+  });
+
+  it('sends the description format together with the other deck-wide settings', async () => {
+    const update = await setup();
+    const markdown = document.body.querySelector('[data-testid="deck-settings-markdown"]') as HTMLElement | null;
+    expect(markdown).not.toBeNull();
+    markdown!.click();
+    await flush();
+    await submit();
+    expect(update).toHaveBeenCalledWith('d1', {
+      new_per_day: 10,
+      reviews_per_day: 10,
+      preset_id: '3',
+      autoplay: true,
+      description_markdown: true,
+    });
+  });
+
+  it('keeps the deck-wide description format out of a sharing member\'s request', async () => {
+    const update = await setup('reader');
+    const markdown = document.body.querySelector('[data-testid="deck-settings-markdown"]') as HTMLElement | null;
+    expect(markdown).not.toBeNull();
+    expect(markdown!.hasAttribute('disabled') || markdown!.getAttribute('data-disabled') !== null).toBe(true);
+    await submit();
+    expect(update).toHaveBeenCalledWith('d1', {
+      new_per_day: 10,
+      reviews_per_day: 10,
+      preset_id: '3',
+    });
   });
 
   it('keeps 0 verbatim as the unlimited cap', async () => {
@@ -105,6 +136,7 @@ describe('DeckSettingsView cap saving', () => {
       reviews_per_day: 0,
       preset_id: '3',
       autoplay: true,
+      description_markdown: false,
     });
   });
 

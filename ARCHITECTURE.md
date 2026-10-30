@@ -62,9 +62,10 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/api` | `/api/v1` REST handlers, their authentication and rate-limit middleware, and the service layer (`service.go` and the methods on `API`) that REST and MCP share. |
 | `internal/mcp` | The built-in MCP server at `/mcp` (streamable HTTP). It accepts API keys only, and every tool calls an `internal/api` service method. |
 | `internal/web` | The gin router: security headers, session and locale middleware, the session-and-CSRF JSON endpoints the SPA uses, the admin API, media proxying, the SPA shell, and the not-found fallback. It mounts `internal/api` and `internal/mcp`. |
+| `internal/markdown` | Leaf package holding the Markdown-to-HTML renderer for text that is stored as Markdown source, currently the deck description. It uses goldmark with the GFM extensions, hard line wraps and raw HTML passed through, and protects whole TeX formulas so they survive parsing for the frame's MathJax. The output is unsanitised: the sandboxed frame is the security boundary. |
 | `internal/media` | Local media storage around `store.MediaStore.Put`: streaming and validating uploads, serving files, and reclaiming orphans. |
 | `internal/mediatype` | Leaf package with the media classification (image, audio, video, font, script, style, other) and the mime-to-extension table shared by `internal/media` and `internal/store`. |
-| `internal/texmath` | The single rule for locating TeX math, shared by `internal/mailstyle` and the store's migration Markdown step. |
+| `internal/texmath` | The single rule for locating TeX math, shared by `internal/mailstyle`, `internal/markdown` and the store's migration Markdown step. |
 | `internal/i18n` | Server-side translation catalogs (`internal/i18n/locales/*.yaml`), request language resolution, and the localiser placed in the request context. |
 | `internal/mail` | Mail templates (built-in HTML defaults and admin overrides share one renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. `Mailer` is the single send path: it checks SMTP and the recipient's preference, resolves the site name and template, adds the footer and the unsubscribe link, and enqueues. The web layer builds the process's one `Mailer` and the reminder and digest workers receive it from `cmd/engram`. Rendering is four steps: placeholders become salted tokens, tokens become HTML-escaped values, the plain-text part comes from `notetype.PlainText`, and the fixed shell is applied. Nothing is sanitised and no Markdown is parsed at send time: administrators write HTML/CSS, and the built-in bodies carry the inline styles. |
 | `internal/mailstyle` | Leaf package holding the inline style map of a mail body and the one Markdown-to-HTML conversion used by the store's template migration. The built-in bodies and the migration read the same styles, so a converted custom template keeps the delivered look. |
@@ -84,7 +85,7 @@ Imports between internal packages, as reported by `go list`:
 cmd/engram → web, api, mcp, auth, config, digest, i18n, jobs, mail, media, reminder, retention, store
 web        → api, mcp, auth, config, i18n, jobs, mail, media, mediatype, notetype, reminder, reviewday, schedule, store
 mcp        → api, store
-api        → auth, media, notetype, reviewday, schedule, store, urlfetch
+api        → auth, markdown, media, notetype, reviewday, schedule, store, urlfetch
 digest     → i18n, mail, reminder, reviewday, schedule, store, worker
 reminder   → i18n, mail, reviewday, schedule, store, worker
 jobs       → schedule, store
@@ -93,6 +94,7 @@ schedule   → reviewday, store
 auth       → store
 media      → mediatype, store
 store      → anki, answer, mailstyle, mediatype, notetype, reviewday, texmath
+markdown   → texmath
 answer     → notetype
 retention  → worker
 anki, config, i18n, mediatype, notetype, reviewday, texmath, urlfetch, worker, pgtest → (no internal imports)

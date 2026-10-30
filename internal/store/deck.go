@@ -238,6 +238,11 @@ func (s *DeckStore) SetAutoplay(ctx context.Context, actorUserID, deckID uint64,
 	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"autoplay": enabled})
 }
 
+// SetDescriptionMarkdown writes the flag that selects between HTML and Markdown for the deck description; only the owner may.
+func (s *DeckStore) SetDescriptionMarkdown(ctx context.Context, actorUserID, deckID uint64, enabled bool) error {
+	return s.mutateOwned(ctx, actorUserID, deckID, map[string]any{"description_markdown": enabled})
+}
+
 // mutateOwned is the column update channel with the owner check that SetCaps writes through.
 func (s *DeckStore) mutateOwned(ctx context.Context, actorUserID, deckID uint64, updates map[string]any) error {
 	existing, err := s.ByID(ctx, deckID)
