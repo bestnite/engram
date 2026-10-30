@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -272,6 +273,75 @@ func TestReviewRenderOmitsChoiceOptionsFromFront(t *testing.T) {
 				t.Errorf("back_html = %s, want it to contain the correct option %q", body.BackHTML, tc.wantBack)
 			}
 		})
+	}
+}
+
+// TestReviewRenderDeckFieldsFollowTheSubdeckPath asserts {{Deck}} and {{Subdeck}} render from the card's stored subdeck
+// path: {{Deck}} is the deck name joined with deck_path, and {{Subdeck}} is the last "::"-separated component of that
+// name. A card whose deck_path is null renders both fields as the deck name, and an empty deck_path is treated the same.
+func TestReviewRenderDeckFieldsFollowTheSubdeckPath(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "Path deck")
+	// The stock basic template does not reference the special fields, so the test declares its own note type.
+	cfg := notetype.Config{
+		Kind:   notetype.KindNormal,
+		Fields: []notetype.Field{{ID: "front", Name: "Front"}},
+		Templates: []notetype.Template{{
+			ID:      "forward",
+			Name:    "Card 1",
+			QFormat: "{{Front}} deck={{Deck}} sub={{Subdeck}}",
+			AFormat: "{{Front}} deck={{Deck}} sub={{Subdeck}}",
+		}},
+	}
+	noteType := &store.NoteType{DeckID: deck.ID, Name: "Deck fields"}
+	if err := store.NewNoteTypeStore(db).Create(t.Context(), noteType, cfg); err != nil {
+		t.Fatalf("create note type: %v", err)
+	}
+	seedNote := func(front string) *store.Note {
+		t.Helper()
+		note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID)}
+		if _, err := store.NewNoteStore(db).Create(t.Context(), note, map[string]any{"front": front}); err != nil {
+			t.Fatalf("create note %q: %v", front, err)
+		}
+		return note
+	}
+	nested := seedNote("nested-question")
+	plain := seedNote("plain-question")
+	emptyPath := seedNote("empty-path-question")
+	// The import writes deck_path on the card, not on the note, so the fixture sets it on the card row directly.
+	if err := db.Model(&store.Card{}).Where("note_id = ?", nested.ID).
+		Update("deck_path", "Lesson 1::Verbs").Error; err != nil {
+		t.Fatalf("set deck_path: %v", err)
+	}
+	// An empty string carries no path component, so it is treated as a null path.
+	if err := db.Model(&store.Card{}).Where("note_id = ?", emptyPath.ID).
+		Update("deck_path", "").Error; err != nil {
+		t.Fatalf("set empty deck_path: %v", err)
+	}
+
+	render := func(noteID uint64) string {
+		t.Helper()
+		rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{
+			"card_id": cardPublicIDOfNote(t, db, noteID), "deck": []string{deck.PublicID},
+		}, cookies, csrf)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
+		}
+		var body reviewRenderBody
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
+		}
+		return body.FrontHTML
+	}
+
+	if front := render(nested.ID); !strings.Contains(front, "deck=Path deck::Lesson 1::Verbs sub=Verbs") {
+		t.Errorf("nested front_html = %q, want {{Deck}} = the deck name plus deck_path and {{Subdeck}} = the last component", front)
+	}
+	if front := render(plain.ID); !strings.Contains(front, "deck=Path deck sub=Path deck") {
+		t.Errorf("front_html without deck_path = %q, want both fields = the deck name", front)
+	}
+	if front := render(emptyPath.ID); !strings.Contains(front, "deck=Path deck sub=Path deck") {
+		t.Errorf("front_html with an empty deck_path = %q, want both fields = the deck name", front)
 	}
 }
 

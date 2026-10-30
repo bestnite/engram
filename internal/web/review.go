@@ -190,12 +190,13 @@ func (s *Server) renderCard(ctx context.Context, card *store.Card, submitted jso
 		return nil, err
 	}
 	values := store.NoteFieldValues(note.FieldsJSON)
+	deckName, subdeckName := deckFieldNames(deck.Name, card.DeckPath)
 	data := notetype.RenderData{
 		Fields:       values,
 		Tags:         store.TagsOrEmpty(note.TagsJSON),
 		TypeName:     nt.Name,
-		DeckName:     deck.Name,
-		SubdeckName:  deck.Name,
+		DeckName:     deckName,
+		SubdeckName:  subdeckName,
 		CardName:     tmpl.Name,
 		CardID:       card.PublicID,
 		ClozeOrdinal: clozeOrdinal,
@@ -212,6 +213,24 @@ func (s *Server) renderCard(ctx context.Context, card *store.Card, submitted jso
 		card: card, note: note, deck: deck, noteType: nt, config: cfg, template: tmpl,
 		spec: tmpl.Answer, ordinal: clozeOrdinal, values: values, front: front, back: back,
 	}, nil
+}
+
+// deckFieldNames returns the {{Deck}} and {{Subdeck}} values for a card: the deck name with the card's stored subdeck
+// path appended, and the last "::"-separated component of that joined name.
+//
+// The card's deck_path carries the Anki subdeck path below the deck the card was imported into, so {{Deck}} shows the
+// same chain the imported card shows and {{Subdeck}} shows the innermost subdeck. An empty deck_path is treated as no
+// path, because the column is nullable and an empty string carries no path component to append.
+func deckFieldNames(deckName string, deckPath *string) (deck, subdeck string) {
+	deck = deckName
+	if deckPath != nil && *deckPath != "" {
+		deck = deckName + "::" + *deckPath
+	}
+	subdeck = deck
+	if i := strings.LastIndex(deck, "::"); i >= 0 {
+		subdeck = deck[i+2:]
+	}
+	return deck, subdeck
 }
 
 // faces renders both sides into the card-view shape.
