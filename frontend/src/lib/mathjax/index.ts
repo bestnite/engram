@@ -24,7 +24,7 @@ interface MathJaxGlobal {
  * only be typeset explicitly on server-sanitized nodes. Delimiters keep the bundled build's defaults - inline `\(…\)` and block
  * `\[…\]` (keeping `$$…$$` as well), matching SSR page behavior.
  */
-const MATHJAX_CONFIG = {
+export const MATHJAX_CONFIG = {
   tex: {
     inlineMath: [['\\(', '\\)']],
     displayMath: [['$$', '$$'], ['\\[', '\\]']],

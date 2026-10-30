@@ -19,8 +19,10 @@ const (
 	// referrerPolicy sends only the origin cross-site and keeps the full path same-site. Tokens that grant access can live in the path
 	// (for example a password-reset or email-verification link), so the path is never sent back cross-site, keeping that credential from leaking to third parties via Referer.
 	referrerPolicy = "strict-origin-when-cross-origin"
-	// permissionsPolicy turns off browser capabilities this site never uses, keeping the minimal set.
-	permissionsPolicy = "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()"
+	// permissionsPolicy turns off browser capabilities this site never uses, keeping the minimal set. Autoplay is allowed for the
+	// same origin only: the review iframe declares allow="autoplay" so audio on a card face may start with the user's review action,
+	// and the site-wide policy must not switch that capability back off in the embedding document.
+	permissionsPolicy = "accelerometer=(), autoplay=(self), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()"
 )
 
 // cspScriptHash is the SHA-256 allowlist token of the inline theme bootstrap script (themeBootstrapJS, a compile-time constant).

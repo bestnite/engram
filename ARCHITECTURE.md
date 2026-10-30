@@ -105,6 +105,11 @@ change.
 - **Browser (SPA).** The browser authenticates with a session cookie. Writes carry a CSRF token
   bound to the session. Pages are client-side routes served by the SPA shell; data comes from JSON
   endpoints registered by `internal/web` and from `/api/v1`.
+- **Card frame.** `GET /card-frame/<build-version>` serves the review iframe document
+  (`internal/web/card_frame.go`). The version segment only busts the iframe cache and is otherwise
+  ignored. The route replaces the site headers with the frame's own sandbox CSP, sends
+  `Referrer-Policy: no-referrer`, and drops `X-Frame-Options`; the parent page embeds the document
+  in a sandboxed iframe and communicates with it only through `postMessage`.
 - **REST clients.** `/api/v1` (`internal/api`) accepts either the session channel or a bearer API
   key. An API key carries scopes, and each route declares the scope it requires.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on
@@ -184,6 +189,10 @@ change.
 
 - `frontend/src/lib/views/` holds one view per page, `frontend/src/lib/components/` the shared
   components, and `frontend/src/lib/api/` the typed client for the JSON endpoints.
+- Vite has two entries: `frontend/index.html` (the SPA shell) and `frontend/card-frame.html`
+  (the card frame document). `frontend/src/cardframe/` is the frame runtime: it is framework-free,
+  reads no cookie, renders the content sent by the parent page into `#qa`, re-executes the content
+  scripts, and posts height, keys, answers and links back to the parent.
 - `frontend/src/lib/format.ts` is the only place numbers, percentages, byte counts, dates and raw field
   values become text; components pass the current locale.
 - UI text comes from `frontend/src/lib/i18n/locales/{zh-CN,en}.ts`. Text produced by the

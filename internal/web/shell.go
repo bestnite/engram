@@ -33,6 +33,11 @@ type shellAsset struct {
 type Shell struct {
 	rawIndex  []byte
 	indexHTML []byte
+	// rawCardFrame and cardFrameHTML are the card frame entry (card-frame.html) as built and after the MathJax meta is injected.
+	// The frame entry is a separate Vite input: it serves the review iframe, not the SPA, so it is kept apart from index.html and
+	// never receives the PWA shell (manifest, theme bootstrap, service worker). It carries no user-facing copy of its own.
+	rawCardFrame  []byte
+	cardFrameHTML []byte
 	// mathjaxURL is the content-hashed URL of the self-hosted MathJax; empty means not injected (resource missing or SetMathJaxURL never called).
 	mathjaxURL string
 	// version is the program version injected into the entry <head>; empty means not injected, and the frontend footer then shows no version.
@@ -49,7 +54,16 @@ func LoadShell() (*Shell, error) {
 	if err != nil {
 		return nil, fmt.Errorf("web: load Shell: %w", err)
 	}
-	return NewShell(subFS)
+	shell, err := NewShell(subFS)
+	if err != nil {
+		return nil, err
+	}
+	// The review iframe is served by the frame route, so a production build that lost its card-frame entry has no working review page.
+	// Failing at startup makes that a build error instead of a 404 found in production.
+	if len(shell.rawCardFrame) == 0 {
+		return nil, fmt.Errorf("web: embedded frontend has no card-frame.html entry")
+	}
+	return shell, nil
 }
 
 // NewShell builds an SPA asset server from the given fs.FS (supports dependency injection and unit tests).
@@ -126,6 +140,13 @@ func NewShell(subFS fs.FS) (*Shell, error) {
 	if err != nil {
 		return nil, fmt.Errorf("web: walk shell assets: %w", err)
 	}
+
+	// The card frame entry is a separate input of the same Vite build. It is optional at this layer because unit tests build a Shell
+	// from a small synthetic fs; the embedded production build always contains it, and LoadShell rejects a build without it.
+	if asset, ok := shell.assets["card-frame.html"]; ok {
+		shell.rawCardFrame = asset.data
+	}
+	shell.rebuild()
 
 	return shell, nil
 }
@@ -238,6 +259,19 @@ func (s *Shell) rebuild() {
 		index = injectBeforeHeadEnd(index, s.shellBlock)
 	}
 	s.indexHTML = index
+
+	// The frame entry is a minimal document: only the Vite entry tags plus the MathJax meta, so it never reads a cookie and never
+	// pulls in the SPA theme bootstrap, manifest or service worker. The same meta name lets the frame loader use the same URL.
+	s.cardFrameHTML = s.rawCardFrame
+	if len(s.rawCardFrame) > 0 && s.mathjaxURL != "" {
+		s.cardFrameHTML = injectMathJaxMeta(s.rawCardFrame, s.mathjaxURL)
+	}
+}
+
+// CardFrameHTML returns the card frame entry as served by GET /card-frame/<build-version>.
+// An empty result means the build has no frame entry; the handler then answers 404.
+func (s *Shell) CardFrameHTML() []byte {
+	return s.cardFrameHTML
 }
 
 // indexHashOf takes the hex of the first 8 bytes of the content's SHA-256 as the strong validator for the entry ETag.

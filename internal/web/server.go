@@ -324,6 +324,9 @@ func New(addr string, deps Deps) (*Server, error) {
 	router.GET("/", s.homeRoute)
 	router.GET(staticPathPrefix+":hash/*filepath", s.assets.Serve)
 	router.GET("/assets/*filepath", s.shell.ServeAsset)
+	// The review iframe page: a separate, minimal document owned by the frame runtime, not the SPA shell. Its version segment only
+	// busts the iframe cache; see registerCardFrameRoutes.
+	s.registerCardFrameRoutes(router)
 	if deps.Sessions != nil && deps.Users != nil {
 		// The SPA profile API is only registered when the session dependencies are complete, and writes stay protected by the session CSRF middleware.
 		profile := router.Group("/api/v1")
