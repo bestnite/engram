@@ -134,40 +134,11 @@ it.
 
 **Phase 3 follow-up — defects found in the review of the P3 merge (on `main`)**
 
-These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly. M17-35
-must land before M17-24, because every imported Anki note type is a note type whose shape matches
-no engram stock kind.
+These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly. The
+remaining ones no longer block M17-24: the editor and the review page now work on any note type.
 
-- [ ] **M17-35 The note editor works on note types** — create, edit and preview a note of any note
-  type of the deck.
-  *Files:* `frontend/src/lib/views/NoteEditView.svelte` (single-writer hotspot);
-  `frontend/src/lib/components/NoteFieldsForm.svelte`; `frontend/src/lib/api/`;
-  `internal/web/note_preview.go`; the locale catalogs (append a block with the prefix `note_edit.type.`).
-  *Problem:* the editor picks a card kind from the `card-types` catalog, builds its fields from that
-  kind and saves with `kind`. The preview endpoint renders the stock definition of the posted `kind`,
-  not the deck's note type. A note of a note type that matches no stock kind cannot be edited, and a
-  customised note type is previewed with stock templates.
-  *Work:*
-  - The editor lists the deck's note types from `GET /api/v1/decks/:id/note-types`. When a new note is
-    created, the selector starts at the first note type in the order the server returns.
-  - The fields are the selected note type's fields, in config order. Each field uses its name as the
-    label and applies its options (sticky, collapsed, plain text, RTL, font and size).
-  - Saving sends `note_type` and `fields` keyed by field name. The editor never sends `kind`.
-  - `POST /api/v1/decks/:id/notes/preview` takes `note_type` instead of `kind` and renders the stored note
-    type with its CSS.
-
-  *Acceptance:*
-  - A client test: a note of a note type that matches no stock kind loads, edits and saves, and the
-    save request carries `note_type`.
-  - A handler test: the preview of a note type whose template differs from the stock template renders
-    the stored template.
-  - A handler test: a preview naming a note type of another deck returns 404.
-  - The two locale catalogs keep identical key sets.
-
-  *Verify:* `go test ./internal/web/... ./internal/i18n/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
 - [ ] **M17-36 Remove the transitional card-kind layer** — delete every payload field and endpoint
   that exists only for the old SPA.
-  *Depends on:* M17-35.
   *Files:* `internal/api/card_types.go`; `internal/api/card_catalog.go`; `internal/api/notes.go`;
   `internal/api/note_view.go`; `internal/api/service.go`; `internal/api/server.go`;
   `internal/web/review.go`; `internal/store/note.go`; `frontend/src/lib/card-types.ts` and its
@@ -243,36 +214,6 @@ no engram stock kind.
   *Acceptance:* `grep -rn -i "sanitiz\|bluemonday\|shortcode" frontend/src internal --include=*.ts --include=*.svelte --include=*.go`
   prints only lines in `internal/store/migrate_*.go`, `internal/mailstyle/` and their tests.
   *Verify:* `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client && go vet ./internal/web/... && go test ./internal/i18n/...`.
-- [ ] **M17-40 Updating a note type keeps its cards consistent** — a template change adds and removes
-  cards as Anki does, behind an impact check.
-  *Files:* `internal/api/note_types.go`; `internal/store/notetype.go`; `internal/store/card.go`;
-  `internal/i18n/locales/` (append a block with the prefix `note_type.update.`).
-  *Problem:* `UpdateNoteType` rewrites the config and touches no card. An added template generates no
-  card for the existing notes. A removed template leaves cards whose template id no longer exists:
-  rendering them returns 500, and submitting a rating for them returns 500, so they stay in the queue.
-  *Work:*
-  - The kind (`normal` or `cloze`) of a note type cannot change. An update that changes it returns
-    400 `invalid_request`.
-  - In one transaction, an update regenerates the cards of every note of the note type with
-    `notetype.GenerateCards`. A card that the new config generates and the note lacks is created.
-  - A card whose template id the new config no longer declares is soft-deleted. Its `card_states` and
-    `reviews` rows stay.
-  - The update body accepts `dry_run`. A dry run writes nothing and returns `cards_added`,
-    `cards_removed` and `reviews_on_removed_cards`.
-  - An update that would remove at least one card requires `confirm_card_removal: true`. Without it
-    the update writes nothing and returns 409 with the code `card_removal_unconfirmed` and the same
-    three counts.
-  - The update writes one audit row that records the three counts.
-
-  *Acceptance:* handler tests:
-  - adding a template creates one card per note whose new front is not empty;
-  - a dry run reports the counts and writes nothing;
-  - removing a template without the confirmation returns 409;
-  - removing a template with the confirmation soft-deletes those cards and keeps their reviews;
-  - a kind change returns 400;
-  - a reader is refused, and a stale version returns 409.
-
-  *Verify:* `go test ./internal/api/... ./internal/store/... && go vet ./internal/api/... ./internal/store/...`.
 - [ ] **M17-42 The editing frame runs no inline script** — a field value cannot execute code in the
   editor.
   *Files:* `internal/web/edit_frame.go`; `internal/web/card_frame.go`; `internal/web/*_test.go`;
@@ -336,7 +277,6 @@ no engram stock kind.
 **Phase 5 — `.apkg` import**
 
 - [ ] **M17-24 `.apkg` import into a deck** — map the decoded package onto the data model.
-  *Depends on:* M17-35.
   *Files:* `internal/anki/import.go`; `internal/api/package*.go`; `internal/mcp/mcp.go`;
   `frontend/src/lib/views/ImportView.svelte`; the locale catalogs (append a block with the prefix
   `import.apkg.`).
@@ -410,7 +350,7 @@ no engram stock kind.
 
   *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run test:client`.
 - [ ] **M17-27 Note type management** — edit a deck's note types.
-  *Depends on:* M17-18, M17-35, M17-40.
+  *Depends on:* M17-18.
   *Files:* a new view under `frontend/src/lib/views/` (single-writer hotspot); `frontend/src/lib/router`;
   the locale catalogs (append a block with the prefix `notetype.`).
   *Work:*
@@ -589,6 +529,7 @@ bluemonday-sanitised `internal/render` are gone.
 | Media by file name and by any type (M17-22) | Media is classified (image, audio, video, font, script, style, other) instead of allowlisted; upload and import accept every class within the quota. `/fm/<token>/<name>` resolves a deck-scoped name through `media_names`, so CSS-only `_` assets are served. Every media response carries `Content-Security-Policy: sandbox` and everything not image/audio/video is an attachment. Note-type `_`-prefixed references are kept by garbage collection (migration 0015 backfills them) and travel with an export. An import whose name holds different bytes renames the new file as Anki does. A note write turns the editor's `/media/<sha256>` and `[sound:<sha256>]` into deck media names, so the frame, references, garbage collection and export resolve them. | Yes — the `media_allowed_mimes` configuration key and its environment variable are removed; every `/media/` and `/fm/` response gains a sandbox CSP and a download disposition for non-inline classes |
 | Note type styles and deck special fields in review (M17-33, M17-44) | Every card frame in the review page and the note preview now takes its HTML, body class and media base from the server's per-side face object, and its style is the engram face sheet followed by the note type's CSS, so a note type rule overrides the default typography. `{{Deck}}` renders the deck name joined with the card's subdeck path (`Lesson 1::Verbs`) and `{{Subdeck}}` its last component; a card outside a subdeck renders the deck name for both. | No — response shapes are unchanged |
 | Review of any note type (M17-34, M17-41) | The due-card payload carries `answer_control`, `machine_graded` and `field_order`, and the review page chooses the self-rating, essay or machine-graded flow from them instead of the card-kind catalog, so a note type that matches no stock kind reviews normally. A note type write (REST create/update, package import, stock creation, migration) now validates every template's answer spec: the control must be registered, every required role bound, and every binding must name a declared field; a bad REST write returns 400 naming the template and role, and a bad package is `package_bad_format` with no rows written. | No — three fields added to the due-card response; previously accepted invalid note types are now rejected |
+| Editor on note types (M17-35, M17-40) | The note editor lists the deck's note types, builds the form from the selected type's fields in config order (field options included) and saves `{note_type, fields}` without a kind; the preview renders the stored type's own templates and CSS and answers 404 for a type of another deck. A note type update regenerates the cards of every live note of the type in one transaction: an added template creates the missing cards, a removed template soft-deletes their cards while `card_states` and `reviews` stay. The edit body takes `dry_run` and `confirm_card_removal`; a removal without confirmation is 409 `card_removal_unconfirmed` with the three counts, a kind change is 400, and a successful update writes one audit row with the counts. | Yes — the note preview request takes `note_type` instead of `kind`; the note type update response gains four fields and a new 409 code |
 | Deck progress | The deck list, the home deck list and the deck detail header show how many of the deck's cards the user has studied and how many new cards are left, as `Studied N · Left M`. On the home deck list each deck gets a second line of numbers: today's new and review counts as badges, which turn grey at zero, and a progress bar beside the studied and remaining text, which turns to the success colour once no new card is left. The counts are per user, so a shared deck never shows another member's progress, and they ignore the daily limits. A suspended new card is not counted as left; a suspended studied card still counts as studied. | No — two fields added to a session-only response |
 | Deck pause | A user pauses a deck for themselves from the deck list (a toggle beside delete or leave) or the deck detail header; the owner and every member, readers included, decide alone. A paused deck keeps a `Paused` badge on the deck list and disappears from the home deck list and the sidebar. It stays out of the default review queue, the home due count, the unfiltered forecast, the weekly digest and the reminder mail, while naming it (`/review?deck=…`, batch review, a stats deck filter) still studies or shows it. Progress is kept and cards keep falling due. Pausing and resuming write the audit actions `deck.pause` and `deck.resume`. | No — additive route, tool, table and field; nothing changes until a user pauses a deck |
 | Note search on field text | Note search (`GET /api/v1/decks/:id/notes?q=`, `search_notes` and the card list) matches the text of the fields instead of their JSON encoding. A field key such as `front` no longer matches every note; `<`, `>`, `&`, quotes and text across a line break can be found; case folding of non-ASCII letters is the same on SQLite and PostgreSQL. A query is split on whitespace and every term must occur, in any order. | No — results change, the request and response shapes do not |
