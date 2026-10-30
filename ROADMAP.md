@@ -132,6 +132,99 @@ it.
   the single breaking release of M17 (HTTP API, MCP, database schema and file format). The
   remaining M17 tasks are additive and land on `main` directly.
 
+**Phase 6 follow-up — defects found in the review of M17-25 to M17-30, M17-45 and M17-47 to M17-51 (on `main`)**
+
+These tasks land on `main` directly. They come before every other open M17 task: M17-55 fixes a
+wrong grading display, and M17-28 is moved here because M17-45 now keeps empty cards in the review
+queue while no cleanup exists yet.
+
+- [ ] **M17-28 Empty-card cleanup and note type change** — Anki's "Empty Cards" and "Change Note
+  Type".
+  *Files:* `internal/api/` (service methods and routes); `internal/store/`; the note type view.
+  *Work:*
+  - Cleanup lists the cards whose front renders empty (M17-9) and deletes them after confirmation,
+    writing an audit row.
+  - Change note type moves notes to another note type of the same deck with a field mapping and a
+    template mapping. Cards follow their mapped template, and an unmapped template's cards are
+    deleted after confirmation. Progress follows the card.
+
+  *Acceptance:*
+  - Store tests: cleanup removes only empty cards; a mapping change keeps `card_states` for every
+    mapped card.
+  - Negative cases: a target note type in another deck is rejected; a reader is refused.
+
+  *Verify:* `go test ./internal/api/... ./internal/store/...`.
+- [ ] **M17-55 Type-in compares the card's own cloze number** — `{{type:cloze:F}}` must compare
+  the deletion the card shows.
+  *Files:* `internal/web/review.go` (`typeInExpected`); `internal/web/review_typein_test.go`.
+  *Problem:* `typeInExpected` calls `notetype.ExtractClozeForTyping(value, item.ordinal+1)`.
+  `item.ordinal` is the value `notetype.CardTemplate` returns for a cloze card, which is already the
+  1-based cloze number; `renderCard` passes the same value as `RenderData.ClozeOrdinal`, documented as
+  1-based. A `c1` card therefore compares the typed value with the `c2` deletion, usually the empty
+  string, and a correct answer is shown as wrong.
+  *Work:* pass `item.ordinal` unchanged to `ExtractClozeForTyping`.
+  *Acceptance:* a handler test with a cloze note type whose template carries `{{type:cloze:Text}}`
+  and a note `{{c1::Paris}} {{c2::Rome}}`: on the `cloze:1` card, typing `Paris` renders Anki's correct
+  comparison for `Paris`; on the `cloze:2` card, typing `Rome` renders the correct comparison for
+  `Rome`.
+  *Verify:* `go test ./internal/web/... && go vet ./internal/web/...`.
+- [ ] **M17-56 Preview unsaved note type templates on the server** — the note type editor shows what
+  the renderer produces.
+  *Files:* `internal/web/note_preview.go`; `internal/web/notes.go` (route registration);
+  `frontend/src/lib/views/NoteTypesView.svelte` (single-writer hotspot);
+  `frontend/src/lib/note-type-template.ts`; `frontend/src/lib/api/client.ts`; the tests beside them.
+  *Problem:* the note type editor previews templates with `renderPreview` in
+  `frontend/src/lib/note-type-template.ts`, a second template renderer written in the frontend. It
+  skips cloze, filters, type placeholders, LaTeX and media, so the preview differs from the faces the
+  server renders.
+  *Work:*
+  - Add `POST /api/v1/decks/:id/note-types/preview` (session and CSRF, editor role on the deck). The
+    body carries an unsaved note type `config` and a `template_id`. The server validates the config
+    with the rule `NoteType.SetConfig` applies, renders the template with `notetype.Render`, and uses
+    each field's name as that field's value. The response is a `front` and a `back` card-face object.
+  - The note type editor shows the response in its preview frames, with the config's CSS.
+  - Delete `renderPreview` and `resolveConditionals` from `note-type-template.ts`, and their tests.
+
+  *Acceptance:*
+  - Handler tests: a cloze template previews its cloze markup; an invalid config returns 400 naming the
+    template; a reader is refused.
+  - A client test: editing a template sends the preview request and shows its HTML in the frame.
+
+  *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
+- [ ] **M17-57 Deck lists show the description as plain text** — an HTML description must not appear
+  as raw tags.
+  *Files:* `internal/api/decks.go` (`DeckResponse`); `frontend/src/lib/api/types.ts`;
+  `frontend/src/lib/views/DecksView.svelte` and `frontend/src/lib/views/HomeView.svelte` (single-writer
+  hotspot); the tests beside them.
+  *Problem:* since M17-29 a deck description is HTML unless `description_markdown` is set. The deck
+  list (`DecksView.svelte`) and the home deck list (`HomeView.svelte`) still print
+  `{deck.description}` as text. The imported Ultimate Geography deck shows its description as
+  `<a href="…"><b>FULL DESCRIPTION</b></a> | …`.
+  *Work:*
+  - `DeckResponse` gains `description_text`: `notetype.PlainText` of `description_html`.
+  - Both lists show `description_text`. Only the deck detail view shows the description as HTML,
+    inside the frame, as it does today.
+
+  *Acceptance:*
+  - A handler test: an HTML description returns its plain text in `description_text`, and a Markdown
+    description returns the plain text of its rendering.
+  - A client test: for the description `<a href="https://example.com"><b>Notes</b></a>`, the deck list
+    and the home deck list show `Notes` and do not show the text `<a href`.
+
+  *Verify:* `go test ./internal/api/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
+- [ ] **M17-58 A field rename writes the new name literally** — `$` in a field name must not act as a
+  replacement pattern.
+  *Files:* `frontend/src/lib/note-type-template.ts` (`rewriteFieldReferences`);
+  `frontend/src/tests/note-type-template.test.ts`.
+  *Problem:* `rewriteFieldReferences` calls `String.prototype.replace(oldName, newName)` with a string
+  replacement, so `$&`, `` $` ``, `$'` and `$$` in the new name are interpreted. Renaming a field `Old`
+  to `Price$&` writes `{{PriceOld}}` into the templates.
+  *Work:* every replacement in `rewriteFieldReferences` writes the new name literally, for example
+  with a replacement function.
+  *Acceptance:* a unit test renames `Old` to each of `A$&B`, `` A$`B ``, `A$'B` and `A$$B` in `{{Old}}`,
+  `{{#Old}}`, `{{/Old}}` and `{{text:Old}}`, and gets the new name verbatim in every form.
+  *Verify:* `npm --prefix frontend test -- --run`.
+
 **Phase 3 follow-up — defects found in the review of the P3 merge (on `main`)**
 
 These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly.
@@ -335,22 +428,6 @@ evidence named below. It is gitignored, so a test that reads it skips when the f
 
 **Phase 6–9 — remaining capabilities**
 
-- [ ] **M17-28 Empty-card cleanup and note type change** — Anki's "Empty Cards" and "Change Note
-  Type".
-  *Files:* `internal/api/` (service methods and routes); `internal/store/`; the note type view.
-  *Work:*
-  - Cleanup lists the cards whose front renders empty (M17-9) and deletes them after confirmation,
-    writing an audit row.
-  - Change note type moves notes to another note type of the same deck with a field mapping and a
-    template mapping. Cards follow their mapped template, and an unmapped template's cards are
-    deleted after confirmation. Progress follows the card.
-
-  *Acceptance:*
-  - Store tests: cleanup removes only empty cards; a mapping change keeps `card_states` for every
-    mapped card.
-  - Negative cases: a target note type in another deck is rejected; a reader is refused.
-
-  *Verify:* `go test ./internal/api/... ./internal/store/...`.
 - [ ] **M17-31 Image occlusion editor** — create and edit occlusion notes.
   *Files:* a new editor component; `frontend/package.json` (dependency `fabric`. Reason: Anki's mask
   editor is built on it, and using the same library keeps the stored shape data identical).
