@@ -134,8 +134,7 @@ it.
 
 **Phase 3 follow-up — defects found in the review of the P3 merge (on `main`)**
 
-These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly. The
-remaining ones no longer block M17-24: the editor and the review page now work on any note type.
+These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly.
 
 - [ ] **M17-36 Remove the transitional card-kind layer** — delete every payload field and endpoint
   that exists only for the old SPA.
@@ -273,40 +272,6 @@ remaining ones no longer block M17-24: the editor and the review page now work o
   *Acceptance:* a test runs the check on a database whose `decks` table has no `public_id` column and
   gets a report.
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-
-**Phase 5 — `.apkg` import**
-
-- [ ] **M17-24 `.apkg` import into a deck** — map the decoded package onto the data model.
-  *Files:* `internal/anki/import.go`; `internal/api/package*.go`; `internal/mcp/mcp.go`;
-  `frontend/src/lib/views/ImportView.svelte`; the locale catalogs (append a block with the prefix
-  `import.apkg.`).
-  *Work:*
-  - The top-level deck becomes one engram deck, and subdecks fill `cards.deck_path`.
-  - Note types are imported unchanged, with `answer = null`.
-  - Notes get `external_ref = "anki:<guid>"`.
-  - Media is registered in `media_names`.
-  - Cards are created as they exist in the package, not regenerated.
-  - Re-importing into the same deck:
-    - updates notes matched by guid, keeping cards and progress;
-    - matches note types by `anki_origin.notetype_id`;
-    - overwrites the templates and CSS when the field and template structure is equal;
-    - otherwise creates a new note type and moves the matched notes to it.
-  - The report lists, item by item:
-    - missing media;
-    - video formats a browser cannot play (anything other than mp4 or webm);
-    - references to external scripts or stylesheets;
-    - `[latex]` without its image.
-  - The Import page, `POST` package import and the MCP `import_deck` accept `.apkg`.
-
-  *Acceptance:*
-  - Importing every fixture and comparing the rendered faces with the golden files passes.
-  - A re-import test proves that progress is kept.
-  - A `dry_run` test writes nothing.
-  - The maintainer places an Ultimate Geography `.apkg` in `testdata/local/` and records that the
-    card count and every rendered face equal the oracle output. The evidence is the captured command
-    output.
-
-  *Verify:* `go test ./internal/anki/... ./internal/api/... ./internal/mcp/...`; `npm --prefix frontend run test:client`.
 
 **Phase 6–9 — remaining capabilities**
 
@@ -529,6 +494,7 @@ bluemonday-sanitised `internal/render` are gone.
 | Media by file name and by any type (M17-22) | Media is classified (image, audio, video, font, script, style, other) instead of allowlisted; upload and import accept every class within the quota. `/fm/<token>/<name>` resolves a deck-scoped name through `media_names`, so CSS-only `_` assets are served. Every media response carries `Content-Security-Policy: sandbox` and everything not image/audio/video is an attachment. Note-type `_`-prefixed references are kept by garbage collection (migration 0015 backfills them) and travel with an export. An import whose name holds different bytes renames the new file as Anki does. A note write turns the editor's `/media/<sha256>` and `[sound:<sha256>]` into deck media names, so the frame, references, garbage collection and export resolve them. | Yes — the `media_allowed_mimes` configuration key and its environment variable are removed; every `/media/` and `/fm/` response gains a sandbox CSP and a download disposition for non-inline classes |
 | Note type styles and deck special fields in review (M17-33, M17-44) | Every card frame in the review page and the note preview now takes its HTML, body class and media base from the server's per-side face object, and its style is the engram face sheet followed by the note type's CSS, so a note type rule overrides the default typography. `{{Deck}}` renders the deck name joined with the card's subdeck path (`Lesson 1::Verbs`) and `{{Subdeck}}` its last component; a card outside a subdeck renders the deck name for both. | No — response shapes are unchanged |
 | Review of any note type (M17-34, M17-41) | The due-card payload carries `answer_control`, `machine_graded` and `field_order`, and the review page chooses the self-rating, essay or machine-graded flow from them instead of the card-kind catalog, so a note type that matches no stock kind reviews normally. A note type write (REST create/update, package import, stock creation, migration) now validates every template's answer spec: the control must be registered, every required role bound, and every binding must name a declared field; a bad REST write returns 400 naming the template and role, and a bad package is `package_bad_format` with no rows written. | No — three fields added to the due-card response; previously accepted invalid note types are now rejected |
+| Anki `.apkg` import (M17-23, M17-24) | `internal/anki` reads all three Anki package layouts (legacy `collection.anki2`, `collection.anki21`, and zstd-compressed `collection.anki21b` with protobuf note type/deck configuration) under the deck package's entry, per-file and total caps. The import page, `POST` package import, upload tickets and the MCP `import_deck` accept `.apkg`: the top-level package deck becomes one engram deck, subdecks fill `cards.deck_path`, note types arrive unchanged with no answer spec, notes carry `external_ref = "anki:<guid>"`, media is registered by name, and the package's cards are created as they exist. Re-importing into the same deck matches notes by guid and note types by `anki_origin.notetype_id`, keeping cards and progress; an equal field/template structure is overwritten in place, a changed one creates a new note type and moves the notes. The report lists missing media, unplayable video, external scripts/stylesheets and missing LaTeX images. | No — a new input format is accepted and the import report gains four lists |
 | Editor on note types (M17-35, M17-40) | The note editor lists the deck's note types, builds the form from the selected type's fields in config order (field options included) and saves `{note_type, fields}` without a kind; the preview renders the stored type's own templates and CSS and answers 404 for a type of another deck. A note type update regenerates the cards of every live note of the type in one transaction: an added template creates the missing cards, a removed template soft-deletes their cards while `card_states` and `reviews` stay. The edit body takes `dry_run` and `confirm_card_removal`; a removal without confirmation is 409 `card_removal_unconfirmed` with the three counts, a kind change is 400, and a successful update writes one audit row with the counts. | Yes — the note preview request takes `note_type` instead of `kind`; the note type update response gains four fields and a new 409 code |
 | Deck progress | The deck list, the home deck list and the deck detail header show how many of the deck's cards the user has studied and how many new cards are left, as `Studied N · Left M`. On the home deck list each deck gets a second line of numbers: today's new and review counts as badges, which turn grey at zero, and a progress bar beside the studied and remaining text, which turns to the success colour once no new card is left. The counts are per user, so a shared deck never shows another member's progress, and they ignore the daily limits. A suspended new card is not counted as left; a suspended studied card still counts as studied. | No — two fields added to a session-only response |
 | Deck pause | A user pauses a deck for themselves from the deck list (a toggle beside delete or leave) or the deck detail header; the owner and every member, readers included, decide alone. A paused deck keeps a `Paused` badge on the deck list and disappears from the home deck list and the sidebar. It stays out of the default review queue, the home due count, the unfiltered forecast, the weekly digest and the reminder mail, while naming it (`/review?deck=…`, batch review, a stats deck filter) still studies or shows it. Progress is kept and cards keep falling due. Pausing and resuming write the audit actions `deck.pause` and `deck.resume`. | No — additive route, tool, table and field; nothing changes until a user pauses a deck |
