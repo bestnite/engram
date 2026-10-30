@@ -137,61 +137,6 @@ it.
 
 **Phase 1 — sandboxed frame (on `main`; the content model does not change yet)**
 
-- [ ] **M17-1 Frame page and runtime skeleton** — serve the frame page and its runtime under the
-  frame contract above.
-  *Files:* `frontend/card-frame.html` (new Vite entry) and `frontend/src/cardframe/` (runtime);
-  `frontend/vite.config.ts`; `internal/web/card_frame.go` (new); `internal/web/security_headers.go`;
-  the route registration in `internal/web`.
-  *Work:*
-  - The runtime handles every message type of the contract and builds the DOM
-    `<html class="…"><body class="…"><div id="qa">…</div></body></html>`.
-  - On `show`, it does these steps in this order:
-    1. it writes the `<style>` and the HTML;
-    2. it re-executes the `<script>` elements in document order and waits for each external script to
-       load;
-    3. it runs `onUpdateHook`, then MathJax typesetting when the content contains `\(` or `\[`, then
-       `onShownHook`;
-    4. on the answer side, it scrolls to `#answer`.
-  - It exposes `onUpdateHook` and `onShownHook` as globals, reports its content height with
-    `ResizeObserver`, and posts `link` for a click on an `http(s)` anchor instead of navigating.
-  - MathJax keeps the current engram configuration in this phase.
-  - Neither the page nor the runtime reads any cookie.
-
-  *Acceptance:*
-  - An `httptest` case asserts the exact CSP and `Referrer-Policy` values on the frame route.
-  - An `httptest` case asserts that every other route keeps the existing CSP and now sends
-    `autoplay=(self)`.
-  - Vitest cases with `happy-dom` (`*.client.ts`) cover:
-    - script re-execution order, with one inline and one external script;
-    - hook order;
-    - that a message whose `source` is not the parent is ignored;
-    - that `link` is posted instead of navigating.
-  - Update `ARCHITECTURE.md`: a new route and a new frontend entry.
-
-  *Verify:* `go test ./internal/web/... && go vet ./internal/web/...`; `npm --prefix frontend run check`;
-  `npm --prefix frontend run test:client`.
-- [ ] **M17-2 Frame media tokens** — `GET /fm/<token>/<name>`, as defined in the frame contract.
-  *Files:* `internal/web/frame_media.go` (new); `internal/web/review.go` and
-  `internal/web/note_preview.go` (add `media_base` to every response that carries a card face); the
-  signing key, stored through the existing secret mechanism in `internal/store/secret.go`.
-  *Work:*
-  - In this phase, `<name>` is `<sha256>` or `<sha256>.<ext>`, and access uses the existing media
-    readability rule. M17-22 replaces the name resolution.
-  - The token lifetime is 6 hours.
-  - The card-face HTML sent to the frame rewrites `/media/<sha256>` references to the relative name
-    `<sha256>`. This rewrite is temporary: M17-14 deletes it.
-
-  *Acceptance:* `httptest` cases for:
-  - success;
-  - an expired token;
-  - a tampered signature;
-  - a token whose user has lost access to the deck;
-  - a sha that is not readable in that deck;
-  - a token issued for another deck.
-
-  Every failure returns `404` without revealing which check failed. Success responses carry
-  `Access-Control-Allow-Origin: *` and `Cache-Control: private`.
-  *Verify:* `go test ./internal/web/... ./internal/store/...`.
 - [ ] **M17-3 Show every card face in the frame** — a `CardFrame` component, used wherever a card face
   is shown today.
   *Depends on:* M17-1, M17-2.
@@ -233,32 +178,6 @@ it.
 
 **Phase 2 — `internal/notetype`, the Anki engine (on `main`; not wired into any request path)**
 
-- [ ] **M17-5 Anki oracle and golden files** — generate the reference behaviour from Anki itself.
-  *Files:* `tools/anki-oracle/` (new: a Python script pinned to `anki==26.9.3`, with its own
-  `requirements.txt` and `README.md`); `internal/notetype/testdata/anki/` (the fixture `.apkg` files
-  and the golden JSON).
-  *Work:*
-  - The script builds the fixture packages itself, so no real deck content is committed:
-    - Anki's six stock note types;
-    - one note type per rule listed in M17-7, M17-8, M17-9 and M17-10;
-    - one package of each format `collection.anki2`, `collection.anki21` and `collection.anki21b`.
-  - For every card it writes:
-    - the note guid;
-    - the card ordinal;
-    - the front HTML and the back HTML exactly as `card.question()` and `card.answer()` return them;
-    - the audio/TTS tag list of each side;
-    - for each type-in fixture, the output of `col.compare_answer` for listed inputs.
-  - The README states the regeneration command.
-  - CI does not run Python; the golden files are committed.
-
-  *Acceptance:*
-  - Running the script twice produces byte-identical golden files.
-  - The fixture list covers every rule named in M17-7 to M17-11; a table in the README maps each
-    rule to its fixture.
-  - The fixtures contain only placeholder text and generated media.
-
-  *Verify:* the regeneration command, then `git status --short internal/notetype/testdata` prints
-  nothing.
 - [ ] **M17-6 Note type model and stock definitions** — the Go types for `config_json`, their
   validation, and Anki's six stock note types.
   *Depends on:* M17-5.
@@ -327,8 +246,8 @@ it.
   *Work:*
   - A normal note type generates the card of a template when that template's front renders non-empty
     with the note's non-empty fields.
-  - A cloze note type generates one card per cloze number found in the fields that `{{cloze:X}}`
-    references.
+  - A cloze note type generates one card per cloze number found in any of the note's fields, as
+    Anki does; `{{cloze:X}}` decides what a card displays, not which cards exist.
   - The function also reports the existing cards whose front is now empty. It never deletes them;
     that is M17-28.
 
