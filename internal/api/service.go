@@ -766,11 +766,16 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 		}
 		noteTypeID = resolved
 	} else {
+		// The kind alias names a shape, not one note type. A deck may hold several note types of the same shape
+		// (a copy with its own CSS or templates), so the note keeps the note type it already has when the request
+		// names no type, or names the shape the note already has. Resolving the alias to "the first type of that
+		// shape" would move the note into a different type on an unrelated content edit.
 		kind := strings.TrimSpace(in.Kind)
-		if kind == "" {
-			kind = a.noteKindOf(ctx, existing)
-		}
-		if kind != "" {
+		if kind == "" || kind == a.noteKindOf(ctx, existing) {
+			if existing.NoteTypeID != nil {
+				noteTypeID = *existing.NoteTypeID
+			}
+		} else {
 			resolved, err := a.noteTypeIDFor(ctx, existing.DeckID, kind)
 			if err != nil {
 				return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -123,6 +124,55 @@ func assertNoteCardCount(t *testing.T, env *testEnv, deckID uint64, wantNotes, w
 	}
 	if cards != wantCards {
 		t.Errorf("cards = %d, want %d", cards, wantCards)
+	}
+}
+
+// TestUpdateNoteKindAliasKeepsNoteType is the M17-37 acceptance: one deck can hold two note types of the basic shape
+// (the second a copy with its own CSS), and a save that names only the transitional kind must leave the note on the type
+// it already has. Resolving the alias to "the first type of that shape" used to move the note into the other type.
+// A request that names a note type explicitly still follows it.
+func TestUpdateNoteKindAliasKeepsNoteType(t *testing.T) {
+	env := newTestEnv(t, 1000, 1000)
+	router := env.router()
+	owner := seedUser(t, env.db, "kind_alias_owner", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	typesBase := fmt.Sprintf("/api/v1/decks/%s/note-types", deck.PublicID)
+
+	stock, ok := notetype.EngramStockByKind("basic")
+	if !ok {
+		t.Fatal("the basic stock kind is not registered")
+	}
+	// Both types have the stock shape, so the kind alias cannot tell them apart; the copy differs only in CSS.
+	copyConfig := stock.Config
+	copyConfig.CSS = ".card { color: red; }"
+	first := createNoteTypeREST(t, router, typesBase, key, "Basic", stock.Config)
+	copied := createNoteTypeREST(t, router, typesBase, key, "Basic copy", copyConfig)
+
+	createNotesREST(t, router, deck.PublicID, copied.ID, key, []map[string]string{{"front": "q1", "back": "a1"}})
+	note := noteOfDeck(t, env, deck.ID)
+	if got := storedNoteTypeID(t, env, note.ID); got != copied.ID {
+		t.Fatalf("seeded note type = %q, want the copy %q", got, copied.ID)
+	}
+
+	// The alias must not move the note to the first type of the shape.
+	code, raw := doJSON(t, router, http.MethodPatch, "/api/v1/notes/"+note.PublicID, key,
+		`{"kind":"basic","fields":{"front":"q2","back":"a2"}}`)
+	if code != http.StatusOK {
+		t.Fatalf("PATCH with the kind alias = %d, want 200 (body %s)", code, raw)
+	}
+	if got := storedNoteTypeID(t, env, note.ID); got != copied.ID {
+		t.Errorf("note type after a kind-alias save = %q, want the unchanged %q", got, copied.ID)
+	}
+
+	// An explicit note type is still followed.
+	code, raw = doJSON(t, router, http.MethodPatch, "/api/v1/notes/"+note.PublicID, key,
+		fmt.Sprintf(`{"note_type":%q,"fields":{"front":"q3","back":"a3"}}`, first.ID))
+	if code != http.StatusOK {
+		t.Fatalf("PATCH with an explicit note type = %d, want 200 (body %s)", code, raw)
+	}
+	if got := storedNoteTypeID(t, env, note.ID); got != first.ID {
+		t.Errorf("note type after an explicit save = %q, want %q", got, first.ID)
 	}
 }
 
