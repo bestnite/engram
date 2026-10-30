@@ -28,7 +28,7 @@ Live demo: <https://engram.nite07.com/> (registration is open; you can also sign
 ## Features
 
 - **FSRS v6 Scheduling**: Adaptive scheduling based on the open-source FSRS v6 algorithm, optimizing review intervals and reducing workload compared to legacy SM-2 algorithms. Supports custom parameter optimization.
-- **Rich Card Types**: Multiple question types built in — cloze, typed answer, numeric with tolerance, single-choice, multiple-choice, and true/false. Card bodies support Markdown, MathJax formulas, and media uploads.
+- **Anki-Compatible Note Types**: Note types are data — fields, templates, CSS and Anki's note type options — with eight registered answer controls (text, numeric, single choice, multiple choice, true/false, list, cloze blanks and short answer). Field values are HTML, formulas render with MathJax, and audio/TTS use Anki syntax (`[sound:<name>]`, `[anki:tts …]…[/anki:tts]`).
 - **Multi-user & Deck Sharing**: Multi-tenant architecture with OIDC / Single Sign-On (SSO) support. Decks can be shared across users while keeping each user's review scheduling and progress strictly isolated.
 - **AI & MCP Native**: Built-in Model Context Protocol server exposing dedicated tools for LLMs and agents to search, create, update, review, and export flashcards.
 - **Modern Interface & PWA**: Clean single-page application built with Svelte 5 and Tailwind CSS, featuring dark/light themes, keyboard navigation shortcuts, internationalization (`zh-CN` and `en`), and PWA support.
@@ -208,7 +208,7 @@ Engram builds on these projects:
 - [fsrs-rs](https://github.com/open-spaced-repetition/fsrs-rs) — the training implementation behind the optimiser adapter.
 - [Gin](https://github.com/gin-gonic/gin) and [GORM](https://gorm.io) — HTTP and database layers.
 - [Svelte](https://svelte.dev/) — the single-page front end.
-- [goldmark](https://github.com/yuin/goldmark) and [bluemonday](https://github.com/microcosm-cc/bluemonday) — Markdown rendering and HTML allowlisting.
+- [goldmark](https://github.com/yuin/goldmark) — Markdown rendering for the one-time note migration and the mail-template conversion. Card content is HTML and is shown only inside the sandboxed frame.
 - [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) — the MCP server.
 - [zitadel/oidc](https://github.com/zitadel/oidc) and [go-i18n](https://github.com/nicksnyder/go-i18n) — OIDC sign-in and translation catalogs.
 - [MathJax](https://www.mathjax.org/) — formula rendering.

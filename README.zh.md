@@ -28,7 +28,7 @@ Engram 是一个开源、自托管的渐进式间隔重复闪卡（Flashcard）�
 ## 功能特性
 
 - **FSRS v6 间隔排程**：内置新一代开源算法 FSRS v6，相比传统 SM-2 记忆模型预测更精准、长期复习负担显著减轻；支持参数独立优化。
-- **丰富卡片题型**：内置填空题（Cloze）、手打答案、容差数值题、单选题、多选题、判断题等。卡面支持 Markdown、MathJax 数学公式与媒体文件。
+- **兼容 Anki 的笔记类型**：笔记类型就是数据——字段、模板、CSS 与 Anki 的笔记类型选项——并内置八种已注册的答案控件（文本、数值、单选、多选、判断、列表、填空、简答）。字段值是 HTML，公式由 MathJax 渲染，音频/TTS 使用 Anki 语法（`[sound:<name>]`、`[anki:tts …]…[/anki:tts]`）。
 - **多用户与卡组共享**：支持 OIDC / 单点登录（SSO）。卡组可在用户间共享协作，各用户复习状态与进度严格隔离独立。
 - **原生 AI & MCP 支持**：内置基于 Streamable HTTP 的 Model Context Protocol (MCP) 服务，为大语言模型与 Agent 提供全套查询、增删改查、复习与导出工具。
 - **现代交互与 PWA**：基于 Svelte 5 与 Tailwind CSS 的轻量单页应用，提供深色/浅色主题、全键盘快捷操作、中英双语界面，并支持 PWA 离线运行。
@@ -208,7 +208,7 @@ Engram 站在以下优秀开源项目的肩膀上：
 - [fsrs-rs](https://github.com/open-spaced-repetition/fsrs-rs) —— 优化器适配器所用训练实现。
 - [Gin](https://github.com/gin-gonic/gin) 与 [GORM](https://gorm.io) —— HTTP 与数据库层。
 - [Svelte](https://svelte.dev/) —— 前端单页应用。
-- [goldmark](https://github.com/yuin/goldmark) 与 [bluemonday](https://github.com/microcosm-cc/bluemonday) —— Markdown 渲染与 HTML 安全过滤。
+- [goldmark](https://github.com/yuin/goldmark) —— 一次性笔记迁移与邮件模板转换所用的 Markdown 渲染。卡片内容是 HTML，且只在沙箱 iframe 内显示。
 - [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) —— 内置 MCP 服务端。
 - [zitadel/oidc](https://github.com/zitadel/oidc) 与 [go-i18n](https://github.com/nicksnyder/go-i18n) —— OIDC 登录与国际化语言包。
 - [MathJax](https://www.mathjax.org/) —— 数学公式渲染。

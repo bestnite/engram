@@ -77,14 +77,18 @@ Decision rule: code, comments, logs and commit messages â†’ English; end user â†
    constraints require an explicit, versioned migration function.
 6. **One business layer, two transports.** REST handlers and MCP tools call the same
    service methods. Never duplicate validation or scheduling logic per transport.
-7. **Card types are registered, not hardcoded.** Adding a type means adding one file and
-   registering it; core code must not change.
+7. **Note types are data. Answer controls are registered:** adding one means adding one
+   file and registering it; core code must not change.
 8. **Review submission is idempotent.** Enforce the `expected_version` check and return
    `409` on mismatch; write the state update and the review row in one transaction.
 9. **A boolean column with a database default must be a pointer in the model.** GORM omits
    a zero-valued field when the column carries a `default` tag, so the database default
    silently overwrites an explicit `false` (measured on `presets.enable_fuzz`). Use `*bool`
    for such columns; never work around it at the call site more than once.
+10. **Unsanitised HTML is shown only inside the sandboxed frame.** Card faces, deck
+    descriptions, mail previews and the rich-text editing area are the only surfaces that
+    display stored HTML. The server sanitises nothing, so the sandboxed iframe and its CSP
+    are the security boundary: never inject stored HTML into the parent page.
 
 ### 2.4 Go style in this repo
 
@@ -104,7 +108,8 @@ Decision rule: code, comments, logs and commit messages â†’ English; end user â†
 ### 2.5 Tests and commits
 
 - Table-driven tests; use a real SQLite database (in-memory or temp file) â€” do not mock
-  the database. Core coverage targets: `internal/schedule` and `internal/cardtype`.
+  the database. Core coverage targets: `internal/schedule`, `internal/notetype` and
+  `internal/answer`.
 - Tests live beside the code as `internal/<package>/*_test.go`. There is no top-level `test/`
   directory.
 - **The default test database is SQLite, locally and in CI.** Neither runs a database
