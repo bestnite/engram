@@ -330,12 +330,8 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		return nil, err
 	}
 
-	// Media is checked against the allowlist using the real bytes and cross-checked with the declaration; this happens before the transaction, so dry_run and a real import are rejected alike,
-	// and no file has been written yet.
-	if err := validatePackageMedia(pkg); err != nil {
-		return nil, err
-	}
-
+	// Every media class is accepted: the package's bytes are classified when written, and nothing here needs to reject a
+	// file before the transaction. The quota check below is the only pre-write gate on media.
 	// The media bytes the import adds count against the **importer's** quota and exceeding it fails the whole package. This check likewise happens before the transaction and before any
 	// disk write, so a rejection leaves no deck/card/media rows in the database and no bytes on disk.
 	if err := checkImportMediaQuota(ctx, s.db, actorUserID, pkg, opts.MediaQuotaBytes); err != nil {
@@ -593,6 +589,11 @@ func resolvePackageNoteTypes(ctx context.Context, tx *gorm.DB, deckID uint64, ty
 		if err := tx.WithContext(ctx).Create(&nt).Error; err != nil {
 			return nil, fmt.Errorf("create note type %q: %w", entry.Name, err)
 		}
+		// A newly created type records its `_`-prefixed media references; the reuse path leaves the existing set alone,
+		// because the package config and the existing config are identical there.
+		if err := NewMediaNoteTypeStore(tx).Replace(ctx, nt.ID, noteTypeMediaNames(entry.Config)); err != nil {
+			return nil, fmt.Errorf("record media of note type %q: %w", entry.Name, err)
+		}
 		byKey[key] = nt.ID
 		out[entry.Ref] = nt.ID
 	}
@@ -710,42 +711,6 @@ func headBytes(raw []byte) []byte {
 	return raw
 }
 
-// Before writing any file, validatePackageMedia determines the type of every piece of media in the package from the real bytes:
-// anything outside the allowlist is rejected, and it cross-checks the media.json declaration -- a declaration that disagrees with the bytes is rejected.
-//
-// Why this lives in the store layer instead of reusing internal/media.Save: the media package already imports store,
-// a reverse dependency would make a cycle; Save also uses its own database connection, bypassing the import transaction, which on SQLite causes
-// SQLITE_BUSY. The detection logic itself is shared with the upload chain in the leaf package mediatype; this only orchestrates it at package level.
-//
-// Entries declared with missing bytes are left to missingMediaRefs to report and skipped here, so the same problem is not reported twice.
-func validatePackageMedia(pkg *packageModel) error {
-	var entries []string
-	for sha, entry := range pkg.Media {
-		raw, ok := pkg.MediaRaw[sha]
-		if !ok {
-			continue
-		}
-		detected, _, ok := mediatype.Detect(headBytes(raw))
-		if !ok {
-			entries = append(entries, fmt.Sprintf("media/%s: unrecognised media bytes", sha))
-			continue
-		}
-		if !mediatype.Allowed(detected, mediatype.DefaultAllowedMimes()) {
-			entries = append(entries, fmt.Sprintf("media/%s: detected %s is not an allowed media type", sha, detected))
-			continue
-		}
-		if declared := mediatype.Normalize(entry.Mime); declared != "" && declared != detected {
-			entries = append(entries, fmt.Sprintf("media/%s: declared %s does not match detected %s", sha, declared, detected))
-		}
-	}
-	if len(entries) == 0 {
-		return nil
-	}
-	// Entries are sorted lexicographically so the same package always reports errors in the same order.
-	sort.Strings(entries)
-	return &PackageError{Code: CodePackageUnsafeMedia, Message: "package media failed validation", Entries: entries}
-}
-
 // checkImportMediaQuota checks, before any file or database row is written, whether the media added by the import exceeds the importer's quota.
 //
 // The accounting matches the upload chain (internal/store.UserMediaUsage):
@@ -807,6 +772,15 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 	if targetKind == "replace_deck" {
 		if err := tx.WithContext(ctx).Where("deck_id = ?", deckID).Delete(&Note{}).Error; err != nil {
 			return fmt.Errorf("replace deck: clear notes: %w", err)
+		}
+	}
+
+	// Anki's clash rule: a package name whose bytes differ from an existing name in the target deck is renamed with a
+	// SHA-1 suffix, and this package's references are rewritten before note types and notes are written, so both resolve
+	// the renamed name. Without a media root no bytes are imported, so no name is registered and no rename is needed.
+	if opts.MediaRoot != "" {
+		if err := renamePackageMedia(ctx, tx, deckID, pkg); err != nil {
+			return err
 		}
 	}
 
@@ -968,9 +942,9 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		if opts.DryRun {
 			continue
 		}
-		// The mime stored is the one determined from the bytes (validatePackageMedia already confirmed it is an allowlisted type);
-		// the media.json declaration only serves the cross-check and is never written into the media table as truth.
-		detected, _, _ := mediatype.Detect(headBytes(raw))
+		// The mime stored is the one classified from the bytes and, for text classes, the file name; the media.json
+		// declaration is informational and is never written into the media table as truth.
+		detected, _ := mediatype.Classify(headBytes(raw), path.Base(pkg.Media[sha].Path))
 		_, abs, err := mstore.SaveBytesTracked(ctx, opts.MediaRoot, detected, raw, Ptr(actorUserID))
 		if abs != "" {
 			// Register the path before checking the error: SaveBytesTracked may return both a path and an error when the file write succeeded but the metadata write failed,

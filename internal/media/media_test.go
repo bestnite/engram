@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -16,9 +15,6 @@ import (
 func pngBytes() []byte {
 	return append([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, []byte("fake-image-body")...)
 }
-
-// gifBytes is a byte sequence with a GIF89a signature.
-func gifBytes() []byte { return []byte("GIF89a fake body") }
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
@@ -42,11 +38,11 @@ func TestSaveDeduplicatesBySha256(t *testing.T) {
 	ctx := context.Background()
 	body := pngBytes()
 
-	first, err := s.Save(ctx, bytes.NewReader(body), SaveOptions{DeclaredMime: "image/png"})
+	first, err := s.Save(ctx, bytes.NewReader(body), SaveOptions{Name: "a.png"})
 	if err != nil {
 		t.Fatalf("first Save() error = %v", err)
 	}
-	second, err := s.Save(ctx, bytes.NewReader(body), SaveOptions{DeclaredMime: "image/png"})
+	second, err := s.Save(ctx, bytes.NewReader(body), SaveOptions{Name: "a.png"})
 	if err != nil {
 		t.Fatalf("second Save() error = %v", err)
 	}
@@ -76,33 +72,40 @@ func TestSaveRejectsOversized(t *testing.T) {
 	s := newTestStore(t)
 	body := bytes.Repeat([]byte("x"), 100)
 	_, err := s.Save(context.Background(), bytes.NewReader(body), SaveOptions{
-		Limit: 10, AllowedMimes: mediatype.DefaultAllowedMimes(), DeclaredMime: "image/png",
+		Limit: 10, Name: "a.png",
 	})
 	if !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("Save() error = %v, want ErrTooLarge", err)
 	}
 }
 
-// TestSaveRejectsMagicMismatch covers a declared type not matching the magic number being rejected.
-func TestSaveRejectsMagicMismatch(t *testing.T) {
+// TestSaveRejectsEmptyFile covers the one rejection left: a file with no detectable content.
+func TestSaveRejectsEmptyFile(t *testing.T) {
 	s := newTestStore(t)
-	_, err := s.Save(context.Background(), bytes.NewReader([]byte("this is not an image")), SaveOptions{
-		DeclaredMime: "image/png",
-	})
+	_, err := s.Save(context.Background(), bytes.NewReader(nil), SaveOptions{Name: "empty.png"})
 	if !errors.Is(err, ErrMagicMismatch) {
 		t.Fatalf("Save() error = %v, want ErrMagicMismatch", err)
 	}
 }
 
-// TestSaveRejectsDisallowedMime covers a detected type not on the allowlist being rejected.
-func TestSaveRejectsDisallowedMime(t *testing.T) {
+// TestSaveAcceptsUnknownBytes covers the classification rule: unrecognised bytes are stored as
+// application/octet-stream, and a text-class extension (here .js) decides the type instead.
+func TestSaveAcceptsUnknownBytes(t *testing.T) {
 	s := newTestStore(t)
-	_, err := s.Save(context.Background(), bytes.NewReader(gifBytes()), SaveOptions{
-		AllowedMimes: []string{"image/png"},
-		DeclaredMime: "image/gif",
-	})
-	if !errors.Is(err, ErrMimeNotAllowed) {
-		t.Fatalf("Save() error = %v, want ErrMimeNotAllowed", err)
+	ctx := context.Background()
+	unknown, err := s.Save(ctx, bytes.NewReader([]byte("this is not an image")), SaveOptions{Name: "note.txt"})
+	if err != nil {
+		t.Fatalf("Save() unknown bytes error = %v", err)
+	}
+	if unknown.Mime != "application/octet-stream" {
+		t.Fatalf("unknown mime = %q, want application/octet-stream", unknown.Mime)
+	}
+	script, err := s.Save(ctx, bytes.NewReader([]byte("console.log(1)")), SaveOptions{Name: "tool.js"})
+	if err != nil {
+		t.Fatalf("Save() script error = %v", err)
+	}
+	if script.Mime != "text/javascript" {
+		t.Fatalf("script mime = %q, want text/javascript", script.Mime)
 	}
 }
 
@@ -111,7 +114,7 @@ func TestOpenReturnsStoredBytes(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	body := pngBytes()
-	saved, err := s.Save(ctx, bytes.NewReader(body), SaveOptions{DeclaredMime: "image/png"})
+	saved, err := s.Save(ctx, bytes.NewReader(body), SaveOptions{Name: "a.png"})
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}

@@ -117,6 +117,13 @@ var BuiltinMigrations = []Migration{
 		Name: "0014_convert_mail_templates",
 		Up:   convertMailTemplatesToHTML,
 	},
+	{
+		// A note type's `_`-prefixed assets (fonts and other CSS-only files) are recorded in media_note_types so garbage
+		// collection can see them. Types written before that reference set existed have no rows, so this derives the set
+		// from each stored config; Replace makes a second run a no-op.
+		Name: "0015_backfill_note_type_media",
+		Up:   backfillNoteTypeMedia,
+	},
 }
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).

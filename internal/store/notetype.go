@@ -76,10 +76,17 @@ func (s *NoteTypeStore) Create(ctx context.Context, nt *NoteType, cfg notetype.C
 	}
 	nt.UpdatedAt = now
 	nt.Version = 0
-	if err := s.db.WithContext(ctx).Create(nt).Error; err != nil {
-		return fmt.Errorf("create note type: %w", err)
-	}
-	return nil
+	// The row and the derived media reference set are written together: garbage collection resolves `_`-prefixed
+	// note-type assets through media_note_types, so a type that exists without its references would let them be reclaimed.
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(nt).Error; err != nil {
+			return fmt.Errorf("create note type: %w", err)
+		}
+		if err := NewMediaNoteTypeStore(tx).Replace(ctx, nt.ID, noteTypeMediaNames(cfg)); err != nil {
+			return fmt.Errorf("create note type media: %w", err)
+		}
+		return nil
+	})
 }
 
 // ByID fetches a note type by primary key.
@@ -134,26 +141,36 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 		return err
 	}
 	now := time.Now().UTC()
-	res := s.db.WithContext(ctx).Model(&NoteType{}).
-		Where("id = ? AND version = ?", nt.ID, expectedVersion).
-		Updates(map[string]any{
-			"name":        nt.Name,
-			"config_json": nt.ConfigJSON,
-			"version":     expectedVersion + 1,
-			"updated_at":  now,
-		})
-	if res.Error != nil {
-		return fmt.Errorf("update note type %d: %w", nt.ID, res.Error)
-	}
-	if res.RowsAffected == 0 {
-		var count int64
-		if err := s.db.WithContext(ctx).Model(&NoteType{}).Where("id = ?", nt.ID).Count(&count).Error; err != nil {
-			return fmt.Errorf("check note type %d after failed update: %w", nt.ID, err)
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&NoteType{}).
+			Where("id = ? AND version = ?", nt.ID, expectedVersion).
+			Updates(map[string]any{
+				"name":        nt.Name,
+				"config_json": nt.ConfigJSON,
+				"version":     expectedVersion + 1,
+				"updated_at":  now,
+			})
+		if res.Error != nil {
+			return fmt.Errorf("update note type %d: %w", nt.ID, res.Error)
 		}
-		if count == 0 {
-			return gorm.ErrRecordNotFound
+		if res.RowsAffected == 0 {
+			var count int64
+			if err := tx.Model(&NoteType{}).Where("id = ?", nt.ID).Count(&count).Error; err != nil {
+				return fmt.Errorf("check note type %d after failed update: %w", nt.ID, err)
+			}
+			if count == 0 {
+				return gorm.ErrRecordNotFound
+			}
+			return fmt.Errorf("%w: note type %d is not at version %d", ErrVersionConflict, nt.ID, expectedVersion)
 		}
-		return fmt.Errorf("%w: note type %d is not at version %d", ErrVersionConflict, nt.ID, expectedVersion)
+		// The new config replaces the reference set in the same transaction: a rejected version writes neither.
+		if err := NewMediaNoteTypeStore(tx).Replace(ctx, nt.ID, noteTypeMediaNames(cfg)); err != nil {
+			return fmt.Errorf("update note type media %d: %w", nt.ID, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	nt.Version = expectedVersion + 1
 	nt.UpdatedAt = now
@@ -180,6 +197,10 @@ func (s *NoteTypeStore) Delete(ctx context.Context, id uint64) error {
 		}
 		if res.RowsAffected == 0 {
 			return gorm.ErrRecordNotFound
+		}
+		// The media reference rows die with the type; otherwise garbage collection could never reclaim the assets.
+		if err := tx.Where("note_type_id = ?", id).Delete(&MediaNoteType{}).Error; err != nil {
+			return fmt.Errorf("delete media of note type %d: %w", id, err)
 		}
 		return nil
 	})

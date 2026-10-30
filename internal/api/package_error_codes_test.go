@@ -160,25 +160,4 @@ func TestImportPackageSurfacesObsoleteFormat(t *testing.T) {
 	}
 }
 
-// TestImportPackageSurfacesUnsafeMedia asserts that when a package's real media bytes are not on the allowlist it yields the stable code
-// package_unsafe_media, the status is still 400 (media is judged by real bytes; a declaration disagreeing with the bytes rejects the whole package).
-func TestImportPackageSurfacesUnsafeMedia(t *testing.T) {
-	env := newTestEnv(t, 60, 60)
-	// Validation happens before writing to disk; a temporary media root is provided so that the rejection is not merely a missing write location.
-	env.api.mediaRoot = t.TempDir()
-	user := seedUser(t, env.db, "pkg_unsafe_media", store.RoleUser)
-	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
-
-	// Declared image/png with real HTML bytes: the real-type verdict disagrees with the declaration -> rejected.
-	raw, _ := apiMediaPackageZip(t, []byte("<html><body><script>alert(1)</script></body></html>"))
-	body, ct := multipartBody(t, "unsafe.edeck", raw)
-	rec := postImport(t, env, k.Plaintext, body, ct)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("unsafe-media import status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
-	}
-	code, _ := decodePackageErrorCode(t, rec.Body.Bytes())
-	if code != store.CodePackageUnsafeMedia {
-		t.Errorf("unsafe-media import code = %q, want %q", code, store.CodePackageUnsafeMedia)
-	}
-}
+// TestImportPackageSurfacesUnsafeMedia was removed with the media allowlist: import now accepts every class.

@@ -50,7 +50,6 @@
     'site.name': 'admin.settings.setting.site_name',
     'site.default_locale': 'admin.settings.setting.site_default_locale',
     media_max_bytes: 'admin.settings.setting.media_max_bytes',
-    media_allowed_mimes: 'admin.settings.setting.media_allowed_mimes',
     media_user_quota_bytes: 'admin.settings.setting.media_user_quota_bytes',
     optimize_min_reviews: 'admin.settings.setting.optimize_min_reviews',
     media_dir: 'admin.settings.setting.media_dir',
@@ -60,7 +59,6 @@
     'site.name': 'admin.settings.setting.site_name.hint',
     'site.default_locale': 'admin.settings.setting.site_default_locale.hint',
     media_max_bytes: 'admin.settings.setting.media_max_bytes.hint',
-    media_allowed_mimes: 'admin.settings.setting.media_allowed_mimes.hint',
     media_user_quota_bytes: 'admin.settings.setting.media_user_quota_bytes.hint',
     optimize_min_reviews: 'admin.settings.setting.optimize_min_reviews.hint',
     media_dir: 'admin.settings.setting.media_dir.hint',
@@ -98,7 +96,6 @@
     const map: Record<string, string> = {
       invalid_locale: 'admin.settings.notice.invalid_locale',
       invalid_number: 'admin.settings.notice.invalid_number',
-      invalid_mime: 'admin.settings.notice.invalid_mime',
       optimize_min_reviews_too_low: 'admin.settings.notice.optimize_min_reviews_too_low',
       save_failed: 'admin.settings.notice.save_failed',
     };

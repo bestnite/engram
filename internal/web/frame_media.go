@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/media"
-	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -28,7 +28,7 @@ import (
 // a key the server keeps in the encrypted settings channel. Every request checks the signature, the expiry and the user's
 // current read access to the deck, so revoking a grant takes effect on the next request rather than at token expiry.
 const (
-	// frameMediaPath is the frame media route. <name> is <sha256> or <sha256>.<ext>; only the sha256 part selects the bytes.
+	// frameMediaPath is the frame media route. <name> is a deck-scoped media name resolved through media_names.
 	frameMediaPath = "/fm/:token/:name"
 	// frameMediaKeySetting is the settings key holding the HMAC key. The name ends in _key, so the settings layer treats it
 	// as sensitive and stores it encrypted; the plaintext never leaves the process.
@@ -39,11 +39,6 @@ const (
 	// leaked URL useful for days.
 	frameMediaTokenTTL = 6 * time.Hour
 )
-
-// frameMediaNameRE is the accepted <name> shape in this phase: 64 lowercase hex characters, optionally followed by one
-// extension segment. An extension may not contain a slash, and anything else is refused before the database is touched.
-// A later data migration replaces this name resolution with the stored media name.
-var frameMediaNameRE = regexp.MustCompile(`^([0-9a-f]{64})(?:\.[^/]+)?$`)
 
 // errFrameMediaUnavailable means the token feature cannot work: either the encrypted settings channel is not wired, or the
 // database/media store needed to verify a request is missing. Callers degrade to an empty media base and an empty 404.
@@ -65,7 +60,7 @@ func (s *Server) registerFrameMediaRoutes(router *gin.Engine) {
 // frameMediaServe serves one frame media read.
 //
 // All checks map to the same bare 404: a bad signature, an expired token, a tampered payload, a missing or inactive user,
-// a deck the user cannot read, a malformed name and an unreadable medium are indistinguishable to the caller. Only the
+// a deck the user cannot read, an unknown media name and an unreadable medium are indistinguishable to the caller. Only the
 // debug log records which check failed; the token itself is never logged, because it is a bearer credential for six hours.
 func (s *Server) frameMediaServe(c *gin.Context) {
 	if s.db == nil || s.secrets == nil || s.media == nil || s.users == nil || s.access == nil {
@@ -76,11 +71,6 @@ func (s *Server) frameMediaServe(c *gin.Context) {
 	claims, ok := s.verifyFrameMediaToken(ctx, c.Param("token"), time.Now())
 	if !ok {
 		s.frameMediaReject(c, "token rejected")
-		return
-	}
-	sha, ok := frameMediaNameSHA(c.Param("name"))
-	if !ok {
-		s.frameMediaReject(c, "malformed media name")
 		return
 	}
 	user, err := s.users.ByID(ctx, claims.userID)
@@ -94,17 +84,18 @@ func (s *Server) frameMediaServe(c *gin.Context) {
 		s.frameMediaReject(c, "token user cannot read the token deck")
 		return
 	}
-	allowed, err := store.MediaAccessibleToUser(ctx, s.db, user.ID, sha)
+	// Authorization is deck read access plus a media_names row for this deck. The row is what makes the name belong to
+	// the deck, so a CSS-only asset such as "_font.woff2" is served without needing a note that references it.
+	name, err := store.NewMediaNameStore(s.db).ByName(ctx, claims.deckID, c.Param("name"))
 	if err != nil {
-		// An infrastructure failure is still a 404 to the caller, so it cannot be told apart from a permission failure.
-		s.frameMediaReject(c, "media access check failed")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.frameMediaReject(c, "media name is unknown in the token deck")
+			return
+		}
+		s.frameMediaReject(c, "media name lookup failed")
 		return
 	}
-	if !allowed {
-		s.frameMediaReject(c, "media is not readable by the token user")
-		return
-	}
-	m, f, err := s.media.Open(ctx, sha)
+	m, f, err := s.media.Open(ctx, name.Sha256)
 	if err != nil {
 		if errors.Is(err, media.ErrNotFound) {
 			s.frameMediaReject(c, "media is missing from storage")
@@ -115,22 +106,12 @@ func (s *Server) frameMediaServe(c *gin.Context) {
 	}
 	defer f.Close()
 
-	etag := `"` + m.Sha256 + `"`
 	// The frame is embedded on the site itself; a wildcard origin keeps the response usable from the sandboxed, opaque-origin
 	// frame while Cache-Control private stops shared caches from storing a token-scoped response.
 	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Cache-Control", "private")
-	c.Header("ETag", etag)
-	// Historical rows may carry a type the byte check would not allow (text/html, image/svg+xml); those are downgraded to a
-	// download so a frame token cannot become a stored-XSS vector.
-	contentType := m.Mime
-	if !mediatype.Allowed(m.Mime, mediatype.DefaultAllowedMimes()) {
-		contentType = "application/octet-stream"
-		c.Header("Content-Disposition", "attachment")
-	}
-	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("Content-Type", contentType)
-	if c.GetHeader("If-None-Match") == etag {
+	writeMediaHeaders(c, m)
+	if c.GetHeader("If-None-Match") == `"`+m.Sha256+`"` {
 		c.Status(http.StatusNotModified)
 		return
 	}
@@ -143,17 +124,6 @@ func (s *Server) frameMediaServe(c *gin.Context) {
 func (s *Server) frameMediaReject(c *gin.Context, reason string) {
 	s.logger.Debug("frame media request rejected", "reason", reason)
 	c.AbortWithStatus(http.StatusNotFound)
-}
-
-// frameMediaNameSHA resolves <name> to the sha256 to serve. In this phase the sha is the name's 64-hex prefix and any
-// extension is ignored: the extension exists only so the relative URL keeps the shape a browser expects. The rewrite that
-// produces these names is temporary and goes away together with this resolution when the media reference format changes.
-func frameMediaNameSHA(name string) (string, bool) {
-	match := frameMediaNameRE.FindStringSubmatch(name)
-	if match == nil {
-		return "", false
-	}
-	return match[1], true
 }
 
 // frameMediaBase is the <base href> prefix for the frame document: "/fm/<token>/" for one user and one deck, or "" when the
@@ -343,17 +313,18 @@ func decodeFrameMediaKey(stored string) ([]byte, error) {
 
 // absoluteMediaRefs turns deck-scoped media names into the absolute /media/<sha256> URLs the parent SPA needs.
 //
-// A field stores media by file name (<sha256>.<ext>, the form the data migration writes), because the frame resolves a name
-// against its <base href>. The SPA has no base element, so the same HTML would resolve against the page address and 404.
-// Only an img/video/audio src attribute and a CSS url(...) reference are rewritten; the name must be exactly 64 lowercase
-// hex characters with an optional extension, so ordinary text that happens to contain hex is left alone.
+// A field stores media by file name (<sha256>.<ext>, the form the data migration writes and the note write path
+// normalises editor uploads into), because the frame resolves a name against its <base href>. The SPA has no base
+// element, so the same HTML would resolve against the page address and 404. Only an img/video/audio src attribute, an
+// anchor href attribute and a CSS url(...) reference are rewritten; the name must be exactly 64 lowercase hex characters
+// with an optional extension, so ordinary text that happens to contain hex is left alone.
 func absoluteMediaRefs(html string) string {
 	return mediaNameRefRE.ReplaceAllString(html, "${1}/media/${2}")
 }
 
-// mediaNameRefRE matches one media name in a URL position: the attribute or CSS prefix, the 64-hex sha, and the optional
-// extension segment that the /media/ route does not take.
-var mediaNameRefRE = regexp.MustCompile(`(src\s*=\s*["']|url\(\s*["']?)([0-9a-f]{64})(?:\.[^"')\s]*)?`)
+// mediaNameRefRE matches one media name in a URL position: an src or href attribute or a CSS url() prefix, the 64-hex
+// sha, and the optional extension segment that the /media/ route does not take.
+var mediaNameRefRE = regexp.MustCompile(`((?:src|href)\s*=\s*["']|url\(\s*["']?)([0-9a-f]{64})(?:\.[^"')\s]*)?`)
 
 // frameOutputHeader tells a card-face endpoint that the HTML is destined for the frame. Its absence is not an error:
 // without the header the response keeps the absolute /media/ URLs the parent SPA needs, because the SPA has no <base>

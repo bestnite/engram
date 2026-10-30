@@ -99,7 +99,6 @@
       case 'package_bad_format':
       case 'package_deck_meta_invalid':
       case 'package_unsafe_entry':
-      case 'package_unsafe_media':
         return 'package.error.invalid';
       default:
         return err.status === 413 ? 'package.error.too_large' : 'package.error.failed';

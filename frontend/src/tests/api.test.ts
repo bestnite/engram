@@ -145,8 +145,8 @@ describe('Centralized typed same-origin REST API client', () => {
 
     it('fetches a CSRF session token before upload and keeps stable server error codes', async () => {
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, csrf_token: 'fresh-upload-csrf' }), { status: 200 }));
-      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'media_mime_not_allowed', message: 'no' } }), { status: 415 }));
-      await expect(client.uploadDeckMedia('3', new File(['x'], 'a.txt'))).rejects.toMatchObject({ status: 415, code: 'media_mime_not_allowed' });
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'media_magic_mismatch', message: 'no' } }), { status: 422 }));
+      await expect(client.uploadDeckMedia('3', new File(['x'], 'a.txt'))).rejects.toMatchObject({ status: 422, code: 'media_magic_mismatch' });
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
       expect(new Headers(mockFetch.mock.calls[1]?.[1]?.headers).get('X-CSRF-Token')).toBe('fresh-upload-csrf');
     });

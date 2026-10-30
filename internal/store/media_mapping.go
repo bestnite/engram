@@ -22,8 +22,9 @@ import (
 // Both read authorization (read side) and pre-write validation (write side) derive from these two facts, so that 'what counts as readable'
 // cannot be implemented twice and drift.
 //
-// Field values are HTML that refers to media by file name, the way Anki does: an img/video/audio src attribute, a [sound:name]
-// tag and a CSS url(name) are the three forms a field or template can carry. A name resolves to content through media_names
+// Field values are HTML that refers to media by file name, the way Anki does: an img/video/audio src attribute, an
+// anchor href attribute, a [sound:name] tag and a CSS url(name) are the four forms a field or template can carry. A name
+// resolves to content through media_names
 // for the note's deck; a name with no row refers to no stored bytes and contributes no reference.
 
 // CodeMediaNotReadable is the stable English code returned when a note write is rejected by pre-write validation (item level, see MediaWriteError).
@@ -66,20 +67,82 @@ func RecordMediaUploader(ctx context.Context, db *gorm.DB, mediaSha string, user
 var (
 	// mediaSrcRE matches an HTML src attribute in any of the three valid quoting forms.
 	mediaSrcRE = regexp.MustCompile(`(?is)\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))`)
+	// mediaHrefRE matches an HTML href attribute in the same three quoting forms.
+	mediaHrefRE = regexp.MustCompile(`(?is)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))`)
 	// mediaSoundRE matches Anki's [sound:name] tag.
 	mediaSoundRE = regexp.MustCompile(`(?is)\[sound:([^\]]+)\]`)
 	// mediaCSSURLRE matches a CSS url(...) reference in any of the three valid quoting forms.
 	mediaCSSURLRE = regexp.MustCompile(`(?is)\burl\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s]*))\s*\)`)
 	// mediaShaNameRE matches a name that already carries the content sha, the form the migration writes (<sha>.<ext>).
 	mediaShaNameRE = regexp.MustCompile(`^([0-9a-f]{64})(?:\.[^/]*)?$`)
+	// mediaPathRefRE matches an editor-produced absolute media path at the start of a reference (or after a quote,
+	// whitespace, '=' or '('). The leading group is required so a URL that merely contains "/media/<sha>" — for
+	// example https://example.com/media/<sha> — is left alone. A trailing extension is consumed and replaced: the
+	// stored mime decides the extension, so keeping both would produce "<sha>.png.png".
+	mediaPathRefRE = regexp.MustCompile(`(^|[\s"'=(])/media/([0-9a-f]{64})(?:\.[A-Za-z0-9]+)?`)
+	// mediaSoundShaRE matches a [sound:<sha>] tag that still needs the deck name's extension appended.
+	mediaSoundShaRE = regexp.MustCompile(`\[sound:([0-9a-f]{64})\]`)
 )
+
+// normaliseNoteMediaNames turns the editor's absolute media references into deck-scoped names and registers those names.
+//
+// The rich-text editor inserts uploads as /media/<sha256>, [sound:<sha256>] and <a href="/media/<sha256>">. Stored
+// verbatim, such a reference means nothing to the frame, media_names, garbage collection or package export. This
+// rewrites it to <sha256>.<ext> using the stored mime (bin when the media row is gone), the same rule migration 0014
+// applied to old notes, and registers each resulting name for the note's deck. Values that already carry a name, an
+// external URL or ordinary text are untouched.
+func normaliseNoteMediaNames(ctx context.Context, tx *gorm.DB, deckID uint64, values map[string]string) error {
+	mimes := make(map[string]string)
+	mimeFor := func(sha string) string {
+		if mime, ok := mimes[sha]; ok {
+			return mime
+		}
+		var media Media
+		mime := ""
+		if err := tx.WithContext(ctx).Select("mime").First(&media, "sha256 = ?", sha).Error; err == nil {
+			mime = media.Mime
+		}
+		mimes[sha] = mime
+		return mime
+	}
+	for id, value := range values {
+		value = mediaPathRefRE.ReplaceAllStringFunc(value, func(match string) string {
+			sub := mediaPathRefRE.FindStringSubmatch(match)
+			return sub[1] + mediaDeckName(sub[2], mimeFor(sub[2]))
+		})
+		value = mediaSoundShaRE.ReplaceAllStringFunc(value, func(match string) string {
+			sub := mediaSoundShaRE.FindStringSubmatch(match)
+			return "[sound:" + mediaDeckName(sub[1], mimeFor(sub[1])) + "]"
+		})
+		values[id] = value
+	}
+	// Register every sha-form name the values end up carrying, including a name the caller already wrote
+	// (<sha>.<ext>) and an already-suffixed [sound:<sha>.<ext>].
+	names := make(map[string]string)
+	for _, value := range values {
+		for _, name := range mediaNamesInHTML(value) {
+			if match := mediaShaNameRE.FindStringSubmatch(name); match != nil {
+				names[name] = match[1]
+			}
+		}
+	}
+	namesStore := NewMediaNameStore(tx)
+	for name, sha := range names {
+		if err := namesStore.Upsert(ctx, deckID, name, sha); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // mediaNamesInHTML returns every media name a piece of field HTML refers to, in order of appearance and without duplicates.
 //
-// A reference that is an absolute URL (any scheme, or a root-relative path) is not a deck-scoped file name and is skipped:
-// the frame may load an external https image, but that image is not this deck's media.
+// The four reference forms a field or template can carry are an img/video/audio src attribute, an anchor href attribute,
+// Anki's [sound:name] tag and a CSS url(name). A reference that is an absolute URL (any scheme, or a root-relative path)
+// is not a deck-scoped file name and is skipped: the frame may load an external https image or link to an external page,
+// but that target is not this deck's media.
 func mediaNamesInHTML(html string) []string {
-	if !strings.Contains(html, "src") && !strings.Contains(html, "[sound:") && !strings.Contains(html, "url(") {
+	if !strings.Contains(html, "src") && !strings.Contains(html, "href") && !strings.Contains(html, "[sound:") && !strings.Contains(html, "url(") {
 		return nil
 	}
 	var names []string
@@ -98,6 +161,9 @@ func mediaNamesInHTML(html string) []string {
 		names = append(names, name)
 	}
 	for _, match := range mediaSrcRE.FindAllStringSubmatch(html, -1) {
+		add(match[1] + match[2] + match[3])
+	}
+	for _, match := range mediaHrefRE.FindAllStringSubmatch(html, -1) {
 		add(match[1] + match[2] + match[3])
 	}
 	for _, match := range mediaSoundRE.FindAllStringSubmatch(html, -1) {

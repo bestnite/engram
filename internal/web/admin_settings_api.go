@@ -172,11 +172,6 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 				adminError(c, http.StatusBadRequest, "invalid_number")
 				return
 			}
-		case settingKeyMediaAllowedMimes:
-			if len(splitMimeList(raw)) == 0 {
-				adminError(c, http.StatusBadRequest, "invalid_mime")
-				return
-			}
 		case settingKeyMediaUserQuotaBytes:
 			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n < 0 {
 				adminError(c, http.StatusBadRequest, "invalid_number")

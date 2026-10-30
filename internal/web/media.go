@@ -8,9 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"regexp"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -23,11 +21,9 @@ import (
 // Environment variable > settings table > built-in default, the same precedence as internal/config; the settings
 // table is read directly here so an admin change takes effect immediately, with no restart.
 const (
-	settingKeyMediaAllowedMimes = "media_allowed_mimes"
 	// settingKeyMediaUserQuotaBytes is the per-user total media quota (bytes); 0/unconfigured = unlimited.
 	// Together with envMediaUserQuotaBytes it points at the same parsing in internal/media (the upload and import chains share it).
 	settingKeyMediaUserQuotaBytes = media.SettingKeyMediaUserQuotaBytes
-	envMediaAllowedMimes          = "MEDIA_ALLOWED_MIMES"
 	envMediaUserQuotaBytes        = media.EnvMediaUserQuotaBytes
 )
 
@@ -64,39 +60,11 @@ func (s *Server) deckMediaUpload(c *gin.Context) {
 	s.storeUpload(c, user)
 }
 
-// allowedMimes resolves the effective mime allow-list: environment variable > settings table > default allow-list.
-func (s *Server) allowedMimes(ctx context.Context) []string {
-	if raw := strings.TrimSpace(os.Getenv(envMediaAllowedMimes)); raw != "" {
-		return splitMimeList(raw)
-	}
-	if s.db != nil {
-		if settings, err := store.LoadSettings(ctx, s.db); err == nil {
-			if raw, ok := settings[settingKeyMediaAllowedMimes]; ok {
-				if list := splitMimeList(raw); len(list) > 0 {
-					return list
-				}
-			}
-		}
-	}
-	return mediatype.DefaultAllowedMimes()
-}
-
 // userMediaQuota resolves the effective per-user total media quota (bytes): environment variable > settings table > 0.
 // 0 (including unconfigured) means unlimited — being off by default is deliberate: no picking a number for the admin that nobody agreed to.
 // The parsing shares internal/media.ResolveUserQuotaBytes with the deck package import chain, so the rules cannot drift apart.
 func (s *Server) userMediaQuota(ctx context.Context) int64 {
 	return media.ResolveUserQuotaBytes(ctx, s.db)
-}
-
-// splitMimeList splits a comma-separated mime string into a lowercase list with whitespace and empty items removed.
-func splitMimeList(raw string) []string {
-	out := make([]string, 0, 4)
-	for _, part := range strings.Split(raw, ",") {
-		if v := strings.TrimSpace(part); v != "" {
-			out = append(out, v)
-		}
-	}
-	return out
 }
 
 // multipartOverheadBytes is the allowance for the upload body beyond the single-file limit (boundaries, part headers, other small fields).
@@ -134,9 +102,9 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 	}
 	defer file.Close()
 
-	declared := ""
+	name := ""
 	if header != nil {
-		declared = header.Header.Get("Content-Type")
+		name = header.Filename
 	}
 	// Validate before writing to disk: read the file into memory (bounded by the single-file limit, reading one byte extra to detect overflow),
 	// with every rejection check run after that; only on pass is it handed to the storage layer to write a temp file + rename, avoiding "half the file
@@ -160,10 +128,9 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		}
 	}
 	saved, err := s.media.Save(ctx, bytes.NewReader(raw), media.SaveOptions{
-		Limit:        fileLimit,
-		AllowedMimes: s.allowedMimes(ctx),
-		DeclaredMime: declared,
-		CreatedBy:    store.Ptr(user.ID),
+		Limit:     fileLimit,
+		Name:      name,
+		CreatedBy: store.Ptr(user.ID),
 	})
 	if err != nil {
 		status, code, msg := mediaErrorResponse(err)
@@ -237,8 +204,6 @@ func mediaErrorResponse(err error) (status int, code, msg string) {
 		switch me.Code {
 		case media.CodeTooLarge:
 			return http.StatusRequestEntityTooLarge, me.Code, me.Msg
-		case media.CodeMimeNotAllowed:
-			return http.StatusUnsupportedMediaType, me.Code, me.Msg
 		case media.CodeMagicMismatch:
 			return http.StatusUnprocessableEntity, me.Code, me.Msg
 		}
@@ -297,24 +262,29 @@ func (s *Server) mediaServe(c *gin.Context) {
 	}
 	defer f.Close()
 
+	// The headers are written before the ETag revalidation, so a 304 carries the same security policy as a 200.
+	writeMediaHeaders(c, m)
 	etag := `"` + m.Sha256 + `"`
-	c.Header("ETag", etag)
 	c.Header("Cache-Control", "private, max-age=31536000, immutable")
-	// The read side tolerates historical polluted rows that may exist in the database: only types the byte check allows are inlined as declared,
-	// everything else (e.g. text/html or image/svg+xml written by an old import chain) is downgraded to a download, avoiding same-origin stored XSS.
-	contentType := m.Mime
-	if !mediatype.Allowed(m.Mime, mediatype.DefaultAllowedMimes()) {
-		contentType = "application/octet-stream"
-		c.Header("Content-Disposition", "attachment")
-	}
-	// Defence in depth: an explicit Content-Type is not overridden by http.ServeContent, but nosniff still stops old browsers/proxies from
-	// executing the response body as a script — before this fix the header was not set here at all.
-	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("Content-Type", contentType)
 	// An ETag hit returns 304 without re-reading the file body.
 	if c.GetHeader("If-None-Match") == etag {
 		c.Status(http.StatusNotModified)
 		return
 	}
 	http.ServeContent(c.Writer, c.Request, "", m.CreatedAt, f)
+}
+
+// writeMediaHeaders sets the one serving rule shared by /media/<sha> and /fm/<token>/<name>: every response is sandboxed,
+// carries the type it was classified as, and is a download unless its class is inline (image, audio, video).
+// A sandboxed CSP keeps even an inline SVG containing <script> from executing on the application's own origin, and
+// nosniff stops a proxy or old browser from reinterpreting the body as another type.
+func writeMediaHeaders(c *gin.Context, m *store.Media) {
+	class := mediatype.ClassOfMime(m.Mime)
+	c.Header("Content-Security-Policy", "sandbox")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Type", m.Mime)
+	if !class.IsInline() {
+		c.Header("Content-Disposition", "attachment")
+	}
+	c.Header("ETag", `"`+m.Sha256+`"`)
 }

@@ -118,7 +118,6 @@ var errorMessages = map[string]string{
 	store.CodePackageBadFormat:       "The package format is invalid.",
 	store.CodePackageUnknownKind:     "The package contains a note type this instance does not know.",
 	store.CodePackageFormatObsolete:  "This package uses a format this release cannot read. Import it with an older engram release and export it again.",
-	store.CodePackageUnsafeMedia:     "The package contains media of a disallowed type.",
 	store.CodePackageDeckMetaInvalid: "The deck name or description in the package is invalid.",
 	store.CodePackageQuotaExceeded:   "The imported media would exceed your media quota.",
 	store.CodePackageMediaForbidden:  "The package references media you cannot read.",

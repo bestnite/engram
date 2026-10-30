@@ -395,6 +395,11 @@ func (s *NoteStore) prepareNoteFields(ctx context.Context, tx *gorm.DB, n *Note,
 	if err != nil {
 		return nil, nil, fmt.Errorf("validate note fields: %w", err)
 	}
+	// The editor inserts /media/<sha256> and [sound:<sha256>]; store them as deck-scoped names and register those
+	// names in the same transaction, so the frame, media_notes, garbage collection and export all see the reference.
+	if err := normaliseNoteMediaNames(ctx, tx, n.DeckID, values); err != nil {
+		return nil, nil, fmt.Errorf("normalise note media names: %w", err)
+	}
 	raw, err := json.Marshal(values)
 	if err != nil {
 		return nil, nil, fmt.Errorf("encode note fields: %w", err)

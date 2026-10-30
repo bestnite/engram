@@ -12,7 +12,6 @@ export function uploadErrorKeyFor(err: unknown): string {
   const code = err instanceof ApiClientError ? err.code : '';
   const keys: Record<string, string> = {
     media_too_large: 'media.upload.too_large',
-    media_mime_not_allowed: 'media.upload.mime_not_allowed',
     media_magic_mismatch: 'media.upload.magic_mismatch',
     media_quota_exceeded: 'media.upload.quota_exceeded',
     media_missing_file: 'media.upload.file_required',

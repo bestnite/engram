@@ -9,7 +9,18 @@ import (
 	"golang.org/x/text/unicode/norm"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"git.nite07.com/nite/engram/internal/mediatype"
 )
+
+// mediaDeckName is the one rule that turns a content sha and a mime into a deck-scoped file name:
+// "<sha256>.<ext>", with mediatype.Ext falling back to "bin" for an unknown or missing mime.
+//
+// Both the note write path and the note-type migration use it, so a name written by one is the
+// name the other would choose for the same bytes.
+func mediaDeckName(sha, mime string) string {
+	return sha + "." + mediatype.Ext(mime)
+}
 
 // normaliseMediaName is the single normalisation rule for a deck-scoped media file name.
 //

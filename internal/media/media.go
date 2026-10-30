@@ -27,9 +27,8 @@ import (
 // Stable error codes (AGENTS.md §2.1: identifiers in English). The upload endpoint maps them to HTTP status codes;
 // callers decide by code, never by matching message.
 const (
-	CodeTooLarge       = "media_too_large"
-	CodeMimeNotAllowed = "media_mime_not_allowed"
-	CodeMagicMismatch  = "media_magic_mismatch"
+	CodeTooLarge      = "media_too_large"
+	CodeMagicMismatch = "media_magic_mismatch"
 	// CodeQuotaExceeded means this upload would exceed that user's total media quota.
 	// Usage is the deduplicated sum of "media referenced by that user's notes ∪ that user's uploads not yet referenced by anyone",
 	// computed by the routing layer before writing to disk; see UserMediaUsage in internal/store.
@@ -47,10 +46,9 @@ func (e *Error) Error() string { return e.Code + ": " + e.Msg }
 var (
 	// ErrTooLarge means the file exceeds the administrator-configured upload limit.
 	ErrTooLarge = &Error{Code: CodeTooLarge, Msg: "file exceeds the configured upload limit"}
-	// ErrMimeNotAllowed means the detected type is not on the allowlist.
-	ErrMimeNotAllowed = &Error{Code: CodeMimeNotAllowed, Msg: "detected media type is not allowed"}
-	// ErrMagicMismatch means the declared type does not match the magic bytes, or the magic number is unrecognizable.
-	ErrMagicMismatch = &Error{Code: CodeMagicMismatch, Msg: "declared media type does not match file magic bytes"}
+	// ErrMagicMismatch means the file has no detectable content (it is empty). Every non-empty file is accepted and
+	// classified; the browser's declared Content-Type never rejects a valid file.
+	ErrMagicMismatch = &Error{Code: CodeMagicMismatch, Msg: "file has no detectable content"}
 	// ErrNotFound means the media does not exist.
 	ErrNotFound = &Error{Code: "media_not_found", Msg: "media not found"}
 )
@@ -158,15 +156,14 @@ func (s *Store) absPath(rel string) (string, error) {
 type SaveOptions struct {
 	// Limit is the per-file byte limit; the default is used when <=0.
 	Limit int64
-	// AllowedMimes is the set of allowed mimes; the default allowlist is used when empty.
-	AllowedMimes []string
-	// DeclaredMime is the client-declared Content-Type, cross-checked against the magic bytes (may be empty).
-	DeclaredMime string
+	// Name is the uploaded file's original name. When the bytes are unrecognised it decides the text classes
+	// (.js/.mjs/.cjs and .css); it never overrides recognised bytes.
+	Name string
 	// CreatedBy is the uploading user id (nullable).
 	CreatedBy *uint64
 }
 
-// Save writes one piece of media: reads into a temporary file up to the limit, validates the magic bytes, then stores it
+// Save writes one piece of media: reads into a temporary file up to the limit, classifies the bytes, then stores it
 // through store.MediaStore.Put, which owns dedup, placement and metadata. On a dedup hit the returned Media is the row
 // that already existed.
 func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store.Media, error) {
@@ -177,11 +174,6 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	if limit <= 0 {
 		limit = defaultMaxBytes
 	}
-	allowed := opts.AllowedMimes
-	if len(allowed) == 0 {
-		allowed = mediatype.DefaultAllowedMimes()
-	}
-
 	tmp, err := os.CreateTemp(s.tempDir(), "upload-*")
 	if err != nil {
 		return nil, fmt.Errorf("media: create temp file: %w", err)
@@ -203,13 +195,13 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 		return nil, ErrTooLarge
 	}
 	if written == 0 {
-		return nil, &Error{Code: CodeMagicMismatch, Msg: "empty file"}
+		return nil, ErrMagicMismatch
 	}
 	if err := tmp.Sync(); err != nil {
 		return nil, fmt.Errorf("media: sync temp file: %w", err)
 	}
 
-	// Read the file header back for magic byte validation: trust only the bytes, never the extension.
+	// Read the file header back for classification: trust the bytes first, the file name only for text classes.
 	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("media: seek temp file: %w", err)
 	}
@@ -218,24 +210,14 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("media: read temp head: %w", err)
 	}
-	detected, _, ok := mediatype.Detect(head[:n])
-	if !ok {
-		return nil, ErrMagicMismatch
-	}
-	if !mediatype.Allowed(detected, allowed) {
-		return nil, ErrMimeNotAllowed
-	}
-	// When the client declared a type it must match the magic number, otherwise the file is disguised.
-	if declared := mediatype.Normalize(opts.DeclaredMime); declared != "" && declared != detected {
-		return nil, ErrMagicMismatch
-	}
+	mime, _ := mediatype.Classify(head[:n], opts.Name)
 	if err := tmp.Close(); err != nil {
 		return nil, fmt.Errorf("media: close temp file: %w", err)
 	}
 
 	row, _, err := store.NewMediaStore(s.db).Put(ctx, s.root, store.MediaPut{
 		Sha256:    hex.EncodeToString(hasher.Sum(nil)),
-		Mime:      detected,
+		Mime:      mime,
 		Bytes:     written,
 		TempPath:  tmpName,
 		CreatedBy: opts.CreatedBy,

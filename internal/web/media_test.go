@@ -260,10 +260,10 @@ func TestMediaUploadRejectsOversized(t *testing.T) {
 	}
 }
 
-// TestMediaUploadRejectsMagicMismatch covers a magic number that does not match the declaration being refused with a stable error code.
-func TestMediaUploadRejectsMagicMismatch(t *testing.T) {
+// TestMediaUploadRejectsEmptyFile covers the one refusal left: a file with no content gets a stable error code.
+func TestMediaUploadRejectsEmptyFile(t *testing.T) {
 	srv, _, _, cookies, csrf := newNotesServer(t)
-	rec := uploadMedia(t, srv, cookies, csrf, "fake.png", "image/png", []byte("not an image at all"))
+	rec := uploadMedia(t, srv, cookies, csrf, "empty.png", "image/png", nil)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("magic mismatch status = %d, want 422 (body %s)", rec.Code, rec.Body.String())
 	}

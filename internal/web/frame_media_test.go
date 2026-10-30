@@ -27,8 +27,8 @@ import (
 // This file covers GET /fm/<token>/<name>: a sandboxed frame has no session, so media reads there are authorized by an
 // HMAC-signed token instead of the session cookie.
 //
-// The rule under test: the signature, the expiry, the token user's current status and deck access, the name shape and the
-// user's readability of the medium. Every failure is the same bare 404, so a caller cannot learn which check rejected it.
+// The rule under test: the signature, the expiry, the token user's current status and deck access, the media-name lookup
+// and the user's readability of the medium. Every failure is the same bare 404, so a caller cannot learn which check rejected it.
 
 // frameMediaFixture is one server with two users, two decks and real media bytes on disk.
 type frameMediaFixture struct {
@@ -140,6 +140,15 @@ func newFrameMediaFixture(t *testing.T) *frameMediaFixture {
 
 	f.readableRaw = append([]byte("\x89PNG\r\n\x1a\n"), []byte("frame-media-readable")...)
 	f.readable = saveFrameMedia(t, db, srv, f.readableRaw, f.owner.ID)
+	// The frame route resolves a request through media_names; register both the bare sha and the migration's
+	// "<sha>.<ext>" form so the tests exercise the name lookup rather than a legacy fallback.
+	names := store.NewMediaNameStore(db)
+	if err := names.Upsert(context.Background(), f.deck.ID, f.readable.Sha256, f.readable.Sha256); err != nil {
+		t.Fatalf("register bare media name: %v", err)
+	}
+	if err := names.Upsert(context.Background(), f.deck.ID, f.readable.Sha256+".png", f.readable.Sha256); err != nil {
+		t.Fatalf("register media name with extension: %v", err)
+	}
 	// The note makes the medium readable for everyone who can see the deck, including the reader.
 	if _, err := store.NewNoteStore(db).Create(context.Background(), &store.Note{
 		DeckID: f.deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, db, f.deck.ID, "basic")), CreatedBy: store.Ptr(f.owner.ID),
@@ -311,8 +320,8 @@ func TestFrameMediaServesReadableMedia(t *testing.T) {
 	}
 }
 
-// TestFrameMediaAcceptsExtensionName asserts that "<sha256>.<ext>" resolves to the same bytes: the extension is cosmetic in
-// this phase and only the 64-hex prefix selects the medium.
+// TestFrameMediaAcceptsExtensionName asserts that "<sha256>.<ext>" resolves to the same bytes: the extension is part of
+// the registered name the migration writes.
 func TestFrameMediaAcceptsExtensionName(t *testing.T) {
 	f := newFrameMediaFixture(t)
 	token := f.token(t, f.reader.ID, f.deck.ID)
@@ -325,8 +334,96 @@ func TestFrameMediaAcceptsExtensionName(t *testing.T) {
 	}
 }
 
-// TestFrameMediaRejectsRequests covers every rejection: expired token, tampered signature, lost deck access, unreadable
-// medium, a token bound to another deck, a malformed token, a non-sha name and a token whose user no longer exists.
+// TestFrameMediaServesNoteTypeOnlyName is the acceptance case for a CSS-only asset: "_font.woff2" is registered in
+// media_names but referenced by no note, and the frame route must still serve it (deck read access is the authorization).
+func TestFrameMediaServesNoteTypeOnlyName(t *testing.T) {
+	f := newFrameMediaFixture(t)
+	font, err := store.NewMediaStore(f.db).SaveBytes(context.Background(), f.srv.media.Root(), "font/woff2",
+		[]byte("wOF2\x00\x01\x00\x00fake-font"), store.Ptr(f.owner.ID))
+	if err != nil {
+		t.Fatalf("SaveBytes(font) error = %v", err)
+	}
+	if err := store.NewMediaNameStore(f.db).Upsert(context.Background(), f.deck.ID, "_font.woff2", font.Sha256); err != nil {
+		t.Fatalf("register font name: %v", err)
+	}
+	token := f.token(t, f.reader.ID, f.deck.ID)
+	rec := f.get(t, "/fm/"+token+"/_font.woff2")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /fm/<token>/_font.woff2 = %d, want 200 (body %q)", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "font/woff2" {
+		t.Errorf("Content-Type = %q, want font/woff2", got)
+	}
+	if got := rec.Header().Get("Content-Disposition"); !strings.HasPrefix(got, "attachment") {
+		t.Errorf("Content-Disposition = %q, want attachment for a font", got)
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); got != "sandbox" {
+		t.Errorf("Content-Security-Policy = %q, want sandbox", got)
+	}
+
+	unknown := f.get(t, "/fm/"+token+"/_missing.woff2")
+	if unknown.Code != http.StatusNotFound {
+		t.Errorf("GET unknown media name = %d, want 404", unknown.Code)
+	}
+}
+
+// TestFrameMediaServesEditorAbsoluteReference is the end-to-end defect case: the editor writes /media/<sha>, the note
+// write stores the deck name, a frame-marked render returns that relative name, and the frame route serves it.
+func TestFrameMediaServesEditorAbsoluteReference(t *testing.T) {
+	f := newFrameMediaFixture(t)
+	ctx := context.Background()
+	media := saveFrameMedia(t, f.db, f.srv, append([]byte("\x89PNG\r\n\x1a\n"), []byte("editor-absolute")...), f.owner.ID)
+	cards, err := store.NewNoteStore(f.db).Create(ctx, &store.Note{
+		DeckID: f.deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, f.db, f.deck.ID, "basic")), CreatedBy: store.Ptr(f.owner.ID),
+	}, map[string]any{
+		"front": `<img src="/media/` + media.Sha256 + `">`,
+		"back":  "back",
+	})
+	if err != nil || len(cards) == 0 {
+		t.Fatalf("create note: %v (%d cards)", err, len(cards))
+	}
+	name := media.Sha256 + ".png"
+	rendered := f.renderCard(t, cards[0].PublicID, true)
+	if !strings.Contains(rendered.FrontHTML, `src="`+name+`"`) {
+		t.Fatalf("frame-rendered front_html = %q, want the relative media name %q", rendered.FrontHTML, name)
+	}
+	if strings.Contains(rendered.FrontHTML, "/media/") {
+		t.Fatalf("frame-rendered front_html kept an absolute media URL: %s", rendered.FrontHTML)
+	}
+
+	token := f.token(t, f.reader.ID, f.deck.ID)
+	rec := f.get(t, "/fm/"+token+"/"+name)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /fm/<token>/%s = %d, want 200 (body %q)", name, rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/png" {
+		t.Errorf("Content-Type = %q, want image/png", got)
+	}
+}
+
+// TestFrameMediaRejectsNameOnlyKnownInAnotherDeck pins deck scoping: the reader can reach the other deck and its
+// media_names row, but the token is issued for f.deck, which names neither the file nor the sha, so the request is 404.
+func TestFrameMediaRejectsNameOnlyKnownInAnotherDeck(t *testing.T) {
+	f := newFrameMediaFixture(t)
+	ctx := context.Background()
+	other := seedDeck(t, f.db, f.owner.ID, "Frame other shared")
+	if err := store.NewGrantStore(f.db).Grant(ctx, other.ID, f.reader.ID, store.RoleReader, store.Ptr(f.owner.ID)); err != nil {
+		t.Fatalf("grant other deck: %v", err)
+	}
+	m := saveFrameMedia(t, f.db, f.srv, append([]byte("\x89PNG\r\n\x1a\n"), []byte("other-deck")...), f.owner.ID)
+	name := m.Sha256 + ".png"
+	if err := store.NewMediaNameStore(f.db).Upsert(ctx, other.ID, name, m.Sha256); err != nil {
+		t.Fatalf("register name in other deck: %v", err)
+	}
+	token := f.token(t, f.reader.ID, f.deck.ID)
+	rec := f.get(t, "/fm/"+token+"/"+name)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET /fm/<token>/%s with the name known only in another deck = %d, want 404", name, rec.Code)
+	}
+}
+
+// TestFrameMediaRejectsRequests covers every rejection: expired token, tampered signature, lost deck access, unknown
+// name, a token bound to another deck, a malformed token, an unknown name and a token whose user no longer exists.
 // Every case must be the same bare 404: no reason in the body and no success headers.
 func TestFrameMediaRejectsRequests(t *testing.T) {
 	cases := []struct {
@@ -517,36 +614,7 @@ func TestFrameMediaTokenLifetime(t *testing.T) {
 	}
 }
 
-// TestFrameMediaNameSHA pins the accepted <name> shapes: exactly 64 lowercase hex characters, optionally followed by one
-// extension segment, and nothing else.
-func TestFrameMediaNameSHA(t *testing.T) {
-	sha := strings.Repeat("a1", 32)
-	cases := []struct {
-		name  string
-		input string
-		want  string
-		valid bool
-	}{
-		{"bare sha", sha, sha, true},
-		{"sha with extension", sha + ".png", sha, true},
-		{"sha with dotted extension", sha + ".tar.gz", sha, true},
-		{"uppercase sha", strings.ToUpper(sha), "", false},
-		{"short sha", sha[:63], "", false},
-		{"long sha", sha + "a", "", false},
-		{"non-hex sha", strings.Repeat("zz", 32), "", false},
-		{"path traversal", "../../etc/passwd", "", false},
-		{"empty", "", "", false},
-		{"extension without sha", ".png", "", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := frameMediaNameSHA(tc.input)
-			if ok != tc.valid || got != tc.want {
-				t.Fatalf("frameMediaNameSHA(%q) = (%q, %v), want (%q, %v)", tc.input, got, ok, tc.want, tc.valid)
-			}
-		})
-	}
-}
+// TestFrameMediaNameSHA was replaced by name resolution through media_names, covered by the tests below.
 
 // TestCardFaceCarriesFrameMediaBase asserts that every response carrying a rendered card face also carries the frame media
 // base, and that the face HTML uses relative media names the base resolves.
@@ -597,7 +665,7 @@ func TestCardFaceCarriesFrameMediaBase(t *testing.T) {
 }
 
 // TestCardFaceFrameOutputRewritesFaces covers the marked request: only the card faces that move into the frame lose the
-// /media/ prefix, and choice options keep their absolute URLs because they stay in the parent page in this phase.
+// /media/ prefix, and choice options keep their absolute URLs because they stay in the parent page.
 func TestCardFaceFrameOutputRewritesFaces(t *testing.T) {
 	f := newFrameMediaFixture(t)
 	ctx := context.Background()
@@ -649,8 +717,8 @@ func TestCardFaceFrameOutputRewritesFaces(t *testing.T) {
 	}
 }
 
-// TestAbsoluteMediaRefs pins the rewrite boundary in the direction the SPA needs: a deck-scoped media name in a src
-// attribute or a CSS url() becomes the absolute /media/<sha256> route, and nothing else is touched.
+// TestAbsoluteMediaRefs pins the rewrite boundary in the direction the SPA needs: a deck-scoped media name in a src or
+// href attribute or a CSS url() becomes the absolute /media/<sha256> route, and nothing else is touched.
 func TestAbsoluteMediaRefs(t *testing.T) {
 	sha := strings.Repeat("ab", 32)
 	cases := []struct {
@@ -661,6 +729,9 @@ func TestAbsoluteMediaRefs(t *testing.T) {
 		{"double-quoted src with extension", `<img src="` + sha + `.png">`, `<img src="/media/` + sha + `">`},
 		{"single-quoted src", `<img src='` + sha + `.png'>`, `<img src='/media/` + sha + `'>`},
 		{"bare sha", `<img src="` + sha + `">`, `<img src="/media/` + sha + `">`},
+		{"href with extension", `<a href="` + sha + `.png">x</a>`, `<a href="/media/` + sha + `">x</a>`},
+		{"single-quoted href", `<a href='` + sha + `.bin'>x</a>`, `<a href='/media/` + sha + `'>x</a>`},
+		{"bare href", `<a href="` + sha + `">x</a>`, `<a href="/media/` + sha + `">x</a>`},
 		{"css url", `<div style="background:url(` + sha + `.jpg)">`, `<div style="background:url(/media/` + sha + `)">`},
 		{"quoted css url", `<div style="background:url('` + sha + `.jpg')">`, `<div style="background:url('/media/` + sha + `')">`},
 		{"external host untouched", `<img src="https://cdn.example.com/a.png">`, `<img src="https://cdn.example.com/a.png">`},

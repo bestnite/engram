@@ -45,8 +45,6 @@ const (
 	// CodePackageFormatObsolete means the package uses a format this release cannot read. The message tells the
 	// user to import it with an older release and export it again in the current format.
 	CodePackageFormatObsolete = "package_format_obsolete"
-	// CodePackageUnsafeMedia means the real bytes of package media are not in the allowlist or disagree with the media.json declaration; listed one by one.
-	CodePackageUnsafeMedia = "package_unsafe_media"
 	// CodePackageDeckMetaInvalid means the manifest's deck name/description crosses a bound (length, control characters or invalid UTF-8);
 	// the offending fields and reasons are listed one by one.
 	CodePackageDeckMetaInvalid = "package_deck_meta_invalid"
@@ -318,6 +316,23 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 	// note_index -> note id, used by the progress mapping.
 	noteIDByIndex := make([]uint64, 0, len(notes))
 	refs := map[string]bool{} // referenced media sha256 -> first appearance
+	// A note type may carry media that no note field references: a font or CSS-only image in its templates/CSS.
+	// Export those too, or the target deck would receive a template whose asset was left behind.
+	if opts.IncludeMedia {
+		typeValues := map[string]string{}
+		for i := range pkg.NoteTypes {
+			for j, value := range noteTypeMediaStrings(pkg.NoteTypes[i].Config) {
+				typeValues[fmt.Sprintf("nt-%d-%d", i, j)] = value
+			}
+		}
+		typeRefs, err := mediaRefsIn(ctx, s.db, deckID, typeValues)
+		if err != nil {
+			return nil, fmt.Errorf("export package: note type media: %w", err)
+		}
+		for sha := range typeRefs {
+			refs[sha] = true
+		}
+	}
 	for i := range notes {
 		n := &notes[i]
 		if n.NoteTypeID == nil {

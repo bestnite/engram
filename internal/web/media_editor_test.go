@@ -174,9 +174,9 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	}
 }
 
-// TestEditorMediaUploadRejectsOversizedAndWrongMagic covers the negative cases of upload validation:
-// above the admin-configured limit -> 413 + media_too_large; declared type not matching the magic number -> 422 + media_magic_mismatch.
-func TestEditorMediaUploadRejectsOversizedAndWrongMagic(t *testing.T) {
+// TestEditorMediaUploadRejectsOversizedAndEmpty covers the negative cases of upload validation:
+// above the admin-configured limit -> 413 + media_too_large; an empty file -> 422 + media_magic_mismatch.
+func TestEditorMediaUploadRejectsOversizedAndEmpty(t *testing.T) {
 	t.Setenv("MEDIA_MAX_BYTES", "1024")
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Limits deck")
@@ -192,13 +192,13 @@ func TestEditorMediaUploadRejectsOversizedAndWrongMagic(t *testing.T) {
 		t.Errorf("oversized upload did not return the stable code: %s", over.Body.String())
 	}
 
-	// Wrong magic: declares png but the content is text.
-	bad := uploadMediaTo(t, srv, cookies, deckPath+"/media", csrfOrEmpty(csrf), "fake.png", "image/png", []byte("this is not a png"))
+	// Empty file: there is no content to classify or store.
+	bad := uploadMediaTo(t, srv, cookies, deckPath+"/media", csrfOrEmpty(csrf), "empty.png", "image/png", nil)
 	if bad.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("wrong-magic upload status = %d, want 422 (body %s)", bad.Code, bad.Body.String())
+		t.Fatalf("empty upload status = %d, want 422 (body %s)", bad.Code, bad.Body.String())
 	}
 	if !strings.Contains(bad.Body.String(), "media_magic_mismatch") {
-		t.Errorf("wrong-magic upload did not return the stable code: %s", bad.Body.String())
+		t.Errorf("empty upload did not return the stable code: %s", bad.Body.String())
 	}
 }
 

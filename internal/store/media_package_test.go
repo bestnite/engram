@@ -261,3 +261,71 @@ func TestImportPackageRollbackLeavesNoOrphanMedia(t *testing.T) {
 		})
 	}
 }
+
+// TestExportIncludesNoteTypeOnlyMedia is the export counterpart of the GC rule: a `_`-prefixed font referenced only by a
+// note type's CSS must travel with the package, or the target deck would receive a template whose asset was left behind.
+func TestExportIncludesNoteTypeOnlyMedia(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			owner := seedUsers(t, db, "pkg_font_owner")[0]
+			deckID := seedPresetDeck(t, db, owner)
+			root := t.TempDir()
+
+			font, err := NewMediaStore(db).SaveBytes(ctx, root, "font/woff2", []byte("wOF2\x00\x01\x00\x00fake-font"), Ptr(owner))
+			if err != nil {
+				t.Fatalf("SaveBytes(font): %v", err)
+			}
+			if err := NewMediaNameStore(db).Upsert(ctx, deckID, "_font.woff2", font.Sha256); err != nil {
+				t.Fatalf("register font name: %v", err)
+			}
+			nt := NoteType{DeckID: deckID, Name: "Fonts"}
+			cfg := noteTypeConfig("Card 1")
+			cfg.CSS = `@font-face { src: url(_font.woff2); }`
+			if err := NewNoteTypeStore(db).Create(ctx, &nt, cfg); err != nil {
+				t.Fatalf("create note type: %v", err)
+			}
+
+			pkg, err := NewDeckStore(db).ExportPackage(ctx, owner, deckID, PackageOptions{IncludeMedia: true, MediaRoot: root})
+			if err != nil {
+				t.Fatalf("ExportPackage: %v", err)
+			}
+			if _, ok := pkg.MediaBytes[font.Sha256]; !ok {
+				t.Fatalf("exported media lacks the note-type-only font %s (media: %v)", font.Sha256, pkg.Media)
+			}
+		})
+	}
+}
+
+// TestExportIncludesEditorAbsoluteMedia is the export half of the note-write normalisation: a note created from the
+// editor's /media/<sha> reference stores a deck name, and the package must carry those bytes.
+func TestExportIncludesEditorAbsoluteMedia(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			owner := seedUsers(t, db, "pkg_abs_media_owner")[0]
+			deckID := seedPresetDeck(t, db, owner)
+			root := t.TempDir()
+
+			raw := append([]byte("\x89PNG\r\n\x1a\n"), []byte("editor-image")...)
+			media, err := NewMediaStore(db).SaveBytes(ctx, root, "image/png", raw, Ptr(owner))
+			if err != nil {
+				t.Fatalf("SaveBytes: %v", err)
+			}
+			n := Note{DeckID: deckID, NoteTypeID: Ptr(stockNoteTypeID(t, db, deckID, "basic")), TagsJSON: "[]", CreatedBy: Ptr(owner)}
+			if _, err := NewNoteStore(db).Create(ctx, &n, map[string]any{
+				"front": "q", "back": `<img src="/media/` + media.Sha256 + `">`,
+			}); err != nil {
+				t.Fatalf("Create(note): %v", err)
+			}
+
+			pkg, err := NewDeckStore(db).ExportPackage(ctx, owner, deckID, PackageOptions{IncludeMedia: true, MediaRoot: root})
+			if err != nil {
+				t.Fatalf("ExportPackage: %v", err)
+			}
+			if !bytes.Equal(pkg.MediaBytes[media.Sha256], raw) {
+				t.Fatalf("exported media lacks the normalized reference %s", media.Sha256)
+			}
+		})
+	}
+}

@@ -16,7 +16,6 @@ import (
 	"gorm.io/gorm/clause"
 
 	"git.nite07.com/nite/engram/internal/answer"
-	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/notetype"
 )
 
@@ -312,7 +311,7 @@ func convertNoteRows(tx *gorm.DB, types map[deckKind]noteTypeRef) error {
 				return fmt.Errorf("convert notes to note types: note %d: %w", row.ID, err)
 			}
 			converter := &fieldConverter{
-				tx: tx, deckID: row.DeckID, mediaExt: map[string]string{},
+				tx: tx, deckID: row.DeckID, mediaMime: map[string]string{},
 				plainFields: noteType.plainFields,
 			}
 			converted := make(map[string]any, len(fields))
@@ -379,7 +378,7 @@ func convertNoteRows(tx *gorm.DB, types map[deckKind]noteTypeRef) error {
 type fieldConverter struct {
 	tx          *gorm.DB
 	deckID      uint64
-	mediaExt    map[string]string
+	mediaMime   map[string]string
 	plainFields map[string]bool
 	names       []MediaName
 	seen        map[string]bool
@@ -486,21 +485,19 @@ func (c *fieldConverter) markdown(src string, inline bool) (string, error) {
 }
 
 // mediaName returns the deck-scoped file name for a content sha and remembers
-// the media_names row. The extension comes from mediatype.Ext, the one
-// mime-to-extension table; a reference whose media row is gone keeps the sha and
-// gets the fallback extension, so the field still names a file.
+// the media_names row. The extension comes from mediaDeckName, the one
+// sha-plus-mime rule the live note write path uses too; a reference whose media
+// row is gone gets the fallback extension, so the field still names a file.
 func (c *fieldConverter) mediaName(sha string) string {
-	ext, ok := c.mediaExt[sha]
+	mime, ok := c.mediaMime[sha]
 	if !ok {
 		var media Media
-		mime := ""
 		if err := c.tx.Select("mime").First(&media, "sha256 = ?", sha).Error; err == nil {
 			mime = media.Mime
 		}
-		ext = mediatype.Ext(mime)
-		c.mediaExt[sha] = ext
+		c.mediaMime[sha] = mime
 	}
-	name := sha + "." + ext
+	name := mediaDeckName(sha, mime)
 	if c.seen == nil {
 		c.seen = make(map[string]bool)
 	}

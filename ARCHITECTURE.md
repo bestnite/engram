@@ -62,7 +62,7 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/mcp` | The built-in MCP server at `/mcp` (streamable HTTP). It accepts API keys only, and every tool calls an `internal/api` service method. |
 | `internal/web` | The gin router: security headers, session and locale middleware, the session-and-CSRF JSON endpoints the SPA uses, the admin API, media proxying, the SPA shell, and the not-found fallback. It mounts `internal/api` and `internal/mcp`. |
 | `internal/media` | Local media storage around `store.MediaStore.Put`: streaming and validating uploads, serving files, and reclaiming orphans. |
-| `internal/mediatype` | Leaf package with the media type detection, the mime-to-extension table and the allowlist shared by `internal/media` and `internal/store`. |
+| `internal/mediatype` | Leaf package with the media classification (image, audio, video, font, script, style, other) and the mime-to-extension table shared by `internal/media` and `internal/store`. |
 | `internal/texmath` | The single rule for locating TeX math, shared by `internal/mailstyle` and the store's migration Markdown step. |
 | `internal/i18n` | Server-side translation catalogs (`internal/i18n/locales/*.yaml`), request language resolution, and the localiser placed in the request context. |
 | `internal/mail` | Mail templates (built-in HTML defaults and admin overrides share one renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. `Mailer` is the single send path: it checks SMTP and the recipient's preference, resolves the site name and template, adds the footer and the unsubscribe link, and enqueues. The web layer builds the process's one `Mailer` and the reminder and digest workers receive it from `cmd/engram`. Rendering is four steps: placeholders become salted tokens, tokens become HTML-escaped values, the plain-text part comes from `notetype.PlainText`, and the fixed shell is applied. Nothing is sanitised and no Markdown is parsed at send time: administrators write HTML/CSS, and the built-in bodies carry the inline styles. |
@@ -120,16 +120,18 @@ change.
   sandboxed frame, which has no session cookie. The token is an HMAC over `(user_id, deck_id,
   expiry)`; its key lives in the encrypted settings channel under `frame_media_key` and is
   created on first use. Each request checks the signature, the expiry, the token user's current
-  status, the user's current read access to the token's deck and the media readability rule, and
-  every failure is the same bare 404. Tokens live six hours. A field stores media by deck-scoped
-  file name (`<sha256>.<ext>`), which is what the frame resolves against `media_base`
-  (`/fm/<token>/`), the document's `<base href>`. A card-face response to a request without the
-  `X-Engram-Frame: 1` header rewrites those names into the absolute `/media/<sha256>` URLs the
-  SPA needs, because the SPA has no base element. The self-hosted MathJax script is referenced by
-  its content-hashed `/static/v/<hash>/js/mathjax/tex-chtml-full.js` URL, and its CHTML web fonts
-  are served from the stable `/static/mathjax/` path because a font request cannot carry the
-  script's hash; that tree is public and sends `Access-Control-Allow-Origin: *`, because the
-  sandboxed frame has an opaque origin.
+  status, the user's current read access to the token's deck and a `media_names` row for that deck
+  and name; every failure is the same bare 404. Tokens live six hours. A field stores media by
+  deck-scoped file name (`<sha256>.<ext>`), which is what the frame resolves against `media_base`
+  (`/fm/<token>/`), the document's `<base href>`. Every stored medium is served with
+  `Content-Security-Policy: sandbox` and as an attachment unless it is image, audio or video. A
+  card-face response to a request without the `X-Engram-Frame: 1` header rewrites those names into
+  the absolute `/media/<sha256>` URLs the SPA needs, because the SPA has no base element. The
+  self-hosted MathJax script is referenced by its content-hashed
+  `/static/v/<hash>/js/mathjax/tex-chtml-full.js` URL, and its CHTML web fonts are served from the
+  stable `/static/mathjax/` path because a font request cannot carry the script's hash; that tree is
+  public and sends `Access-Control-Allow-Origin: *`, because the sandboxed frame has an opaque
+  origin.
 - **Card view.** A card-face response carries one `{html, css, body_class, side, media_base}`
   object per side (`front` and `back`), plus the card's template `ordinal`. The HTML is the note
   type's template rendered against the note's field values. The back side substitutes the answer
@@ -146,10 +148,12 @@ change.
   values.
 - **Note write and review.** `NoteStore.Save` resolves the note type (deck and note type id),
   rejects a field name the config does not declare and names it, converts the payload values to
-  HTML keyed by field id, recomputes `search_text` from the plain text of every field not marked
-  `exclude_from_search`, regenerates the cards with `notetype.GenerateCards` (existing cards keep
-  their rows and progress; a card the note no longer generates is soft-deleted), and rebuilds the
-  `media_notes` mapping from the `src`, `[sound:]` and CSS `url()` references of the field HTML.
+  HTML keyed by field id, normalises `/media/<sha256>` and `[sound:<sha256>]` into deck media
+  names `<sha256>.<ext>` and registers them in `media_names`, recomputes `search_text` from the
+  plain text of every field not marked `exclude_from_search`, regenerates the cards with
+  `notetype.GenerateCards` (existing cards keep their rows and progress; a card the note no longer
+  generates is soft-deleted), and rebuilds the `media_notes` mapping from the `src`, `href`,
+  `[sound:]` and CSS `url()` references of the field HTML.
   Submitting a review resolves the card's template answer spec: a grading control decodes the
   submitted answer, grades it, and maps its score through the preset's mapping; a template with no
   spec, or the self-assessed short answer control, takes the four-grade self-assessment. A
@@ -220,13 +224,15 @@ change.
   `sha256`, so a field or template can refer to media by name the way Anki does. `(deck_id, name)`
   is the primary key, which puts the uniqueness in the schema, and names are stored
   NFC-normalised. An upsert (`clause.OnConflict`) repoints a name to new content instead of adding
-  a row. A field refers to media in three forms, and the note write path scans exactly those: an
-  `src` attribute, a `[sound:name]` tag, and a CSS `url(name)`. A name that already carries the
-  sha (`<sha256>.<ext>`, the form the migration writes) needs no lookup; any other name resolves
+  a row. A field or template refers to media in four forms: an `src` attribute, an `href`
+  attribute, a `[sound:name]` tag, and a CSS `url(name)`. A name that already carries the sha
+  (`<sha256>.<ext>`, the form the migration writes) needs no lookup; any other name resolves
   through `media_names` for the note's deck.
-- **Note type media references.** `media_note_types` records which media names a note type's
-  templates and CSS refer to, keyed by `(note_type_id, media_name)`. The set is derived data,
-  replaced as a whole, and exists for read access checks and media garbage collection.
+- **Note type media references.** `media_note_types` records which `_`-prefixed media names a note
+  type's templates and CSS refer to, keyed by `(note_type_id, media_name)`. The set is derived
+  data, replaced as a whole, and exists for media garbage collection; the read side no longer
+  consults it. It is written on create, update and package import, cleared when the type is
+  deleted, and backfilled by migration 0015.
 - **Audit.** Security-relevant and settings-changing actions append rows to the audit log; the
   action names are constants in `internal/store/audit.go`.
 

@@ -10,14 +10,18 @@ import (
 
 // The storage side of media reclamation: mark orphaned media, delete media rows orphaned past the grace period. File deletion lives in internal/media.
 //
-// 'Orphaned' = no row in media_notes points at these bytes. Mapping rows of soft-deleted notes are kept (a note can be restored),
-// so media referenced by a soft-deleted note is not orphaned; when a deck is deleted its notes and mappings are hard-deleted together, and the media becomes orphaned.
+// 'Orphaned' = no row in media_notes points at these bytes and no note type's `_`-prefixed reference resolves to them.
+// Mapping rows of soft-deleted notes are kept (a note can be restored), so media referenced by a soft-deleted note is not
+// orphaned; when a deck is deleted its notes and mappings are hard-deleted together, and the media becomes orphaned.
 //
 // Why two steps instead of deleting as soon as something looks orphaned: removing an image while editing a note and adding it back later is common, and there is also a
 // time gap between upload and card insertion. Recording 'since when it has been orphaned' and deleting only past the grace period avoids deleting by mistake.
 
-// orphanCondition is the SQL condition for 'no note references it', shared by marking, clearing and deleting.
-const orphanCondition = "NOT EXISTS (SELECT 1 FROM media_notes AS ref WHERE ref.media_sha = media.sha256)"
+// orphanCondition is the portable SQL condition for 'no note field and no note type references it', shared by marking,
+// clearing and deleting. The note-type branch joins media_note_types to media_names by name, because a note type stores the
+// deck-scoped file name while the media table stores the content sha.
+const orphanCondition = "NOT EXISTS (SELECT 1 FROM media_notes AS ref WHERE ref.media_sha = media.sha256) " +
+	"AND NOT EXISTS (SELECT 1 FROM media_note_types AS mnt JOIN media_names AS mn ON mn.name = mnt.media_name WHERE mn.sha256 = media.sha256)"
 
 // MarkOrphanedMedia stamps orphaned_at = now on newly orphaned media and clears the mark on media that got referenced again.
 // It returns the number of rows newly marked and cleared.
