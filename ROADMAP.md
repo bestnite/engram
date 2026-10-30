@@ -160,39 +160,11 @@ it.
     keyboard shortcuts. The evidence is a captured screenshot set from the `run` skill.
 
   *Verify:* `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
-  *Evidence pending:* the screenshot set from the `run` skill is captured by M17-4's browser
-  harness; the component tests and the `{@html}` allowlist test landed in `6865a54`.
-- [ ] **M17-4 Browser isolation tests** — prove the sandbox in a real browser.
-  *Depends on:* M17-3.
-  *Files:* `frontend/e2e/` (new); `frontend/package.json` (dev dependency `@playwright/test`. Reason:
-  the sandbox is the only security boundary for unsanitised HTML, and only a real browser can prove
-  it); `.github/workflows/ci.yml` (a job that installs Chromium and runs the suite).
-  *Acceptance:* a test card whose template script tries each of these must fail at every one:
-  - reading `document.cookie` returns an empty string;
-  - `fetch('/api/v1/decks')` is rejected by CSP;
-  - `top.location = …` is blocked;
-  - submitting a `<form>` is blocked;
-  - `window.open` returns `null`;
-  - reading `parent.document` throws.
-
-  The same card can load an https image, and the test observes that the image loaded.
-  *Verify:* `npm --prefix frontend run test:e2e` against a server started by the test with SQLite.
-
+  *Evidence pending:* the screenshot set is captured with the Playwright harness M17-4 added, in
+  M17-17's one-card-per-kind set; the component tests and the `{@html}` allowlist test landed in
+  `6865a54`.
 **Phase 2 — `internal/notetype`, the Anki engine (on `main`; not wired into any request path)**
 
-- [ ] **M17-9 Card generation** — port `rslib/src/notetype/cardgen.rs`.
-  *Depends on:* M17-7, M17-8.
-  *Files:* `internal/notetype/cardgen.go` and its tests.
-  *Work:*
-  - A normal note type generates the card of a template when that template's front renders non-empty
-    with the note's non-empty fields.
-  - A cloze note type generates one card per cloze number found in any of the note's fields, as
-    Anki does; `{{cloze:X}}` decides what a card displays, not which cards exist.
-  - The function also reports the existing cards whose front is now empty. It never deletes them;
-    that is M17-28.
-
-  *Acceptance:* for every fixture note, the generated card set equals the golden card list.
-  *Verify:* `go test ./internal/notetype/...`.
 - [ ] **M17-10 Audio, TTS and LaTeX markup; `PlainText`** — port the relevant parts of
   `rslib/src/card_rendering/` and `rslib/src/latex.rs`.
   *Depends on:* M17-7.
