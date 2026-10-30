@@ -134,23 +134,8 @@ it.
 
 **Phase 6 follow-up — defects found in the review of M17-25 to M17-30, M17-45 and M17-47 to M17-51 (on `main`)**
 
-These tasks land on `main` directly. They come before every other open M17 task: M17-55 fixes a
-wrong grading display.
+This task lands on `main` directly.
 
-- [ ] **M17-55 Type-in compares the card's own cloze number** — `{{type:cloze:F}}` must compare
-  the deletion the card shows.
-  *Files:* `internal/web/review.go` (`typeInExpected`); `internal/web/review_typein_test.go`.
-  *Problem:* `typeInExpected` calls `notetype.ExtractClozeForTyping(value, item.ordinal+1)`.
-  `item.ordinal` is the value `notetype.CardTemplate` returns for a cloze card, which is already the
-  1-based cloze number; `renderCard` passes the same value as `RenderData.ClozeOrdinal`, documented as
-  1-based. A `c1` card therefore compares the typed value with the `c2` deletion, usually the empty
-  string, and a correct answer is shown as wrong.
-  *Work:* pass `item.ordinal` unchanged to `ExtractClozeForTyping`.
-  *Acceptance:* a handler test with a cloze note type whose template carries `{{type:cloze:Text}}`
-  and a note `{{c1::Paris}} {{c2::Rome}}`: on the `cloze:1` card, typing `Paris` renders Anki's correct
-  comparison for `Paris`; on the `cloze:2` card, typing `Rome` renders the correct comparison for
-  `Rome`.
-  *Verify:* `go test ./internal/web/... && go vet ./internal/web/...`.
 - [ ] **M17-56 Preview unsaved note type templates on the server** — the note type editor shows what
   the renderer produces.
   *Files:* `internal/web/note_preview.go`; `internal/web/notes.go` (route registration);
@@ -174,40 +159,6 @@ wrong grading display.
   - A client test: editing a template sends the preview request and shows its HTML in the frame.
 
   *Verify:* `go test ./internal/web/...`; `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
-- [ ] **M17-57 Deck lists show the description as plain text** — an HTML description must not appear
-  as raw tags.
-  *Files:* `internal/api/decks.go` (`DeckResponse`); `frontend/src/lib/api/types.ts`;
-  `frontend/src/lib/views/DecksView.svelte` and `frontend/src/lib/views/HomeView.svelte` (single-writer
-  hotspot); the tests beside them.
-  *Problem:* since M17-29 a deck description is HTML unless `description_markdown` is set. The deck
-  list (`DecksView.svelte`) and the home deck list (`HomeView.svelte`) still print
-  `{deck.description}` as text. The imported Ultimate Geography deck shows its description as
-  `<a href="…"><b>FULL DESCRIPTION</b></a> | …`.
-  *Work:*
-  - `DeckResponse` gains `description_text`: `notetype.PlainText` of `description_html`.
-  - Both lists show `description_text`. Only the deck detail view shows the description as HTML,
-    inside the frame, as it does today.
-
-  *Acceptance:*
-  - A handler test: an HTML description returns its plain text in `description_text`, and a Markdown
-    description returns the plain text of its rendering.
-  - A client test: for the description `<a href="https://example.com"><b>Notes</b></a>`, the deck list
-    and the home deck list show `Notes` and do not show the text `<a href`.
-
-  *Verify:* `go test ./internal/api/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
-- [ ] **M17-58 A field rename writes the new name literally** — `$` in a field name must not act as a
-  replacement pattern.
-  *Files:* `frontend/src/lib/note-type-template.ts` (`rewriteFieldReferences`);
-  `frontend/src/tests/note-type-template.test.ts`.
-  *Problem:* `rewriteFieldReferences` calls `String.prototype.replace(oldName, newName)` with a string
-  replacement, so `$&`, `` $` ``, `$'` and `$$` in the new name are interpreted. Renaming a field `Old`
-  to `Price$&` writes `{{PriceOld}}` into the templates.
-  *Work:* every replacement in `rewriteFieldReferences` writes the new name literally, for example
-  with a replacement function.
-  *Acceptance:* a unit test renames `Old` to each of `A$&B`, `` A$`B ``, `A$'B` and `A$$B` in `{{Old}}`,
-  `{{#Old}}`, `{{/Old}}` and `{{text:Old}}`, and gets the new name verbatim in every form.
-  *Verify:* `npm --prefix frontend test -- --run`.
-
 **Phase 3 follow-up — defects found in the review of the P3 merge (on `main`)**
 
 These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly.
@@ -528,3 +479,6 @@ bluemonday-sanitised `internal/render` are gone.
 | Package note index on `.apkg` import (M17-52) | The card loop resolves each package note through an index built once before it, so the import no longer spends cards × notes comparisons; the mapping, the card identity and the report counts are unchanged. | No |
 | `check-migration` on a database without deck public ids (M17-46) | The pre-flight check probes `decks.public_id` first, so a database created before the column existed gets a report naming each deck by its numeric id instead of an SQL error. | No |
 | Empty cards and change note type (M17-28) | A deck's note type page lists the cards whose front renders empty, previews the removal and then soft-deletes them, so the cards leave the queue while their `card_states` and `reviews` stay; the cleanup writes `card.empty_cleanup`. "Change note type" moves every note of one type to another type of the same deck through a field mapping and a template mapping: a mapped card keeps its id and progress and takes the target template's ordinal, an unmapped template's cards are soft-deleted after confirmation, and the operation writes `note_type.change`. Both writes take `dry_run` and `confirm_card_removal` and report the counts, and the list and both writes need the editor role. | No — three routes and two audit actions are added |
+| Cloze type-in compares its own deletion (M17-55) | `{{type:cloze:F}}` compares the typed value with the deletion the card shows: the web layer's card ordinal is already the 1-based cloze number, so a `c1` card no longer compares the `c2` deletion. | No |
+| Deck description as plain text in the lists (M17-57) | Every deck response gains `description_text`: `description_html` reduced to one line of plain text. The deck list and the home deck list print it, so an imported HTML description no longer shows raw tags, while the deck detail page still renders the description as HTML inside the sandboxed frame. | No — additive response field |
+| Literal field renames (M17-58) | Renaming a field writes the new name verbatim in `{{Old}}`, `{{#Old}}`, `{{/Old}}` and `{{text:Old}}`, so `$&`, `` $` ``, `$'` and `$$` in the new name no longer act as replacement patterns. | No |
