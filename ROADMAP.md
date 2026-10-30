@@ -135,25 +135,8 @@ it.
 **Phase 6 follow-up — defects found in the review of M17-25 to M17-30, M17-45 and M17-47 to M17-51 (on `main`)**
 
 These tasks land on `main` directly. They come before every other open M17 task: M17-55 fixes a
-wrong grading display, and M17-28 is moved here because M17-45 now keeps empty cards in the review
-queue while no cleanup exists yet.
+wrong grading display.
 
-- [ ] **M17-28 Empty-card cleanup and note type change** — Anki's "Empty Cards" and "Change Note
-  Type".
-  *Files:* `internal/api/` (service methods and routes); `internal/store/`; the note type view.
-  *Work:*
-  - Cleanup lists the cards whose front renders empty (M17-9) and deletes them after confirmation,
-    writing an audit row.
-  - Change note type moves notes to another note type of the same deck with a field mapping and a
-    template mapping. Cards follow their mapped template, and an unmapped template's cards are
-    deleted after confirmation. Progress follows the card.
-
-  *Acceptance:*
-  - Store tests: cleanup removes only empty cards; a mapping change keeps `card_states` for every
-    mapped card.
-  - Negative cases: a target note type in another deck is rejected; a reader is refused.
-
-  *Verify:* `go test ./internal/api/... ./internal/store/...`.
 - [ ] **M17-55 Type-in compares the card's own cloze number** — `{{type:cloze:F}}` must compare
   the deletion the card shows.
   *Files:* `internal/web/review.go` (`typeInExpected`); `internal/web/review_typein_test.go`.
@@ -544,3 +527,4 @@ bluemonday-sanitised `internal/render` are gone.
 | Deck archive removal | The deck archive state is removed: it had no route, tool or page that set it, the sidebar's archived filter could never match, and pausing a deck already covers hiding one. The `archived_at` field leaves every deck response and the column leaves the database through a versioned migration. | Yes — HTTP API and MCP payload (`archived_at` removed) and database schema (column dropped by migration 0010) |
 | Package note index on `.apkg` import (M17-52) | The card loop resolves each package note through an index built once before it, so the import no longer spends cards × notes comparisons; the mapping, the card identity and the report counts are unchanged. | No |
 | `check-migration` on a database without deck public ids (M17-46) | The pre-flight check probes `decks.public_id` first, so a database created before the column existed gets a report naming each deck by its numeric id instead of an SQL error. | No |
+| Empty cards and change note type (M17-28) | A deck's note type page lists the cards whose front renders empty, previews the removal and then soft-deletes them, so the cards leave the queue while their `card_states` and `reviews` stay; the cleanup writes `card.empty_cleanup`. "Change note type" moves every note of one type to another type of the same deck through a field mapping and a template mapping: a mapped card keeps its id and progress and takes the target template's ordinal, an unmapped template's cards are soft-deleted after confirmation, and the operation writes `note_type.change`. Both writes take `dry_run` and `confirm_card_removal` and report the counts, and the list and both writes need the editor role. | No — three routes and two audit actions are added |
