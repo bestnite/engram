@@ -7,9 +7,9 @@ import { faces } from './card-face-fixture';
 import { shownHtmlOnSide } from './card-frame-fixture';
 
 /**
- * The review page hands its card faces to the frame, and the frame runtime attaches the shortcode controls (covered by
+ * The review page hands its card faces to the frame, and the frame runtime attaches the audio and speech controls (covered by
  * cardframe.client.ts). These cases mount the real view and assert that both faces — the prompt and the self-graded answer —
- * reach the frame with the shortcode markup intact, so the controls can be built there.
+ * reach the frame with their audio and speech markers intact, so the controls can be built there.
  */
 
 const SHA = 'a'.repeat(64);
@@ -33,7 +33,7 @@ const card: DueCard = {
   field_order: ['front', 'back'],
 };
 
-describe('ReviewView shortcode controls', () => {
+describe('ReviewView audio and speech controls', () => {
   let instance: ReturnType<typeof mount> | null = null;
 
   afterEach(() => {

@@ -19,7 +19,7 @@ import {
  * The card frame runtime.
  *
  * The frame document is deliberately tiny: the parent page sends it card content with `postMessage`, the runtime writes that
- * content into `<div id="qa">`, re-executes its scripts, typesets the face, attaches the shortcode controls and reports
+ * content into `<div id="qa">`, re-executes its scripts, typesets the face, attaches the audio and speech controls and reports
  * height, keys, answers and links back. It renders no Svelte component and reads no cookie: the sandboxed iframe has an opaque
  * origin, and everything it needs arrives in the messages or the frame document's own `<html lang>`.
  *
@@ -109,7 +109,7 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
 
   // The frame document carries the request's resolved language on <html lang>, exactly like the SPA entry: the server knows
   // the user's profile setting, the runtime does not and reads no cookie. Adopting it before the first face is shown makes
-  // the shortcode controls label themselves from the user's catalog; without a supported lang the module's browser-language
+  // the audio and speech controls label themselves from the user's catalog; without a supported lang the module's browser-language
   // detection stays in charge.
   const documentLang = doc.documentElement.lang.trim();
   if (documentLang !== '' && isSupportedLocale(documentLang)) setLocale(documentLang);
@@ -260,12 +260,12 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     if (containsMath(message.html)) {
       await typesetCard(win, doc, mathjaxURL, nextRoot);
     }
-    // Play markers become the same audio/video/speech elements the shortcodes produce, so one control module drives
+    // Play markers become audio, video or speech elements that carry the same data attributes, so one control module drives
     // every tag. A face that still carries literal [sound:] tags gets the fallback; both lists stay in document order.
     const sideCode = side === 'answer' ? 'a' : 'q';
     sources = enhanceAVMarkers(doc, nextRoot, message.avTags);
     sources.push(...enhanceSoundTags(doc, nextRoot, sideCode));
-    // The shortcode controls are part of the face, so they are attached here, after the content and its typesetting: a card
+    // The audio and speech controls are part of the face, so they are attached here, after the content and its typesetting: a card
     // face leaving the parent DOM must not lose its audio or TTS controls.
     enhanceShortcodes([nextRoot]);
     if (message.side === 'question') focusAnswer(nextRoot);

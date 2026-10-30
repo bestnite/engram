@@ -182,7 +182,7 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 // TestReviewRenderReturnsStoredHTML asserts the card render endpoint returns the stored field HTML unchanged: the server
 // no longer sanitises (the sandboxed frame is the security boundary), edit_href points at the card's edit page, and
 // missing session/CSRF and an out-of-scope request are all rejected.
-func TestReviewRenderReturnsSanitizedHTML(t *testing.T) {
+func TestReviewRenderReturnsFaceHTML(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Render deck")
 	note := seedBasic(t, db, deck.ID,

@@ -760,7 +760,7 @@ export class ApiClient {
   }
 
   /**
-   * Preview fields using the authenticated session-only sanitized preview endpoint.
+   * Preview fields using the authenticated session-only preview endpoint.
    *
    * noteTypeID is the public id of a note type of the deck in the address; the server renders that stored type (templates
    * and CSS included). fields is keyed by the note type's field names, the same shape a note write accepts.
@@ -1004,7 +1004,7 @@ export class ApiClient {
   }
 
   /**
-   * Fetch server-sanitized HTML for both sides of a card plus its edit URL (POST /api/v1/review/render).
+   * Fetch both rendered sides of a card plus its edit URL (POST /api/v1/review/render).
    * The review page only hands this HTML to the card frame and never renders raw fields as Markdown.
    */
   async renderReviewCard(

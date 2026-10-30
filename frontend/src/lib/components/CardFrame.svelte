@@ -30,7 +30,10 @@
   import { appVersion } from '../version';
 
   interface Props {
-    /** Sanitized card-face HTML. Empty means the caller has no rich content and shows plain text instead of a frame. */
+    /**
+     * Card-face HTML handed to the frame exactly as the server rendered it. Empty means the caller has no rich content and
+     * shows plain text instead of a frame.
+     */
     html: string;
     /** Card-face CSS; the frame document already carries the app stylesheet, so this holds the face typography only. */
     css: string;

@@ -3,12 +3,12 @@ import { enhanceShortcodes, stopShortcodePlayback } from '../lib/shortcodes';
 import { setLocale } from '../lib/i18n';
 
 /**
- * Browser-side shortcode controls.
+ * Browser-side controls for the audio and speech markers in card content.
  *
- * The server contract is fixed: `span.engram-tts[data-tts-*]` and `span.engram-audio[data-audio-*]` arrive inside
- * HTML that bluemonday already sanitized, and the element's text is the visible fallback. The module may read only
- * those data attributes. Speech and media are stubbed at the global boundary because the test environment has
- * neither engine; the cases assert what the module asks them to do, not that a real voice exists.
+ * The contract is fixed: `span.engram-tts[data-tts-*]` and `span.engram-audio[data-audio-*]` arrive inside card HTML,
+ * and the element's text is the visible fallback. The module may read only those data attributes. Speech and media are
+ * stubbed at the global boundary because the test environment has neither engine; the cases assert what the module asks
+ * them to do, not that a real voice exists.
  */
 
 const SHA = 'a'.repeat(64);

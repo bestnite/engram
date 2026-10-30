@@ -7,8 +7,8 @@
  * this module reads that meta and loads it with a dynamic `<script src>`. The CSP's `script-src 'self'` already allows same-origin
  * external scripts, so neither an inline config script nor nonce / 'unsafe-inline' is needed.
  *
- * Typesetting boundary: typeset is called only on "HTML containers returned sanitized by the server", never on the whole page - a
- * note field's HTML is edited inside the sandboxed editing frame and must never pass through a parent HTML sink or be
+ * Typesetting boundary: typeset is called only on the containers that hold card or feedback HTML, never on the whole page -
+ * a note field's HTML is edited inside the sandboxed editing frame and must never pass through a parent HTML sink or be
  * interpreted by the parent's MathJax.
  */
 
@@ -22,7 +22,7 @@ interface MathJaxGlobal {
 
 /**
  * MathJax v3 startup config. `startup.typeset: false` turns off whole-page auto typesetting: SPA content arrives asynchronously, so it should
- * only be typeset explicitly on server-sanitized nodes. Delimiters keep the bundled build's defaults - inline `\(…\)` and block
+ * only be typeset explicitly on the containers that hold card or feedback HTML. Delimiters keep the bundled build's defaults - inline `\(…\)` and block
  * `\[…\]` (keeping `$$…$$` as well), matching SSR page behavior. The bundle is `tex-chtml-full`, shared with the card frame; the
  * frame replaces this object with Anki's reviewer configuration before it loads the same script.
  */
@@ -92,7 +92,7 @@ export function ensureMathJax(): Promise<MathJaxGlobal | null> {
 }
 
 /**
- * typeset re-typesets the given "server-sanitized HTML" container.
+ * typeset re-typesets the given container of card or feedback HTML.
  *
  * typesetClear first, then typesetPromise: clear the old node's MathJax typesetting state so that after switching card/answer no
  * stale formula DOM is left behind (the card-switch path). Rendering failures are swallowed - a formula typesetting failure must not

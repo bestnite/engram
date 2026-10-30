@@ -527,7 +527,7 @@ describe('unified note editor — create mode', () => {
     await flush();
 
     // The frame runtime attaches the controls to the face it renders (covered by cardframe.client.ts), so the editor only has
-    // to hand over the sanitized markup with the shortcode attributes intact.
+    // to hand over the face markup with its audio and speech markers intact.
     expect(await shownHtmlOnSide(target, 'question')).toEqual([front]);
   });
 
@@ -997,7 +997,7 @@ describe('unified note editor — lifecycle and routes', () => {
 /**
  * The preview below the desktop breakpoint is a drawer over the form rather than a column under it, so a
  * phone author does not scroll past their own fields to see the result. It is the same panel the desktop
- * column shows — never a second copy of the sanitized HTML — and it is closed by default.
+ * column shows — never a second copy of the preview HTML — and it is closed by default.
  */
 describe('unified note editor — preview drawer below the desktop breakpoint', () => {
   function panel(): HTMLElement {
@@ -1062,7 +1062,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
     expect(panel().classList.contains('hidden')).toBe(false);
     expect(panel().classList.contains('fixed')).toBe(true);
     expect(toggle().getAttribute('aria-expanded')).toBe('true');
-    // One sanitized container only: the drawer is the panel the preview was already committed into.
+    // One preview container only: the drawer is the panel the preview was already committed into.
     expect(target.querySelectorAll('[data-testid="note-preview-result"]')).toHaveLength(1);
     expect(panel().querySelector('[data-testid="note-preview-result"]')).toBeTruthy();
 

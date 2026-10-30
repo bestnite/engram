@@ -16,7 +16,7 @@ describe('Centralized typed same-origin REST API client', () => {
     client = new ApiClient({ fetch: mockFetch as unknown as typeof fetch });
   });
 
-  describe('sanitized note preview', () => {
+  describe('note preview faces', () => {
     it('loads session CSRF when absent and posts note_type plus fields to the deck preview route', async () => {
       mockFetch
         .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, user: null, csrf_token: 'preview-csrf' }), { status: 200 }))

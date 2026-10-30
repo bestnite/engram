@@ -75,7 +75,7 @@ func TestCardFrameServesExactHeaders(t *testing.T) {
 	}
 }
 
-// TestCardFrameCarriesRequestLocale pins the frame document's <html lang>. The frame attaches the shortcode controls, whose
+// TestCardFrameCarriesRequestLocale pins the frame document's <html lang>. The frame attaches the audio and speech controls, whose
 // labels come from the translation catalog, so the document must carry the language the request resolved to - the same source
 // as the SPA entry. The ETag is computed from the written body, so two languages cannot share a cached response.
 func TestCardFrameCarriesRequestLocale(t *testing.T) {

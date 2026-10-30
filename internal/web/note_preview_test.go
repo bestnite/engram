@@ -30,7 +30,7 @@ func postPreview(t *testing.T, srv *Server, deckPublicID string, cookies []*http
 	return rec
 }
 
-func TestNotePreviewSanitizesHTMLAndPreservesTeX(t *testing.T) {
+func TestNotePreviewReturnsHTMLAndPreservesTeX(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Preview")
 	noteTypeID := stockNoteTypePublicID(t, db, deck.ID, "basic")

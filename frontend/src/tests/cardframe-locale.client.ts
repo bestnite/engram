@@ -4,7 +4,7 @@ import { formatMessage, getLocale, setLocale } from '../lib/i18n';
 
 /**
  * The frame boots with the language the server resolved for the request and wrote into `<html lang>`; the runtime may not read
- * a cookie, so this attribute is the only source. The shortcode controls are built inside the frame, so their labels follow the
+ * a cookie, so this attribute is the only source. The audio and speech controls are built inside the frame, so their labels follow the
  * user's catalog rather than the browser language.
  */
 

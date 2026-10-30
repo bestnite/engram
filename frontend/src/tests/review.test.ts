@@ -66,7 +66,7 @@ describe('review submission API', () => {
     expect(JSON.parse(init?.body as string)).toEqual({ card_id: '11', expected_version: 6, deck: ['2', '7'] });
   });
 
-  it('renders one card through the sanitized render endpoint with session CSRF', async () => {
+  it('renders one card through the render endpoint with session CSRF', async () => {
     fetcher.mockResolvedValueOnce(new Response(JSON.stringify({
       card_id: 11, front_html: '<p>F</p>', back_html: '<p>B</p>', edit_href: '/decks/2/notes/7',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));

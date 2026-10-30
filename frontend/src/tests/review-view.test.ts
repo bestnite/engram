@@ -77,7 +77,7 @@ describe('ReviewView graded answering', () => {
     expect(boolHtml).toContain('data-testid="review-graded-submit"');
   });
 
-  it('renders the result panel from the server feedback, including sanitized answer HTML and rating mapping', () => {
+  it('renders the result panel from the server feedback, including answer HTML and rating mapping', () => {
     const feedback: GradedFeedback = {
       verdict: 'correct',
       score: 1,
@@ -142,7 +142,7 @@ describe('ReviewView graded answering', () => {
   });
 });
 
-describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
+describe('ReviewView face HTML in the frame, edit, and bury parity', () => {
   beforeEach(() => {
     setLocale('zh-CN');
   });
@@ -154,15 +154,15 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
         initialLoading: false,
         initialCards: [basic],
         initialRevealed: true,
-        initialFrontFace: face('<p><strong>Sanitized</strong> front</p>'),
-        initialBackFace: face('<p><em>Sanitized</em> back</p>', { side: 'back' }),
+        initialFrontFace: face('<p><strong>Stored</strong> front</p>'),
+        initialBackFace: face('<p><em>Stored</em> back</p>', { side: 'back' }),
         initialEditHref: '/decks/5/notes/21',
       },
     });
     // Both faces are rendered by the frame, so the parent markup carries one frame per face and no face HTML of its own.
     expect((html.match(/data-card-frame/g) ?? [])).toHaveLength(2);
-    expect(html).not.toContain('<strong>Sanitized</strong> front');
-    expect(html).not.toContain('<em>Sanitized</em> back');
+    expect(html).not.toContain('<strong>Stored</strong> front');
+    expect(html).not.toContain('<em>Stored</em> back');
     expect(html).not.toContain('RAW-FRONT-TEXT');
     expect(html).not.toContain('RAW-BACK-TEXT');
     // After flipping, the four self-ratings are still there.
@@ -179,13 +179,13 @@ describe('ReviewView server-sanitized HTML, edit, and bury parity', () => {
     expect(html).toContain('Plain back');
   });
 
-  it('renders the sanitized front HTML for a graded prompt', () => {
+  it('renders the front face HTML for a graded prompt', () => {
     const typed = gradedCard('typed', { prompt: 'RAW-PROMPT', answer: 'Paris' });
     const { html } = render(ReviewView, {
       props: {
         initialLoading: false,
         initialCards: [typed],
-        initialFrontFace: face('<p>Sanitized <code>prompt</code></p>'),
+        initialFrontFace: face('<p>Stored <code>prompt</code></p>'),
       },
     });
     expect(html).toContain('data-testid="review-graded-prompt"');

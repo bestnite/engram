@@ -28,7 +28,7 @@
     initialRevealedAnswerHTML?: string;
     // The render endpoint's two faces, carrying the note type's CSS, body class and media base. In production the path is
     // fetched from the render endpoint via $effect; these initial values are kept so the DOM-less server-side rendering tests
-    // can pin "only sanitized HTML reaches the HTML sink".
+    // can pin "the face HTML reaches the frame and never the parent DOM".
     initialFrontFace?: CardFace | null;
     initialBackFace?: CardFace | null;
     initialEditHref?: string;

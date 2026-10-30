@@ -525,7 +525,7 @@
         <!-- Right column: live preview, rescheduled on input, card type and insertion changes. At lg and wider it is the
              sticky second column, its height capped at one screen and scrolling inside itself. Below lg it is a drawer:
              one and the same panel, laid over the page while open and out of the layout while closed, so the form keeps
-             the whole width and no second copy of the sanitized HTML is ever rendered. -->
+             the whole width and no second copy of the preview HTML is ever rendered. -->
         <div class={previewOpen ? 'min-w-0' : 'hidden min-w-0 lg:sticky lg:top-6 lg:block'}>
           {#if previewOpen}
             <!-- Below lg only: the drawer covers the form, and this closes it. Escape is handled by the window handler. -->

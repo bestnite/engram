@@ -10,7 +10,7 @@ import { REVIEW_BACK_CSS, REVIEW_FRONT_CSS } from '../lib/card-frame';
 /**
  * The review page's card faces leave the parent DOM: every face — the question, the revealed answer and a graded result's
  * answer — is handed to the sandboxed frame, and the parent markup keeps only the controls and the plain-text fallback.
- * These cases assert the content that reaches the frame, so moving the sink does not weaken "sanitized HTML, never the raw
+ * These cases assert the content that reaches the frame, so moving the sink does not weaken "the stored HTML, never the raw
  * field text".
  */
 describe('ReviewView card faces in the frame', () => {
@@ -59,9 +59,9 @@ describe('ReviewView card faces in the frame', () => {
     };
     const renderReviewCard = vi.fn().mockResolvedValue({
       card_id: 'b1',
-      ...faces('<p><strong>Sanitized</strong> front</p>', '<p><em>Sanitized</em> back</p>', '/fm/token/'),
-      front_html: '<p><strong>Sanitized</strong> front</p>',
-      back_html: '<p><em>Sanitized</em> back</p>',
+      ...faces('<p><strong>Stored</strong> front</p>', '<p><em>Stored</em> back</p>', '/fm/token/'),
+      front_html: '<p><strong>Stored</strong> front</p>',
+      back_html: '<p><em>Stored</em> back</p>',
       options_html: [],
       blanks: null,
       edit_href: '/decks/d1/notes/n1',
@@ -73,7 +73,7 @@ describe('ReviewView card faces in the frame', () => {
     expect(renderReviewCard).toHaveBeenCalledWith({ card_id: 'b1', deck: undefined, tags: undefined }, { frame: true });
     const question = await shownFaces(target);
     expect(question).toHaveLength(1);
-    expect(question[0]).toMatchObject({ html: '<p><strong>Sanitized</strong> front</p>', side: 'question', mediaBase: '/fm/token/' });
+    expect(question[0]).toMatchObject({ html: '<p><strong>Stored</strong> front</p>', side: 'question', mediaBase: '/fm/token/' });
     // The raw field text stays out of the parent page entirely.
     expect(target.textContent).not.toContain('RAW-FRONT-TEXT');
 
@@ -82,7 +82,7 @@ describe('ReviewView card faces in the frame', () => {
 
     const shown = await shownFaces(target);
     expect(shown.map((face) => face.side)).toEqual(['question', 'answer']);
-    expect(shown[1]).toMatchObject({ html: '<p><em>Sanitized</em> back</p>', mediaBase: '/fm/token/' });
+    expect(shown[1]).toMatchObject({ html: '<p><em>Stored</em> back</p>', mediaBase: '/fm/token/' });
     expect(target.textContent).not.toContain('RAW-BACK-TEXT');
   });
 

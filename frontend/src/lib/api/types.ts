@@ -223,10 +223,11 @@ export interface AVTag {
 /**
  * One rendered side of a card (Go: internal/web/review.go:CardFace).
  *
- * html is already sanitized by the server; css is the note type's own stylesheet, which the frame appends after its engram
- * face typography so a note type rule wins; body_class is the class list the frame writes on its `<body>`; media_base is the
- * `<base href>` the face's relative media names resolve against. av_tags describes every play marker in html, and autoplay
- * is the deck's setting for starting those tags without a click.
+ * html is the face HTML the server rendered, and the server does not sanitise it: the sandboxed frame and its CSP are the
+ * only boundary around it. css is the note type's own stylesheet, which the frame appends after its engram face typography
+ * so a note type rule wins; body_class is the class list the frame writes on its `<body>`; media_base is the `<base href>`
+ * the face's relative media names resolve against. av_tags describes every play marker in html, and autoplay is the deck's
+ * setting for starting those tags without a click.
  */
 export interface CardFace {
   html: string;
@@ -248,7 +249,7 @@ export interface NotePreviewCard {
   back_html?: string;
 }
 
-/** POST /api/v1/decks/:id/notes/preview response; the HTML is already sanitized by the server. */
+/** POST /api/v1/decks/:id/notes/preview response; the cards carry the same face objects the review frame shows. */
 export interface NotePreviewResponse {
   cards: NotePreviewCard[];
   /**
@@ -874,7 +875,7 @@ export type GradedAnswer = string | number | boolean | number[] | string[];
 
 /**
  * POST /api/v1/review/grade request body.
- * When action is omitted it grades normally; 'reveal' only fetches the sanitized correct answer (writes nothing);
+ * When action is omitted it grades normally; 'reveal' only fetches the correct answer (writes nothing);
  * 'give_up' means giving up after the answer was revealed, recorded as a self-grade of Again.
  */
 export interface SubmitGradedReviewRequest {
@@ -888,7 +889,7 @@ export interface SubmitGradedReviewRequest {
 }
 
 /**
- * Grade feedback: verdict is the decision, answer_html is the server-sanitized correct answer (the single HTML sink).
+ * Grade feedback: verdict is the decision, answer_html is the rendered correct answer, shown by the frame.
  */
 export interface GradedFeedback {
   verdict: 'correct' | 'partial' | 'incorrect';
@@ -901,7 +902,7 @@ export interface GradedFeedback {
   media_base?: string;
   given: string;
   parsed?: string;
-  /** Per-item result for card kinds graded item by item (list cards): sanitized HTML of each item's answer plus correctness, in item order. */
+  /** Per-item result for card kinds graded item by item (list cards): each item's rendered answer HTML plus correctness, in item order. */
   breakdown?: { answer_html: string; correct: boolean }[];
 }
 
@@ -922,7 +923,7 @@ export interface GradedReviewResult {
 }
 
 /**
- * POST /api/v1/review/grade (action=reveal) response body: only the sanitized correct answer.
+ * POST /api/v1/review/grade (action=reveal) response body: only the correct answer.
  */
 export interface RevealAnswerResponse {
   revealed: boolean;
@@ -936,8 +937,8 @@ export interface RevealAnswerResponse {
 
 /**
  * POST /api/v1/review/render response body (Go: internal/web/review_api.go).
- * front / back are the card's faces — sanitized HTML plus the note type's CSS, body class and media base — and are the review
- * page's HTML sinks. front_html / back_html repeat their HTML for older callers only.
+ * front / back are the card's faces — rendered HTML plus the note type's CSS, body class and media base — and the review page
+ * hands them to the sandboxed frame. front_html / back_html repeat their HTML for older callers only.
  * edit_href points at the card edit page, for the `e` shortcut to jump there.
  */
 export interface ReviewRenderResponse {
@@ -954,7 +955,7 @@ export interface ReviewRenderResponse {
   front_html?: string;
   back_html?: string;
   /**
-   * Server-sanitized HTML of each choice option, one entry per option in option order; null for card types without options.
+   * Rendered HTML of each choice option, one entry per option in option order; null for card types without options.
    * The answer controls inject these fragments, so they must never be replaced with the raw option text.
    */
   options_html?: string[] | null;

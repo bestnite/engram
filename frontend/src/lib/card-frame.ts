@@ -1,8 +1,8 @@
 /**
  * Card-face CSS sent with the frame's `show` message.
  *
- * The frame document loads the application stylesheet, so design tokens and the utility classes the shortcode controls
- * carry already exist there. These strings only restate the typography each view used to apply to the wrapper element
+ * The frame document loads the application stylesheet, so design tokens and the utility classes the audio and speech
+ * controls carry already exist there. These strings only restate the typography each view used to apply to the wrapper element
  * around the face, because that wrapper stays in the parent and its classes no longer reach the content.
  *
  * Every rule targets `#qa`, which is the element the frame runtime writes the card HTML into.

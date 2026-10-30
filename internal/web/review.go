@@ -131,7 +131,8 @@ type ReviewCardView struct {
 	ExpectedVersion string
 	Template        string
 	// Ordinal is the card's zero-based position among the note's templates, the value Anki's reviewer turns into the
-	// body class `cardN` with N = Ordinal + 1. It is zero for a single-template note and for a cloze card.
+	// body class `cardN` with N = Ordinal + 1. It is zero for a single-template note; a cloze card's ordinal is its
+	// cloze number minus one, so the card for cloze 1 is ordinal 0.
 	Ordinal int
 	// Front and Back are the card faces: HTML, CSS, body class, side and media base.
 	Front CardFace

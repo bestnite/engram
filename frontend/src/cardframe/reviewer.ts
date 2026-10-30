@@ -219,7 +219,7 @@ function soundWrapper(node: Text): Element | null {
   return node.parentElement?.closest('.engram-sound') ?? null;
 }
 
-/** One play marker's element: an audio source for the shortcode player, a video, or a speech source. */
+/** One play marker's element: an audio source for the audio player, a video, or a speech source. */
 function avElement(doc: Document, node: Text, tag: AVTag, side: 'q' | 'a', index: number): HTMLElement {
   if (tag.kind === 'sound') {
     const name = tag.name ?? '';
@@ -247,7 +247,7 @@ function avElement(doc: Document, node: Text, tag: AVTag, side: 'q' | 'a', index
   const source = doc.createElement('span');
   source.className = 'engram-tts';
   source.setAttribute('data-tts-text', tag.field_text ?? '');
-  // Anki removes the spoken body from the card text and leaves only the play control; the shortcode control's hide
+  // Anki removes the spoken body from the card text and leaves only the play control; the speech control's hide
   // flag does the same, while restoring the text if speech is unavailable.
   source.setAttribute('data-tts-hide', '1');
   const lang = (tag.lang ?? '').replace(/_/g, '-');
@@ -264,9 +264,9 @@ function avElement(doc: Document, node: Text, tag: AVTag, side: 'q' | 'a', index
  * enhanceAVMarkers replaces every [anki:play:<side>:<n>] marker with the control source the tag list describes.
  *
  * The server extracts the tags before the frame sees the face, so a marker's side and index identify its entry in
- * `tags`. A sound tag becomes the same `data-audio-src` element the audio shortcode produces, carrying the segment
+ * `tags`. A sound tag becomes the same `data-audio-src` element the audio marker produces, carrying the segment
  * attributes of its wrapping span.engram-sound; an mp4 or webm becomes an inline video; a TTS tag becomes the same
- * `data-tts-*` element the speech shortcode produces. The elements are returned in document order.
+ * `data-tts-*` element the speech marker produces. The elements are returned in document order.
  */
 export function enhanceAVMarkers(doc: Document, root: Element, tags: AVTag[]): HTMLElement[] {
   if (tags.length === 0) return [];
@@ -352,7 +352,7 @@ export function enhanceSoundTags(doc: Document, root: Element, side: 'q' | 'a'):
   return created;
 }
 
-/** Plays the tag at `side:index`: clicks its shortcode control, or starts a video element. */
+/** Plays the tag at `side:index`: clicks its audio or speech control, or starts a video element. */
 export function playAVTag(sources: HTMLElement[], side: string, index: number): void {
   const source = sources.find(
     (element) => element.dataset.avSide === side && element.dataset.avIndex === String(index),

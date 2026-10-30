@@ -115,7 +115,7 @@ func TestGradeNumericAcceptance(t *testing.T) {
 				t.Errorf("feedback = %+v, want score %v rating %d", *body.Feedback, tc.wantScore, tc.wantRating)
 			}
 			if body.Feedback.AnswerHTML == "" {
-				t.Errorf("feedback answer_html is empty, want sanitized correct answer")
+				t.Errorf("feedback answer_html is empty, want the correct answer")
 			}
 			if body.Feedback.Parsed != tc.wantParsed {
 				t.Errorf("feedback parsed = %q, want %q", body.Feedback.Parsed, tc.wantParsed)
@@ -325,7 +325,7 @@ func TestGradeVersionConflict(t *testing.T) {
 }
 
 // TestGradeRevealAndGiveUp covers the read-only reveal preview and "give up answering, log Again":
-// reveal returns the sanitized correct answer and writes nothing; give_up writes an Again with grade_source=self.
+// reveal returns the correct answer and writes nothing; give_up writes an Again with grade_source=self.
 func TestGradeRevealAndGiveUp(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA reveal")
@@ -372,7 +372,7 @@ func TestGradeRevealAndGiveUp(t *testing.T) {
 }
 
 // TestGradeListFeedbackBreakdown asserts a list question gets partial credit through the SPA grading entry point by the number of items recalled, with the feedback marking each item
-// right or wrong (in item order, sanitized), and the render response gives one input box per item.
+// right or wrong (in item order), and the render response gives one input box per item.
 func TestGradeListFeedbackBreakdown(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "SPA list")

@@ -1,11 +1,10 @@
 /**
- * Client-side controls for the shortcodes the server expands.
+ * Client-side controls for the audio and speech markers in card content.
  *
- * The renderer turns `{{tts:…}}` and `{{audio:…}}` into elements that carry data attributes and nothing else
- * (`span.engram-tts[data-tts-*]`, `span.engram-audio[data-audio-*]`). Ruby needs no behaviour and is left alone.
- * This module is the single enhancement entry point: it reads only the server's data attributes, never the raw card
- * text, and it only ever operates on containers whose HTML the server already sanitized and that `typeset` was
- * called on.
+ * The frame runtime turns Anki's `[anki:tts]` and `[sound:]` markers into elements that carry data attributes and nothing
+ * else (`span.engram-tts[data-tts-*]`, `span.engram-audio[data-audio-*]`). Ruby needs no behaviour and is left alone.
+ * This module is the single enhancement entry point: it reads only those data attributes, never the raw card text, and it
+ * only ever operates on containers that hold card or feedback HTML and that `typeset` was called on.
  *
  * The visible body of each element stays in the output: a reader without JavaScript, without a speech engine, or on
  * a page whose media it may not read keeps the text. The audio shortcode's body is a bare `/media/<sha256>` path, so
@@ -1150,7 +1149,8 @@ function handleProgressKey(event: Event): void {
 }
 
 /**
- * enhanceShortcodes attaches controls to every shortcode element below the given server-sanitized containers.
+ * enhanceShortcodes attaches controls to every speech or audio marker below the given containers of card or feedback
+ * HTML.
  *
  * Safe to call twice on the same DOM and safe to call on a re-rendered container: the marker attribute prevents a
  * second button on a shortcode element, and the WeakSet keeps one delegated listener per container. Nullish nodes are

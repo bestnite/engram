@@ -6,8 +6,8 @@
     value: string;
     label: string;
     /**
-     * Server-sanitized HTML rendered instead of the plain label. It must never receive raw user text: only HTML that already went
-     * through the server's sanitizing Markdown/TeX pipeline may be injected here, because this is an HTML sink.
+     * HTML rendered instead of the plain label, because an option keeps its stored formatting. It must never receive raw
+     * user text: the caller passes only a fragment that came from the server, and this is an HTML sink.
      */
     html?: string;
     disabled?: boolean;
