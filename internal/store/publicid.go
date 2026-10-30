@@ -50,6 +50,7 @@ func (m *Preset) BeforeCreate(*gorm.DB) error   { assignPublicID(&m.PublicID); r
 func (m *Deck) BeforeCreate(*gorm.DB) error     { assignPublicID(&m.PublicID); return nil }
 func (m *Note) BeforeCreate(*gorm.DB) error     { assignPublicID(&m.PublicID); return nil }
 func (m *Card) BeforeCreate(*gorm.DB) error     { assignPublicID(&m.PublicID); return nil }
+func (m *NoteType) BeforeCreate(*gorm.DB) error { assignPublicID(&m.PublicID); return nil }
 func (m *Review) BeforeCreate(*gorm.DB) error   { assignPublicID(&m.PublicID); return nil }
 func (m *APIKey) BeforeCreate(*gorm.DB) error   { assignPublicID(&m.PublicID); return nil }
 func (m *Job) BeforeCreate(*gorm.DB) error      { assignPublicID(&m.PublicID); return nil }

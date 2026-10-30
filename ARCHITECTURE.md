@@ -91,7 +91,7 @@ mail       → config, render, store, worker
 schedule   → reviewday, store
 auth       → store
 media      → mediatype, store
-store      → cardtype, mediatype, reviewday
+store      → cardtype, mediatype, notetype, reviewday
 cardtype   → texmath
 render     → texmath
 retention  → worker
@@ -149,6 +149,28 @@ change.
   due forecast.
 - **Presets.** A preset holds the FSRS weights, desired retention, learning and relearning
   steps, and fuzz switch that the scheduler for a deck uses.
+- **Note types.** `note_types` holds a deck-scoped note type: `name`, `config_json` and a `version`
+  optimistic lock. `config_json` is TEXT holding `internal/notetype.Config` (kind, fields,
+  templates, CSS, LaTeX and Anki origin); the store marshals and unmarshals it, so both databases
+  see the same string. The name and config are validated before a write, and an update names the
+  version it read and increments it, so a stale writer gets `ErrVersionConflict` instead of
+  overwriting a newer edit. A note type still used by a note that is not soft-deleted cannot be
+  deleted (`ErrNoteTypeInUse`).
+- **Notes and note types.** `notes` carries `note_type_id`, `source_url` and `extra_json`.
+  `note_type_id` is nullable in this schema version: `AutoMigrate` only adds columns, existing rows
+  have no note type yet, and a later migration makes it NOT NULL and drops `notes.kind`.
+  `source_url` and `extra_json` are nullable TEXT.
+- **Cards and subdecks.** `cards.deck_path` is a nullable TEXT path relative to the imported root
+  deck (for example `Lesson 1::Verbs`); a card without it sits directly in the note's deck. A
+  subdeck is stored only as this path and never as a deck row.
+- **Deck-scoped media names.** `media_names` maps a deck-scoped file name to the content-addressed
+  `sha256`, so a field or template can refer to media by name the way Anki does. `(deck_id, name)`
+  is the primary key, which puts the uniqueness in the schema, and names are stored
+  NFC-normalised. An upsert (`clause.OnConflict`) repoints a name to new content instead of adding
+  a row.
+- **Note type media references.** `media_note_types` records which media names a note type's
+  templates and CSS refer to, keyed by `(note_type_id, media_name)`. The set is derived data,
+  replaced as a whole, and exists for read access checks and media garbage collection.
 - **Audit.** Security-relevant and settings-changing actions append rows to the audit log; the
   action names are constants in `internal/store/audit.go`.
 

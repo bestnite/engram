@@ -146,29 +146,85 @@ type Note struct {
 	// The column is nullable because AutoMigrate adds it to existing tables, and migration 0011 fills in the existing rows.
 	SearchText string `gorm:"column:search_text" json:"-"`
 	// an idempotency key defined by the caller; NULLs do not participate in uniqueness (both databases allow several NULLs).
-	ExternalRef   *string        `gorm:"uniqueIndex:idx_notes_deck_external_ref" json:"external_ref,omitempty"`
-	Source        *string        `json:"source,omitempty"` // manual | api | import
-	ReferenceRefs *string        `gorm:"column:reference_refs" json:"reference_refs,omitempty"`
-	CreatedBy     *uint64        `json:"created_by,omitempty"`
-	CreatedAt     time.Time      `gorm:"not null" json:"created_at"`
-	UpdatedAt     time.Time      `gorm:"not null" json:"updated_at"`
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	ExternalRef   *string `gorm:"uniqueIndex:idx_notes_deck_external_ref" json:"external_ref,omitempty"`
+	Source        *string `json:"source,omitempty"` // manual | api | import
+	ReferenceRefs *string `gorm:"column:reference_refs" json:"reference_refs,omitempty"`
+	// NoteTypeID names the note type that defines this note's fields and templates.
+	// It is nullable in this schema version: AutoMigrate only adds columns, existing rows have no note type yet,
+	// and a later migration that drops notes.kind makes it NOT NULL. The pointer keeps "no note type" distinct from id 0.
+	NoteTypeID *uint64 `gorm:"column:note_type_id;index" json:"note_type_id,omitempty"`
+	// SourceURL is the optional origin link of the content, moved out of the field map by a later migration.
+	SourceURL *string `gorm:"column:source_url" json:"source_url,omitempty"`
+	// ExtraJSON is the remaining optional content that has no column of its own, stored as TEXT like every JSON column.
+	ExtraJSON *string        `gorm:"column:extra_json" json:"extra_json,omitempty"`
+	CreatedBy *uint64        `json:"created_by,omitempty"`
+	CreatedAt time.Time      `gorm:"not null" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"not null" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (Note) TableName() string { return "notes" }
 
 // Card is an instance of a note in some presentation form; scheduling acts on cards.
 type Card struct {
-	ID        uint64         `gorm:"primaryKey" json:"-"`
-	PublicID  string         `gorm:"column:public_id;uniqueIndex" json:"id"`
-	NoteID    uint64         `gorm:"not null;index;uniqueIndex:idx_cards_note_template" json:"note_id"`
-	Template  string         `gorm:"not null;uniqueIndex:idx_cards_note_template" json:"template"`
+	ID       uint64 `gorm:"primaryKey" json:"-"`
+	PublicID string `gorm:"column:public_id;uniqueIndex" json:"id"`
+	NoteID   uint64 `gorm:"not null;index;uniqueIndex:idx_cards_note_template" json:"note_id"`
+	Template string `gorm:"not null;uniqueIndex:idx_cards_note_template" json:"template"`
+	// DeckPath is the Anki subdeck path relative to the imported root deck, for example "Lesson 1::Verbs";
+	// NULL means the card sits directly in the note's deck. Subdecks exist only as this path, never as deck rows.
+	DeckPath  *string        `gorm:"column:deck_path" json:"deck_path,omitempty"`
 	Ordinal   int            `gorm:"not null;default:0" json:"ordinal"`
 	CreatedAt time.Time      `gorm:"not null" json:"created_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (Card) TableName() string { return "cards" }
+
+// NoteType is the deck-scoped definition of a note's fields and card templates.
+//
+// ConfigJSON holds internal/notetype.Config as JSON text and is the single source of the note type's shape.
+// The choice of a TEXT column over a gorm serializer: JSON must stay TEXT on both databases (no jsonb), and a string column
+// serializes identically under SQLite and PostgreSQL with no driver-specific behaviour. The store marshals and unmarshals it
+// (see NoteTypeStore); code outside the store works with notetype.Config through Config and SetConfig.
+type NoteType struct {
+	ID         uint64 `gorm:"primaryKey" json:"-"`
+	PublicID   string `gorm:"column:public_id;uniqueIndex" json:"id"`
+	DeckID     uint64 `gorm:"not null;index" json:"deck_id"`
+	Name       string `gorm:"not null" json:"name"`
+	ConfigJSON string `gorm:"column:config_json;not null" json:"config_json"`
+	// Version is the optimistic lock: every update names the version it read and increments it, so a stale writer is rejected
+	// instead of overwriting a newer edit.
+	Version   int       `gorm:"not null;default:0" json:"version"`
+	CreatedAt time.Time `gorm:"not null" json:"created_at"`
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
+func (NoteType) TableName() string { return "note_types" }
+
+// MediaName maps a deck-scoped file name to content-addressed media, the way Anki refers to media: by file name.
+//
+// (deck_id, name) is the primary key, so the uniqueness is enforced by the schema, not only by the store. name is stored
+// NFC-normalised: the same file name written with a composed or a decomposed character must resolve to one row.
+type MediaName struct {
+	DeckID uint64 `gorm:"primaryKey;uniqueIndex:idx_media_names_deck_name,priority:1" json:"deck_id"`
+	Name   string `gorm:"primaryKey;uniqueIndex:idx_media_names_deck_name,priority:2" json:"name"`
+	Sha256 string `gorm:"column:sha256;not null;index" json:"sha256"`
+}
+
+func (MediaName) TableName() string { return "media_names" }
+
+// MediaNoteType records that a note type's templates or CSS refer to a media file name.
+//
+// It is the reference set behind read access checks and media garbage collection: media named here cannot be reclaimed
+// while the note type exists. media_name is NFC-normalised like MediaName.Name. The pair is the primary key, so a
+// replaced set can never hold duplicates.
+type MediaNoteType struct {
+	NoteTypeID uint64 `gorm:"column:note_type_id;primaryKey;uniqueIndex:idx_media_note_types_pair,priority:1" json:"note_type_id"`
+	MediaName  string `gorm:"column:media_name;primaryKey;uniqueIndex:idx_media_note_types_pair,priority:2" json:"media_name"`
+}
+
+func (MediaNoteType) TableName() string { return "media_note_types" }
 
 // CardState is one user's FSRS state for one card; the primary key (card_id, user_id) is the cornerstone of shared decks.
 type CardState struct {
@@ -379,6 +435,8 @@ func AllModels() []any {
 		&User{}, &Identity{}, &Invite{}, &Setting{}, &Preset{}, &Deck{}, &Note{}, &Card{},
 		&CardState{}, &Review{}, &DeckGrant{}, &Media{}, &APIKey{}, &Job{},
 		&MediaNote{}, &MediaUploader{},
+		// Note types, deck-scoped media names and the note type's media references (M17 data model).
+		&NoteType{}, &MediaName{}, &MediaNoteType{},
 		&AuditLog{}, &SchemaVersion{}, &Session{},
 		// TOTP: model defined in totp.go, but it must appear here (see the comment above).
 		&UserTOTP{}, &TOTPRecoveryCode{},

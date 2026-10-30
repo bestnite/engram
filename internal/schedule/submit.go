@@ -15,7 +15,10 @@ import (
 
 // ErrVersionConflict means the expected_version held by the caller does not match the one in the DB: a client replay,
 // a double-open window, or a grade submitted twice. The caller should map it to HTTP 409.
-var ErrVersionConflict = errors.New("schedule: card state version conflict")
+//
+// It is the store's optimistic-lock sentinel, aliased rather than redefined: the scheduler and the note type store
+// report the same condition, so callers keep one errors.Is target.
+var ErrVersionConflict = store.ErrVersionConflict
 
 // Legal values of grade_source. typed/llm cover answer-based question types and future LLM grading.
 const (
