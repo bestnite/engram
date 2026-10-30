@@ -13,6 +13,7 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/yuin/goldmark v1.8.6
+	github.com/zeebo/blake3 v0.2.4
 	github.com/zitadel/oidc/v3 v3.51.16
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.61.0
