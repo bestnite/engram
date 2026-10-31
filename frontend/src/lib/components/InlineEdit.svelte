@@ -1,12 +1,13 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import type { Snippet } from 'svelte';
   import { Pencil } from '@lucide/svelte';
   import { cn } from './ui/utils';
 
   /**
    * Inline editing: normally shows text; clicking the text or the pencil icon next to it turns it into an input.
-   * Enter or blur saves, Esc cancels; in multiline mode Shift+Enter inserts a newline.
+   * Enter or blur saves, Esc cancels. The edited values hold no line break (the server rejects control characters in a
+   * deck name and description), so multiline mode only wraps long text: Enter still saves, and a pasted line break
+   * becomes a space.
    *
    * onSave returning false means the save failed (the caller is responsible for reporting why); the component stays in edit mode and the input is not lost.
    * When not editable (e.g. not the owner) it renders only the text, with no clickable area.
@@ -24,13 +25,6 @@
     /** Style of the display-state text; the edit-state input keeps the same font size and weight so nothing jumps when switching. */
     class?: string;
     testId?: string;
-    /**
-     * Display-state content that replaces the plain text, such as a sandboxed frame for HTML that must not enter the parent
-     * page. It is used only when the value is non-empty; the edit state still edits the raw value. The snippet receives the
-     * function that enters editing, because a click inside a frame never reaches this component: the content calls it the
-     * way a click on plain text does. It is a no-op when the value is not editable.
-     */
-    display?: Snippet<[() => void]>;
   }
 
   let {
@@ -43,7 +37,6 @@
     maxlength,
     class: klass = '',
     testId,
-    display,
   }: Props = $props();
 
   let editing = $state(false);
@@ -62,6 +55,7 @@
 
   async function commit(): Promise<void> {
     if (saving) return;
+    if (multiline) draft = draft.replace(/\s*[\r\n]+\s*/g, ' ');
     if (draft === value) {
       editing = false;
       return;
@@ -82,7 +76,7 @@
     if (event.key === 'Escape') {
       event.preventDefault();
       cancel();
-    } else if (event.key === 'Enter' && !(multiline && event.shiftKey) && !event.isComposing) {
+    } else if (event.key === 'Enter' && !event.isComposing) {
       // isComposing: Enter while an IME is composing must not be treated as a save.
       event.preventDefault();
       void commit();
@@ -124,17 +118,13 @@
   {/if}
 {:else if editable}
   <span class="group/inline flex min-w-0 items-start gap-1.5">
-    {#if display && value}
-      <span class="block min-w-0 flex-1">{@render display(start)}</span>
-    {:else}
-      <!-- The text itself is clickable too: a small icon should not be the only way into editing. -->
-      <span
-        class={cn('min-w-0 cursor-text break-words rounded-sm', !value && 'text-muted-foreground/70', klass)}
-        onclick={start}
-        role="presentation"
-        data-testid={testId}
-      >{value || placeholder}</span>
-    {/if}
+    <!-- The text itself is clickable too: a small icon should not be the only way into editing. -->
+    <span
+      class={cn('min-w-0 cursor-text break-words rounded-sm', !value && 'text-muted-foreground/70', klass)}
+      onclick={start}
+      role="presentation"
+      data-testid={testId}
+    >{value || placeholder}</span>
     <button
       type="button"
       onclick={start}
@@ -146,8 +136,6 @@
       <Pencil class="size-3.5" aria-hidden="true" />
     </button>
   </span>
-{:else if display && value}
-  <span class="block {klass}" data-testid={testId}>{@render display(() => {})}</span>
 {:else if value}
   <span class={klass} data-testid={testId}>{value}</span>
 {/if}

@@ -4,21 +4,11 @@
 export interface Deck {
   id: string;
   name: string;
+  /** Plain text: shown as text, never as markup (Go: DeckResponse.Description). */
   description: string;
   /**
-   * Whether `description` is Markdown source instead of HTML (Go: DeckResponse.DescriptionMarkdown).
-   * A response from an older server omits it; the default is HTML.
-   */
-  description_markdown?: boolean;
-  /**
-   * The description after the server rendered it: Markdown converted when `description_markdown` is set, the stored HTML
-   * passed through otherwise (Go: DeckResponse.DescriptionHTML). It is unsanitised content: show it only inside the
-   * sandboxed frame, never in the parent page.
-   */
-  description_html?: string;
-  /**
-   * The description reduced to one line of plain text, for the lists that print it as a string
-   * (Go: DeckResponse.DescriptionText). A response from an older server omits it.
+   * The description on one line, for the lists that print it as a single line (Go: DeckResponse.DescriptionText).
+   * A response from an older server omits it.
    */
   description_text?: string;
   new_per_day: number;
@@ -129,8 +119,6 @@ export interface DeckSettings {
   preset_id: string;
   /** Deck-wide autoplay setting; only the owner can change it (Go: deckSettingsResponse.Autoplay). */
   autoplay?: boolean;
-  /** Whether the deck description is Markdown rather than HTML; only the owner can change it (Go: deckSettingsResponse.DescriptionMarkdown). */
-  description_markdown?: boolean;
   new_per_day: number;
   reviews_per_day: number;
   /** New-card quota added by today's "one more round"; new_left already counts it, new_per_day does not. */
@@ -153,8 +141,6 @@ export interface UpdateDeckSettingsRequest {
   preset_id?: string;
   /** Optional deck-wide setting; the owner only. Omitting it leaves the value untouched. */
   autoplay?: boolean;
-  /** Optional deck-wide setting that switches the description between HTML and Markdown; the owner only. */
-  description_markdown?: boolean;
 }
 
 /** POST /api/v1/decks request and response body. An empty preset_id uses the server's default preset. */

@@ -4,52 +4,30 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// deckDescriptionBody is the part of DeckResponse the description rendering cases read.
+// deckDescriptionBody is the part of DeckResponse the description cases read; raw keeps every key of the entry.
 type deckDescriptionBody struct {
-	ID                  string `json:"id"`
-	Description         string `json:"description"`
-	DescriptionMarkdown bool   `json:"description_markdown"`
-	DescriptionHTML     string `json:"description_html"`
-	DescriptionText     string `json:"description_text"`
+	ID              string `json:"id"`
+	Description     string `json:"description"`
+	DescriptionText string `json:"description_text"`
+	raw             map[string]json.RawMessage
 }
 
-// TestDeckResponseDescriptionRendering pins the flag switch: the stored text stays the source, while DescriptionHTML is the
-// Markdown rendering when the flag is set and the stored HTML passed through when it is not. DescriptionText is the plain
-// text of whichever of the two DescriptionHTML holds, so a list that prints the description never prints markup.
-func TestDeckResponseDescriptionRendering(t *testing.T) {
+// TestDeckResponseDescriptionIsPlainText pins the description contract: the stored text comes back unchanged, markup
+// included, because every client shows it as text; description_text is the same text on one line; and no rendered
+// variant exists for a client to inject into a page.
+func TestDeckResponseDescriptionIsPlainText(t *testing.T) {
 	cases := []struct {
-		name       string
-		source     string
-		markdown   bool
-		wantHTML   []string
-		denyHTML   []string
-		wantSource string
-		wantText   string
+		name     string
+		source   string
+		wantText string
 	}{
-		{
-			name:       "HTML description passes through",
-			source:     "<p>plain <strong>HTML</strong></p>",
-			markdown:   false,
-			wantHTML:   []string{"<p>plain <strong>HTML</strong></p>"},
-			denyHTML:   []string{"<h1>"},
-			wantSource: "<p>plain <strong>HTML</strong></p>",
-			wantText:   "plain HTML",
-		},
-		{
-			name:       "Markdown description renders",
-			source:     "# Heading\n\n**bold**",
-			markdown:   true,
-			wantHTML:   []string{"<h1>Heading</h1>", "<strong>bold</strong>"},
-			denyHTML:   []string{"# Heading", "**bold**"},
-			wantSource: "# Heading\n\n**bold**",
-			wantText:   "Heading bold",
-		},
+		{name: "multi-line text", source: "First line\n\nSecond   line", wantText: "First line Second line"},
+		{name: "markup is text", source: "<p>a <b>tag</b></p><script>x()</script>", wantText: "<p>a <b>tag</b></p><script>x()</script>"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -57,51 +35,24 @@ func TestDeckResponseDescriptionRendering(t *testing.T) {
 			owner := seedUser(t, env.db, "desc_owner_"+safeName(tc.name), store.RoleUser)
 			deck := seedDeck(t, env.db, owner.ID)
 			if err := env.db.WithContext(context.Background()).Model(&store.Deck{}).Where("id = ?", deck.ID).
-				Updates(map[string]any{"description": tc.source, "description_markdown": tc.markdown}).Error; err != nil {
+				Update("description", tc.source).Error; err != nil {
 				t.Fatalf("store deck description: %v", err)
 			}
 			key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead}, nil)
 
 			body := deckDescriptionFromList(t, env, key.Plaintext, deck.PublicID)
-			if body.Description != tc.wantSource {
-				t.Errorf("description = %q, want the stored source %q", body.Description, tc.wantSource)
-			}
-			if body.DescriptionMarkdown != tc.markdown {
-				t.Errorf("description_markdown = %v, want %v", body.DescriptionMarkdown, tc.markdown)
-			}
-			for _, want := range tc.wantHTML {
-				if !strings.Contains(body.DescriptionHTML, want) {
-					t.Errorf("description_html = %q, want it to contain %q", body.DescriptionHTML, want)
-				}
-			}
-			for _, deny := range tc.denyHTML {
-				if strings.Contains(body.DescriptionHTML, deny) {
-					t.Errorf("description_html = %q, must not contain %q", body.DescriptionHTML, deny)
-				}
+			if body.Description != tc.source {
+				t.Errorf("description = %q, want the stored text %q", body.Description, tc.source)
 			}
 			if body.DescriptionText != tc.wantText {
 				t.Errorf("description_text = %q, want %q", body.DescriptionText, tc.wantText)
 			}
+			for _, removed := range []string{"description_html", "description_markdown"} {
+				if _, ok := body.raw[removed]; ok {
+					t.Errorf("deck response still carries %q", removed)
+				}
+			}
 		})
-	}
-}
-
-// TestDeckResponseDescriptionScriptStaysData asserts an HTML description carrying a script is delivered verbatim as a JSON
-// field and never inlined into the SPA shell: the client can only put it inside the sandboxed frame.
-func TestDeckResponseDescriptionScriptStaysData(t *testing.T) {
-	env := newTestEnv(t, 60, 60)
-	owner := seedUser(t, env.db, "desc_script_owner", store.RoleUser)
-	deck := seedDeck(t, env.db, owner.ID)
-	const payload = `<p>intro</p><script>window.__deck_description_ran = true</script>`
-	if err := env.db.WithContext(context.Background()).Model(&store.Deck{}).Where("id = ?", deck.ID).
-		Updates(map[string]any{"description": payload}).Error; err != nil {
-		t.Fatalf("store deck description: %v", err)
-	}
-	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead}, nil)
-
-	body := deckDescriptionFromList(t, env, key.Plaintext, deck.PublicID)
-	if body.DescriptionHTML != payload {
-		t.Errorf("description_html = %q, want the stored HTML verbatim", body.DescriptionHTML)
 	}
 }
 
@@ -114,13 +65,19 @@ func deckDescriptionFromList(t *testing.T, env *testEnv, plaintext, publicID str
 		t.Fatalf("GET decks = %d, want 200 (body %s)", status, raw)
 	}
 	var list struct {
-		Decks []deckDescriptionBody `json:"decks"`
+		Decks []map[string]json.RawMessage `json:"decks"`
 	}
 	if err := json.Unmarshal(raw, &list); err != nil {
 		t.Fatalf("decode deck list: %v (%s)", err, raw)
 	}
-	for _, item := range list.Decks {
+	for _, entry := range list.Decks {
+		encoded, _ := json.Marshal(entry)
+		var item deckDescriptionBody
+		if err := json.Unmarshal(encoded, &item); err != nil {
+			t.Fatalf("decode deck entry: %v", err)
+		}
 		if item.ID == publicID {
+			item.raw = entry
 			return item
 		}
 	}

@@ -140,6 +140,13 @@ var BuiltinMigrations = []Migration{
 		Name: "0017_convert_note_ruby_shortcodes",
 		Up:   convertNoteRubyShortcodes,
 	},
+	{
+		// Deck descriptions are plain text, so no client needs a sandboxed frame to show one. An HTML description becomes
+		// the text a reader saw, a Markdown one keeps its source, and the description_markdown flag column is dropped.
+		// Dropping a column is outside AutoMigrate's additive scope and needs an explicit migration.
+		Name: "0018_plain_text_deck_descriptions",
+		Up:   plainTextDeckDescriptions,
+	},
 }
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).

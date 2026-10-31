@@ -186,7 +186,8 @@
     try {
       const deck = await apiClient.createDeck({
         name,
-        description,
+        // A description is one line of plain text (the server rejects a line break); the textarea only wraps it.
+        description: description.replace(/\s*[\r\n]+\s*/g, ' '),
         preset_id: createPresetId,
       });
       decks = [deck, ...decks];

@@ -25,7 +25,6 @@ describe('DeckSettingsView cap saving', () => {
     role: 'owner',
     preset_id: '3',
     autoplay: true,
-    description_markdown: false,
     new_per_day: 10,
     reviews_per_day: 10,
     new_used: 2,
@@ -92,38 +91,23 @@ describe('DeckSettingsView cap saving', () => {
       reviews_per_day: 10,
       preset_id: '3',
       autoplay: true,
-      description_markdown: false,
     });
     expect(toast.success).toHaveBeenCalledWith(formatMessage('zh-CN', 'deck.settings.saved'));
   });
 
-  it('sends the description format together with the other deck-wide settings', async () => {
-    const update = await setup();
-    const markdown = document.body.querySelector('[data-testid="deck-settings-markdown"]') as HTMLElement | null;
-    expect(markdown).not.toBeNull();
-    markdown!.click();
-    await flush();
+  it('keeps the deck-wide settings out of a sharing member\'s request', async () => {
+    const update = await setup('reader');
     await submit();
     expect(update).toHaveBeenCalledWith('d1', {
       new_per_day: 10,
       reviews_per_day: 10,
       preset_id: '3',
-      autoplay: true,
-      description_markdown: true,
     });
   });
 
-  it('keeps the deck-wide description format out of a sharing member\'s request', async () => {
-    const update = await setup('reader');
-    const markdown = document.body.querySelector('[data-testid="deck-settings-markdown"]') as HTMLElement | null;
-    expect(markdown).not.toBeNull();
-    expect(markdown!.hasAttribute('disabled') || markdown!.getAttribute('data-disabled') !== null).toBe(true);
-    await submit();
-    expect(update).toHaveBeenCalledWith('d1', {
-      new_per_day: 10,
-      reviews_per_day: 10,
-      preset_id: '3',
-    });
+  it('offers no description format: a description is plain text', async () => {
+    await setup();
+    expect(document.body.querySelector('[data-testid="deck-markdown-row"]')).toBeNull();
   });
 
   it('keeps 0 verbatim as the unlimited cap', async () => {
@@ -136,7 +120,6 @@ describe('DeckSettingsView cap saving', () => {
       reviews_per_day: 0,
       preset_id: '3',
       autoplay: true,
-      description_markdown: false,
     });
   });
 

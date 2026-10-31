@@ -1039,16 +1039,28 @@ func TestPlanAnkiDecks(t *testing.T) {
 		},
 		{
 			// A description the deck model would reject is dropped, not allowed to fail the
-			// import: real Anki decks carry multi-line HTML blurbs over the length bound.
+			// import: real Anki decks carry HTML blurbs over the length bound.
 			name: "unstorable description is dropped",
 			decks: []anki.Deck{
-				{ID: 1, Name: "A", Description: strings.Repeat("x", 2001)},
-				{ID: 2, Name: "B", Description: "line\nbreak"},
+				{ID: 1, Name: "A", Description: "short"},
+				{ID: 2, Name: "B", Description: strings.Repeat("x", 2001)},
 			},
 			cardDecks:       []int64{1, 2, 2},
 			wantTop:         "B",
 			wantDescription: "",
 			wantPaths:       map[int64]string{1: "A", 2: ""},
+		},
+		{
+			// An Anki description is HTML; the deck keeps the text a reader saw, on one line,
+			// since a newline in the HTML source is whitespace and a description holds none.
+			name: "HTML description becomes one line of text",
+			decks: []anki.Deck{
+				{ID: 1, Name: "A", Description: "<div>Geography<br>flags &amp; maps</div>\n<p>second <b>block</b></p>"},
+			},
+			cardDecks:       []int64{1},
+			wantTop:         "A",
+			wantDescription: "Geography flags & maps second block",
+			wantPaths:       map[int64]string{1: ""},
 		},
 	}
 

@@ -22,8 +22,7 @@
    *
    * The face never enters the parent DOM: the frame receives it with `show` and renders it in its own document, so card
    * content (including a card author's scripts and styles) cannot reach the parent page. The parent only sizes the iframe
-   * from the height the frame reports, forwards the key presses and content clicks it receives, sends the theme, and opens
-   * links in a new tab.
+   * from the height the frame reports, forwards the key presses it receives, sends the theme, and opens links in a new tab.
    *
    * Every incoming message is accepted only from this component's own iframe and every field is validated, because the
    * frame may report anything a card's script asks it to.
@@ -53,8 +52,6 @@
     onkey?: (message: CardFrameKey) => void;
     /** Receives the answer value a control posted (`answer {value}`). */
     onanswer?: (value: FrameAnswerValue) => void;
-    /** Receives a click on the face's plain content: not a link and not a control the face uses itself. */
-    onclick?: () => void;
     /** Accessible name of the iframe. */
     title?: string;
   }
@@ -70,7 +67,6 @@
     ordinal = 0,
     onkey,
     onanswer,
-    onclick,
     title = '',
   }: Props = $props();
 
@@ -163,9 +159,6 @@
         if (value !== null) onanswer?.(value);
         return;
       }
-      case 'click':
-        onclick?.();
-        return;
       case 'link':
         // Only http(s) targets are opened: a frame script must not be able to hand the parent a javascript: or data: URL.
         if (typeof data.href === 'string' && /^https?:\/\//i.test(data.href)) {

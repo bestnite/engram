@@ -402,19 +402,11 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     postKey(event);
   }
 
-  /**
-   * A click on a link is handed to the parent, which opens http(s) targets in a new tab. A click on plain content is
-   * reported as `click`, so a parent that shows the frame as an editable value can start editing the way it does for
-   * text in its own page. A click on a control the face uses itself (an input, a button, a player) is the face's own.
-   */
   function onClick(event: MouseEvent): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const anchor = target.closest('a[href]');
-    if (!(anchor instanceof HTMLAnchorElement)) {
-      if (!target.closest('a, button, input, textarea, select, label, audio, video, [contenteditable]')) post({ type: 'click' });
-      return;
-    }
+    if (!(anchor instanceof HTMLAnchorElement)) return;
     const href = anchor.href;
     if (!href.startsWith('http://') && !href.startsWith('https://')) return;
     event.preventDefault();

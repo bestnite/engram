@@ -7,20 +7,18 @@ import type { Deck, StatsSummary } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 
 /**
- * Both deck lists print the description as a single line of text, so they show the server's `description_text` and never the
- * stored HTML (or Markdown source) that the deck detail page renders inside the sandboxed frame.
+ * Both deck lists print the description as a single line, so they show the server's `description_text`. A description is
+ * plain text: markup in it is printed as written, never rendered.
  */
 
-const htmlDescription = '<a href="https://example.com"><b>Notes</b></a>';
+const markupDescription = '<a href="https://example.com"><b>Notes</b></a>';
 
 function baseDeck(overrides: Partial<Deck> = {}): Deck {
   return {
     id: 'd1',
     name: 'Biology',
-    description: htmlDescription,
-    description_html: htmlDescription,
-    description_text: 'Notes',
-    description_markdown: false,
+    description: markupDescription,
+    description_text: markupDescription,
     new_per_day: 20,
     reviews_per_day: 200,
     preset_id: 'p1',
@@ -70,19 +68,19 @@ describe('deck description in the lists', () => {
     await flush();
   }
 
-  it('shows the plain text of an HTML description in the deck list', async () => {
+  it('prints a description as text in the deck list', async () => {
     await mountDecks([baseDeck()]);
     const row = target.querySelector('[data-testid="deck-card-d1"]');
     expect(row).not.toBeNull();
-    expect(row!.textContent).toContain('Notes');
-    expect(row!.textContent).not.toContain('<a href');
+    expect(row!.textContent).toContain(markupDescription);
+    expect(row!.querySelector('b, a[href="https://example.com"]')).toBeNull();
   });
 
-  it('shows the plain text of an HTML description in the home deck list', async () => {
+  it('prints a description as text in the home deck list', async () => {
     await mountHome([baseDeck()]);
     const row = target.querySelector('[data-testid="home-deck-row-d1"]');
     expect(row).not.toBeNull();
-    expect(row!.textContent).toContain('Notes');
-    expect(row!.textContent).not.toContain('<a href');
+    expect(row!.textContent).toContain(markupDescription);
+    expect(row!.querySelector('b, a[href="https://example.com"]')).toBeNull();
   });
 });

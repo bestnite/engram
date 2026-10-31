@@ -8,23 +8,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"git.nite07.com/nite/engram/internal/markdown"
-	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
 // DeckResponse is the external shape of a deck; REST and MCP share the same shape.
 type DeckResponse struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Description is plain text, line breaks included; a client shows it as text.
 	Description string `json:"description"`
-	// DescriptionMarkdown reports whether Description is Markdown source rather than HTML.
-	DescriptionMarkdown bool `json:"description_markdown"`
-	// DescriptionHTML is the description after rendering: Markdown converted when DescriptionMarkdown is set, the stored HTML
-	// passed through otherwise. It is unsanitised content and clients must show it only inside the sandboxed frame.
-	DescriptionHTML string `json:"description_html"`
-	// DescriptionText is DescriptionHTML reduced to one line of plain text, the form every list that prints the description as a
-	// string shows. It exists so a list never has to strip markup itself and never prints raw tags.
+	// DescriptionText is Description on one line, the form every list that prints the description as a single line shows.
 	DescriptionText string `json:"description_text"`
 	NewPerDay       int    `json:"new_per_day"`
 	ReviewsPerDay   int    `json:"reviews_per_day"`
@@ -50,28 +43,14 @@ type deckResponse = DeckResponse
 // study settings on this deck (owners read the deck columns, shared members read their own member settings); the preset's numeric primary key becomes an external id here.
 func (a *API) ToDeckResponse(ctx context.Context, userID uint64, d store.Deck, role string) DeckResponse {
 	out := DeckResponse{
-		ID:                  d.PublicID,
-		Name:                d.Name,
-		Description:         d.Description,
-		DescriptionMarkdown: d.DescriptionIsMarkdown(),
-		CreatedAt:           d.CreatedAt,
-		Role:                role,
-		Autoplay:            d.AutoplayEnabled(),
+		ID:              d.PublicID,
+		Name:            d.Name,
+		Description:     d.Description,
+		DescriptionText: strings.Join(strings.Fields(d.Description), " "),
+		CreatedAt:       d.CreatedAt,
+		Role:            role,
+		Autoplay:        d.AutoplayEnabled(),
 	}
-	// The description reaches the client as HTML either way: an HTML deck passes its stored text through, a Markdown deck is
-	// rendered here so the server owns the one rendering rule. A render failure falls back to the source text, which the frame
-	// still shows as text instead of losing the description.
-	out.DescriptionHTML = d.Description
-	if out.DescriptionMarkdown {
-		rendered, err := markdown.Render(d.Description)
-		if err != nil {
-			a.logger.Error("render deck description markdown failed", "deck_id", d.ID, "error", err)
-		} else {
-			out.DescriptionHTML = rendered
-		}
-	}
-	// Lists print the description as a single line of text, so the stripping happens once here rather than in every client.
-	out.DescriptionText = notetype.PlainText(out.DescriptionHTML)
 	paused, err := a.decks.IsPaused(ctx, userID, d.ID)
 	if err != nil {
 		a.logger.Error("load deck pause for deck response failed", "deck_id", d.ID, "user_id", userID, "error", err)

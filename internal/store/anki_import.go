@@ -189,12 +189,13 @@ func planAnkiDecks(pkg *anki.Package) ankiDeckPlan {
 
 	for i := range pkg.Decks {
 		if names[pkg.Decks[i].ID] == plan.TopName {
-			// The deck model rejects a description over its length bound or carrying a control
-			// character, and real Anki decks routinely carry multi-line HTML blurbs. A cosmetic
-			// field must not fail the import of the cards, so an unstorable description is
-			// dropped instead of written invalid.
-			if len(deckMetaErrors("", pkg.Decks[i].Description)) == 0 {
-				plan.Description = pkg.Decks[i].Description
+			// An Anki deck description is HTML, and an engram description is one line of plain
+			// text, so the import keeps the text a reader saw. The deck model still rejects a
+			// description over its length bound; a cosmetic field must not fail the import of the
+			// cards, so an unstorable description is dropped instead of written invalid.
+			description := descriptionFromHTML(pkg.Decks[i].Description)
+			if len(deckMetaErrors("", description)) == 0 {
+				plan.Description = description
 			}
 			break
 		}

@@ -284,22 +284,3 @@ describe('card frame height report', () => {
     document.body.removeAttribute('style');
   });
 });
-
-describe('card frame content clicks', () => {
-  it('reports a click on plain content, and leaves links and the face controls alone', async () => {
-    runtime = createRuntime({ parent: parent as unknown as Window });
-    runtime.handleMessage(
-      showMessage({ html: '<p id="text">text</p><a id="link" href="https://example.com/">link</a><button id="button">b</button><input id="input">' }),
-    );
-    await flush();
-    const clicks = () => posted().filter((message) => message.type === 'click').length;
-
-    document.getElementById('text')!.click();
-    expect(clicks()).toBe(1);
-    document.getElementById('link')!.click();
-    document.getElementById('button')!.click();
-    document.getElementById('input')!.click();
-    expect(clicks()).toBe(1);
-    expect(posted()).toContainEqual({ type: 'link', href: 'https://example.com/' });
-  });
-});

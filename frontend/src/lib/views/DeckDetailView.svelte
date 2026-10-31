@@ -20,7 +20,6 @@
   import { listClasses, menuClasses, selectionBarButton } from '../components/ui/variants';
   import { toast } from '../components/ui/toast';
   import InlineEdit from '../components/InlineEdit.svelte';
-  import CardFrame from '../components/CardFrame.svelte';
   import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
@@ -213,16 +212,7 @@
   const canEditContent = $derived(deck?.role !== 'reader');
   // Only the owner can change the name and description (the same criterion on the server); other members only see the text.
   const isOwner = $derived(deck?.role === 'owner');
-  // The description is shown in the sandboxed frame, so the server-rendered HTML is the value that reaches it: a Markdown deck
-  // arrives already converted, an HTML deck passes its stored HTML through. The source text stays in `description` for editing.
-  const descriptionHTML = $derived(deck?.description_html ?? deck?.description ?? '');
   const descriptionValue = $derived(deck?.description ?? '');
-  // A description with no markup is shown as text, exactly like the name: no frame is needed for it, and text never
-  // carries HTML into this page. Markdown always goes through the frame, because its rendering is HTML.
-  const descriptionIsText = $derived(!deck?.description_markdown && !/<[a-z!/]|&[#a-z0-9]+;/i.test(descriptionValue));
-  // The frame's own body is restyled to read as the muted text the header shows around it: no page background, no
-  // padding, the header's size and colour. The selector outranks the frame's own `body.nightMode` rule.
-  const descriptionCSS = 'html body.deck-description { background: transparent; padding: 0; color: var(--muted-foreground); font-size: 0.875rem; line-height: 1.25rem; } html body.deck-description a { text-decoration: underline; }';
 
   /**
    * Save of the header's in-place edit: name and description go through the same endpoint, and the unchanged one is submitted along with its current value.
@@ -242,8 +232,7 @@
         ...deck,
         name: updated.name,
         description: updated.description,
-        description_markdown: updated.description_markdown ?? deck.description_markdown,
-        description_html: updated.description_html ?? updated.description,
+        description_text: updated.description_text,
       };
       toast.success($t('deck.settings.info_saved'));
       return true;
@@ -569,22 +558,6 @@
   </span>
 {/snippet}
 
-{#snippet descriptionFrame(startEdit: () => void)}
-  <!-- The description is stored HTML: the frame renders it in its own sandboxed document, never in this page.
-       A click on its text enters editing, as a click on the name does. -->
-  <span class="block" data-testid="deck-description-rendered">
-    <CardFrame
-      html={descriptionHTML}
-      css={isOwner ? `${descriptionCSS} html body.deck-description { cursor: text; }` : descriptionCSS}
-      bodyClass="deck-description"
-      side="question"
-      mediaBase=""
-      title={$t('deck.settings.description')}
-      onclick={startEdit}
-    />
-  </span>
-{/snippet}
-
 <Page>
   <PageHeader
     title={deck ? deck.name : $t('notes.deck_title', { id: deckId })}
@@ -614,10 +587,8 @@
             placeholder={$t('deck.add_description')}
             label={$t('deck.settings.description')}
             maxlength={2000}
-            class="whitespace-pre-line"
             testId="deck-description"
             onSave={(description) => saveDeckInfo({ description })}
-            display={descriptionIsText ? undefined : descriptionFrame}
           />
         </div>
       {/if}
