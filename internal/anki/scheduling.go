@@ -47,28 +47,34 @@ func readLegacyDeckConfigs(db *gorm.DB, pkg *Package) error {
 	if err := db.Raw("SELECT dconf FROM col").Row().Scan(&raw); err != nil {
 		return fmt.Errorf("%w: col.dconf: %v", ErrCorruptCollection, err)
 	}
-	var configs map[string]struct {
-		ID        int64     `json:"id"`
-		Name      string    `json:"name"`
-		Retention float64   `json:"desiredRetention"`
-		FSRS6     []float64 `json:"fsrsParams6"`
-		FSRS5     []float64 `json:"fsrsParams5"`
-		FSRS4     []float64 `json:"fsrsWeights"`
-		New       struct {
-			Delays []float64 `json:"delays"`
-		} `json:"new"`
-		Lapse struct {
-			Delays []float64 `json:"delays"`
-		} `json:"lapse"`
-		Review struct {
-			Max int `json:"maxIvl"`
-		} `json:"rev"`
-	}
+	var configs map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(raw), &configs); err != nil {
 		pkg.DeckConfigsSkipped = true
 		return nil
 	}
-	for _, c := range configs {
+	for _, rawConfig := range configs {
+		var c struct {
+			ID        int64     `json:"id"`
+			Name      string    `json:"name"`
+			Retention float64   `json:"desiredRetention"`
+			FSRS6     []float64 `json:"fsrsParams6"`
+			FSRS5     []float64 `json:"fsrsParams5"`
+			FSRS4     []float64 `json:"fsrsWeights"`
+			New       struct {
+				Delays []float64 `json:"delays"`
+			} `json:"new"`
+			Lapse struct {
+				Delays []float64 `json:"delays"`
+			} `json:"lapse"`
+			Review struct {
+				Max int `json:"maxIvl"`
+			} `json:"rev"`
+		}
+		if err := json.Unmarshal(rawConfig, &c); err != nil {
+			// The deck gets preset defaults when its config is skipped, and content still imports.
+			pkg.DeckConfigsSkipped = true
+			continue
+		}
 		weights := c.FSRS6
 		if len(weights) == 0 {
 			weights = c.FSRS5
@@ -97,6 +103,7 @@ func readModernDeckConfigs(db *gorm.DB, pkg *Package) error {
 		}
 		cfg, err := decodeDeckConfig(data)
 		if err != nil {
+			// The deck gets preset defaults when its config is skipped, and content still imports.
 			pkg.DeckConfigsSkipped = true
 			continue
 		}

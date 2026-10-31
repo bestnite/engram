@@ -105,8 +105,14 @@ func TestSchedulingTolerance(t *testing.T) {
 			}
 		}},
 		{"invalid dconf", `UPDATE col SET dconf = 'invalid'`, false, func(t *testing.T, p *Package) {
-			if len(p.DeckConfigs) != 0 {
-				t.Fatalf("configs: %+v", p.DeckConfigs)
+			if len(p.DeckConfigs) != 0 || !p.DeckConfigsSkipped {
+				t.Fatalf("configs: %+v, skipped: %v", p.DeckConfigs, p.DeckConfigsSkipped)
+			}
+		}},
+		{"one malformed dconf entry", `UPDATE col SET dconf = '{"1":{"id":1,"rev":{"maxIvl":36500.0}},"2":{"id":2,"name":"valid","rev":{"maxIvl":200}}}'`, false, func(t *testing.T, p *Package) {
+			want := []DeckConfig{{ID: 2, Name: "valid", MaximumReviewInterval: 200}}
+			if !reflect.DeepEqual(p.DeckConfigs, want) || !p.DeckConfigsSkipped {
+				t.Fatalf("configs: %+v, skipped: %v", p.DeckConfigs, p.DeckConfigsSkipped)
 			}
 		}},
 		{"invalid config protobuf", `UPDATE deck_config SET config = x'320100'`, true, func(t *testing.T, p *Package) {
