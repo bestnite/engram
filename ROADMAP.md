@@ -157,18 +157,6 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   - The REST and MCP tests pass.
 
   *Verify:* `go test ./internal/api/... ./internal/web/... ./internal/mcp/... ./internal/store/...`; `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
-- [ ] **M17-37 A kind alias never moves a note to another note type** — keep a note on its note type
-  while the transitional `kind` field still exists.
-  *Files:* `internal/api/service.go` (`UpdateNote`); `internal/api/notes_test.go`.
-  *Problem:* `UpdateNote` resolves a posted `kind` with `ensureStockNoteType`, which returns the first
-  note type of the deck whose field ids and template ids match the stock shape. When a deck holds two
-  note types of that shape (one of them a copy with different CSS or templates), saving a note of the
-  second one through the SPA moves the note to the first one.
-  *Work:* when the request carries no `note_type`, and the posted `kind` equals the stock kind of the
-  note's current note type, the note keeps its current note type.
-  *Acceptance:* a handler test with two note types of the `basic` shape in one deck: updating a note of
-  the second type with `kind: "basic"` keeps `note_type_id` unchanged.
-  *Verify:* `go test ./internal/api/... && go vet ./internal/api/...`.
 - [ ] **M17-38 Convert the `{{ruby:…}}` shortcode** — existing notes show raw ruby source since
   migration 0012.
   *Files:* `internal/store/migrate.go` (a new versioned migration appended at the end);
@@ -193,78 +181,6 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
   - The test runs once with `TEST_PG_DSN`.
 
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-
-**Phase 5 follow-up — defects found in the review of M17-22 to M17-24, M17-35 and M17-40 (on `main`)**
-
-These tasks land on `main` directly. The local Ultimate Geography package (`testdata/local/Ultimate-Geography.apkg`) is the
-evidence named below. It is gitignored, so a test that reads it skips when the file is absent.
-
-- [ ] **M17-53 Stream large `.apkg` packages** — import a package of any realistic size with memory
-  that does not grow with its media.
-  *Files:* `internal/anki/`; `internal/store/anki_import.go`; `internal/store/package_import.go`;
-  `internal/store/media_*.go`; `internal/media/media.go`; `internal/api/package.go`,
-  `package_upload.go` and `package_url.go`; `internal/urlfetch/`; `internal/anki/limits_test.go`;
-  `ARCHITECTURE.md`.
-  *Problem:*
-  - The REST multipart import and the URL import cap the package at `media_max_bytes`, the single-media
-    upload limit (default 10 MiB). With the defaults, the 12 MB Ultimate Geography package is refused
-    with 413 from the Import page.
-  - The reader allows at most 2000 entries, 32 MiB per entry and 128 MiB in total. It holds the whole
-    archive and every decompressed media file in memory. Many shared Anki decks with audio have more
-    than 2000 files or more than 128 MiB of media.
-
-  *Work:*
-  - Three new settings, each resolved as environment variable, then settings table, then default, the
-    way `media_max_bytes` is resolved:
-    - `package_max_bytes` / `PACKAGE_MAX_BYTES`: the largest package a transport accepts, default
-      2 GiB;
-    - `package_max_entries` / `PACKAGE_MAX_ENTRIES`: the most zip entries an `.apkg` may have, default
-      100 000;
-    - `package_max_unpacked_bytes` / `PACKAGE_MAX_UNPACKED_BYTES`: the decompressed total of an
-      `.apkg`, default 4 GiB.
-  - A per-entry decompressed cap of 512 MiB stays a constant, because it guards one allocation and is
-    not a deployment choice.
-  - The multipart, URL and upload-ticket transports cap the body at `package_max_bytes` and spool it to
-    a temporary file. The reader opens the zip from that file. Every temporary file is removed when the
-    import ends, on every path.
-  - The collection entry is decompressed into a temporary file, as today, without first holding it in
-    memory.
-  - `anki.MediaEntry` carries no byte slice. The reader exposes each media entry's name, its declared
-    size and a function that opens its decompressed stream.
-  - The import makes one pass over the media that hashes each stream (SHA-1 and SHA-256) and counts its
-    size. The clash rename and the quota check use these results, before any media write.
-  - A media write streams the entry into the content-addressed store through a temporary file and a
-    rename. Under `dry_run` nothing is written.
-  - The `.edeck` reader keeps its in-memory reading and its current caps. `TestDefaultLimitsMatchDeckPackageReader`
-    is deleted, because the two readers no longer share caps.
-
-  *Acceptance:*
-  - Tests with the three caps set low: each cap rejects with `package_too_large`, and no deck row,
-    media row or file is left.
-  - A test imports a generated package with 2500 media entries.
-  - A handler test imports a 12 MB package through `POST /api/v1/decks/import` with the default
-    settings.
-  - A test checks that the temporary files are gone after a successful import and after a failed one.
-  - The existing import tests and goldens pass.
-
-  *Verify:* `go test ./internal/anki/... ./internal/store/... ./internal/api/... ./internal/media/... ./internal/urlfetch/...`.
-
-**Phase 6–9 — remaining capabilities**
-
-- [ ] **M17-31 Image occlusion editor** — create and edit occlusion notes.
-  *Files:* a new editor component; `frontend/package.json` (dependency `fabric`. Reason: Anki's mask
-  editor is built on it, and using the same library keeps the stored shape data identical).
-  *Work:*
-  - Draw, move and resize rect, ellipse, polygon and text shapes.
-  - Group shapes into one cloze number.
-  - Choose the occlusion mode.
-  - Write the occlusion field in Anki's `{{cN::image-occlusion:…}}` form.
-
-  *Acceptance:*
-  - A note created in the editor renders the same as an Anki-created fixture with the same shapes.
-  - The stored field round-trips through edit without change.
-
-  *Verify:* `npm --prefix frontend run check && npm --prefix frontend run test:client`.
 
 ### M10 — Future work (not part of the current release)
 
@@ -398,3 +314,6 @@ bluemonday-sanitised `internal/render` are gone.
 | Editing frame without inline script (M17-42) | Both frame documents share one CSP builder. The editing frame's `script-src` names only the origin, because its runtime is a same-origin module and it never typesets MathJax; an inline event handler in a shared deck's field therefore stays inert and cannot post `upload` messages the parent would upload under the editing user's session. The card frame keeps its inline and eval policy for authored scripts and MathJax. | No |
 | Only the note types Anki imports (M17-54) | The import drops package note types that no note uses, because Anki 26.09.3's importer creates only the types its notes reference. The oracle gained a fixture that carries an unused type together with the golden names Anki adds for it, and an import test pins that result, so importing a deck no longer leaves an empty `Basic` note type behind. | No — the set of created note types changes; no payload shape changes |
 | Purge deleted notes with their note type (M17-59) | A note type used by a live note is still refused with `note_type_in_use`. A type whose notes are all soft-deleted is refused with 409 `note_type_purge_unconfirmed` and the counts `deleted_notes`, `cards` and `reviews`, and `DELETE …?confirm_purge=true` hard-deletes those notes, their cards, `card_states` and `media_notes` rows through the same cascade deck deletion uses, keeping `reviews`. The note type view shows the counts before confirming. | No — a delete that was refused now succeeds after a confirmation; one new 409 code |
+| A kind alias keeps the note type (M17-37) | An update with no `note_type` keeps the note's current type when the posted `kind` is empty or names the type's own shape, so a deck holding two note types of one shape no longer moves the note into the other one on an unrelated edit; a `kind` naming a different shape still resolves to the deck's stock type of that shape. | No |
+| Streaming large `.apkg` imports (M17-53) | Three settings cap a package — `package_max_bytes` (2 GiB), `package_max_entries` (100 000) and `package_max_unpacked_bytes` (4 GiB), each resolved as environment variable, then settings row, then default. The multipart, URL and upload-ticket transports spool the body to a temporary file removed on every path; the reader opens the zip from that file, the collection entry lands in a temporary SQLite file, and media is hashed once and written to the content-addressed store as a stream, so memory no longer grows with the media. The `.edeck` reader keeps its in-memory caps. | No — three configuration keys are added; packages far larger than the single-media limit are now accepted |
+| Image occlusion editor (M17-31) | The note editor opens an image-occlusion note type on a `fabric` canvas: rectangles, ellipses, polygons and text can be drawn, moved, resized and grouped under a cloze number, both occlusion modes are selectable, and the field is written as Anki's one-deletion-per-shape `{{cN::image-occlusion:…}}` markup. An untouched deletion is written back verbatim, so an unchanged note round-trips byte for byte. | No — a frontend dependency (`fabric`) and a page behaviour |
