@@ -1471,9 +1471,13 @@ func equalAnkiState(a, b CardState) bool {
 // importAnkiProgress keeps the per-user state separate from shared card content.
 func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64, pkg *anki.Package, cardIDs map[int64]uint64, opts PackageImportOptions, report *PackageImportReport, now time.Time) error {
 	if !opts.IncludeProgress {
-		report.StatesDiscarded = len(pkg.Cards)
+		for _, card := range pkg.Cards {
+			if card.Type != 0 || card.Queue != 0 {
+				report.StatesDiscarded++
+			}
+		}
 		report.ReviewsDiscarded = len(pkg.Reviews)
-		report.ProgressDiscarded = len(pkg.Cards)+len(pkg.Reviews) > 0
+		report.ProgressDiscarded = report.StatesDiscarded > 0 || report.ReviewsDiscarded > 0
 		return nil
 	}
 	var user User

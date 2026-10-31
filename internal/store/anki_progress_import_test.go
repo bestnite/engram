@@ -15,6 +15,32 @@ import (
 	"git.nite07.com/nite/engram/internal/anki"
 )
 
+func TestAnkiDiscardedProgressCounts(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		cards     []anki.Card
+		reviews   []anki.Review
+		states    int
+		discarded bool
+	}{
+		{name: "all_new", cards: []anki.Card{{}, {}}, states: 0},
+		{name: "review", cards: []anki.Card{{}, {Type: 2, Queue: 2}}, states: 1, discarded: true},
+		{name: "queue_only", cards: []anki.Card{{Queue: -1}}, states: 1, discarded: true},
+		{name: "reviews_only", reviews: []anki.Review{{}}, discarded: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			report := &PackageImportReport{}
+			pkg := &anki.Package{Cards: tc.cards, Reviews: tc.reviews}
+			if err := importAnkiProgress(context.Background(), nil, 0, 0, pkg, nil, PackageImportOptions{}, report, time.Time{}); err != nil {
+				t.Fatal(err)
+			}
+			if report.StatesDiscarded != tc.states || report.ReviewsDiscarded != len(tc.reviews) || report.ProgressDiscarded != tc.discarded {
+				t.Fatalf("report = %+v", report)
+			}
+		})
+	}
+}
+
 func TestAnkiReviewColumns(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

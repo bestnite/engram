@@ -122,6 +122,35 @@ func TestCLIPackageRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCLIImportProgress(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(strconv.FormatBool(enabled), func(t *testing.T) {
+			dbPath := filepath.Join(t.TempDir(), "cli.db")
+			cfgEnv(t, dbPath)
+			db, err := store.Open("sqlite", dbPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := store.AutoMigrate(t.Context(), db); err != nil {
+				t.Fatal(err)
+			}
+			userID, _ := seedCLIDeck(t, db)
+			args := []string{"--package", "../../internal/notetype/testdata/anki/stock.anki21b.apkg", "--user", strconv.FormatUint(userID, 10)}
+			if enabled {
+				args = append(args, "--include-progress")
+			}
+			captureImportReport(t, args)
+			var count int64
+			if err := db.Model(&store.CardState{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
+				t.Fatal(err)
+			}
+			if (count > 0) != enabled {
+				t.Fatalf("states = %d, enabled = %t", count, enabled)
+			}
+		})
+	}
+}
+
 func TestCLIImportReusePreset(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "cli.db")
 	cfgEnv(t, dbPath)
