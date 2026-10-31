@@ -349,6 +349,18 @@ func TestAnkiProgressImport(t *testing.T) {
 					if again.ProgressApplied != 0 || again.StatesSkipped != 2 || again.ReviewsApplied != 0 || again.ReviewsSkipped != 7 {
 						t.Fatalf("repeat: %+v", again)
 					}
+					var repeatedStates []CardState
+					if err := db.Where("user_id = ?", user).Order("card_id").Find(&repeatedStates).Error; err != nil {
+						t.Fatal(err)
+					}
+					if len(repeatedStates) != len(states) {
+						t.Fatalf("repeat state count: got %d, want %d", len(repeatedStates), len(states))
+					}
+					for i := range states {
+						if repeatedStates[i].CardID != states[i].CardID || repeatedStates[i].Version != states[i].Version {
+							t.Errorf("repeat state %d: card/version got %d/%d, want %d/%d", i, repeatedStates[i].CardID, repeatedStates[i].Version, states[i].CardID, states[i].Version)
+						}
+					}
 				})
 			}
 		})

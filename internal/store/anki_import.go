@@ -13,7 +13,6 @@ import (
 	"io"
 	"math"
 	"path"
-	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -1454,6 +1453,21 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 		!math.IsNaN(*difficulty) && !math.IsInf(*difficulty, 0) && *difficulty >= 1 && *difficulty <= 10
 }
 
+func equalAnkiState(a, b CardState) bool {
+	equalTime := func(x, y *time.Time) bool {
+		return x == nil && y == nil || x != nil && y != nil && x.Equal(*y)
+	}
+	equalFloat := func(x, y *float64) bool {
+		return x == nil && y == nil || x != nil && y != nil && *x == *y
+	}
+	return a.CardID == b.CardID && a.UserID == b.UserID && a.State == b.State &&
+		equalTime(a.DueAt, b.DueAt) && a.StepIndex == b.StepIndex &&
+		equalFloat(a.Stability, b.Stability) && equalFloat(a.Difficulty, b.Difficulty) &&
+		a.Reps == b.Reps && a.Lapses == b.Lapses && a.ScheduledDays == b.ScheduledDays &&
+		a.ElapsedDays == b.ElapsedDays && equalTime(a.LastReviewAt, b.LastReviewAt) &&
+		a.Version == b.Version && equalTime(a.SuspendedAt, b.SuspendedAt)
+}
+
 // importAnkiProgress keeps the per-user state separate from shared card content.
 func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64, pkg *anki.Package, cardIDs map[int64]uint64, opts PackageImportOptions, report *PackageImportReport, now time.Time) error {
 	if !opts.IncludeProgress {
@@ -1628,7 +1642,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		}
 		if err == nil {
 			state.Version = old.Version
-			if reflect.DeepEqual(old, state) {
+			if equalAnkiState(old, state) {
 				report.StatesSkipped++
 				continue
 			}
