@@ -898,10 +898,11 @@ func (s *DeckStore) prepareAnkiImport(ctx context.Context, actorUserID uint64, r
 	}
 
 	report := &PackageImportReport{
-		Target:    targetKind,
-		DryRun:    opts.DryRun,
-		MatchRule: "anki_guid",
-		Errors:    []PackageImportError{},
+		Target:       targetKind,
+		DryRun:       opts.DryRun,
+		CardsSkipped: pkg.CardsSkipped,
+		MatchRule:    "anki_guid",
+		Errors:       []PackageImportError{},
 	}
 	placed, writtenMedia, err := s.placeAnkiMedia(ctx, files, opts, report)
 	if err != nil {

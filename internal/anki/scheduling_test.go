@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -17,6 +19,87 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"gorm.io/gorm"
 )
+
+func TestRealColumnRules(t *testing.T) {
+	tests := []struct{ table, column, field, rule string }{
+		{"col", "crt", "CreatedAt", "round"},
+		{"cards", "id", "ID", "primary"}, {"cards", "nid", "", "fail"}, {"cards", "did", "", "fail"}, {"cards", "ord", "", "fail"},
+		{"cards", "mod", "Modified", "round"}, {"cards", "usn", "USN", "round"}, {"cards", "due", "Due", "round"}, {"cards", "ivl", "Interval", "round"}, {"cards", "factor", "Factor", "round"}, {"cards", "reps", "Reps", "round"}, {"cards", "lapses", "Lapses", "round"}, {"cards", "left", "Left", "round"}, {"cards", "odue", "OriginalDue", "round"},
+		{"cards", "type", "", "skip"}, {"cards", "queue", "", "skip"}, {"cards", "odid", "", "skip"}, {"cards", "flags", "", "skip"},
+		{"revlog", "id", "ID", "primary"}, {"revlog", "cid", "", "revlog"}, {"revlog", "ease", "", "revlog"}, {"revlog", "type", "", "revlog"},
+		{"revlog", "usn", "USN", "round"}, {"revlog", "ivl", "Interval", "round"}, {"revlog", "lastIvl", "LastInterval", "round"}, {"revlog", "factor", "Factor", "round"}, {"revlog", "time", "Time", "round"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.table+"/"+tc.column, func(t *testing.T) {
+			db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, q := range []string{
+				`CREATE TABLE col (crt INTEGER, dconf TEXT)`, `INSERT INTO col VALUES (1, '{}')`,
+				`CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, ord INTEGER, mod INTEGER, usn INTEGER, type INTEGER, queue INTEGER, due INTEGER, ivl INTEGER, factor INTEGER, reps INTEGER, lapses INTEGER, left INTEGER, odue INTEGER, odid INTEGER, flags INTEGER, data TEXT)`,
+				`INSERT INTO cards VALUES (1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,''), (2,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,'')`,
+				`CREATE TABLE revlog (id INTEGER PRIMARY KEY, cid INTEGER, usn INTEGER, ease INTEGER, ivl INTEGER, lastIvl INTEGER, factor INTEGER, time INTEGER, type INTEGER)`,
+				`INSERT INTO revlog VALUES (1,1,1,1,1,1,1,1,1), (2,2,1,1,1,1,1,1,1)`,
+			} {
+				if err := db.Exec(q).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			where := " WHERE id = 1"
+			if tc.table == "col" {
+				where = ""
+			}
+			err = db.Exec(fmt.Sprintf("UPDATE %s SET %s = 7.5%s", tc.table, tc.column, where)).Error
+			if tc.rule == "primary" {
+				if err == nil {
+					t.Fatal("SQLite accepted REAL primary key")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			pkg := &Package{}
+			pkg.Cards, err = readCards(db, pkg)
+			if tc.rule == "fail" {
+				if !errors.Is(err, ErrCorruptCollection) {
+					t.Fatalf("error = %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = readScheduling(db, pkg); err != nil {
+				t.Fatal(err)
+			}
+			switch tc.rule {
+			case "skip":
+				if pkg.CardsSkipped != 1 || len(pkg.Cards) != 1 || pkg.Cards[0].ID != 2 {
+					t.Fatalf("cards = %+v, skipped = %d", pkg.Cards, pkg.CardsSkipped)
+				}
+			case "revlog":
+				if !errors.Is(pkg.RevlogErr, ErrCorruptCollection) || len(pkg.Reviews) != 1 || pkg.Reviews[0].ID != 2 {
+					t.Fatalf("reviews = %+v, error = %v", pkg.Reviews, pkg.RevlogErr)
+				}
+			case "round":
+				var v reflect.Value
+				switch tc.table {
+				case "col":
+					v = reflect.ValueOf(*pkg)
+				case "cards":
+					v = reflect.ValueOf(pkg.Cards[0])
+				case "revlog":
+					v = reflect.ValueOf(pkg.Reviews[0])
+				}
+				if got := v.FieldByName(tc.field).Int(); got != 8 {
+					t.Fatalf("got %d, want 8", got)
+				}
+			}
+		})
+	}
+}
 
 func TestSchedulingRows(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

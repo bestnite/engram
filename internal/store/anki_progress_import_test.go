@@ -21,6 +21,83 @@ import (
 	"git.nite07.com/nite/engram/internal/anki"
 )
 
+func TestAnkiImportReportsSkippedCard(t *testing.T) {
+	raw, err := os.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var archive bytes.Buffer
+	zw := zip.NewWriter(&archive)
+	for _, entry := range zr.File {
+		r, err := entry.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if entry.Name == "collection.anki2" {
+			path := filepath.Join(t.TempDir(), "collection.sqlite")
+			if err := os.WriteFile(path, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			col, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := col.Exec("UPDATE cards SET queue = 1.5 WHERE id = (SELECT MIN(id) FROM cards)").Error; err != nil {
+				t.Fatal(err)
+			}
+			sqlDB, err := col.DB()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := sqlDB.Close(); err != nil {
+				t.Fatal(err)
+			}
+			data, err = os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		w, err := zw.Create(entry.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			user := seedUsers(t, db, "skipped_card_"+driver)[0]
+			report, err := NewDeckStore(db).ImportPackage(context.Background(), user, bytes.NewReader(archive.Bytes()), PackageImportOptions{Target: PackageTargetNewDeck, MediaRoot: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if report.CardsSkipped != 1 {
+				t.Fatalf("cards_skipped = %d", report.CardsSkipped)
+			}
+			encoded, err := json.Marshal(report)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Contains(encoded, []byte(`"cards_skipped":1`)) {
+				t.Fatalf("report = %s", encoded)
+			}
+		})
+	}
+}
+
 func TestAnkiImportUnreadableRevlog(t *testing.T) {
 	raw, err := os.ReadFile(ankiFixturePath("stock.anki2.apkg"))
 	if err != nil {

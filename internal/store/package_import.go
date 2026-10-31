@@ -283,6 +283,7 @@ type PackageImportReport struct {
 	NotesUpdated      int    `json:"notes_updated"`
 	NotesSkipped      int    `json:"notes_skipped"`
 	CardsCreated      int    `json:"cards_created"`
+	CardsSkipped      int    `json:"cards_skipped"`
 	MediaNew          int    `json:"media_new"`
 	MediaMissing      int    `json:"media_missing"`
 	ProgressApplied   int    `json:"progress_applied"`

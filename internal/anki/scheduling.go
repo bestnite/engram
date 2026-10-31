@@ -20,7 +20,7 @@ func readScheduling(db *gorm.DB, pkg *Package) error {
 }
 
 func readReviews(db *gorm.DB, pkg *Package) error {
-	rows, err := db.Raw("SELECT " + roundedIntegers("id", "cid", "usn", "ease", "ivl", "lastIvl", "factor", "time", "type") + " FROM revlog ORDER BY id").Rows()
+	rows, err := db.Raw("SELECT id, " + rejectRealIntegers("cid") + ", " + roundedIntegers("usn") + ", " + rejectRealIntegers("ease") + ", " + roundedIntegers("ivl", "lastIvl", "factor", "time") + ", " + rejectRealIntegers("type") + " FROM revlog ORDER BY id").Rows()
 	if err != nil {
 		return fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
 	}

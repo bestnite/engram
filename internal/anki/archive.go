@@ -66,9 +66,9 @@ func ReadWithLimits(r io.ReaderAt, size int64, limits Limits) (*Package, error) 
 	pkg := &Package{Format: format}
 	switch format {
 	case FormatModern:
-		pkg.NoteTypes, pkg.Decks, pkg.Notes, pkg.Cards, err = readModernCollection(db)
+		pkg.NoteTypes, pkg.Decks, pkg.Notes, pkg.Cards, err = readModernCollection(db, pkg)
 	default:
-		pkg.NoteTypes, pkg.Decks, pkg.Notes, pkg.Cards, err = readLegacyCollection(db)
+		pkg.NoteTypes, pkg.Decks, pkg.Notes, pkg.Cards, err = readLegacyCollection(db, pkg)
 	}
 	if err != nil {
 		return nil, err

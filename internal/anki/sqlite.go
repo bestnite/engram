@@ -1,6 +1,7 @@
 package anki
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -44,7 +45,7 @@ func openCollection(path string) (*gorm.DB, func(), error) {
 
 // readLegacyCollection decodes a schema-11 collection: note types and decks
 // are JSON columns of the col table, notes and cards are tables.
-func readLegacyCollection(db *gorm.DB) ([]NoteType, []Deck, []Note, []Card, error) {
+func readLegacyCollection(db *gorm.DB, pkg *Package) ([]NoteType, []Deck, []Note, []Card, error) {
 	var modelsJSON, decksJSON string
 	row := db.Raw("SELECT models, decks FROM col").Row()
 	if err := row.Scan(&modelsJSON, &decksJSON); err != nil {
@@ -73,7 +74,7 @@ func readLegacyCollection(db *gorm.DB) ([]NoteType, []Deck, []Note, []Card, erro
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	cards, err := readCards(db)
+	cards, err := readCards(db, pkg)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -260,8 +261,8 @@ func readNotes(db *gorm.DB) ([]Note, error) {
 
 // readCards reads the cards table. Schema 11 and schema 18 use the same
 // columns, so both layouts share this query.
-func readCards(db *gorm.DB) ([]Card, error) {
-	rows, err := db.Raw("SELECT " + roundedIntegers("id", "nid", "did", "ord", "mod", "usn", "type", "queue", "due", "ivl", "factor", "reps", "lapses", "left", "odue", "odid", "flags") + ", data FROM cards ORDER BY id").Rows()
+func readCards(db *gorm.DB, pkg *Package) ([]Card, error) {
+	rows, err := db.Raw("SELECT id, " + rejectRealIntegers("nid", "did", "ord") + ", " + roundedIntegers("mod", "usn", "due", "ivl", "factor", "reps", "lapses", "left", "odue") + ", data, " + rejectRealIntegers("type", "queue", "odid", "flags") + " FROM cards ORDER BY id").Rows()
 	if err != nil {
 		return nil, fmt.Errorf("%w: cards table: %v", ErrCorruptCollection, err)
 	}
@@ -269,15 +270,30 @@ func readCards(db *gorm.DB) ([]Card, error) {
 	var cards []Card
 	for rows.Next() {
 		var card Card
-		if err := rows.Scan(&card.ID, &card.NoteID, &card.DeckID, &card.Ordinal, &card.Modified, &card.USN, &card.Type, &card.Queue, &card.Due, &card.Interval, &card.Factor, &card.Reps, &card.Lapses, &card.Left, &card.OriginalDue, &card.OriginalDeckID, &card.Flags, &card.Data); err != nil {
+		var rawType, rawQueue, rawOdid, rawFlags any
+		if err := rows.Scan(&card.ID, &card.NoteID, &card.DeckID, &card.Ordinal, &card.Modified, &card.USN, &card.Due, &card.Interval, &card.Factor, &card.Reps, &card.Lapses, &card.Left, &card.OriginalDue, &card.Data, &rawType, &rawQueue, &rawOdid, &rawFlags); err != nil {
 			return nil, fmt.Errorf("%w: cards table: %v", ErrCorruptCollection, err)
 		}
+		var typ, queue, odid, flags sql.NullInt64
+		if typ.Scan(rawType) != nil || queue.Scan(rawQueue) != nil || odid.Scan(rawOdid) != nil || flags.Scan(rawFlags) != nil || !typ.Valid || !queue.Valid || !odid.Valid || !flags.Valid {
+			pkg.CardsSkipped++
+			continue
+		}
+		card.Type, card.Queue, card.OriginalDeckID, card.Flags = int(typ.Int64), int(queue.Int64), odid.Int64, int(flags.Int64)
 		cards = append(cards, card)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("%w: cards table: %v", ErrCorruptCollection, err)
 	}
 	return cards, nil
+}
+
+func rejectRealIntegers(columns ...string) string {
+	expressions := make([]string, len(columns))
+	for i, column := range columns {
+		expressions[i] = fmt.Sprintf("CASE WHEN typeof(%[1]s) = 'real' THEN NULL ELSE %[1]s END", column)
+	}
+	return strings.Join(expressions, ", ")
 }
 
 // Preserve integers exactly and leave invalid values for Scan to reject.
@@ -292,7 +308,7 @@ func roundedIntegers(columns ...string) string {
 // readModernCollection decodes a schema-18 collection. Note types, fields,
 // templates and decks are tables; the col table's JSON columns are empty and
 // are not read.
-func readModernCollection(db *gorm.DB) ([]NoteType, []Deck, []Note, []Card, error) {
+func readModernCollection(db *gorm.DB, pkg *Package) ([]NoteType, []Deck, []Note, []Card, error) {
 	var ver int
 	if err := db.Raw("SELECT ver FROM col").Row().Scan(&ver); err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("%w: col table: %v", ErrCorruptCollection, err)
@@ -312,7 +328,7 @@ func readModernCollection(db *gorm.DB) ([]NoteType, []Deck, []Note, []Card, erro
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	cards, err := readCards(db)
+	cards, err := readCards(db, pkg)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
