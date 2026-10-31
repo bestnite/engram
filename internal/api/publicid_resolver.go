@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -54,7 +55,7 @@ func (a *API) ImportPresetID(ctx context.Context, owner uint64, publicID string)
 		return 0, InvalidRequest("invalid preset selection")
 	}
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("resolve import preset: %w", err)
 	}
 	if p.OwnerUserID != owner {
 		return 0, InvalidRequest("invalid preset selection")

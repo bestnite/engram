@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/store"
@@ -53,8 +54,8 @@ func TestImportPresetID(t *testing.T) {
 	if err == nil {
 		t.Fatal("closed database returned no error")
 	}
-	if se := asServiceError(err); se.Status != http.StatusInternalServerError || se.Code != CodeInternal {
-		t.Fatalf("closed database error = %+v, want 500 internal", se)
+	if se := asServiceError(err); se.Status != http.StatusInternalServerError || se.Code != CodeInternal || !strings.Contains(se.Message, "resolve import preset") {
+		t.Fatalf("closed database error = %+v, want 500 internal with resolve import preset context", se)
 	}
 }
 

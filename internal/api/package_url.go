@@ -52,9 +52,10 @@ type importURLRequest struct {
 
 // ImportDeckPackageURL downloads a deck package from a public HTTPS direct link and imports it.
 //
-// Order matters: resolve the target deck and authorize first, and only start the network download once the request is known not to be rejected. Downloading before authorizing
-// would let unauthorized users turn this entry into an outbound pivot for the server. After the download it reuses ImportDeckPackage, which resolves the target
-// once more and authorizes once more - redundant but idempotent, in exchange for the invariant "authorization precedes fetching bytes".
+// Order matters: check the preset, authorize the target, apply the rate limiter, acquire an
+// import slot, then download. Downloading before authorization would let unauthorized users
+// turn this entry into an outbound pivot. After downloading, ImportDeckPackage resolves the target
+// and authorizes again, preserving the invariant that authorization precedes fetching bytes.
 func (a *API) ImportDeckPackageURL(ctx context.Context, u *store.User, apiKeyID *uint64, rawURL string, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
 	if err := a.validateImportPreset(ctx, u.ID, &opts); err != nil {
 		return nil, err

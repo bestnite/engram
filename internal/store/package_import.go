@@ -229,7 +229,8 @@ type PackageImportOptions struct {
 	// PresetMode selects new, reuse or copy for new_deck; empty defaults to new.
 	// For into_deck and replace_deck, only empty or new is accepted, without PresetID.
 	PresetMode string
-	// PresetID identifies the owner's preset for reuse or copy, preventing cross-owner selection.
+	// PresetID identifies the preset for reuse or copy. ValidateImportPreset checks its owner
+	// during validation, and selectImportPreset checks its owner again before use.
 	PresetID uint64
 	// Target takes new_deck (the default), into_deck:<id>, replace_deck:<id>.
 	Target string
@@ -1327,7 +1328,7 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 }
 
 // selectImportPreset applies a validated mode inside the import transaction, checking ownership
-// again so a preset removed or transferred after validation cannot be selected.
+// again so a preset removed after validation cannot be selected.
 func selectImportPreset(ctx context.Context, tx *gorm.DB, owner uint64, opts PackageImportOptions, create func() (Preset, error)) (Preset, error) {
 	if opts.PresetMode == PackagePresetNew {
 		return create()

@@ -118,8 +118,10 @@ type bulkActionIn struct {
 
 // importDeckIn is the input of import_deck: it accepts a deck package, with the source being one of two alternatives.
 type importDeckIn struct {
-	PresetMode string `json:"preset_mode,omitempty" jsonschema:"preset mode: new, reuse or copy"`
-	PresetID   string `json:"preset_id,omitempty" jsonschema:"public id of the preset to reuse or copy"`
+	// PresetMode selects how a new deck obtains its preset; reuse and copy require PresetID.
+	PresetMode string `json:"preset_mode,omitempty" jsonschema:"preset choice for new_deck only: new, reuse or copy; reuse and copy require preset_id; other modes refuse preset_id"`
+	// PresetID identifies the owned preset to reuse or copy for a new deck; other modes refuse it.
+	PresetID string `json:"preset_id,omitempty" jsonschema:"public id of the owned preset for new_deck only; required for reuse and copy; refused for any other mode"`
 	// Package is the package body itself: the JSON document export_deck outputs, a base64-encoded .edeck zip, or a base64-encoded .apkg archive. Mutually exclusive with URL.
 	Package any `json:"package,omitempty" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck/.apkg archive; mutually exclusive with url"`
 	// URL is a public HTTPS direct link (.edeck/.zip/.apkg); it is downloaded and validated by the server, and is mutually exclusive with Package.
@@ -139,8 +141,10 @@ type importDeckIn struct {
 
 // createImportUploadIn is the input of create_import_upload: the import options are fixed into the ticket when it is issued.
 type createImportUploadIn struct {
-	PresetMode string `json:"preset_mode,omitempty" jsonschema:"preset mode: new, reuse or copy"`
-	PresetID   string `json:"preset_id,omitempty" jsonschema:"public id of the preset to reuse or copy"`
+	// PresetMode selects how a new deck obtains its preset; reuse and copy require PresetID.
+	PresetMode string `json:"preset_mode,omitempty" jsonschema:"preset choice for new_deck only: new, reuse or copy; reuse and copy require preset_id; other modes refuse preset_id"`
+	// PresetID identifies the owned preset to reuse or copy for a new deck; other modes refuse it.
+	PresetID string `json:"preset_id,omitempty" jsonschema:"public id of the owned preset for new_deck only; required for reuse and copy; refused for any other mode"`
 	// Target takes new_deck (default), into_deck:<public id>, or replace_deck:<public id>.
 	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<public id> or replace_deck:<public id>"`
 	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
