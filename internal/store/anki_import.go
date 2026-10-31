@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"path"
 	"reflect"
 	"regexp"
@@ -1248,7 +1249,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		cardIDs[card.ID] = created.ID
 		report.CardsCreated++
 	}
-	if err := importAnkiProgress(ctx, tx, actorUserID, pkg, cardIDs, opts, report, now); err != nil {
+	if err := importAnkiProgress(ctx, tx, actorUserID, deckID, pkg, cardIDs, opts, report, now); err != nil {
 		return err
 	}
 
@@ -1452,7 +1453,7 @@ func ankiSteps(steps []float64) string {
 }
 
 // importAnkiProgress keeps the per-user state separate from shared card content.
-func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID uint64, pkg *anki.Package, cardIDs map[int64]uint64, opts PackageImportOptions, report *PackageImportReport, now time.Time) error {
+func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64, pkg *anki.Package, cardIDs map[int64]uint64, opts PackageImportOptions, report *PackageImportReport, now time.Time) error {
 	if !opts.IncludeProgress {
 		report.StatesDiscarded = len(pkg.Cards)
 		report.ReviewsDiscarded = len(pkg.Reviews)
@@ -1464,11 +1465,44 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID uint64, pkg *an
 		return fmt.Errorf("import Anki progress: load user: %w", err)
 	}
 	loc, cutoff := reviewday.Location(user.Timezone), reviewday.ResolveCutoff(user.DayCutoffHour)
+	var deck Deck
+	if err := tx.WithContext(ctx).First(&deck, deckID).Error; err != nil {
+		return fmt.Errorf("import Anki progress: load deck: %w", err)
+	}
+	settings, err := NewDeckStore(tx).StudySettings(ctx, userID, &deck)
+	if err != nil {
+		return fmt.Errorf("import Anki progress: load study settings: %w", err)
+	}
+	var preset Preset
+	if err := tx.WithContext(ctx).First(&preset, settings.PresetID).Error; err != nil {
+		return fmt.Errorf("import Anki progress: load preset: %w", err)
+	}
+	params := fsrs.DefaultParam()
+	if preset.WeightsJSON != nil && strings.TrimSpace(*preset.WeightsJSON) != "" && strings.TrimSpace(*preset.WeightsJSON) != "null" {
+		var weights []float64
+		if err := json.Unmarshal([]byte(*preset.WeightsJSON), &weights); err != nil {
+			return fmt.Errorf("import Anki progress: decode preset weights: %w", err)
+		}
+		params.W, err = fsrs.MigrateWeights(weights)
+		if err != nil {
+			return fmt.Errorf("import Anki progress: migrate preset weights: %w", err)
+		}
+	}
+	engine := fsrs.NewFSRS(params)
 	last := make(map[int64]int64)
 	previous := make(map[int64]int64)
+	histories := make(map[int64]fsrs.ReviewEntries)
+	lastDay := make(map[int64]time.Time)
 	for _, r := range pkg.Reviews {
 		if r.Type >= 0 && r.Type <= 3 && r.Ease >= 1 && r.Ease <= 4 {
 			previous[r.CardID], last[r.CardID] = last[r.CardID], r.ID
+			day, _ := time.Parse("2006-01-02", reviewday.Day(time.UnixMilli(r.ID), loc, cutoff))
+			var delta float64
+			if prev, ok := lastDay[r.CardID]; ok {
+				delta = day.Sub(prev).Hours() / 24
+			}
+			histories[r.CardID] = append(histories[r.CardID], fsrs.ReviewEntry{Rating: fsrs.Rating(r.Ease), DeltaT: delta})
+			lastDay[r.CardID] = day
 		}
 	}
 	for _, card := range pkg.Cards {
@@ -1502,6 +1536,24 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID uint64, pkg *an
 			}
 		}
 		state.Stability, state.Difficulty = data.Stability, data.Difficulty
+		if card.Type != 0 && (state.Stability == nil || state.Difficulty == nil) {
+			var memory *fsrs.MemoryState
+			var computeErr error
+			if history := histories[card.ID]; len(history) > 0 {
+				memory, computeErr = engine.MemoryState(history, nil)
+			} else {
+				interval := float64(card.Interval)
+				if interval < 0 {
+					interval = -interval / 86400
+				}
+				memory, computeErr = engine.MemoryStateFromSM2(float64(card.Factor)/1000, interval, 0.9)
+			}
+			if computeErr != nil || memory == nil || math.IsNaN(memory.Stability) || math.IsInf(memory.Stability, 0) || memory.Stability < 0.001 || math.IsNaN(memory.Difficulty) || math.IsInf(memory.Difficulty, 0) || memory.Difficulty < 1 || memory.Difficulty > 10 {
+				report.StatesSkipped++
+				continue
+			}
+			state.Stability, state.Difficulty = &memory.Stability, &memory.Difficulty
+		}
 		if data.LastReview != nil {
 			// Anki writes lrt in seconds; also accept millisecond timestamps from packages
 			// that use the same precision as the review log.

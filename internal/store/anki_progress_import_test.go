@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	fsrs "github.com/open-spaced-repetition/go-fsrs/v4"
+
 	"git.nite07.com/nite/engram/internal/anki"
 )
 
@@ -151,6 +153,97 @@ func TestAnkiProgressImport(t *testing.T) {
 						t.Fatalf("repeat: %+v", again)
 					}
 				})
+			}
+		})
+	}
+}
+
+func TestAnkiProgressMissingMemory(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		for _, tc := range []struct {
+			name                   string
+			kind, factor, interval int
+			history, skipped       bool
+		}{
+			{"review history", 2, 2500, 7, true, false},
+			{"learning history", 1, 0, -600, true, false},
+			{"review SM2", 2, 2500, 7, false, false},
+			{"learning invalid SM2", 1, 0, -600, false, true},
+		} {
+			t.Run(driver+"/"+tc.name, func(t *testing.T) {
+				user := seedUsers(t, db, fmt.Sprintf("memory_%s_%d_%d_%t", driver, tc.kind, tc.factor, tc.history))[0]
+				pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				pkg.Notes, pkg.Cards = pkg.Notes[:1], pkg.Cards[:1]
+				card := &pkg.Cards[0]
+				card.Type, card.Queue, card.Factor, card.Interval, card.Data = tc.kind, tc.kind, tc.factor, tc.interval, `{}`
+				pkg.Reviews = nil
+				if tc.history {
+					pkg.Reviews = []anki.Review{{ID: 1600000000000, CardID: card.ID, Ease: 3, Type: 0}, {ID: 1600086400000, CardID: card.ID, Ease: 4, Type: 1}}
+				}
+				report := &PackageImportReport{}
+				plan := planAnkiDecks(pkg)
+				opts := PackageImportOptions{IncludeProgress: true, Now: time.Now}
+				if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, opts, report); err != nil {
+					t.Fatal(err)
+				}
+				var states []CardState
+				if err := db.Where("user_id = ?", user).Find(&states).Error; err != nil {
+					t.Fatal(err)
+				}
+				if tc.skipped {
+					if len(states) != 0 || report.StatesSkipped != 1 {
+						t.Fatalf("states=%+v report=%+v", states, report)
+					}
+					return
+				}
+				if len(states) != 1 || states[0].Stability == nil || *states[0].Stability < .001 || states[0].Difficulty == nil || *states[0].Difficulty < 1 || *states[0].Difficulty > 10 {
+					t.Fatalf("states=%+v report=%+v", states, report)
+				}
+			})
+		}
+	}
+}
+
+func TestAnkiProgressReplayUsesStudyWeightsAndReviewDays(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			user := seedUsers(t, db, "replay_"+driver)[0]
+			if err := db.Model(&User{}).Where("id = ?", user).Updates(map[string]any{"timezone": "UTC", "day_cutoff_hour": 4}).Error; err != nil {
+				t.Fatal(err)
+			}
+			pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pkg.Notes, pkg.Cards = pkg.Notes[:1], pkg.Cards[:1]
+			card := &pkg.Cards[0]
+			card.Type, card.Queue, card.Data = 2, 2, `{}`
+			first := time.Date(2024, 3, 1, 3, 59, 0, 0, time.UTC)
+			pkg.Reviews = []anki.Review{{ID: first.UnixMilli(), CardID: card.ID, Ease: 3, Type: 0}, {ID: first.Add(time.Minute).UnixMilli(), CardID: card.ID, Ease: 4, Type: 1}, {ID: first.Add(2 * time.Minute).UnixMilli(), CardID: card.ID, Ease: 0, Type: 1}}
+			weights := fsrs.DefaultWeights()
+			weights[2] += 2
+			pkg.DeckConfigs[0].Weights = append([]float64(nil), weights[:]...)
+			plan := planAnkiDecks(pkg)
+			report := &PackageImportReport{}
+			if err := NewDeckStore(db).importAnkiInTx(ctx, db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{IncludeProgress: true, ApplyWeights: true, Now: time.Now}, report); err != nil {
+				t.Fatal(err)
+			}
+			params := fsrs.DefaultParam()
+			params.W = weights
+			want, err := fsrs.NewFSRS(params).MemoryState(fsrs.ReviewEntries{{Rating: fsrs.Good}, {Rating: fsrs.Easy, DeltaT: 1}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got CardState
+			if err := db.Where("user_id = ?", user).First(&got).Error; err != nil {
+				t.Fatal(err)
+			}
+			if got.Stability == nil || got.Difficulty == nil || *got.Stability != want.Stability || *got.Difficulty != want.Difficulty {
+				t.Fatalf("got %+v want %+v", got, want)
 			}
 		})
 	}
