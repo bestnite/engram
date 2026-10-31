@@ -1,0 +1,13 @@
+{
+  "cards": {
+    "partial": {
+      "difficulty": 3.7991995811462402,
+      "stability": 300.0
+    },
+    "reset": {
+      "difficulty": 6.4021148681640625,
+      "stability": 1.8867881298065186
+    }
+  },
+  "source": "anki==26.9.3"
+}

@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -13,6 +14,64 @@ import (
 
 	"git.nite07.com/nite/engram/internal/anki"
 )
+
+func TestAnkiProgressReplayStart(t *testing.T) {
+	var golden struct {
+		Cards map[string]struct {
+			Stability  float64 `json:"stability"`
+			Difficulty float64 `json:"difficulty"`
+		} `json:"cards"`
+	}
+	raw, err := os.ReadFile(ankiFixturePath("memory-replay.golden.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &golden); err != nil {
+		t.Fatal(err)
+	}
+	for driver, db := range packageDatabases(t) {
+		for _, tc := range []struct {
+			name, key string
+			index     int
+			learning  bool
+		}{
+			{"first_learning", "reset", 1, true},
+			{"partial_review", "partial", 0, false},
+			{"reset", "reset", 1, false},
+		} {
+			t.Run(driver+"/"+tc.name, func(t *testing.T) {
+				pkg, err := anki.ReadFile(ankiFixturePath("memory-replay.anki2.apkg"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				card := pkg.Cards[tc.index]
+				pkg.Cards = []anki.Card{card}
+				var reviews []anki.Review
+				for _, r := range pkg.Reviews {
+					if r.CardID == card.ID && (!tc.learning || r.ID > 1700000000000+210*86400000) {
+						reviews = append(reviews, r)
+					}
+				}
+				pkg.Reviews = reviews
+				user := seedUsers(t, db, "replay_start_"+driver+"_"+tc.name)[0]
+				plan, report := planAnkiDecks(pkg), &PackageImportReport{}
+				if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: true, Now: time.Now}, report); err != nil {
+					t.Fatal(err)
+				}
+				var state CardState
+				if err := db.Where("user_id = ?", user).First(&state).Error; err != nil {
+					t.Fatal(err)
+				}
+				want := golden.Cards[tc.key]
+				// Anki's ComputedMemoryState is float32 and its Rust implementation rounds
+				// differently; the observed 2–8 ULP differences are precision, not algorithm.
+				if state.Stability == nil || state.Difficulty == nil || math.Abs(*state.Stability-want.Stability) > 1e-4 || math.Abs(*state.Difficulty-want.Difficulty) > 1e-4 {
+					t.Fatalf("state=%+v want=%+v", state, want)
+				}
+			})
+		}
+	}
+}
 
 // TestRealAnkiPackage optionally exercises an externally generated Anki export.
 func TestRealAnkiPackage(t *testing.T) {

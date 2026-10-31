@@ -1951,6 +1951,63 @@ def print_table() -> None:
         print("| `%s` | %s | %s | `%s` |" % (rule, requirement, fixture, notes))
 
 
+def build_memory_fixture(workdir: Path) -> None:
+    """Keep the scheduling history in a deterministic legacy package."""
+    package = OUT_DIR / "memory-replay.anki2.apkg"
+    with zipfile.ZipFile(OUT_DIR / "stock.anki2.apkg") as archive:
+        entries = {name: archive.read(name) for name in archive.namelist()}
+    db_path = workdir / "memory-replay.anki2"
+    db_path.write_bytes(entries["collection.anki2"])
+    conn = connect(db_path)
+    ids = [row[0] for row in conn.execute(
+        "select c.id from cards c join notes n on n.id=c.nid "
+        "where n.guid in ('stock-basic-one', 'stock-basic-two') order by n.guid"
+    )]
+    assert len(ids) == 2
+    conn.execute("update cards set type=2, queue=2, ivl=300, factor=2500, data='{}' where id=?", (ids[0],))
+    conn.execute("update cards set type=1, queue=1, ivl=0, factor=2500, data='{}' where id=?", (ids[1],))
+    base, day = 1700000000000, 86400000
+    rows = [
+        (ids[0], base, 3, 300, 100, 2500, 1),
+        (ids[1], base+1000, 3, -600, 0, 2500, 0),
+        (ids[1], base+day, 3, 1, -600, 2500, 1),
+        (ids[1], base+4*day, 3, 3, 1, 2500, 1),
+        (ids[1], base+10*day, 3, 6, 3, 2500, 1),
+        (ids[1], base+210*day, 0, 0, 6, 0, 4),
+        (ids[1], base+211*day, 1, -60, 0, 0, 0),
+        (ids[1], base+212*day, 3, -600, -60, 0, 0),
+    ]
+    for cid, stamp, ease, ivl, last, factor, kind in rows:
+        conn.execute("insert into revlog values (?, ?, -1, ?, ?, ?, ?, 1000, ?)",
+                     (stamp, cid, ease, ivl, last, factor, kind))
+    conn.commit()
+    conn.execute("vacuum")
+    conn.close()
+    entries["collection.anki2"] = db_path.read_bytes()
+    with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_STORED) as archive:
+        for name, contents in entries.items():
+            info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+            archive.writestr(info, contents)
+
+    col = Collection(str(workdir / "memory-import.anki2"))
+    try:
+        col.import_anki_package(ImportAnkiPackageRequest(
+            package_path=str(package), options=ImportAnkiPackageOptions(
+                with_scheduling=True, with_deck_configs=True)))
+        result = {"source": SOURCE, "cards": {}}
+        for name, guid in (("partial", "stock-basic-one"), ("reset", "stock-basic-two")):
+            nid = next(nid for nid in col.find_notes("") if col.get_note(nid).guid == guid)
+            card = col.get_note(nid).cards()[0]
+            data = json.loads(col.db.scalar("select data from cards where id=?", card.id))
+            assert "s" not in data and "d" not in data, data
+            state = col.compute_memory_state(card.id)
+            result["cards"][name] = {"stability": state.stability, "difficulty": state.difficulty}
+            print(f"memory-replay {name}: data={data} computed={state}")
+        write_json(OUT_DIR / "memory-replay.golden.json", result)
+    finally:
+        col.close()
+
+
 def main(argv: list[str]) -> int:
     if "--table" in argv:
         print_table()
@@ -2015,6 +2072,7 @@ def main(argv: list[str]) -> int:
             if package.record_import_note_types:
                 golden["import_note_types"] = imported[package.fixture]
             write_json(OUT_DIR / ("%s.golden.json" % package.fixture), golden)
+        build_memory_fixture(workdir)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

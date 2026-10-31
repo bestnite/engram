@@ -158,6 +158,11 @@ a note that carries it on its shapes is in "hide all, guess one" mode, and a not
 
 ## Golden JSON
 
+`memory-replay.anki2.apkg` is the scheduling exception: it carries two histories
+and no FSRS memory state. After import Anki leaves `cards.data` as `{}`; the
+golden records `compute_memory_state()` on each imported card, not stored values.
+The package is a deterministic legacy fixture derived from the stock package.
+
 One file per fixture group, UTF-8, keys sorted, two-space indent, one trailing newline.
 
 ```json
@@ -352,6 +357,5 @@ packages store note field values, not rendered output, so they carry no host nam
 - Template error codes. Anki renders its own English error text for an unknown field, an unclosed
   conditional or a missing cloze number, while the Go ports return stable error codes the caller
   localises. The error text is not a contract, so no fixture records it.
-- Scheduling, deck configuration, review history and browser-only rendering. Every package is
-  exported with `with_scheduling=False` and `with_deck_configs=False`, and the goldens come from
-  `card.question()`/`card.answer()` only.
+- Scheduling beyond the `memory-replay` history cases, deck configuration and browser-only
+  rendering. The other packages are exported without scheduling or deck configurations.

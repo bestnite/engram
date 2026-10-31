@@ -1494,10 +1494,23 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	last := make(map[int64]int64)
 	previous := make(map[int64]int64)
 	histories := make(map[int64]fsrs.ReviewEntries)
+	firstType := make(map[int64]int)
 	lastDay := make(map[int64]time.Time)
+	reset := make(map[int64]int64)
+	for _, r := range pkg.Reviews {
+		if r.Type == 4 && r.ID > reset[r.CardID] {
+			reset[r.CardID] = r.ID
+		}
+	}
 	for _, r := range pkg.Reviews {
 		if r.Type >= 0 && r.Type <= 3 && r.Ease >= 1 && r.Ease <= 4 {
 			previous[r.CardID], last[r.CardID] = last[r.CardID], r.ID
+			if r.ID <= reset[r.CardID] {
+				continue
+			}
+			if len(histories[r.CardID]) == 0 {
+				firstType[r.CardID] = r.Type
+			}
 			day, _ := time.Parse("2006-01-02", reviewday.Day(time.UnixMilli(r.ID), loc, cutoff))
 			var delta float64
 			if prev, ok := lastDay[r.CardID]; ok {
@@ -1541,7 +1554,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		if card.Type != 0 && !usableAnkiMemory(state.Stability, state.Difficulty) {
 			var memory *fsrs.MemoryState
 			var computeErr error
-			if history := histories[card.ID]; len(history) > 0 {
+			if history := histories[card.ID]; len(history) > 0 && firstType[card.ID] != 1 {
 				memory, computeErr = engine.MemoryState(history, nil)
 			} else {
 				interval := float64(card.Interval)
