@@ -29,6 +29,17 @@ API does not expose, so the script counts them from the package's own schema-11 
 .venv/bin/python verify_package.py path/to/package.apkg
 ```
 
+## Probing a scheduling layout
+
+`interday_probe.py` builds a collection with a learning, a review and a relearning card, exports
+it as a package and prints the `due`, `odue`, `odid` and `type`/`queue` values Anki writes for
+each. It answers what a scheduling column means in a package, and its output is the evidence
+`M18-12` recorded for interday learning and filtered decks.
+
+```bash
+.venv/bin/python interday_probe.py /tmp/anki-probe-output
+```
+
 ## Regeneration
 
 Run from this directory. `uv` and Python 3.13 are required.
