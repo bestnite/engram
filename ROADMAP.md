@@ -193,26 +193,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   *Acceptance:* the ledger table holds a row naming each of the four IDs. Evidence is the output of
   `grep -n -E 'M18-(1|2|3|9)\b' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-27 `M18-13` tests reach the import, and the table drives every case** — the `M18-13`
-  acceptance required that each malformed package imports its content with `include_progress` off,
-  but `TestSchedulingTolerance` in `internal/anki/scheduling_test.go` calls only `ReadWithLimits`. No
-  test sends such a package through `ImportPackage`, and that path is where `M18-24` found its defect.
-  The test also compares `tc.name` with `"unreadable revlog"` in three places, to insert an extra
-  revlog row and to switch its expectations, so renaming the case silently changes what it checks; and
-  it checks `RevlogErr` only against nil, not with `errors.Is(err, ErrCorruptCollection)`. The comment
-  on `roundedIntegers` in `internal/anki/sqlite.go` does not begin with the function name and says only
-  what the function does. The fix: the table gains fields for extra setup statements, for whether
-  `RevlogErr` is expected and for the expected readable review count, so no line reads `tc.name`; the
-  `RevlogErr` case uses `errors.Is`; the comment begins with `roundedIntegers` and states why it rounds:
-  an Anki collection can hold a REAL value in an integer column, and before `M18-13` one such value
-  rejected the whole package. A table test in `internal/store` imports each `M18-13` package (a REAL
-  `revlog.ivl`, a REAL `cards.due`, a REAL `cards.factor`, a `col.dconf` that is not JSON, and an
-  undecodable `deck_config.config`) through `ImportPackage` with `include_progress` off, and checks
-  that every note and card of the package was created. This entry changes tests and one comment only,
-  and lands after `M18-24` and `M18-25` so that it tests their final behaviour. *Acceptance:*
-  `grep -n 'tc.name [!=]=' internal/anki/scheduling_test.go` prints nothing; the `internal/store` table
-  test passes. Evidence is the grep output and the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-28 The release ledger row for `M18-2` records what `M18-13` changed** — `M18-22` writes
   each ledger row from the commits whose messages name that row's ID, and the `M18-13` commit
   (`2b1f2e8`) names only `M18-13`. The `M18-2` row would therefore leave out a change visible through
