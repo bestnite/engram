@@ -145,33 +145,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-17 `.apkg` deck configuration values the scheduler cannot use** — `M18-9` checks the
-  package's FSRS weights, but `createAnkiPreset` in `internal/store/anki_import.go` still copies the
-  learning steps, the relearning steps and the maximum interval without checking them against what
-  the scheduler accepts. Two failures follow. First: a schema-18 package stores the steps as protobuf
-  floats (`internal/anki/protobuf.go`), which can be NaN or infinite; `ankiSteps` formats such a step
-  as `NaNm` or `+Infm`, `parseSteps` in `internal/schedule/scheduler.go` refuses that string, and
-  `schedule.NewScheduler` returns an error for the deck's preset, so every preview and every review
-  submission in the deck fails — the failure `M18-9` removed for weights. Second: a maximum interval
-  above 36 500 days, or a negative step, passes `parseSteps`, but go-fsrs v4.0.0 `NewFSRS` then sees
-  `Parameters.Validate` fail and replaces every parameter with `fsrs.DefaultParam()`. The deck is
-  then scheduled with the default weights, retention, steps and maximum interval, while the report
-  says `weights_applied` and the preset page shows the imported values. The preset write path has the
-  second gap as well: `validatePresetForWrite` in `internal/store/preset.go` and `parsePresetRequest`
-  in `internal/web/presets_api.go` accept every maximum interval above 0. The fix:
-  `validatePresetForWrite` refuses a maximum interval above 36 500 with `ErrInvalidMaximumInterval`;
-  `createAnkiPreset` stores 36 500 when the package's maximum interval is above 36 500; and
-  `createAnkiPreset` keeps the preset's default learning steps when the package's learning step list
-  holds a step that is NaN, infinite or negative, and applies the same rule to the relearning steps.
-  *Acceptance:* table tests in `internal/store` call `createAnkiPreset` with a maximum interval of
-  50 000, a learning step of −1, a NaN learning step and an infinite relearning step, and check the
-  stored preset; a test in `internal/schedule` imports, through `ImportPackage`, legacy packages
-  carrying the maximum interval of 50 000 and the step of −1, builds the scheduler from each resulting
-  preset, and asserts that its go-fsrs parameters hold the preset's weights, retention, steps and
-  maximum interval, which shows that `NewFSRS` did not reset them; a handler test in `internal/web`
-  shows that creating a preset and updating a preset with `maximum_interval_days` 36 501 each return
-  400 `preset_max_interval_invalid`. Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-18 `.apkg` import says why requested weights were not used** — with `apply_weights` on
   and the target `new_deck`, `createAnkiPreset` drops weights that `fsrs.MigrateWeights` refuses and
   throws the error away. The report then carries `weights_applied` false and `weights_discarded`
