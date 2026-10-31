@@ -99,6 +99,13 @@ lands after `M18-30` and `M18-31`, so that it tests their final behaviour. `M18-
 `README.md` and never runs beside `M18-21`, which edits the same file. `M18-35` edits this file and
 `AGENTS.md`, so only the parent does it, with the maintainer present.
 
+`M18-36` to `M18-41` fix defects that a review of the landed `M18-7` (commit `5c18c80`) found. They
+also land before `M18-5`. `M18-36`, `M18-37`, `M18-38` and `M18-40` change
+`internal/store/anki_import.go`, so each runs alone like the entries above. `M18-37` waits for a
+maintainer decision. `M18-39` changes only `internal/store/anki_export.go` and may run beside any
+entry that does not touch that file. `M18-41` changes only tests and lands after `M18-36`, which
+adds a test in `internal/schedule` beside the one `M18-41` moves there.
+
 - [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
   half of `internal/store/package_import.go`, `internal/store/package_document.go`,
   `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
@@ -588,6 +595,129 @@ lands after `M18-30` and `M18-31`, so that it tests their final behaviour. `M18-
   parent edits these two files, with the maintainer present. *Acceptance:* the ledger table holds a row
   naming `M18-4`; the sentence in `AGENTS.md` section 2.7 names `reuse` and `copy`. Evidence is the
   output of `grep -n 'M18-4\b' ROADMAP.md` limited to the ledger section and the `AGENTS.md` diff.
+
+- [ ] **M18-36 A memory state the package carries is checked like a derived one** — `M18-7` checks
+  only the state it derives: `importAnkiProgress` in `internal/store/anki_import.go` skips a derived
+  state whose stability is below 0.001 or not finite, or whose difficulty is outside 1–10 or not
+  finite, but it stores the `s` and `d` of `cards.data` without any check. go-fsrs v4.0.0
+  `validateCard` refuses a non-new card whose stability is below 0.001 or whose difficulty is below
+  1, so such a card fails every preview and every review submission, which is the failure `M18-7`
+  removed for a missing state. Reproduced on `main`: a review card written by `anki.WriteArchive`
+  with `s`=0 and `d`=5, with `s`=5 and `d`=0, and with `s`=−1 and `d`=5, imported with
+  `include_progress` on, each reported `progress_applied` 1 and `states_skipped` 0, and
+  `Scheduler.Preview` on the stored state returned `fsrs: invalid stability: 0 (minimum 0.001 for
+  non-New cards)`, `fsrs: invalid difficulty: 0 (minimum 1 for non-New cards)` and `fsrs: invalid
+  stability: -1 (minimum 0.001 for non-New cards)`. The fix: one unexported function in
+  `internal/store/anki_import.go` decides whether a memory state is usable (both values finite,
+  stability at least 0.001, difficulty from 1 to 10), and both the package's state and the derived
+  state go through it. On a non-new card, a package state that is not usable is treated exactly
+  like a missing one: the importer derives the state from the kept revlog rows, else from SM-2, and
+  skips the card and counts it in `states_skipped` when neither result is usable. *Acceptance:* a
+  table test in `internal/store/anki_progress_import_test.go` imports a review card with each of
+  `{"s":0,"d":5}`, `{"s":5,"d":0}`, `{"s":-1,"d":5}` and `{"s":5,"d":11}`, once with two kept revlog
+  rows (the stored state equals the replay of those rows) and once with no revlog row and factor 0
+  (the card is counted in `states_skipped` and has no state row); a card with `{"s":5,"d":5}` keeps
+  those values; a test in `internal/schedule` calls `Preview` on every written state and gets no
+  error. Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-37 The replay starts where the card's memory actually starts** — `M18-7` replays every
+  kept revlog row of a card (type 0–3, ease 1–4) from an empty memory state. Two kinds of history
+  make that result wrong. First, a history that does not begin with the card's first learning row,
+  for example a collection whose older rows were removed or a card that came from SM-2 with only its
+  recent reviews logged: the first kept row is treated as the card's first ever rating. Measured with
+  the go-fsrs v4.0.0 default weights: a review card with `ivl` 300 and factor 2500 whose only kept row
+  is one Good review gets stability 2.31 days, while `MemoryStateFromSM2(2.5, 300, 0.9)` gives 300
+  days, and that SM-2 state followed by the same Good review gives 750 days. Second, a card that was
+  reset to new in Anki (Forget, a revlog type 4 row with ease 0) and learned again: the rows before
+  the reset are still replayed, so the old history decides the new state. Measured: four Good rows
+  followed by Again 200 days later give stability 4.61 and difficulty 7.39, while the Again row alone
+  gives stability 0.212 and difficulty 6.41. The rule is decided. First, the reference comes from
+  `tools/anki-oracle` at `anki==26.9.3` (its README holds the commands): add a fixture whose
+  collection carries both histories above and commit the memory states Anki reports as goldens under
+  `internal/notetype/testdata/anki/`. Second, the Go replay reproduces those goldens, which settles
+  the two questions in code rather than by argument: a history without its learning start begins from
+  the state Anki uses (SM-2 built from `factor` and `ivl`), and every row up to and including the
+  card's last reset row (revlog type 4) is dropped. Third, if the oracle environment cannot be
+  installed in the work session, the fallback is `MemoryStateFromSM2(factor/1000, ivl, 0.9)` as the
+  starting state, the same reset truncation, and acceptance by re-scheduling the derived state to
+  within one day of `ivl`; the closing commit then records that Anki parity was not verified. `M18-10` fills earlier review rows from the same replay, so it uses the rows
+  this rule selects. *Acceptance:* table tests in `internal/store/anki_progress_import_test.go` cover a
+  card whose history begins with its first learning row, a review card whose history begins with a
+  review row, and a card with a reset row followed by new learning rows, and each stored state follows
+  the decided rule (equals the golden, when the rule requires Anki's result). Evidence is the raw
+  scoped `go test` and `go vet` output and, when goldens are used, the oracle script's output.
+
+- [ ] **M18-38 One function decodes a preset's weights** — `M18-7` added a second copy of
+  `presetWeights` from `internal/schedule/scheduler.go` to `importAnkiProgress` in
+  `internal/store/anki_import.go`: both treat NULL, an empty string and `null` as the default weights,
+  decode the JSON array and pass it through `fsrs.MigrateWeights`. The comment on
+  `schedule.Parameters` calls that function the single source of where the scheduling parameters come
+  from, and the import's memory state is only correct while the two copies agree, because the
+  scheduler later continues from that state with its own weights. `internal/schedule` imports
+  `internal/store`, so the import cannot call the scheduler's copy. The fix: `internal/store` gains one
+  exported function that takes a preset's `weights_json` value and returns `fsrs.Weights` with
+  exactly the rule `presetWeights` has today; `schedule.Parameters` and `importAnkiProgress` both call
+  it; `presetWeights` and the inline copy in `importAnkiProgress` are deleted. The error texts keep
+  their English wording. *Acceptance:* `grep -rn 'func presetWeights' internal/` prints nothing;
+  `grep -n 'MigrateWeights' internal/store/anki_import.go` prints only the line in
+  `createAnkiPreset`; a table test in `internal/store` calls the new function with NULL, `""`,
+  `" null "`, a 21-value set, a 17-value set, a 19-value set, `[1,2,3]` and `not json`, and checks the
+  default weights for the first three, the `fsrs.MigrateWeights` result for the next three and an
+  error for the last two; the existing `internal/schedule` tests pass unchanged. Evidence is the grep
+  output and the raw scoped `go test` and `go vet` output of `internal/store` and `internal/schedule`.
+
+- [ ] **M18-39 The `ankiWeights` comment states what the function does** — found while reviewing
+  `M18-7`; the code comes from `M18-1`. The comment on `ankiWeights` in
+  `internal/store/anki_export.go` says that an undecodable weights value means "use the defaults", so
+  no weights are written. The code returns an error instead (`decode weights: …`), and that error
+  fails the export. The scheduler also refuses an undecodable value (`presetWeights` in
+  `internal/schedule/scheduler.go`), so a preset with such a value cannot be studied either, and
+  writing no weights would hide that fault from the user. The fix changes the comment only: it states
+  that NULL, an empty string, `null` and an empty array write no weights, and that an undecodable
+  value or a set `fsrs.MigrateWeights` refuses fails the export, because the scheduler refuses the
+  same value. Behaviour is unchanged. *Acceptance:* each statement of the comment matches the code of
+  `ankiWeights`. Evidence is the diff.
+
+- [ ] **M18-40 The memory-state derivation states its rules** — the `M18-7` block in
+  `importAnkiProgress` (`internal/store/anki_import.go`) carries no comment, although each of its
+  rules is not obvious from the code: why a non-new card needs a derived state (Anki writes `s` and `d`
+  only when FSRS is enabled, and go-fsrs refuses a non-new card whose stability is below 0.001); that
+  `DeltaT` counts whole review days between consecutive kept rows with the importing user's timezone
+  and cutoff; that a negative `cards.ivl` counts seconds and is converted to days for SM-2; that the
+  SM-2 retention 0.9 is a fixed assumption about the retention the card's SM-2 intervals aimed at; and
+  why an unusable state skips the card instead of failing the import (a stored unusable state would
+  make every preview and submission of the card fail, so the card stays new for the importer). The
+  derivation also discards the error of `time.Parse` (`day, _ :=`), and the comment on
+  `importAnkiProgress` still describes only the separation of progress from content. The fix: the
+  derivation moves into one unexported function with a comment that begins with its name and states
+  the order (the package's state, then the replay, then SM-2, then skip) and each rule above with its
+  reason; the `time.Parse` error is returned wrapped with `%w`; the comment on `importAnkiProgress`
+  also states that it derives a missing memory state. Behaviour is unchanged. *Acceptance:*
+  `grep -n 'day, _ :=' internal/store/anki_import.go` prints nothing; the existing progress tests pass
+  unchanged. Evidence is the grep output and the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-41 `M18-7` tests cover the study preset, the remaining card shapes and PostgreSQL** — four
+  gaps in the `M18-7` tests. First, `TestAnkiProgressReplayUsesStudyWeightsAndReviewDays` imports into
+  a new deck, where the importer is the owner and `StudySettings` returns `decks.preset_id`, so the
+  test passes just as well if the importer reads the deck's preset instead of the importer's own study
+  preset; the only case that tells the two apart, an editor of a shared deck whose
+  `deck_member_settings.preset_id` holds other weights than the owner's preset, is not tested. Second,
+  no case covers a relearning card (type 3) or a `cards.data` that carries only one of `s` and `d`.
+  Third, `TestAnkiImportedMemoryPreview` lives in `internal/api` although it calls no handler; `M18-20`
+  moves its sibling `TestAnkiImportWeightsSchedule` to `internal/schedule` for the same reason. Fourth,
+  the commit that closed `M18-7` (`d11b9c0`) records that the PostgreSQL cases were not run, and the
+  replay test compares stability and difficulty with exact float equality, so its result on the
+  PostgreSQL column type is unknown. The fix adds and moves tests only. *Acceptance:* a test in
+  `internal/store` imports with target `into_deck` as an editor of a shared deck whose member preset
+  holds weights other than the owner's preset, and the stored state equals the replay with the
+  member's weights and differs from the replay with the owner's; table cases cover a relearning card
+  with two kept revlog rows, a relearning card with no revlog row and factor 2500, and a review card
+  with two kept revlog rows whose `data` is `{"s":5}`, and one whose `data` is `{"d":5}`; each of the
+  four gets a stability of at least 0.001 and a difficulty from 1 to 10; `TestAnkiImportedMemoryPreview`
+  lives in `internal/schedule` and `internal/api/anki_memory_import_test.go` no longer exists;
+  `TestAnkiProgressMissingMemory` and `TestAnkiProgressReplayUsesStudyWeightsAndReviewDays` pass with
+  `TEST_PG_DSN` set. Evidence is the raw scoped `go test` and `go vet` output, including the run with
+  `TEST_PG_DSN` set.
 
 ---
 
