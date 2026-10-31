@@ -63,24 +63,13 @@ release; a task moves into a release milestone when it is scheduled.
 
 ### M18 — Deck package: `.apkg` becomes the only format
 
-`M18-1` (landed) wrote the `.apkg` export and `M18-2` (landed) the import side; `M18-3` adds the
-transports, `M18-4` the import-time preset choice, and `M18-5` removes `.edeck`. `M18-5` must not
-start before the others land: a user has to be able to export a deck before the export they have
-today disappears. The release that carries `M18-5` breaks the `.edeck` file format, the package
-export route and the `export_deck` MCP tool. The parent updates `AGENTS.md` section 2.7 with the
-maintainer present (`M18-1` moved `.apkg` export into it and `M18-2` moved `.apkg` progress import
-into it); a subagent must not edit that file.
-
-- [ ] **M18-3 `.apkg` export transports and the MCP download URL** — `GET /api/v1/decks/:id/package`
-  takes `format=apkg` plus the four switches as query parameters, and the web deck page downloads the
-  same bytes; the CLI gains `--format` and the switch flags; the MCP `export_deck` gains `format`.
-  The SPA export dialog is not part of this task: it moves to `.apkg` in `M18-5`.
-  A new MCP tool `create_export_download` returns a single-use URL the caller fetches the archive
-  from, modelled on the import-upload ticket, so package bytes never enter the model context. It is
-  scoped to the caller, works once and expires. *Acceptance:* route tests cover the format switch,
-  every flag, the read-scope check and an unknown format (400); the download URL works once, expires
-  and refuses another user; a captured request against a seeded deck writes the archive. Evidence is
-  the test names with raw output and the captured response.
+`M18-1` (landed) wrote the `.apkg` export, `M18-2` (landed) the import side and `M18-3` (landed) the
+transports; `M18-4` adds the import-time preset choice, `M18-6` its page, and `M18-5` removes
+`.edeck`. `M18-5` must not start before the others land: a user has to be able to export a deck
+before the export they have today disappears. The release that carries `M18-5` breaks the `.edeck`
+file format, the package export route and the `export_deck` MCP tool. The parent updates `AGENTS.md`
+section 2.7 with the maintainer present (`M18-1` moved `.apkg` export into it and `M18-2` moved
+`.apkg` progress import into it); a subagent must not edit that file.
 
 - [ ] **M18-4 Preset choice on import: new, reuse or copy** — the import request takes
   `preset_mode` (`new`, `reuse`, `copy`) plus `preset_id` for the last two. `new` builds a preset
@@ -91,7 +80,7 @@ into it); a subagent must not edit that file.
   (400 otherwise), and `reuse` or `copy` together with `apply_weights` is refused with 400 instead of
   silently ignored, because writing package weights into a shared preset would change the scheduling
   of every other deck that points at it. The report gains `preset_mode` and `preset_name`. The import
-  page shows a preset picker for reuse and copy and the weights checkbox only for new. *Acceptance:*
+  page UI is `M18-6`; this entry is transport and store only. *Acceptance:*
   table tests cover the three modes, a missing `preset_id`, a `preset_id` of another user, and
   `apply_weights` with reuse and with copy; a copy of `Default` gets another name and exactly one
   preset remains the default; the report names the preset used or created. Evidence is the raw test
@@ -112,6 +101,17 @@ into it); a subagent must not edit that file.
   empty; export and import both go through `.apkg` only; an archive named `.zip` whose entries hold
   an Anki collection is accepted, because the file name never decides the reader; the full-module gate
   passes. Evidence is the grep output, the test output, and a captured export-then-import round trip.
+
+- [ ] **M18-6 Import page: choose how the preset is created** — this is UI work and belongs to the
+  designer. The import page (`frontend/src/lib/views/ImportView.svelte`) offers the three
+  `preset_mode` values with a preset picker for reuse and copy, and shows the FSRS weight checkbox
+  only for new. The picker lists the caller's presets and sends `preset_id`; a refusal (another
+  user's preset, or weights with reuse or copy) appears as a localised error next to the control and
+  writes nothing. User-facing text comes from the catalog, with identical key sets in
+  `frontend/src/lib/i18n/locales/en.ts` and `zh-CN.ts`. *Acceptance:* the three modes are
+  selectable; reuse and copy reveal the picker and hide the weight checkbox; a refused combination
+  shows a localised error and leaves the server write count at zero; a captured state of each mode
+  is reported. Evidence is the component test output and the captured states.
 
 ---
 

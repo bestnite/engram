@@ -104,7 +104,8 @@ Engram provides 23 dedicated MCP tools:
 - `bury_card`: Postpone one card to the start of your next review day without touching its progress. Mirrors REST `POST /cards/{id}/bury`.
 - `set_deck_paused`: Pause or resume a deck for yourself only. A paused deck leaves the default review queue, the due count and the reminder emails, but keeps its progress and can still be reviewed by name.
 - `get_stats`: Retrieve learning summaries, queue counts, and retention rates.
-- `export_deck` / `import_deck`: Export and import portable deck packages (`.edeck`). `import_deck` also accepts an Anki `.apkg` package and targets a new deck, an existing deck, or a full deck replacement.
+- `export_deck` / `import_deck`: Export and import portable deck packages. `export_deck` writes `.edeck` or Anki's `.apkg` (`format`), and `import_deck` accepts either, targeting a new deck, an existing deck, or a full deck replacement.
+- `create_export_download`: Get a single-use download URL for a deck package in either format, so a large archive never passes through the model.
 - `create_import_upload`: Get a single-use upload URL for a deck package. The agent sends the file to it with an HTTP client such as `curl`, so a large package never passes through the model and the API key never leaves the MCP client.
 
 ---
