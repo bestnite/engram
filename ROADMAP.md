@@ -61,6 +61,107 @@ release; a task moves into a release milestone when it is scheduled.
   *Do not start until the maintainer decides how custom note types are meant to be used, which
   decides whether the entry belongs in the editor at all.*
 
+### M18 — Deck package: `.apkg` becomes the only format
+
+`M18-1` to `M18-3` build the Anki package path, `M18-4` adds the import-time preset choice, and
+`M18-5` removes `.edeck`. `M18-5` must not start before the others land: a user has to be able to
+export a deck before the export they have today disappears. The release that carries `M18-5` breaks
+the `.edeck` file format, the package export route and the `export_deck` MCP tool. The parent updates
+`AGENTS.md` section 2.7 with the maintainer present (`M18-1` moves `.apkg` export into the
+compatibility target, `M18-2` moves `.apkg` progress import into it); a subagent must not edit that
+file.
+
+- [ ] **M18-1 `.apkg` export: write a legacy `collection.anki21` package** — a new writer turns one
+  deck into an archive that both Anki 26.09.3 and `internal/store/anki_import.go` read.
+  `internal/anki/write.go` builds a schema-11 SQLite collection (`col`, `notes`, `cards`, `revlog`,
+  `graves`, with the columns the oracle-generated `internal/notetype/testdata/anki/stock.anki2.apkg`
+  carries) through the pure-Go `github.com/glebarez/sqlite` driver already in `go.mod`, then adds
+  `meta` (`\x08\x02`), `media` (a JSON number → file name map) and the numbered media entries.
+  `internal/store/anki_export.go` maps store rows onto that model: one Anki deck per distinct
+  `cards.deck_path` (the flat deck plus real subdecks); each note type as Anki's legacy model JSON
+  (field options, template formats, `req`, `sortf`, CSS, LaTeX, `originalStockKind`, `type`, `usn`,
+  `mod`, and `anki_origin.notetype_id` as the note type id when present, so a re-import matches it);
+  each note with `flds` joined by `\x1f` in field order, `sfld` as the sort field's plain text,
+  Anki's field checksum in `csum` (taken from the fixture, not guessed), `guid` from an `anki:`
+  `external_ref` or derived deterministically from the note's public id, tags as Anki stores them
+  and `data` as `{}`; each card with its template ordinal and a new-card position, or its real
+  scheduling state when progress is exported; and one `dconf` entry with `desiredRetention`, the
+  learn and relearn delays, `rev.maxIvl` and, when weights are exported, `fsrsWeights` (21 floats).
+  `store.PackageOptions` gains `IncludeDeckConfigs`, and `IncludeReviews` stops depending on
+  `IncludeProgress` so the two switches are independent (this also changes the `.edeck` export until
+  `M18-5` removes it). Progress and reviews are the caller's own rows only; both default off, deck
+  configuration and media default on. Parameters legacy `dconf` cannot express are named in the
+  writer's doc comment and left out. *Acceptance:* a unit test asserts the archive's entries and the
+  collection's tables, columns and required rows; two exports of one deck are byte-identical; a round
+  trip through `ImportPackage` into a fresh user reproduces notes, cards, note types, media, card
+  states and reviews; a new `tools/anki-oracle/verify_package.py` opens the produced file with
+  `anki==26.9.3` and prints its note, card, note type, media and deck-config counts. Evidence is the
+  raw output of `go test ./internal/anki/... ./internal/store/... && go vet ./internal/anki/...
+  ./internal/store/...` plus that script's output. `ARCHITECTURE.md`'s `internal/anki` row is updated
+  in the same commit, because the package stops being a reader only.
+
+- [ ] **M18-2 `.apkg` import: deck configuration, card states and the review log** — the importer
+  reads what the package says about scheduling instead of discarding it. `internal/anki/protobuf.go`
+  gains a decoder for `DeckConfig.Config` (`fsrs_params_6`, `desired_retention`, `learn_steps`,
+  `relearn_steps`, `maximum_review_interval`), and the legacy `col.dconf` JSON is read for the same
+  values (`fsrsWeights`, `desiredRetention`, `new.delays`, `lapse.delays`, `rev.maxIvl`).
+  `PackageImportOptions` gains `IncludeProgress` (default false), which governs the `.apkg` path
+  only; the `.edeck` path keeps `AllowOthersProgress` until `M18-5` removes it. Off writes no
+  `card_states` and no `reviews` row and the report counts what was discarded; on writes the
+  importing user's card states and review rows. The review mapping is `rating` from `revlog.ease` (a
+  row whose ease is outside 1–4 is skipped and counted), `reviewed_at` from `revlog.id`, `elapsed_ms`
+  from `revlog.time`, `duration_days` from `revlog.ivl`, and `state_before` from `revlog.type`: 0 with
+  no earlier review of that card → 0, any later 0 → 1, 1 and 3 → 2, 2 → 3, while 4 and 5 (manual,
+  rescheduled) are skipped and counted. Because Anki's log has no pre-rating state, the derivation is
+  recorded in a code comment as the lossy part of the mapping. A repeated import writes no review row
+  whose `(card_id, reviewed_at, rating)` already exists. The memory state (`stability`, `difficulty`) is read from wherever the
+  layout stores it, verified against the oracle, not assumed. *Acceptance:* a package produced by
+  `M18-1` and imported into a fresh user reproduces its card states and review rows; a second import
+  of the same package adds no row; `include_progress` off writes none; the skipped review rows appear
+  in the report; the SQLite cases run by default and the PostgreSQL cases run when `TEST_PG_DSN` is
+  set. Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-3 `.apkg` export transports and the MCP download URL** — `GET /api/v1/decks/:id/package`
+  takes `format=apkg` plus the four switches as query parameters, and the web deck page downloads the
+  same bytes; the CLI gains `--format` and the switch flags; the MCP `export_deck` gains `format`.
+  A new MCP tool `create_export_download` returns a single-use URL the caller fetches the archive
+  from, modelled on the import-upload ticket, so package bytes never enter the model context. It is
+  scoped to the caller, works once and expires. *Acceptance:* route tests cover the format switch,
+  every flag, the read-scope check and an unknown format (400); the download URL works once, expires
+  and refuses another user; a captured request against a seeded deck writes the archive. Evidence is
+  the test names with raw output and the captured response.
+
+- [ ] **M18-4 Preset choice on import: new, reuse or copy** — the import request takes
+  `preset_mode` (`new`, `reuse`, `copy`) plus `preset_id` for the last two. `new` builds a preset
+  from the package's deck configuration, taking its FSRS weights only when `apply_weights` is on;
+  `reuse` points the new deck at the caller's chosen preset and writes nothing to it; `copy`
+  duplicates the chosen preset into an independent row, which must never be named `Default` because
+  that name identifies the account's own default. `preset_id` must be one of the caller's presets
+  (400 otherwise), and `reuse` or `copy` together with `apply_weights` is refused with 400 instead of
+  silently ignored, because writing package weights into a shared preset would change the scheduling
+  of every other deck that points at it. The report gains `preset_mode` and `preset_name`. The import
+  page shows a preset picker for reuse and copy and the weights checkbox only for new. *Acceptance:*
+  table tests cover the three modes, a missing `preset_id`, a `preset_id` of another user, and
+  `apply_weights` with reuse and with copy; a copy of `Default` gets another name and exactly one
+  preset remains the default; the report names the preset used or created. Evidence is the raw test
+  output and a captured import response.
+
+- [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
+  half of `internal/store/package_import.go`, `internal/store/package_document.go`,
+  `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
+  of `schema/README.md`, the `.edeck` choice in the export dialog of
+  `frontend/src/lib/views/DeckDetailView.svelte`, the `export_deck` MCP tool, the JSON document branch
+  of the upload ticket, and the CLI's `.edeck` export. Keep in a package-named file everything the
+  `.apkg` path still uses: `PackageError` and its codes, `PackageImportOptions`,
+  `PackageImportReport`, `PackageImportError`, the package limits, `MediaQuotaBytes`,
+  `uniqueOwnerName`, the archive spool and the `ImportPackage` entry. `README.md` and
+  `ARCHITECTURE.md` record the single format and name what it does not carry (answer controls,
+  note `external_ref`/`extra`/`source_url`, note-type card-face extensions), and the release ledger
+  records the breaking removals. *Acceptance:* `git grep -n edeck -- '*.go' '*.ts' '*.svelte'` is
+  empty; export and import both go through `.apkg` only; an archive named `.zip` whose entries hold
+  an Anki collection is accepted, because the file name never decides the reader; the full-module gate
+  passes. Evidence is the grep output, the test output, and a captured export-then-import round trip.
+
 ---
 
 ## 2. Release ledger
