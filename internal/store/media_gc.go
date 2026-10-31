@@ -49,17 +49,23 @@ func MarkOrphanedMedia(ctx context.Context, db *gorm.DB, now time.Time) (marked,
 // and the caller would then reference bytes that no longer exist. Reusing the bytes through
 // MediaStore.Put or MediaStore.reuse clears the mark as part of the same write, but a caller that
 // reuses a row in a later transaction needs the mark cleared earlier.
+//
+// The shas are cleared in bounded batches: an import may reuse tens of thousands of stored media, and one
+// statement with that many bound parameters exceeds the limit of SQLite (32766) and of PostgreSQL (65535).
 func clearOrphanedMedia(ctx context.Context, db *gorm.DB, shas []string) (int64, error) {
-	if len(shas) == 0 {
-		return 0, nil
+	const batch = 500
+	var cleared int64
+	for start := 0; start < len(shas); start += batch {
+		end := min(start+batch, len(shas))
+		res := db.WithContext(ctx).Model(&Media{}).
+			Where("sha256 IN ?", shas[start:end]).Where("orphaned_at IS NOT NULL").
+			Update("orphaned_at", nil)
+		if res.Error != nil {
+			return cleared, fmt.Errorf("store: clear orphaned media: %w", res.Error)
+		}
+		cleared += res.RowsAffected
 	}
-	res := db.WithContext(ctx).Model(&Media{}).
-		Where("sha256 IN ?", shas).Where("orphaned_at IS NOT NULL").
-		Update("orphaned_at", nil)
-	if res.Error != nil {
-		return 0, fmt.Errorf("store: clear orphaned media: %w", res.Error)
-	}
-	return res.RowsAffected, nil
+	return cleared, nil
 }
 
 // DeleteOrphanedMedia deletes media rows orphaned no later than before and still orphaned right now (at most limit rows),

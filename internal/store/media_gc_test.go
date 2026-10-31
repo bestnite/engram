@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,59 @@ func TestMediaGCMarksAndDeletesOnlyStaleOrphans(t *testing.T) {
 				if media != want || uploaders != want {
 					t.Errorf("%s: media=%d uploaders=%d, want %d each", name, media, uploaders, want)
 				}
+			}
+		})
+	}
+}
+
+// TestClearOrphanedMediaBatchesLargeSets verifies that clearing orphan marks works for more shas than one statement may
+// bind (SQLite allows 32766 parameters, PostgreSQL 65535), that it clears only the listed marked rows, and that the count
+// it returns excludes listed rows that carried no mark.
+func TestClearOrphanedMediaBatchesLargeSets(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			now := time.Now().UTC().Truncate(time.Second)
+			orphaned := now.Add(-8 * 24 * time.Hour)
+			sha := func(i int) string { return fmt.Sprintf("%064x", i) }
+
+			const marked, unmarked, absent = 1200, 10, 68800
+			rows := make([]Media, 0, marked+unmarked+1)
+			for i := 0; i < marked+unmarked+1; i++ {
+				row := Media{Sha256: sha(i), RelPath: "x/" + sha(i) + ".png", Mime: "image/png", Bytes: 1, CreatedAt: now}
+				// Every row but the unmarked ones carries a mark; the last row is marked but not listed.
+				if i < marked || i == marked+unmarked {
+					row.OrphanedAt = &orphaned
+				}
+				rows = append(rows, row)
+			}
+			if err := db.CreateInBatches(rows, 200).Error; err != nil {
+				t.Fatalf("seed media: %v", err)
+			}
+			listed := make([]string, 0, marked+unmarked+absent)
+			for i := 0; i < marked+unmarked; i++ {
+				listed = append(listed, sha(i))
+			}
+			for i := 0; i < absent; i++ {
+				listed = append(listed, sha(1_000_000+i))
+			}
+
+			cleared, err := clearOrphanedMedia(ctx, db, listed)
+			if err != nil {
+				t.Fatalf("clearOrphanedMedia(%d shas) error = %v", len(listed), err)
+			}
+			if cleared != marked {
+				t.Fatalf("clearOrphanedMedia() cleared %d rows, want %d", cleared, marked)
+			}
+			var stillMarked []string
+			if err := db.Model(&Media{}).Where("orphaned_at IS NOT NULL").Pluck("sha256", &stillMarked).Error; err != nil {
+				t.Fatalf("read marks: %v", err)
+			}
+			if len(stillMarked) != 1 || stillMarked[0] != sha(marked+unmarked) {
+				t.Fatalf("rows still marked = %v, want only the unlisted row %s", stillMarked, sha(marked+unmarked))
 			}
 		})
 	}
