@@ -465,17 +465,6 @@ adds a test in `internal/schedule` beside the one `M18-41` moves there.
   names `M18-2` also names `M18-13`. Evidence is the output of `grep -n 'M18-13' ROADMAP.md` limited to
   the ledger section.
 
-- [ ] **M18-34 README states that the package's deck configuration is used only for `preset_mode`
-  `new`** — line 47 of `README.md` says "An `.apkg` import carries its deck configuration into the new
-  deck's preset". Since `M18-4` that holds only for `preset_mode` `new`: `reuse` points the new deck at
-  one of the caller's presets and `copy` at a copy of one, and neither reads the package's deck
-  configuration or its FSRS weights. The fix rewrites that sentence to name the three modes, says that
-  `preset_id` names the caller's own preset for `reuse` and `copy`, and says that `apply_weights` is
-  refused with `reuse` and `copy`. `M18-21` rewrites other lines of the same section; this entry
-  changes only the sentence named here. *Acceptance:* each statement of the rewritten sentence matches
-  `ValidateImportPreset` and `selectImportPreset` in `internal/store/package_import.go`. Evidence is
-  the `README.md` diff.
-
 - [ ] **M18-35 Release ledger and `AGENTS.md` record `M18-4`** — the commit that closed `M18-4`
   (`5ff830d`) removed the backlog entry but added no ledger row, and `M18-22` lists only `M18-1`,
   `M18-2`, `M18-3` and `M18-9`. `M18-4` changes the HTTP API (the multipart import and the upload

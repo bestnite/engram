@@ -44,7 +44,7 @@ Import a deck from the **Import** page (upload the file, or paste the file's pub
 
 Choose the target: `new_deck` creates a deck, and `into_deck:<id>` merges into a deck you can edit. The CLI and the MCP tool also take `replace_deck:<id>` to replace an existing deck, which only the deck's owner may do.
 
-An `.apkg` import carries its deck configuration into the new deck's preset. Learning progress travels only when asked: `include_progress` (off by default) applies the package's card states and review log to your own account, and without it every imported card starts as new.
+An `.apkg` import reads the package's deck configuration only when `preset_mode` is `new` (the default), and takes the package's FSRS weights only when `apply_weights` is also set. `preset_mode` `reuse` points the new deck at the preset named by `preset_id`, and `copy` points it at a new copy of that preset; neither reads the package's configuration or its weights, and `apply_weights` is refused with them. `preset_id` always names one of your own presets. Learning progress travels only when asked: `include_progress` (off by default) applies the package's card states and review log to your own account, and without it every imported card starts as new.
 
 ### Anki `.apkg` packages
 
