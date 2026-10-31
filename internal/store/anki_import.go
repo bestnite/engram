@@ -882,6 +882,9 @@ func (s *DeckStore) prepareAnkiImport(ctx context.Context, actorUserID uint64, r
 	if err != nil {
 		return nil, mapAnkiPackageError(err)
 	}
+	if opts.IncludeProgress && pkg.RevlogErr != nil {
+		return nil, mapAnkiPackageError(pkg.RevlogErr)
+	}
 	files, err := hashAnkiMedia(pkg, ankiLimits)
 	if err != nil {
 		return nil, mapAnkiPackageError(err)

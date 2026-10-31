@@ -1,20 +1,141 @@
 package store
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	fsrs "github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/anki"
 )
+
+func TestAnkiImportUnreadableRevlog(t *testing.T) {
+	raw, err := os.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var archive bytes.Buffer
+	zw := zip.NewWriter(&archive)
+	for _, entry := range zr.File {
+		r, err := entry.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(r)
+		if closeErr := r.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if entry.Name == "collection.anki2" {
+			path := filepath.Join(t.TempDir(), "collection.anki2")
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			col, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := col.Exec("DELETE FROM revlog").Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := col.Exec("INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) SELECT 1600000000000, id, 0, 3, 1, 0, 2500, 100, 1 FROM cards LIMIT 1").Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := col.Exec("INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) SELECT 1600000000001, id, 0, 3, 'invalid', 0, 2500, 100, 1 FROM cards LIMIT 1").Error; err != nil {
+				t.Fatal(err)
+			}
+			sqlDB, err := col.DB()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := sqlDB.Close(); err != nil {
+				t.Fatal(err)
+			}
+			data, err = os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		w, err := zw.Create(entry.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data := archive.Bytes()
+	pkg, err := anki.Read(bytes.NewReader(data), int64(len(data)))
+	if err != nil || pkg.RevlogErr == nil || len(pkg.Reviews) != 1 || len(pkg.Notes) == 0 || len(pkg.Cards) == 0 {
+		t.Fatalf("fixture: pkg=%+v error=%v", pkg, err)
+	}
+	for driver, db := range packageDatabases(t) {
+		for _, tc := range []struct {
+			name    string
+			enabled bool
+		}{{"progress_on", true}, {"progress_off", false}} {
+			t.Run(driver+"/"+tc.name, func(t *testing.T) {
+				user := seedUsers(t, db, "unreadable_revlog_"+driver+"_"+tc.name)[0]
+				models := []any{&Deck{}, &Note{}, &Card{}, &CardState{}, &Review{}}
+				counts := make([]int64, len(models))
+				for i, model := range models {
+					if err := db.Model(model).Count(&counts[i]).Error; err != nil {
+						t.Fatal(err)
+					}
+				}
+				mediaRoot := t.TempDir()
+				_, err := NewDeckStore(db).ImportPackage(context.Background(), user, bytes.NewReader(data), PackageImportOptions{Target: PackageTargetNewDeck, IncludeProgress: tc.enabled, MediaRoot: mediaRoot})
+				if tc.enabled {
+					var pe *PackageError
+					if !errors.As(err, &pe) || pe.Code != CodePackageBadFormat {
+						t.Fatalf("error = %v, want package_bad_format", err)
+					}
+					entries, err := os.ReadDir(mediaRoot)
+					if err != nil || len(entries) != 0 {
+						t.Fatalf("media entries = %v, error = %v", entries, err)
+					}
+				} else if err != nil {
+					t.Fatal(err)
+				}
+				want := []int64{0, 0, 0, 0, 0}
+				if !tc.enabled {
+					want[0], want[1], want[2] = int64(len(pkg.Decks)), int64(len(pkg.Notes)), int64(len(pkg.Cards))
+				}
+				for i, model := range models {
+					var got int64
+					if err := db.Model(model).Count(&got).Error; err != nil {
+						t.Fatal(err)
+					}
+					if got-counts[i] != want[i] {
+						t.Errorf("%T: added %d, want %d", model, got-counts[i], want[i])
+					}
+				}
+				t.Logf("progress=%t deck/note/card/state/review deltas=%v", tc.enabled, want)
+			})
+		}
+	}
+}
 
 func TestAnkiProgressLocalWins(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
