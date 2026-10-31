@@ -272,29 +272,30 @@ func hasScope(id Identity, scope string) bool {
 
 // toolScopes maps tool names to the scope they require; shared by handshake filtering and invocation re-checks, so both use the same rules.
 var toolScopes = map[string]string{
-	"list_decks":           store.ScopeRead,
-	"search_notes":         store.ScopeRead,
-	"list_deck_tags":       store.ScopeRead,
-	"get_note":             store.ScopeRead,
-	"get_stats":            store.ScopeRead,
-	"list_note_types":      store.ScopeRead,
-	"get_note_type":        store.ScopeRead,
-	"export_deck":          store.ScopeRead,
-	"create_deck":          store.ScopeWrite,
-	"update_deck":          store.ScopeWrite,
-	"delete_deck":          store.ScopeWrite,
-	"bulk_decks":           store.ScopeWrite,
-	"create_notes":         store.ScopeWrite,
-	"update_note":          store.ScopeWrite,
-	"delete_note":          store.ScopeWrite,
-	"bulk_notes":           store.ScopeWrite,
-	"import_deck":          store.ScopeWrite,
-	"create_import_upload": store.ScopeWrite,
-	"get_due_cards":        store.ScopeReview,
-	"submit_review":        store.ScopeReview,
-	"add_extra_new_cards":  store.ScopeReview,
-	"set_deck_paused":      store.ScopeReview,
-	"bury_card":            store.ScopeReview,
+	"list_decks":             store.ScopeRead,
+	"search_notes":           store.ScopeRead,
+	"list_deck_tags":         store.ScopeRead,
+	"get_note":               store.ScopeRead,
+	"get_stats":              store.ScopeRead,
+	"list_note_types":        store.ScopeRead,
+	"get_note_type":          store.ScopeRead,
+	"export_deck":            store.ScopeRead,
+	"create_export_download": store.ScopeRead,
+	"create_deck":            store.ScopeWrite,
+	"update_deck":            store.ScopeWrite,
+	"delete_deck":            store.ScopeWrite,
+	"bulk_decks":             store.ScopeWrite,
+	"create_notes":           store.ScopeWrite,
+	"update_note":            store.ScopeWrite,
+	"delete_note":            store.ScopeWrite,
+	"bulk_notes":             store.ScopeWrite,
+	"import_deck":            store.ScopeWrite,
+	"create_import_upload":   store.ScopeWrite,
+	"get_due_cards":          store.ScopeReview,
+	"submit_review":          store.ScopeReview,
+	"add_extra_new_cards":    store.ScopeReview,
+	"set_deck_paused":        store.ScopeReview,
+	"bury_card":              store.ScopeReview,
 }
 
 const instructions = "Engram library and scheduler. Tools mirror the REST /api/v1 surface " +
@@ -323,6 +324,7 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(s, srv, id, "list_note_types", "List one deck's note types, each with its field ids and names, templates and CSS. Field values in create_notes and update_note are HTML strings keyed by field name. Call it before writing notes so the note_type id and field names are known.", s.listNoteTypes)
 	addTool(s, srv, id, "get_note_type", "Read one note type of a deck: its fields (id, name and options), templates and CSS. Field values in create_notes and update_note are HTML strings keyed by field name.", s.getNoteType)
 	addTool(s, srv, id, "export_deck", "Export one deck as a self-contained deck package: manifest, notes, cards and preset as JSON, with optional progress and inlined media.", s.exportDeck)
+	addTool(s, srv, id, "create_export_download", "Create a single-use download URL for a deck package.", s.createExportDownload)
 	addTool(s, srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run). Each note names its note_type and sends fields as a map from field name to HTML string; list_note_types returns the deck's note types and their field names.", s.createNotes)
 	addTool(s, srv, id, "update_note", "Update one note's content and tags. Fields are a map from field name to HTML string, and note_type names the note type those field names belong to. list_note_types returns the available note types and field names.", s.updateNote)
 	addTool(s, srv, id, "delete_note", "Soft-delete one note (review progress is preserved).", s.deleteNote)

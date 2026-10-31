@@ -78,8 +78,10 @@ type getNoteTypeIn struct {
 
 // exportDeckIn is the input of export_deck; it exports a **deck package**.
 type exportDeckIn struct {
-	DeckID          string `json:"deck_id" jsonschema:"the public id of the deck to export as a package"`
-	IncludeProgress bool   `json:"include_progress,omitempty" jsonschema:"include the caller's own review progress"`
+	DeckID             string `json:"deck_id" jsonschema:"the public id of the deck to export as a package"`
+	Format             string `json:"format,omitempty" jsonschema:"package format: edeck (default) or apkg"`
+	IncludeDeckConfigs *bool  `json:"include_deck_configs,omitempty" jsonschema:"include deck configuration; default true"`
+	IncludeProgress    bool   `json:"include_progress,omitempty" jsonschema:"include the caller's own review progress"`
 	// IncludeMedia defaults to true (media is inlined by default).
 	IncludeMedia   *bool `json:"include_media,omitempty" jsonschema:"inline media bytes; default true"`
 	IncludeReviews bool  `json:"include_reviews,omitempty" jsonschema:"include the caller's own review log, independent of include_progress"`
@@ -364,16 +366,36 @@ func (s *Server) exportDeck(ctx context.Context, id Identity, in exportDeckIn) (
 	if in.IncludeMedia != nil {
 		includeMedia = *in.IncludeMedia
 	}
-	pkg, err := s.api.ExportDeckPackage(ctx, id.User.ID, d.ID, store.PackageOptions{
-		IncludeProgress: in.IncludeProgress,
-		IncludeMedia:    includeMedia,
-		IncludeReviews:  in.IncludeReviews,
-		IncludeWeights:  in.IncludeWeights,
-	})
+	opts := store.PackageOptions{
+		IncludeProgress:    in.IncludeProgress,
+		IncludeMedia:       includeMedia,
+		IncludeReviews:     in.IncludeReviews,
+		IncludeWeights:     in.IncludeWeights,
+		IncludeDeckConfigs: in.IncludeDeckConfigs,
+	}
+	if in.Format == "apkg" {
+		return s.api.ExportAnkiPackage(ctx, id.User.ID, d.ID, opts)
+	}
+	if in.Format != "" && in.Format != "edeck" {
+		return nil, api.InvalidRequest("invalid package format")
+	}
+	pkg, err := s.api.ExportDeckPackage(ctx, id.User.ID, d.ID, opts)
 	if err != nil {
 		return nil, err
 	}
 	return pkg.Document(), nil
+}
+
+func (s *Server) createExportDownload(ctx context.Context, id Identity, in exportDeckIn) (*api.ExportDownload, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return nil, err
+	}
+	media := in.IncludeMedia == nil || *in.IncludeMedia
+	return s.api.CreateExportDownload(ctx, id.User.ID, d.ID, in.Format, store.PackageOptions{
+		IncludeProgress: in.IncludeProgress, IncludeReviews: in.IncludeReviews,
+		IncludeDeckConfigs: in.IncludeDeckConfigs, IncludeMedia: media, IncludeWeights: in.IncludeWeights,
+	})
 }
 
 func (s *Server) createNotes(ctx context.Context, id Identity, in bulkNotesIn) (any, error) {

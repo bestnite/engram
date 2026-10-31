@@ -226,6 +226,7 @@ func (a *API) Register(r gin.IRouter) {
 	// Upload the package with a ticket: it does not sit behind the v1 group's auth middleware, the ticket in the path is itself the credential (auth happened at issuance).
 	// The request does not depend on cookies, so it has no CSRF surface either.
 	r.PUT(importUploadPathPrefix+":token", a.handleImportUpload)
+	r.GET(exportDownloadPath+":token", a.handleExportDownload)
 	v1.GET("/keys", a.authn.RequireScope(store.ScopeKeys), a.listKeys)
 	v1.POST("/keys", a.authn.RequireScope(store.ScopeKeys), a.createKey)
 	v1.DELETE("/keys/:id", a.authn.RequireScope(store.ScopeKeys), a.deleteKey)
