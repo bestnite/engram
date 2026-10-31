@@ -591,17 +591,24 @@ func (s *DeckStore) ValidateImportPreset(ctx context.Context, owner uint64, targ
 	if opts.PresetMode == "" {
 		opts.PresetMode = "new"
 	}
-	if opts.PresetMode != "new" && opts.PresetMode != "reuse" && opts.PresetMode != "copy" || opts.PresetMode != "new" && (opts.PresetID == 0 || opts.ApplyWeights || targetKind != PackageTargetNewDeck) {
+	switch opts.PresetMode {
+	case "new":
+		return nil
+	case "reuse", "copy":
+	default:
 		return &PackageError{Message: "invalid preset selection"}
 	}
-	if opts.PresetMode != "new" {
-		var count int64
-		if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ? AND owner_user_id = ?", opts.PresetID, owner).Count(&count).Error; err != nil {
-			return err
-		}
-		if count != 1 {
-			return &PackageError{Message: "invalid preset selection"}
-		}
+	// Reuse and copy need the caller's own preset, a new deck to attach it to, and no package
+	// weights: writing those into a preset would change every deck that already points at it.
+	if targetKind != PackageTargetNewDeck || opts.PresetID == 0 || opts.ApplyWeights {
+		return &PackageError{Message: "invalid preset selection"}
+	}
+	var count int64
+	if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ? AND owner_user_id = ?", opts.PresetID, owner).Count(&count).Error; err != nil {
+		return err
+	}
+	if count != 1 {
+		return &PackageError{Message: "invalid preset selection"}
 	}
 	return nil
 }
