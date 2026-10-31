@@ -261,7 +261,7 @@ func readNotes(db *gorm.DB) ([]Note, error) {
 // readCards reads the cards table. Schema 11 and schema 18 use the same
 // columns, so both layouts share this query.
 func readCards(db *gorm.DB) ([]Card, error) {
-	rows, err := db.Raw("SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data FROM cards ORDER BY id").Rows()
+	rows, err := db.Raw("SELECT " + roundedIntegers("id", "nid", "did", "ord", "mod", "usn", "type", "queue", "due", "ivl", "factor", "reps", "lapses", "left", "odue", "odid", "flags") + ", data FROM cards ORDER BY id").Rows()
 	if err != nil {
 		return nil, fmt.Errorf("%w: cards table: %v", ErrCorruptCollection, err)
 	}
@@ -278,6 +278,15 @@ func readCards(db *gorm.DB) ([]Card, error) {
 		return nil, fmt.Errorf("%w: cards table: %v", ErrCorruptCollection, err)
 	}
 	return cards, nil
+}
+
+// Preserve integers exactly and leave invalid values for Scan to reject.
+func roundedIntegers(columns ...string) string {
+	expressions := make([]string, len(columns))
+	for i, column := range columns {
+		expressions[i] = fmt.Sprintf("CASE WHEN typeof(%[1]s) = 'real' THEN CAST(ROUND(%[1]s) AS INTEGER) ELSE %[1]s END", column)
+	}
+	return strings.Join(expressions, ", ")
 }
 
 // readModernCollection decodes a schema-18 collection. Note types, fields,

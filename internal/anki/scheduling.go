@@ -9,30 +9,37 @@ import (
 )
 
 func readScheduling(db *gorm.DB, pkg *Package) error {
-	if err := db.Raw("SELECT crt FROM col").Row().Scan(&pkg.CreatedAt); err != nil {
+	if err := db.Raw("SELECT " + roundedIntegers("crt") + " FROM col").Row().Scan(&pkg.CreatedAt); err != nil {
 		return fmt.Errorf("%w: collection creation time: %v", ErrCorruptCollection, err)
 	}
-	rows, err := db.Raw("SELECT id, cid, usn, ease, ivl, lastIvl, factor, time, type FROM revlog ORDER BY id").Rows()
-	if err != nil {
-		return fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
-	}
-	for rows.Next() {
-		var r Review
-		if err := rows.Scan(&r.ID, &r.CardID, &r.USN, &r.Ease, &r.Interval, &r.LastInterval, &r.Factor, &r.Time, &r.Type); err != nil {
-			rows.Close()
-			return fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
-		}
-		pkg.Reviews = append(pkg.Reviews, r)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
-	}
+	pkg.RevlogErr = readReviews(db, pkg)
 	if pkg.Format == FormatModern {
 		return readModernDeckConfigs(db, pkg)
 	}
 	return readLegacyDeckConfigs(db, pkg)
+}
+
+func readReviews(db *gorm.DB, pkg *Package) error {
+	rows, err := db.Raw("SELECT " + roundedIntegers("id", "cid", "usn", "ease", "ivl", "lastIvl", "factor", "time", "type") + " FROM revlog ORDER BY id").Rows()
+	if err != nil {
+		return fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
+	}
+	defer rows.Close()
+	var scanErr error
+	for rows.Next() {
+		var r Review
+		if err := rows.Scan(&r.ID, &r.CardID, &r.USN, &r.Ease, &r.Interval, &r.LastInterval, &r.Factor, &r.Time, &r.Type); err != nil {
+			if scanErr == nil {
+				scanErr = fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
+			}
+			continue
+		}
+		pkg.Reviews = append(pkg.Reviews, r)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
+	}
+	return scanErr
 }
 
 func readLegacyDeckConfigs(db *gorm.DB, pkg *Package) error {
@@ -58,7 +65,7 @@ func readLegacyDeckConfigs(db *gorm.DB, pkg *Package) error {
 		} `json:"rev"`
 	}
 	if err := json.Unmarshal([]byte(raw), &configs); err != nil {
-		return fmt.Errorf("%w: col.dconf: %v", ErrCorruptCollection, err)
+		return nil
 	}
 	for _, c := range configs {
 		weights := c.FSRS6
@@ -89,7 +96,7 @@ func readModernDeckConfigs(db *gorm.DB, pkg *Package) error {
 		}
 		cfg, err := decodeDeckConfig(data)
 		if err != nil {
-			return fmt.Errorf("%w: deck_config: %v", ErrCorruptCollection, err)
+			continue
 		}
 		cfg.ID, cfg.Name = id, name
 		pkg.DeckConfigs = append(pkg.DeckConfigs, cfg)

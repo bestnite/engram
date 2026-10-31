@@ -1,12 +1,19 @@
 package anki
 
 import (
+	"archive/zip"
+	"bytes"
+	"database/sql"
 	"encoding/binary"
+	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/klauspost/compress/zstd"
 	"google.golang.org/protobuf/encoding/protowire"
 	"gorm.io/gorm"
 )
@@ -35,6 +42,151 @@ func TestSchedulingRows(t *testing.T) {
 	}
 	if len(pkg.DeckConfigs) != 1 || !reflect.DeepEqual(pkg.DeckConfigs[0].Weights, []float64{1, 2}) || pkg.DeckConfigs[0].MaximumReviewInterval != 200 {
 		t.Fatalf("configs: %+v", pkg.DeckConfigs)
+	}
+}
+
+func TestSchedulingTolerance(t *testing.T) {
+	tests := []struct {
+		name, query string
+		modern      bool
+		check       func(*testing.T, *Package)
+	}{
+		{"revlog real", `UPDATE revlog SET ivl = 7.5`, false, func(t *testing.T, p *Package) {
+			if len(p.Reviews) != 1 || p.Reviews[0].Interval != 8 {
+				t.Fatalf("reviews: %+v", p.Reviews)
+			}
+		}},
+		{"card due real", `UPDATE cards SET due = 7.5`, false, func(t *testing.T, p *Package) {
+			if p.Cards[0].Due != 8 {
+				t.Fatalf("due: %d", p.Cards[0].Due)
+			}
+		}},
+		{"card factor real", `UPDATE cards SET factor = 2500.5`, false, func(t *testing.T, p *Package) {
+			if p.Cards[0].Factor != 2501 {
+				t.Fatalf("factor: %d", p.Cards[0].Factor)
+			}
+		}},
+		{"invalid dconf", `UPDATE col SET dconf = 'invalid'`, false, func(t *testing.T, p *Package) {
+			if len(p.DeckConfigs) != 0 {
+				t.Fatalf("configs: %+v", p.DeckConfigs)
+			}
+		}},
+		{"invalid config protobuf", `UPDATE deck_config SET config = x'320100'`, true, func(t *testing.T, p *Package) {
+			if len(p.DeckConfigs) != 0 {
+				t.Fatalf("configs: %+v", p.DeckConfigs)
+			}
+		}},
+		{"unreadable revlog", `UPDATE revlog SET ivl = 'invalid'`, false, func(t *testing.T, p *Package) {
+			if p.RevlogErr == nil {
+				t.Fatal("missing revlog error")
+			}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var archive []byte
+			if tc.modern {
+				var err error
+				archive, err = os.ReadFile(filepath.Join("..", "notetype", "testdata", "anki", "stock.anki21b.apkg"))
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				var b bytes.Buffer
+				if err := WriteArchive(&b, writeTestPackage()); err != nil {
+					t.Fatal(err)
+				}
+				archive = b.Bytes()
+			}
+			zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			entries := make(map[string][]byte)
+			for _, f := range zr.File {
+				r, err := f.Open()
+				if err != nil {
+					t.Fatal(err)
+				}
+				entries[f.Name], err = io.ReadAll(r)
+				r.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			name := "collection.anki21"
+			if tc.modern {
+				name = "collection.anki21b"
+				decoder, err := zstd.NewReader(nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				entries[name], err = decoder.DecodeAll(entries[name], nil)
+				decoder.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			path := filepath.Join(t.TempDir(), "collection.sqlite")
+			if err := os.WriteFile(path, entries[name], 0600); err != nil {
+				t.Fatal(err)
+			}
+			db, err := sql.Open("sqlite", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(tc.query); err != nil {
+				t.Fatal(err)
+			}
+			if tc.name == "unreadable revlog" {
+				if _, err := db.Exec(`INSERT INTO revlog VALUES (1600000000001, 1, 0, 3, 9, 1, 2500, 100, 1)`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			entries[name], err = os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.modern {
+				encoder, err := zstd.NewWriter(nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				entries[name] = encoder.EncodeAll(entries[name], nil)
+				encoder.Close()
+			}
+			var b bytes.Buffer
+			zw := zip.NewWriter(&b)
+			for name, data := range entries {
+				w, err := zw.Create(name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := w.Write(data); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := zw.Close(); err != nil {
+				t.Fatal(err)
+			}
+			pkg, err := ReadWithLimits(bytes.NewReader(b.Bytes()), int64(b.Len()), DefaultLimits())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(pkg.Notes) == 0 || len(pkg.Cards) == 0 {
+				t.Fatalf("missing content: %+v", pkg)
+			}
+			if tc.name != "unreadable revlog" && pkg.RevlogErr != nil {
+				t.Fatalf("revlog: %v", pkg.RevlogErr)
+			}
+			if tc.name == "unreadable revlog" && (len(pkg.Reviews) != 1 || pkg.Reviews[0].Interval != 9) {
+				t.Fatalf("readable reviews: %+v", pkg.Reviews)
+			}
+			tc.check(t, pkg)
+		})
 	}
 }
 
