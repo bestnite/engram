@@ -12,8 +12,10 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 	"git.nite07.com/nite/engram/internal/anki"
 	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/notetype"
+	"git.nite07.com/nite/engram/internal/reviewday"
 )
 
 // Anki package (.apkg) import.
@@ -1025,7 +1028,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 	// media references to the report, and no stored row points at them.
 	dropUnusedAnkiNoteTypes(pkg)
 
-	deckID, err := s.resolveAnkiTargetDeck(ctx, tx, actorUserID, plan, targetKind, targetDeckID, opts)
+	deckID, err := s.resolveAnkiTargetDeck(ctx, tx, actorUserID, pkg, plan, targetKind, targetDeckID, opts)
 	if err != nil {
 		return err
 	}
@@ -1104,7 +1107,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 	// imported marks notes this pass actually wrote (create or update). A skipped or failed note
 	// is not touched, including its card set.
 	imported := make(map[int64]bool, len(pkg.Notes))
-	now := time.Now().UTC()
+	now := opts.Now().UTC()
 	for i := range pkg.Notes {
 		note := &pkg.Notes[i]
 		target, ok := targets[note.NoteTypeID]
@@ -1157,6 +1160,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		notesByID[pkg.Notes[i].ID] = &pkg.Notes[i]
 	}
 	existingCards := map[uint64]map[int]Card{}
+	cardIDs := make(map[int64]uint64, len(pkg.Cards))
 	for _, card := range pkg.Cards {
 		noteID, ok := noteIDs[card.NoteID]
 		if !ok {
@@ -1167,6 +1171,12 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 			continue
 		}
 		if !imported[card.NoteID] {
+			var existing Card
+			if err := tx.WithContext(ctx).Where("note_id = ? AND ordinal = ?", noteID, card.Ordinal).First(&existing).Error; err == nil {
+				cardIDs[card.ID] = existing.ID
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
 			continue
 		}
 		// Resolve the note's own target through the package note it belongs to.
@@ -1213,6 +1223,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		}
 		row, ok := existingCards[noteID][card.Ordinal]
 		if ok {
+			cardIDs[card.ID] = row.ID
 			updates := map[string]any{"template": template, "deck_path": pathPtr}
 			if row.DeletedAt.Valid {
 				updates["deleted_at"] = nil
@@ -1229,7 +1240,11 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 			return fmt.Errorf("create card for note %d: %w", noteID, err)
 		}
 		existingCards[noteID][card.Ordinal] = created
+		cardIDs[card.ID] = created.ID
 		report.CardsCreated++
+	}
+	if err := importAnkiProgress(ctx, tx, actorUserID, pkg, cardIDs, opts, report, now); err != nil {
+		return err
 	}
 
 	// A note that moved to another note type must not keep a card the new type cannot render.
@@ -1407,9 +1422,155 @@ func writeAnkiNote(ctx context.Context, tx *gorm.DB, actorUserID, deckID uint64,
 	return old.ID, false, nil
 }
 
-// resolveAnkiTargetDeck resolves new_deck, into_deck and replace_deck for an Anki import. A new
-// deck gets its own preset built from the documented defaults, because an .apkg carries no preset.
-func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, actorUserID uint64, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions) (uint64, error) {
+func ankiTopConfig(pkg *anki.Package, top string) *anki.DeckConfig {
+	for _, deck := range pkg.Decks {
+		if ankiDeckName(deck.Name) == top {
+			for i := range pkg.DeckConfigs {
+				if pkg.DeckConfigs[i].ID == deck.ConfigID {
+					return &pkg.DeckConfigs[i]
+				}
+			}
+		}
+	}
+	if len(pkg.DeckConfigs) == 1 {
+		return &pkg.DeckConfigs[0]
+	}
+	return nil
+}
+
+func ankiSteps(steps []float64) string {
+	parts := make([]string, len(steps))
+	for i, step := range steps {
+		parts[i] = strconv.FormatFloat(step, 'f', -1, 64) + "m"
+	}
+	return strings.Join(parts, ",")
+}
+
+// importAnkiProgress keeps the per-user state separate from shared card content.
+func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID uint64, pkg *anki.Package, cardIDs map[int64]uint64, opts PackageImportOptions, report *PackageImportReport, now time.Time) error {
+	if !opts.IncludeProgress {
+		report.StatesDiscarded = len(pkg.Cards)
+		report.ReviewsDiscarded = len(pkg.Reviews)
+		report.ProgressDiscarded = len(pkg.Cards)+len(pkg.Reviews) > 0
+		return nil
+	}
+	var user User
+	if err := tx.WithContext(ctx).First(&user, userID).Error; err != nil {
+		return fmt.Errorf("import Anki progress: load user: %w", err)
+	}
+	loc, cutoff := reviewday.Location(user.Timezone), reviewday.ResolveCutoff(user.DayCutoffHour)
+	last := make(map[int64]int64)
+	previous := make(map[int64]int64)
+	for _, r := range pkg.Reviews {
+		if r.Type >= 0 && r.Type <= 3 && r.Ease >= 1 && r.Ease <= 4 {
+			previous[r.CardID], last[r.CardID] = last[r.CardID], r.ID
+		}
+	}
+	for _, card := range pkg.Cards {
+		id, ok := cardIDs[card.ID]
+		if !ok || card.Type < 0 || card.Type > 3 || (card.Type == 0 && card.Queue != 0 && card.Queue != -1) {
+			report.StatesSkipped++
+			continue
+		}
+		states := [...]string{"new", "learning", "review", "relearning"}
+		state := CardState{CardID: id, UserID: userID, State: states[card.Type], Reps: card.Reps, Lapses: card.Lapses, ScheduledDays: card.Interval, StepIndex: card.Left}
+		if card.Type == 1 || card.Type == 3 {
+			due := time.Unix(card.Due, 0).UTC()
+			state.DueAt = &due
+		}
+		if card.Type == 2 {
+			due := time.Unix(pkg.CreatedAt, 0).UTC().Add(time.Duration(card.Due) * 24 * time.Hour)
+			state.DueAt = &due
+		}
+		var data struct {
+			Stability  *float64 `json:"s"`
+			Difficulty *float64 `json:"d"`
+			LastReview *int64   `json:"lrt"`
+		}
+		if card.Data != "" {
+			if err := json.Unmarshal([]byte(card.Data), &data); err != nil {
+				return fmt.Errorf("import Anki card %d data: %w", card.ID, err)
+			}
+		}
+		state.Stability, state.Difficulty = data.Stability, data.Difficulty
+		if data.LastReview != nil {
+			at := time.UnixMilli(*data.LastReview).UTC()
+			state.LastReviewAt = &at
+		}
+		if previous[card.ID] != 0 && last[card.ID] >= previous[card.ID] {
+			state.ElapsedDays = int((last[card.ID] - previous[card.ID]) / 86400000)
+		}
+		var old CardState
+		err := tx.WithContext(ctx).Where("card_id = ? AND user_id = ?", id, userID).First(&old).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("load Anki card state: %w", err)
+		}
+		if card.Queue == -1 {
+			state.SuspendedAt = &now
+			if err == nil && old.SuspendedAt != nil {
+				state.SuspendedAt = old.SuspendedAt
+			}
+		}
+		if err == nil {
+			state.Version = old.Version
+			if reflect.DeepEqual(old, state) {
+				report.StatesSkipped++
+				continue
+			}
+			state.Version++
+			if err := tx.WithContext(ctx).Model(&CardState{}).Where("card_id = ? AND user_id = ?", id, userID).Select("*").Updates(&state).Error; err != nil {
+				return fmt.Errorf("update Anki card state: %w", err)
+			}
+		} else if err := tx.WithContext(ctx).Create(&state).Error; err != nil {
+			return fmt.Errorf("create Anki card state: %w", err)
+		}
+		report.ProgressApplied++
+	}
+	seen := make(map[int64]bool)
+	for _, r := range pkg.Reviews {
+		// Anki's log has no pre-rating state, so deriving it from the review type is lossy.
+		earlier := seen[r.CardID]
+		seen[r.CardID] = true
+		before := 0
+		switch r.Type {
+		case 0:
+			if earlier {
+				before = 1
+			}
+		case 1, 3:
+			before = 2
+		case 2:
+			before = 3
+		default:
+			report.ReviewsSkipped++
+			continue
+		}
+		id, ok := cardIDs[r.CardID]
+		if !ok || r.Ease < 1 || r.Ease > 4 {
+			report.ReviewsSkipped++
+			continue
+		}
+		at := time.UnixMilli(r.ID).UTC()
+		var count int64
+		if err := tx.WithContext(ctx).Model(&Review{}).Where("card_id = ? AND user_id = ? AND reviewed_at = ? AND rating = ?", id, userID, at, r.Ease).Count(&count).Error; err != nil {
+			return fmt.Errorf("check Anki review: %w", err)
+		}
+		if count != 0 {
+			report.ReviewsSkipped++
+			continue
+		}
+		elapsed, duration := r.Time, float64(r.Interval)
+		review := Review{CardID: id, UserID: userID, Rating: r.Ease, GradeSource: "self", ReviewedAt: at, ReviewDay: reviewday.Day(at, loc, cutoff), ElapsedMS: &elapsed, DurationDays: &duration, StateBefore: before}
+		if err := tx.WithContext(ctx).Create(&review).Error; err != nil {
+			return fmt.Errorf("create Anki review: %w", err)
+		}
+		report.ReviewsApplied++
+	}
+	return nil
+}
+
+// resolveAnkiTargetDeck resolves the target and creates a preset for a new deck.
+func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *anki.Package, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions) (uint64, error) {
 	switch targetKind {
 	case PackageTargetNewDeck:
 		name := strings.TrimSpace(opts.NewDeckName)
@@ -1426,7 +1587,7 @@ func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, acto
 		if err != nil {
 			return 0, err
 		}
-		presetID, err := createAnkiPreset(ctx, tx, actorUserID, unique)
+		presetID, err := createAnkiPreset(ctx, tx, actorUserID, unique, ankiTopConfig(pkg, plan.TopName))
 		if err != nil {
 			return 0, err
 		}
@@ -1455,13 +1616,31 @@ func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, acto
 // createAnkiPreset creates the imported deck's preset with the documented defaults. The name is
 // independent of the user's default preset, so deleting this deck's preset cannot remove the
 // account default and vice versa.
-func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName string) (uint64, error) {
+func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName string, cfg *anki.DeckConfig) (uint64, error) {
 	base := "Imported — " + deckName
 	name, err := uniqueOwnerName(ctx, tx, &Preset{}, owner, base)
 	if err != nil {
 		return 0, err
 	}
 	preset := NewPreset(owner, name)
+	if cfg != nil {
+		if cfg.DesiredRetention > 0 && cfg.DesiredRetention <= 1 {
+			preset.DesiredRetention = cfg.DesiredRetention
+		}
+		preset.LearningSteps = ankiSteps(cfg.LearnSteps)
+		preset.RelearningSteps = ankiSteps(cfg.RelearnSteps)
+		if cfg.MaximumReviewInterval > 0 {
+			preset.MaximumIntervalDays = cfg.MaximumReviewInterval
+		}
+		if len(cfg.Weights) > 0 {
+			raw, err := json.Marshal(cfg.Weights)
+			if err != nil {
+				return 0, err
+			}
+			text := string(raw)
+			preset.WeightsJSON = &text
+		}
+	}
 	if err := NewPresetStore(tx).Create(ctx, &preset); err != nil {
 		return 0, err
 	}

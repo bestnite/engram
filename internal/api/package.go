@@ -73,6 +73,8 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 			"target": report.Target, "dry_run": report.DryRun,
 			"notes_created": report.NotesCreated, "notes_updated": report.NotesUpdated,
 			"progress_applied": report.ProgressApplied, "progress_discarded": report.ProgressDiscarded,
+			"states_skipped": report.StatesSkipped, "states_discarded": report.StatesDiscarded,
+			"reviews_applied": report.ReviewsApplied, "reviews_skipped": report.ReviewsSkipped, "reviews_discarded": report.ReviewsDiscarded,
 		},
 	})
 	return report, nil
@@ -253,6 +255,7 @@ func (a *API) handleImportPackage(c *gin.Context) {
 		OnConflict: c.PostForm("on_conflict"),
 		// Allowing import of someone else's progress is an admin setting; only an explicit admin opt-in counts here.
 		AllowOthersProgress: c.PostForm("allow_others_progress") == "1" && u.Role == store.RoleAdmin,
+		IncludeProgress:     c.PostForm("include_progress") == "1",
 		SkipMissingMedia:    c.PostForm("skip_missing_media") == "1",
 		ApplyWeights:        c.PostForm("apply_weights") == "1",
 	})

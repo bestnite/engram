@@ -43,6 +43,7 @@ type importURLRequest struct {
 	DryRun              bool   `json:"dry_run"`
 	OnConflict          string `json:"on_conflict"`
 	AllowOthersProgress bool   `json:"allow_others_progress"`
+	IncludeProgress     bool   `json:"include_progress"`
 	SkipMissingMedia    bool   `json:"skip_missing_media"`
 	ApplyWeights        bool   `json:"apply_weights"`
 }
@@ -123,6 +124,7 @@ func (a *API) handleImportPackageURL(c *gin.Context) {
 		OnConflict: req.OnConflict,
 		// Allowing import of someone else's progress is an admin setting; only an explicit admin opt-in counts here.
 		AllowOthersProgress: req.AllowOthersProgress && u.Role == store.RoleAdmin,
+		IncludeProgress:     req.IncludeProgress,
 		SkipMissingMedia:    req.SkipMissingMedia,
 		ApplyWeights:        req.ApplyWeights,
 	})

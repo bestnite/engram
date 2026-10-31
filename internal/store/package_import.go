@@ -226,6 +226,8 @@ type PackageImportOptions struct {
 	OnConflict string
 	// AllowOthersProgress is an admin switch (off by default): allow someone else's progress in the package to be imported into one's own account.
 	AllowOthersProgress bool
+	// IncludeProgress imports scheduling from Anki packages for the importing user.
+	IncludeProgress bool
 	// With SkipMissingMedia=true, missing media is only counted and the import continues; default false (missing media fails the import and lists them).
 	SkipMissingMedia bool
 	// ApplyWeights defaults to off: the weights in the package are the exporter's memory curve, and by default the importer starts from the default weights, gathering their own
@@ -271,6 +273,11 @@ type PackageImportReport struct {
 	ProgressApplied   int    `json:"progress_applied"`
 	ProgressSkipped   int    `json:"progress_skipped"`
 	ProgressDiscarded bool   `json:"progress_discarded"`
+	StatesSkipped     int    `json:"states_skipped"`
+	StatesDiscarded   int    `json:"states_discarded"`
+	ReviewsApplied    int    `json:"reviews_applied"`
+	ReviewsSkipped    int    `json:"reviews_skipped"`
+	ReviewsDiscarded  int    `json:"reviews_discarded"`
 	MatchRule         string `json:"match_rule,omitempty"`
 	// MissingMedia names every media reference that the package does not carry bytes for.
 	MissingMedia []string `json:"missing_media,omitempty"`

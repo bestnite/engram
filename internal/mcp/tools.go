@@ -128,6 +128,7 @@ type importDeckIn struct {
 	SkipMissingMedia bool `json:"skip_missing_media,omitempty" jsonschema:"skip missing media instead of failing"`
 	// AllowOthersProgress can only be set by an administrator: allows importing other people's progress inside the package.
 	AllowOthersProgress bool `json:"allow_others_progress,omitempty" jsonschema:"admin only: import progress that belongs to another user"`
+	IncludeProgress     bool `json:"include_progress,omitempty" jsonschema:"import Anki scheduling progress for the current user"`
 	// ApplyWeights defaults to false: only under the new_deck target are the package's weights written into the newly created preset.
 	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for the new deck's preset (new_deck only); default false"`
 }
@@ -142,6 +143,7 @@ type createImportUploadIn struct {
 	SkipMissingMedia bool `json:"skip_missing_media,omitempty" jsonschema:"skip missing media instead of failing"`
 	// AllowOthersProgress can only be set by an administrator: allows importing other people's progress inside the package.
 	AllowOthersProgress bool `json:"allow_others_progress,omitempty" jsonschema:"admin only: import progress that belongs to another user"`
+	IncludeProgress     bool `json:"include_progress,omitempty" jsonschema:"import Anki scheduling progress for the current user"`
 	// ApplyWeights defaults to false: only under the new_deck target are the package's weights written into the newly created preset.
 	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for the new deck's preset (new_deck only); default false"`
 }
@@ -404,6 +406,7 @@ func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (
 		OnConflict:          in.OnConflict,
 		SkipMissingMedia:    in.SkipMissingMedia,
 		AllowOthersProgress: in.AllowOthersProgress,
+		IncludeProgress:     in.IncludeProgress,
 		ApplyWeights:        in.ApplyWeights,
 	}
 	url := strings.TrimSpace(in.URL)
@@ -440,6 +443,7 @@ func (s *Server) createImportUpload(ctx context.Context, id Identity, in createI
 		OnConflict:          in.OnConflict,
 		SkipMissingMedia:    in.SkipMissingMedia,
 		AllowOthersProgress: in.AllowOthersProgress,
+		IncludeProgress:     in.IncludeProgress,
 		ApplyWeights:        in.ApplyWeights,
 	})
 }

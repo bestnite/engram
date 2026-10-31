@@ -188,6 +188,7 @@ func runImport(args []string) error {
 	onConflict := fs.String("on-conflict", "", "conflict policy: skip, update (default) or fail")
 	skipMissing := fs.Bool("skip-missing-media", false, "skip missing media instead of failing")
 	applyWeights := fs.Bool("apply-weights", false, "use the package's FSRS weights for the new deck's preset (new_deck only)")
+	includeProgress := fs.Bool("include-progress", false, "import Anki scheduling progress")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -218,6 +219,7 @@ func runImport(args []string) error {
 		OnConflict:       *onConflict,
 		SkipMissingMedia: *skipMissing,
 		ApplyWeights:     *applyWeights,
+		IncludeProgress:  *includeProgress,
 	})
 	if err != nil {
 		return err

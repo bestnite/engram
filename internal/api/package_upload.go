@@ -60,6 +60,7 @@ type importUploadTicket struct {
 	OnConflict          string  `json:"on_conflict"`
 	SkipMissingMedia    bool    `json:"skip_missing_media"`
 	AllowOthersProgress bool    `json:"allow_others_progress"`
+	IncludeProgress     bool    `json:"include_progress"`
 	ApplyWeights        bool    `json:"apply_weights"`
 	APIKeyID            *uint64 `json:"api_key_id,omitempty"`
 }
@@ -70,6 +71,7 @@ type importUploadRequest struct {
 	DryRun              bool   `json:"dry_run"`
 	OnConflict          string `json:"on_conflict"`
 	AllowOthersProgress bool   `json:"allow_others_progress"`
+	IncludeProgress     bool   `json:"include_progress"`
 	SkipMissingMedia    bool   `json:"skip_missing_media"`
 	ApplyWeights        bool   `json:"apply_weights"`
 }
@@ -94,6 +96,7 @@ func (a *API) CreateImportUpload(ctx context.Context, u *store.User, apiKeyID *u
 		OnConflict:          opts.OnConflict,
 		SkipMissingMedia:    opts.SkipMissingMedia,
 		AllowOthersProgress: opts.AllowOthersProgress && u.Role == store.RoleAdmin,
+		IncludeProgress:     opts.IncludeProgress,
 		ApplyWeights:        opts.ApplyWeights,
 		APIKeyID:            apiKeyID,
 	})
@@ -161,6 +164,7 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 		OnConflict:          ticket.OnConflict,
 		SkipMissingMedia:    ticket.SkipMissingMedia,
 		AllowOthersProgress: ticket.AllowOthersProgress,
+		IncludeProgress:     ticket.IncludeProgress,
 		ApplyWeights:        ticket.ApplyWeights,
 	}
 	// Authorize before reading bytes, the same invariant as direct-link import: a rejected request spends no reading or parsing.
@@ -256,6 +260,7 @@ func (a *API) handleCreateImportUpload(c *gin.Context) {
 		DryRun:              req.DryRun,
 		OnConflict:          req.OnConflict,
 		AllowOthersProgress: req.AllowOthersProgress,
+		IncludeProgress:     req.IncludeProgress,
 		SkipMissingMedia:    req.SkipMissingMedia,
 		ApplyWeights:        req.ApplyWeights,
 	})
