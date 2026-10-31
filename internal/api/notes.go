@@ -104,6 +104,7 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 			"created_at":   n.CreatedAt,
 			"updated_at":   n.UpdatedAt,
 			"external_ref": n.ExternalRef,
+			"source_url":   n.SourceURL,
 			"suspended":    suspended[n.ID],
 		})
 	}

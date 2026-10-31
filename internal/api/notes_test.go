@@ -190,3 +190,68 @@ func TestImportRejectsScopeAndMalformedBody(t *testing.T) {
 		t.Fatalf("error envelope = %s, want code %q", raw, CodeInvalidRequest)
 	}
 }
+
+// TestNoteSourceURLRoundTrip covers the origin link the editor writes: a note payload carries it as the source_url
+// field, the store keeps it in its own column, and every note response returns it. A save without the key keeps the
+// link, and an empty value clears it.
+func TestNoteSourceURLRoundTrip(t *testing.T) {
+	env := newTestEnv(t, 1000, 1000)
+	router := env.router()
+	owner := seedUser(t, env.db, "source_owner", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	noteType := createStockNoteType(t, env.db, deck.ID, "basic")
+
+	createNotesREST(t, router, deck.PublicID, noteType.PublicID, key,
+		[]map[string]string{{"front": "q", "back": "a", "source_url": "https://example.com/origin", "extra": "kept"}})
+	note := noteOfDeck(t, env, deck.ID)
+
+	sourceOf := func(raw []byte) any {
+		t.Helper()
+		var body map[string]any
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("note response is not JSON: %v (%s)", err, raw)
+		}
+		value, ok := body["source_url"]
+		if !ok {
+			t.Fatalf("note response has no source_url key: %s", raw)
+		}
+		if fields, _ := body["fields"].(map[string]any); fields["source_url"] != nil {
+			t.Errorf("source_url leaked into the field map: %s", raw)
+		}
+		return value
+	}
+
+	code, raw := doJSON(t, router, http.MethodGet, "/api/v1/notes/"+note.PublicID, key, "")
+	if code != http.StatusOK {
+		t.Fatalf("GET note = %d (body %s)", code, raw)
+	}
+	if got := sourceOf(raw); got != "https://example.com/origin" {
+		t.Fatalf("source_url after create = %v, want the posted link", got)
+	}
+
+	body := fmt.Sprintf(`{"note_type":%q,"fields":{"front":"q2","back":"a2"}}`, noteType.PublicID)
+	code, raw = doJSON(t, router, http.MethodPatch, "/api/v1/notes/"+note.PublicID, key, body)
+	if code != http.StatusOK {
+		t.Fatalf("PATCH without source_url = %d (body %s)", code, raw)
+	}
+	if got := sourceOf(raw); got != "https://example.com/origin" {
+		t.Errorf("source_url after a save without the key = %v, want it kept", got)
+	}
+	var stored store.Note
+	if err := env.db.First(&stored, note.ID).Error; err != nil {
+		t.Fatalf("reload note: %v", err)
+	}
+	if stored.ExtraJSON == nil || *stored.ExtraJSON != `"kept"` {
+		t.Errorf("extra_json after a save without the key = %v, want it kept", stored.ExtraJSON)
+	}
+
+	body = fmt.Sprintf(`{"note_type":%q,"fields":{"front":"q2","back":"a2","source_url":""}}`, noteType.PublicID)
+	code, raw = doJSON(t, router, http.MethodPatch, "/api/v1/notes/"+note.PublicID, key, body)
+	if code != http.StatusOK {
+		t.Fatalf("PATCH clearing source_url = %d (body %s)", code, raw)
+	}
+	if got := sourceOf(raw); got != nil {
+		t.Errorf("source_url after clearing = %v, want null", got)
+	}
+}

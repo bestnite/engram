@@ -742,7 +742,16 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	if err != nil {
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}
-	n := store.Note{ID: existing.ID, DeckID: existing.DeckID, NoteTypeID: store.Ptr(noteTypeID)}
+	// source_url and extra live in their own columns and reach the store only as optional keys of the field map, which
+	// set or clear them. A payload without the key keeps the stored value, as an absent tags list does below: an editor
+	// that never shows extra must not erase it on every save.
+	n := store.Note{
+		ID:         existing.ID,
+		DeckID:     existing.DeckID,
+		NoteTypeID: store.Ptr(noteTypeID),
+		SourceURL:  existing.SourceURL,
+		ExtraJSON:  existing.ExtraJSON,
+	}
 	if in.Tags != nil {
 		n.TagsJSON = store.TagsJSON(*in.Tags)
 	} else {
