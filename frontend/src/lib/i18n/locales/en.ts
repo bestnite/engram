@@ -1681,4 +1681,6 @@ export const en: LocaleCatalog = {
   'notetype.syntax.text': 'Strips the field’s formatting and keeps the plain text.',
   'notetype.syntax.special': 'The note’s tags, its deck, its subdeck, the note type name and the template name.',
   'notetype.syntax.frontside': 'Inserts the front on the back. When the back shows the question (with this, or by repeating every field of the front), the reveal shows the back alone, as Anki does; otherwise the question stays above the answer.',
+  // ---- Rich-text field editor: source mode ----
+  'editor.source.hint': 'Formatting is unavailable while the HTML source is shown.',
 };

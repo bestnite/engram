@@ -123,7 +123,7 @@
   const description = $derived(options.description ?? '');
 
   const toolbarButton =
-    'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+    'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40';
 
   const separator = 'h-4 w-px shrink-0 bg-input @max-sm:hidden';
 
@@ -488,23 +488,31 @@
             aria-label={$t(action.label, { field: label })}
             title={$t(action.label, { field: label })}
             aria-keyshortcuts={action.shortcut}
+            disabled={sourceOpen}
             onmousedown={(event) => event.preventDefault()}
             onclick={() => command(action.name, action.extra)}
           >
             <action.Icon class="size-4" aria-hidden="true" />
           </button>
         {/each}
-        <label class="{toolbarButton} relative" title={$t('editor.text_color', { field: label })}>
+        <label
+          class="{toolbarButton} relative {sourceOpen ? 'pointer-events-none opacity-40' : ''}"
+          title={$t('editor.text_color', { field: label })}
+        >
           <Palette class="size-4" aria-hidden="true" />
           <input
             type="color"
             class="absolute inset-0 cursor-pointer opacity-0"
             data-testid="{testId}-text-color"
             aria-label={$t('editor.text_color', { field: label })}
+            disabled={sourceOpen}
             oninput={(event) => applyColor('textColor', event)}
           />
         </label>
-        <label class="{toolbarButton} relative" title={$t('editor.highlight', { field: label })}>
+        <label
+          class="{toolbarButton} relative {sourceOpen ? 'pointer-events-none opacity-40' : ''}"
+          title={$t('editor.highlight', { field: label })}
+        >
           <Highlighter class="size-4" aria-hidden="true" />
           <input
             type="color"
@@ -512,6 +520,7 @@
             data-testid="{testId}-highlight"
             aria-label={$t('editor.highlight', { field: label })}
             value="#fff59d"
+            disabled={sourceOpen}
             oninput={(event) => applyColor('highlight', event)}
           />
         </label>
@@ -525,6 +534,7 @@
             data-testid="{testId}-format-{action.id}"
             aria-label={$t(action.label, { field: label })}
             title={$t(action.label, { field: label })}
+            disabled={sourceOpen}
             onmousedown={(event) => event.preventDefault()}
             onclick={() => command(action.name, action.extra)}
           >
@@ -541,6 +551,7 @@
             data-testid="{testId}-format-{action.id}"
             aria-label={$t(action.label, { field: label })}
             title={$t(action.label, { field: label })}
+            disabled={sourceOpen}
             onmousedown={(event) => event.preventDefault()}
             onclick={() => command(action.name, action.extra)}
           >
@@ -554,6 +565,7 @@
             data-testid="{testId}-format-{action.id}"
             aria-label={$t(action.label, { field: label })}
             title={$t(action.label, { field: label })}
+            disabled={sourceOpen}
             onmousedown={(event) => event.preventDefault()}
             onclick={() => command(action.name, action.extra)}
           >
@@ -569,6 +581,7 @@
           data-testid="{testId}-insert-image"
           aria-label={$t('editor.insert_image', { field: label })}
           title={$t('editor.insert_image', { field: label })}
+          disabled={sourceOpen}
           onmousedown={(event) => event.preventDefault()}
           onclick={pickFile}
         >
@@ -580,6 +593,7 @@
           data-testid="{testId}-insert-audio"
           aria-label={$t('editor.audio.open', { field: label })}
           title={$t('editor.audio.open', { field: label })}
+          disabled={sourceOpen}
           onmousedown={(event) => event.preventDefault()}
           onclick={openAudio}
         >
@@ -591,6 +605,7 @@
           data-testid="{testId}-insert-ruby"
           aria-label={$t('editor.ruby.open', { field: label })}
           title={$t('editor.ruby.open', { field: label })}
+          disabled={sourceOpen}
           onmousedown={(event) => event.preventDefault()}
           onclick={() => openWithSelection('ruby')}
         >
@@ -602,6 +617,7 @@
           data-testid="{testId}-insert-tts"
           aria-label={$t('editor.tts.open', { field: label })}
           title={$t('editor.tts.open', { field: label })}
+          disabled={sourceOpen}
           onmousedown={(event) => event.preventDefault()}
           onclick={() => openWithSelection('tts')}
         >
@@ -615,6 +631,7 @@
             aria-label={$t(action.label, { field: label })}
             title={$t(action.label, { field: label })}
             aria-keyshortcuts={action.shortcut}
+            disabled={sourceOpen}
             onmousedown={(event) => event.preventDefault()}
             onclick={() => command(action.name, action.extra)}
           >
@@ -635,6 +652,11 @@
         </button>
       </div>
     </div>
+    {#if sourceOpen}
+      <p class="px-1.5 pb-1 text-xs text-muted-foreground" data-testid="{testId}-source-hint">
+        {$t('editor.source.hint')}
+      </p>
+    {/if}
   {/if}
   {#if options.collapsed}
     <!-- Only a collapsible field has this row: an empty row would draw a strip between the toolbar and the text. -->

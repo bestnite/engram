@@ -194,6 +194,28 @@ describe('RichTextField toolbar commands', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('disables the formatting controls while the HTML source is shown', () => {
+    const fake = mountField();
+    const toggle = target.querySelector('[data-testid="field-source-toggle"]') as HTMLButtonElement;
+    toggle.click();
+    flushSync();
+
+    const bold = buttons()['bold']!;
+    expect(bold.disabled).toBe(true);
+    expect(target.querySelector('[data-testid="field-text-color"]')!.hasAttribute('disabled')).toBe(true);
+    expect((target.querySelector('[data-testid="field-insert-image"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(target.querySelector('[data-testid="field-source-hint"]')).not.toBeNull();
+
+    const before = posted(fake).length;
+    bold.click();
+    expect(posted(fake)).toHaveLength(before);
+
+    toggle.click();
+    flushSync();
+    expect(bold.disabled).toBe(false);
+    expect(target.querySelector('[data-testid="field-source-hint"]')).toBeNull();
+  });
+
   it('uploads a chosen file and asks the frame to insert it', async () => {
     const fake = mountField();
     const input = target.querySelector('[data-testid="field-file-input"]') as HTMLInputElement;

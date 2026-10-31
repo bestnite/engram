@@ -1680,4 +1680,6 @@ export const zhCN: LocaleCatalog = {
   'notetype.syntax.text': '去掉字段的格式，只保留纯文本。',
   'notetype.syntax.special': '笔记的标签、所在卡组、子卡组、笔记类型名、模板名。',
   'notetype.syntax.frontside': '在背面插入正面的内容。背面包含问题时（用了它，或再次引用了正面的全部字段），翻面后只显示背面，和 Anki 一致；否则问题保留在答案上方。',
+  // ---- Rich-text field editor: source mode ----
+  'editor.source.hint': '显示 HTML 源码时无法使用格式工具。',
 };
