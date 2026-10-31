@@ -193,26 +193,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   *Acceptance:* the ledger table holds a row naming each of the four IDs. Evidence is the output of
   `grep -n -E 'M18-(1|2|3|9)\b' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-25 One malformed `col.dconf` entry no longer drops every deck configuration** —
-  `readLegacyDeckConfigs` in `internal/anki/scheduling.go` decodes the whole of `col.dconf` with one
-  `json.Unmarshal` into a map of structs, and since `M18-13` it keeps no configuration when that call
-  fails. `encoding/json` reports an error for the whole call when one entry holds a value of the wrong
-  type, for example a `maxIvl` written as `36500.0`, which Go refuses for an `int` field. One malformed
-  entry therefore drops every deck configuration of a schema-11 package, including the one the top deck
-  uses, and the new deck gets the preset defaults instead of the package's steps, retention, maximum
-  interval and FSRS weights. A schema-18 package loses only the malformed row
-  (`readModernDeckConfigs`), so the two layouts disagree. The two skip points also carry no comment
-  that says why skipping is safe. The fix: decode `col.dconf` into `map[string]json.RawMessage` first;
-  a `col.dconf` that is not a JSON object keeps no configuration, as today; then decode each entry on
-  its own and skip an entry that does not decode. Once `M18-24` has landed, a skipped entry sets
-  `DeckConfigsSkipped`. The skip point in `readLegacyDeckConfigs` and the one in
-  `readModernDeckConfigs` each gain a comment stating why skipping is safe: the deck then gets the
-  preset defaults, and the content still imports. *Acceptance:* a table test in
-  `internal/anki/scheduling_test.go` reads a schema-11 package whose `col.dconf` holds two entries, one
-  with `"maxIvl": 36500.0` and one valid, and gets exactly the valid configuration; a `col.dconf` that
-  is not valid JSON still yields no configuration. Evidence is the raw scoped `go test` and `go vet`
-  output.
-
 - [ ] **M18-26 Rounding a REAL value applies to quantities, not to identifiers and codes** —
   `roundedIntegers` in `internal/anki/sqlite.go` rounds a REAL value in every integer column that
   `readCards` and `readReviews` select. `M18-13` asked for rounding on the numeric scheduling columns,
