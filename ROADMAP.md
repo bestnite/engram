@@ -193,27 +193,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   *Acceptance:* the ledger table holds a row naming each of the four IDs. Evidence is the output of
   `grep -n -E 'M18-(1|2|3|9)\b' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-23 An unreadable revlog fails an `.apkg` import that has `include_progress` on** —
-  `M18-13` required that an unreadable revlog fails the import only when `include_progress` is on.
-  Commit `2b1f2e8` did the reader half: `readReviews` in `internal/anki/scheduling.go` skips every
-  revlog row it cannot scan, keeps the readable rows in `Package.Reviews` and stores the first error in
-  `Package.RevlogErr`. The store half is missing: no code outside `internal/anki` reads `RevlogErr`.
-  The commit that closed `M18-13` (`83c0189`) says this half moved into `M18-7`, but the `M18-7` entry
-  does not contain it. With `include_progress` on, a package whose revlog holds one unreadable row
-  therefore imports without an error, writes the readable rows to `reviews` and drops the unreadable
-  row without a trace. The dropped row cannot be recovered later, because the review log is the only
-  input to parameter optimisation. The fix: `prepareAnkiImport` in `internal/store/anki_import.go`,
-  right after `anki.ReadWithLimits` returns, returns `mapAnkiPackageError(pkg.RevlogErr)` (code
-  `package_bad_format`) when `include_progress` is on and `pkg.RevlogErr` is not nil. That point is
-  before the media placement and before the transaction, so the failed import writes no file and no
-  row. With `include_progress` off the import ignores `RevlogErr`. *Acceptance:* a table test in
-  `internal/store/anki_progress_import_test.go` imports, through `ImportPackage`, a schema-11 package
-  whose revlog holds one readable row and one row with `ivl` = `'invalid'`. With `include_progress`
-  on, the import returns a `PackageError` with code `package_bad_format`, and the database holds no
-  new deck, note, card, `card_states` row or `reviews` row. With `include_progress` off, every note and
-  card of the package is created and no `card_states` or `reviews` row is written. Evidence is the raw
-  scoped `go test` and `go vet` output.
-
 - [ ] **M18-24 An undecodable deck configuration falls back to the preset defaults, not to another
   deck's configuration** — since `M18-13`, `readModernDeckConfigs` in `internal/anki/scheduling.go`
   skips a `deck_config` row whose `config` does not decode, and `readLegacyDeckConfigs` keeps no
