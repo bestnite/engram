@@ -97,3 +97,47 @@ func TestImportPresetReuseResponse(t *testing.T) {
 		t.Fatalf("unexpected response: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestImportSharedDeckOmitsOwnerPreset(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	owner := seedUser(t, env.db, "report_owner", store.RoleUser)
+	editor := seedUser(t, env.db, "report_editor", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	preset := store.NewPreset(owner.ID, "Owner private preset")
+	if err := env.db.Create(&preset).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := env.db.Model(&store.Deck{}).Where("id = ?", deck.ID).Update("preset_id", preset.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	grant := store.DeckGrant{DeckID: deck.ID, UserID: editor.ID, Role: store.RoleEditor, CreatedAt: env.now}
+	if err := env.db.Create(&grant).Error; err != nil {
+		t.Fatal(err)
+	}
+	key := seedKey(t, env.keys, editor.ID, []string{store.ScopeWrite}, nil)
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	f, err := w.CreateFormFile("file", "import.edeck")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(minimalPackageZip(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteField("target", "into_deck:"+deck.PublicID); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	rec := postImport(t, env, key.Plaintext, &body, w.FormDataContentType())
+	t.Logf("editor response: %s", rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	for _, forbidden := range []string{"preset_mode", "preset_name", preset.Name} {
+		if bytes.Contains(rec.Body.Bytes(), []byte(forbidden)) {
+			t.Fatalf("response contains %q: %s", forbidden, rec.Body.String())
+		}
+	}
+}

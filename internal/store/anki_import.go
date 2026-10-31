@@ -895,11 +895,10 @@ func (s *DeckStore) prepareAnkiImport(ctx context.Context, actorUserID uint64, r
 	}
 
 	report := &PackageImportReport{
-		Target:     targetKind,
-		PresetMode: opts.PresetMode,
-		DryRun:     opts.DryRun,
-		MatchRule:  "anki_guid",
-		Errors:     []PackageImportError{},
+		Target:    targetKind,
+		DryRun:    opts.DryRun,
+		MatchRule: "anki_guid",
+		Errors:    []PackageImportError{},
 	}
 	placed, writtenMedia, err := s.placeAnkiMedia(ctx, files, opts, report)
 	if err != nil {
@@ -1036,9 +1035,6 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		return err
 	}
 	report.DeckID = deckID
-	if err := fillImportPresetReport(ctx, tx, deckID, report); err != nil {
-		return err
-	}
 	pid, err := deckPublicID(ctx, tx, deckID)
 	if err != nil {
 		return err
@@ -1666,17 +1662,18 @@ func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, acto
 		if err != nil {
 			return 0, err
 		}
-		presetID, err := selectImportPreset(ctx, tx, actorUserID, opts, func() (uint64, error) {
+		preset, err := selectImportPreset(ctx, tx, actorUserID, opts, func() (Preset, error) {
 			return createAnkiPreset(ctx, tx, actorUserID, unique, cfg, opts.ApplyWeights, report)
 		})
 		if err != nil {
 			return 0, err
 		}
+		report.PresetMode, report.PresetName = opts.PresetMode, preset.Name
 		deck := Deck{
 			OwnerUserID: actorUserID,
 			Name:        unique,
 			Description: plan.Description,
-			PresetID:    presetID,
+			PresetID:    preset.ID,
 			CreatedAt:   opts.Now().UTC(),
 		}
 		if err := tx.WithContext(ctx).Create(&deck).Error; err != nil {
@@ -1697,11 +1694,11 @@ func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, acto
 // createAnkiPreset creates the imported deck's preset with the documented defaults. The name is
 // independent of the user's default preset, so deleting this deck's preset cannot remove the
 // account default and vice versa.
-func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName string, cfg *anki.DeckConfig, applyWeights bool, report *PackageImportReport) (uint64, error) {
+func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName string, cfg *anki.DeckConfig, applyWeights bool, report *PackageImportReport) (Preset, error) {
 	base := "Imported — " + deckName
 	name, err := uniqueOwnerName(ctx, tx, &Preset{}, owner, base)
 	if err != nil {
-		return 0, err
+		return Preset{}, err
 	}
 	preset := NewPreset(owner, name)
 	if cfg != nil {
@@ -1717,7 +1714,7 @@ func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName s
 			if _, err := fsrs.MigrateWeights(cfg.Weights); err == nil {
 				raw, err := json.Marshal(cfg.Weights)
 				if err != nil {
-					return 0, err
+					return Preset{}, err
 				}
 				text := string(raw)
 				preset.WeightsJSON = &text
@@ -1725,13 +1722,13 @@ func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName s
 		}
 	}
 	if err := NewPresetStore(tx).Create(ctx, &preset); err != nil {
-		return 0, err
+		return Preset{}, err
 	}
 	if preset.WeightsJSON != nil {
 		report.WeightsApplied = true
 		report.WeightsDiscarded = false
 	}
-	return preset.ID, nil
+	return preset, nil
 }
 
 // registerAnkiMediaNames records every media name the package provides for the target deck.

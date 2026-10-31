@@ -64,7 +64,7 @@ func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 			t.Logf("explicit false enable_fuzz stored as %v", *gotOff.EnableFuzz)
 
 			// 3) Package import path: createPresetFromPackage's compensatory write is gone, and false must still be stored as false.
-			importedID, err := createPresetFromPackage(ctx, db, owner, &PackagePreset{
+			imported, err := createPresetFromPackage(ctx, db, owner, &PackagePreset{
 				Name: "Imported", DesiredRetention: DefaultDesiredRetention,
 				LearningSteps: DefaultLearningSteps, RelearningSteps: DefaultRelearningSteps,
 				MaximumIntervalDays: DefaultMaximumIntervalDays, EnableFuzz: false,
@@ -72,7 +72,7 @@ func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 			if err != nil {
 				t.Fatalf("createPresetFromPackage error = %v", err)
 			}
-			gotImported, err := presets.ByID(ctx, importedID)
+			gotImported, err := presets.ByID(ctx, imported.ID)
 			if err != nil {
 				t.Fatalf("ByID(imported) error = %v", err)
 			}

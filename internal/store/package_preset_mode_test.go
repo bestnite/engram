@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -178,3 +179,46 @@ func TestImportPresetModes(t *testing.T) {
 }
 
 func fmtOptions(o PackageImportOptions) string { b, _ := json.Marshal(o); return string(b) }
+
+func TestImportReportPresetByTarget(t *testing.T) {
+	apkg, err := os.ReadFile(ankiFixturePath("stock.anki21.apkg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	formats := []struct {
+		name string
+		raw  []byte
+	}{{"edeck", manifestZip(t, "Report", "")}, {"apkg", apkg}}
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			owner := seedUsers(t, db, "report_preset_owner")[0]
+			for _, format := range formats {
+				for _, target := range []string{"new_deck", "into_deck", "replace_deck"} {
+					t.Run(format.name+"/"+target, func(t *testing.T) {
+						existing := importPackageOK(t, db, owner, manifestZip(t, "Target", ""), PackageImportOptions{})
+						opts := PackageImportOptions{Target: target, MediaRoot: t.TempDir()}
+						if target != "new_deck" {
+							opts.Target = fmt.Sprintf("%s:%d", target, existing.DeckID)
+						}
+						report := importPackageOK(t, db, owner, format.raw, opts)
+						if target == "new_deck" {
+							var deck Deck
+							var preset Preset
+							if err := db.First(&deck, report.DeckID).Error; err != nil {
+								t.Fatal(err)
+							}
+							if err := db.First(&preset, deck.PresetID).Error; err != nil {
+								t.Fatal(err)
+							}
+							if report.PresetMode != "new" || report.PresetName != preset.Name || preset.Name == "" {
+								t.Fatalf("report: %+v preset: %+v", report, preset)
+							}
+						} else if report.PresetMode != "" || report.PresetName != "" {
+							t.Fatalf("report: %+v", report)
+						}
+					})
+				}
+			}
+		})
+	}
+}
