@@ -156,25 +156,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   leaves `version` unchanged on both drivers. Evidence is the raw `go test` output of both runs, the
   PostgreSQL one with `TEST_PG_DSN` set.
 
-- [ ] **M18-10 `.apkg` review rows: fill `interval_days`, `duration_days` and the memory state with
-  their real meanings** — `M18-2` wrote `revlog.ivl` into `duration_days`, as its entry specified,
-  but that mapping was wrong: in engram `duration_days` is the number of days since the card's
-  previous review (`reviewFromOutcome` in `internal/schedule/submit.go`), while `revlog.ivl` is the
-  interval chosen by the rating, which is `interval_days`. Imported rows also leave `interval_days`,
-  `stability` and `difficulty` NULL, so undoing the first review made after an import rebuilds the
-  card from a previous row with no memory state (`rebuildReviewLog` in
-  `internal/schedule/actions.go`) and restores a stability of 0. The fix: `interval_days` is `ivl`
-  when it is positive or zero, and `-ivl / 86400` when it is negative, because a negative `ivl` counts
-  seconds; `duration_days` is the fractional number of days between the revlog ids of this row and the
-  card's previous kept row, and NULL on the card's first kept row; the card's last kept row carries the
-  stability and difficulty written to the card's state; an earlier row carries the state that
-  `fsrs.HistoricalMemoryStates` gives for it when `M18-7` replays the history, and NULL otherwise.
-  This task needs `M18-7`. *Acceptance:* a table test checks the four columns on a card with a
-  learning row (negative `ivl`), a review row and a relearning row; the round trip in
-  `TestExportAnkiPackageRoundTrip` also compares `interval_days` and `duration_days`; a test imports a
-  review card, submits one review, undoes it, and gets back the imported stability, difficulty and due
-  date. Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-11 Last review time survives an `.apkg` round trip** — the importer sets
   `last_review_at` only from the `lrt` key of `cards.data`, and the exporter (`internal/anki/write.go`,
   `internal/store/anki_export.go`) never writes `lrt`, so an engram export imported back has no last
