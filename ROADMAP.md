@@ -156,19 +156,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   leaves `version` unchanged on both drivers. Evidence is the raw `go test` output of both runs, the
   PostgreSQL one with `TEST_PG_DSN` set.
 
-- [ ] **M18-12 `.apkg` due dates for interday learning and filtered decks** — the importer reads the
-  `due` of every learning (type 1) and relearning (type 3) card as Unix seconds. For queue 3, Anki's
-  interday learning queue, `due` counts days from collection creation instead: a card reviewed with
-  `anki==26.9.3` under the steps `1 10 60 1440 2880` reports `type 1 queue 3 due 1`, which the
-  importer stores as a due date in January 1970. A card in a filtered deck (`odid` ≠ 0) keeps its real
-  due date in `odue`, which the reader decodes but the importer ignores. The fix: queue 3 uses
-  collection creation plus `due` days; a card with `odid` ≠ 0 uses `odue` in place of `due`, with the
-  same type and queue rules. The filtered-deck layout is verified against a package that
-  `tools/anki-oracle` produces with `anki==26.9.3`, not assumed. *Acceptance:* table tests cover
-  queue 1, queue 3 and a filtered-deck card of each type that has a due date; the oracle package
-  imports with the due dates Anki shows for it. Evidence is the raw scoped `go test` and `go vet`
-  output and the oracle script's output.
-
 - [ ] **M18-14 `.apkg` progress report counts and transport tests** — with `include_progress` off,
   `importAnkiProgress` sets `states_discarded` to the number of all package cards and
   `progress_discarded` to true for every package that has a card, including a package whose cards are
