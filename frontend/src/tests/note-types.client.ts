@@ -272,3 +272,81 @@ describe('NoteTypesView stock picker', () => {
     expect(optionLabels.some((label) => label.includes('Anki') || label.includes('常用模板'))).toBe(false);
   });
 });
+
+describe('NoteTypesView opened from the note editor', () => {
+  let instance: ReturnType<typeof mount> | null = null;
+
+  afterEach(() => {
+    if (instance) unmount(instance);
+    instance = null;
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+  });
+
+  async function flush(): Promise<void> {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+  }
+
+  async function open(address: string): Promise<void> {
+    setLocale('zh-CN');
+    routeStore.set(matchRoute(address));
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(NoteTypesView, {
+      target,
+      props: {
+        initialLoading: false,
+        initialNoteTypes: [noteType()],
+        initialStocks: [{ id: 'anki:basic', source: 'anki', name: 'Basic', label_key: 'notetype.stock.anki.basic' }],
+        initialControls: [],
+      },
+    });
+    await flush();
+  }
+
+  function backLink(): HTMLAnchorElement {
+    return document.body.querySelector('[data-testid="notetype-back"]') as HTMLAnchorElement;
+  }
+
+  const editor = '/decks/d1/notes/new?return=%2Fdecks%2Fd1';
+
+  it('opens the create dialog and leads back to the editor', async () => {
+    await open(`/decks/d1/note-types?create=1&return=${encodeURIComponent(editor)}`);
+    expect(document.body.querySelector('[data-testid="notetype-create-dialog"]')).not.toBeNull();
+    expect(backLink().getAttribute('href')).toBe(editor);
+    expect(backLink().textContent).toContain('返回编辑笔记');
+  });
+
+  it('hands the created type back to the editor', async () => {
+    const created = { ...noteType(), id: 'nt-new', name: 'Basic 2' };
+    const create = vi.spyOn(apiClient, 'createNoteType').mockResolvedValue(created);
+    await open(`/decks/d1/note-types?create=1&return=${encodeURIComponent(editor)}`);
+
+    const name = document.body.querySelector('[data-testid="notetype-create-name"]') as HTMLInputElement;
+    name.value = 'Basic 2';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    (document.body.querySelector('[data-testid="notetype-create-form"]') as HTMLFormElement).dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    await flush();
+
+    expect(create).toHaveBeenCalledWith('d1', { name: 'Basic 2', stock_id: 'anki:basic' });
+    const href = backLink().getAttribute('href') ?? '';
+    const params = new URLSearchParams(href.split('?')[1]);
+    expect(href.startsWith('/decks/d1/notes/new?')).toBe(true);
+    expect(params.get('note_type')).toBe('nt-new');
+    expect(params.get('return')).toBe('/decks/d1');
+  });
+
+  it('keeps the dialog closed and the deck as the way back without a request from the editor', async () => {
+    await open('/decks/d1/note-types');
+    expect(document.body.querySelector('[data-testid="notetype-create-dialog"]')).toBeNull();
+    expect(backLink().getAttribute('href')).toBe('/decks/d1');
+  });
+
+  it('ignores a return address that leaves the app', async () => {
+    await open(`/decks/d1/note-types?return=${encodeURIComponent('//example.com/x')}`);
+    expect(backLink().getAttribute('href')).toBe('/decks/d1');
+  });
+});

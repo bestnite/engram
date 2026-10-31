@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { safeReturnPath, withReturn } from '../lib/return-to';
+import { safeReturnPath, withParam, withoutParam, withReturn } from '../lib/return-to';
 
 /**
  * The return path comes from the address, so anyone can write it. Only a path this app's router can
@@ -38,5 +38,29 @@ describe('withReturn', () => {
 
   it('keeps a query the link already has', () => {
     expect(withReturn('/decks/2/notes/7?x=1', '/review')).toBe('/decks/2/notes/7?x=1&return=%2Freview');
+  });
+});
+
+describe('withParam and withoutParam', () => {
+  it.each([
+    ['/decks/5/notes/new', '/decks/5/notes/new?note_type=nt-1'],
+    ['/decks/5/notes/new?return=%2Fdecks%2F5', '/decks/5/notes/new?return=%2Fdecks%2F5&note_type=nt-1'],
+    ['/decks/5/notes/new?note_type=old&return=%2Fdecks%2F5', '/decks/5/notes/new?note_type=nt-1&return=%2Fdecks%2F5'],
+  ])('sets the parameter on %s', (path, expected) => {
+    expect(withParam(path, 'note_type', 'nt-1')).toBe(expected);
+  });
+
+  it.each([
+    ['/decks/5/notes/new', '/decks/5/notes/new'],
+    ['/decks/5/notes/new?note_type=nt-1', '/decks/5/notes/new'],
+    ['/decks/5/notes/new?note_type=nt-1&return=%2Fdecks%2F5', '/decks/5/notes/new?return=%2Fdecks%2F5'],
+  ])('removes the parameter from %s', (path, expected) => {
+    expect(withoutParam(path, 'note_type')).toBe(expected);
+  });
+
+  it('keeps a nested return path decodable after a round trip', () => {
+    const editor = withReturn('/decks/5/notes/new', '/review?deck=5&tag=a b');
+    const back = withParam(editor, 'note_type', 'nt-1');
+    expect(new URLSearchParams(back.split('?')[1]).get('return')).toBe('/review?deck=5&tag=a b');
   });
 });

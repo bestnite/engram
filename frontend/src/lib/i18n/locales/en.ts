@@ -1688,4 +1688,8 @@ export const en: LocaleCatalog = {
   // ---- Review page: render failure fallback and retry ----
   'review.render_failed': 'The card content could not be loaded. The plain text below is shown instead.',
   'review.render_retry': 'Try again',
+  // ---- Note editor: shortcut to create a note type ----
+  'note_edit.type.create': 'New note type',
+  'note_edit.type.current': 'Note type: {name}',
+  'notetype.back_note': 'Back to the note',
 };

@@ -1315,3 +1315,73 @@ describe('note editor — delete', () => {
     expect(target.querySelector('[data-testid="note-delete"]')).toBeNull();
   });
 });
+
+describe('unified note editor — shortcut to create a note type', () => {
+  function newTypeLink(): HTMLAnchorElement | null {
+    return target.querySelector('[data-testid="note-edit-new-type"]') as HTMLAnchorElement | null;
+  }
+
+  /** The note type page address the shortcut leads to, split into its path and parameters. */
+  function shortcutTarget(): { path: string; params: URLSearchParams } {
+    const href = newTypeLink()?.getAttribute('href') ?? '';
+    const [path = '', query = ''] = href.split('?');
+    return { path, params: new URLSearchParams(query) };
+  }
+
+  it('links to the create dialog and carries the editor address without an earlier handed-back type', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5' }, { return: '/review', note_type: 'nt-custom' });
+    routeStore.set({
+      path: '/decks/5/notes/new',
+      params: { id: '5' },
+      query: { return: '/review', note_type: 'nt-custom' },
+      search: 'return=%2Freview&note_type=nt-custom',
+      route: null,
+    });
+    await flush();
+
+    const { path, params } = shortcutTarget();
+    expect(path).toBe('/decks/5/note-types');
+    expect(params.get('create')).toBe('1');
+    expect(params.get('return')).toBe('/decks/5/notes/new?return=%2Freview');
+  });
+
+  it('starts a new note with the type the note type page handed back', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5' }, { note_type: 'nt-custom' });
+    await flush();
+    expect(target.querySelector('[data-testid="note-edit-type"]')?.textContent).toContain('Custom layout');
+    expect(target.querySelector(`[data-testid="${QUESTION}"]`)).not.toBeNull();
+  });
+
+  it('falls back to the first type when the handed-back type is not in the deck', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5' }, { note_type: 'nt-gone' });
+    await flush();
+    expect(target.querySelector('[data-testid="note-edit-type"]')?.textContent).toContain('Basic');
+  });
+
+  it('keeps the stored type of an existing note even when a type is handed back', async () => {
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture());
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5', noteId: '9' }, { note_type: 'nt-custom' });
+    await flush();
+    expect(target.querySelector('[data-testid="note-edit-type"]')?.textContent).toContain('Basic');
+    expect(newTypeLink()).not.toBeNull();
+  });
+
+  it('names the only type and still offers the shortcut', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5' }, {}, [basicNoteType()]);
+    await flush();
+    expect(target.querySelector('[data-testid="note-edit-type-name"]')?.textContent).toContain('Basic');
+    expect(newTypeLink()).not.toBeNull();
+  });
+
+  it('offers the shortcut when the deck has no note type yet', async () => {
+    mountEditor({ id: '5' }, {}, []);
+    await flush();
+    expect(target.querySelector('[data-testid="note-edit-no-types"]')).not.toBeNull();
+    expect(shortcutTarget().path).toBe('/decks/5/note-types');
+  });
+});

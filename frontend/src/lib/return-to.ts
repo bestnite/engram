@@ -29,3 +29,30 @@ export function withReturn(href: string, from: string): string {
   const separator = href.includes('?') ? '&' : '?';
   return `${href}${separator}${RETURN_PARAM}=${encodeURIComponent(from)}`;
 }
+
+/**
+ * The query parameter a detour adds to the return path to hand back the note type it created. The
+ * note editor reads it in create mode and starts with that type selected.
+ */
+export const NOTE_TYPE_PARAM = 'note_type';
+
+/** Returns the in-app path with one query parameter set, replacing any earlier value of that key. */
+export function withParam(path: string, key: string, value: string): string {
+  const [pathOnly, params] = splitQuery(path);
+  params.set(key, value);
+  return `${pathOnly}?${params.toString()}`;
+}
+
+/** Returns the in-app path without the given query parameter. */
+export function withoutParam(path: string, key: string): string {
+  const [pathOnly, params] = splitQuery(path);
+  params.delete(key);
+  const query = params.toString();
+  return query ? `${pathOnly}?${query}` : pathOnly;
+}
+
+function splitQuery(path: string): [string, URLSearchParams] {
+  const index = path.indexOf('?');
+  if (index < 0) return [path, new URLSearchParams()];
+  return [path.slice(0, index), new URLSearchParams(path.slice(index + 1))];
+}

@@ -1687,4 +1687,8 @@ export const zhCN: LocaleCatalog = {
   // ---- 复习页：渲染失败的回退与重试 ----
   'review.render_failed': '卡片内容暂时没有加载出来，下面显示的是纯文本。',
   'review.render_retry': '重新加载',
+  // ---- 笔记编辑页：新建笔记类型的快捷入口 ----
+  'note_edit.type.create': '新建笔记类型',
+  'note_edit.type.current': '笔记类型：{name}',
+  'notetype.back_note': '返回编辑笔记',
 };

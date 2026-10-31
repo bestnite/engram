@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { routeStore } from '../router';
+  import { NOTE_TYPE_PARAM, RETURN_PARAM, safeReturnPath, withParam } from '../return-to';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type {
@@ -58,6 +59,20 @@
   let answerControls = $state<AnswerControl[]>(initialControls ?? []);
 
   const deckId = $derived($routeStore.params.id || '');
+
+  // A page that sends the author here to create a type (the note editor) passes its address and asks for
+  // the create dialog. The back link then returns there, handing back the type created on this visit so
+  // the editor can start with it selected; without a return address it leads to the deck.
+  const returnTo = $derived(safeReturnPath($routeStore.query[RETURN_PARAM]));
+  let createdId = $state('');
+  const back = $derived(
+    returnTo
+      ? {
+          href: createdId ? withParam(returnTo, NOTE_TYPE_PARAM, createdId) : returnTo,
+          label: $t('notetype.back_note'),
+        }
+      : { href: `/decks/${encodeURIComponent(deckId)}`, label: $t('notetype.back') },
+  );
 
   // The editor works on a clone, so leaving a type without saving never changes the list.
   interface Draft {
@@ -974,6 +989,7 @@
         created = await apiClient.createNoteType(deckId, { name, config });
       }
       noteTypes = [...noteTypes, created];
+      createdId = created.id;
       createOpen = false;
       selectType(created);
       toast.success($t('notetype.create.created'));
@@ -985,19 +1001,27 @@
   }
 
   onMount(() => {
+    const wantsCreate = $routeStore.query.create === '1';
     // A view rendered with fixture data in a test does not fetch; the real shell always has none.
-    if (initialNoteTypes === null && initialError === null) void load();
-    else if (noteTypes.length > 0 && draft === null) {
+    if (initialNoteTypes === null && initialError === null) {
+      // The dialog needs the stock list, so it opens once the load succeeded.
+      void load().then(() => {
+        if (wantsCreate && loadError === null) openCreate();
+      });
+      return;
+    }
+    if (noteTypes.length > 0 && draft === null) {
       const first = noteTypes[0];
       if (first) selectType(first);
     }
+    if (wantsCreate && initialError === null) openCreate();
   });
 </script>
 
 <Page testId="note-types-view">
   <PageHeader
     title={$t('notetype.title')}
-    back={{ href: `/decks/${encodeURIComponent(deckId)}`, label: $t('notetype.back'), testId: 'notetype-back' }}
+    back={{ href: back.href, label: back.label, testId: 'notetype-back' }}
   >
     {#snippet actions()}
       <Button variant="outline" size="lg" onclick={() => void openEmptyCards()} testId="notetype-empty-open">

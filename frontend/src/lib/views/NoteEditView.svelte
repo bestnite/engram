@@ -2,7 +2,7 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import { onMount, tick, untrack } from 'svelte';
   import { routeStore, navigate, matchRoute } from '../router';
-  import { RETURN_PARAM, safeReturnPath } from '../return-to';
+  import { NOTE_TYPE_PARAM, RETURN_PARAM, safeReturnPath, withReturn, withoutParam } from '../return-to';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Note, NotePreviewCard, NoteType, NoteTypeField } from '../api';
@@ -37,6 +37,15 @@
     safeReturnPath($routeStore.query[RETURN_PARAM]) ?? `/decks/${encodeURIComponent(deckId)}`
   );
   const returnsToReview = $derived(matchRoute(returnTo).route?.path === '/review');
+
+  // The shortcut to the note type page opens its create dialog and carries this editor's address, so the
+  // note type page can send the author back here. The address drops a type handed back by an earlier
+  // detour: the note type page adds the one it creates this time.
+  const newTypeHref = $derived.by(() => {
+    const search = $routeStore.search;
+    const here = withoutParam(`${$routeStore.path}${search ? `?${search}` : ''}`, NOTE_TYPE_PARAM);
+    return withReturn(`/decks/${encodeURIComponent(deckId)}/note-types?create=1`, here);
+  });
 
   // Debounce window of the live preview: the request fires about half a second after typing in the fields stops, avoiding a request per character.
   const PREVIEW_DEBOUNCE_MS = 500;
@@ -257,8 +266,11 @@
     if (disposed) return;
     try {
       if (isCreate) {
-        // Creating never GETs with an empty id. The first note type in the server's order is the starting point.
-        const initial = noteTypes[0];
+        // Creating never GETs with an empty id. The starting point is the type the note type page handed back
+        // after creating it, and otherwise the first note type in the server's order. Edit mode ignores the
+        // handed-back type: switching an existing note's type resets its fields, which only the author may decide.
+        const requested = $routeStore.query[NOTE_TYPE_PARAM];
+        const initial = noteTypes.find((entry) => entry.id === requested) ?? noteTypes[0];
         if (!initial) {
           typeProblem = 'empty';
         } else {
@@ -554,6 +566,10 @@
     <p role="alert" data-testid="note-edit-metadata-error" class="text-sm text-destructive-foreground">{$t('common.error')}</p>
   {:else if typeProblem === 'empty'}
     <p role="alert" data-testid="note-edit-no-types" class="text-sm text-muted-foreground">{$t('note_edit.type.empty')}</p>
+    <Button variant="outline" size="lg" class="mt-4" href={newTypeHref} testId="note-edit-new-type">
+      <Plus class="size-4" aria-hidden="true" />
+      <span>{$t('note_edit.type.create')}</span>
+    </Button>
   {:else if typeProblem === 'missing'}
     <p role="alert" data-testid="note-edit-type-missing" class="text-sm text-destructive-foreground">{$t('note_edit.type.missing')}</p>
   {:else}
@@ -563,10 +579,23 @@
              and the tags; the tools sit on the field they write into, so nothing has to be scrolled to on a phone. -->
         <div class="min-w-0 space-y-8">
           <div class="space-y-5">
-            <!-- With a single note type there is nothing to choose, so the selector would only take space. -->
-            {#if noteTypes.length > 1}
-              <div>
-                <span class="block text-sm font-medium text-foreground">{$t('note_edit.type.label')}</span>
+            <!-- With a single note type there is nothing to choose, so the selector would only take space and
+                 the row names the type instead. The shortcut to create a type is on the row either way. -->
+            <div>
+              <div class="flex items-center justify-between gap-3">
+                {#if noteTypes.length > 1}
+                  <span class="block text-sm font-medium text-foreground">{$t('note_edit.type.label')}</span>
+                {:else}
+                  <span class="min-w-0 truncate text-sm text-muted-foreground" data-testid="note-edit-type-name">
+                    {$t('note_edit.type.current', { name: selectedType?.name ?? '' })}
+                  </span>
+                {/if}
+                <Button variant="ghost" size="xs" class="-mr-2" href={newTypeHref} testId="note-edit-new-type">
+                  <Plus class="size-3.5" aria-hidden="true" />
+                  <span>{$t('note_edit.type.create')}</span>
+                </Button>
+              </div>
+              {#if noteTypes.length > 1}
                 <Select
                   class="mt-1.5 w-full"
                   testId="note-edit-type"
@@ -575,8 +604,8 @@
                   options={typeOptions}
                 />
                 <p class="mt-1.5 text-xs text-muted-foreground">{$t('note_edit.type.hint')}</p>
-              </div>
-            {/if}
+              {/if}
+            </div>
 
             <NoteFieldsForm
               {specs}
