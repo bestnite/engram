@@ -168,44 +168,47 @@ func TestDeckConfigsSkipped(t *testing.T) {
 
 func TestSchedulingTolerance(t *testing.T) {
 	tests := []struct {
-		name, query string
-		modern      bool
-		check       func(*testing.T, *Package)
+		name, query   string
+		modern        bool
+		extraSetup    []string
+		wantRevlogErr bool
+		wantReviews   int
+		check         func(*testing.T, *Package)
 	}{
-		{"revlog real", `UPDATE revlog SET ivl = 7.5`, false, func(t *testing.T, p *Package) {
+		{"revlog real", `UPDATE revlog SET ivl = 7.5`, false, nil, false, 1, func(t *testing.T, p *Package) {
 			if len(p.Reviews) != 1 || p.Reviews[0].Interval != 8 {
 				t.Fatalf("reviews: %+v", p.Reviews)
 			}
 		}},
-		{"card due real", `UPDATE cards SET due = 7.5`, false, func(t *testing.T, p *Package) {
+		{"card due real", `UPDATE cards SET due = 7.5`, false, nil, false, 1, func(t *testing.T, p *Package) {
 			if p.Cards[0].Due != 8 {
 				t.Fatalf("due: %d", p.Cards[0].Due)
 			}
 		}},
-		{"card factor real", `UPDATE cards SET factor = 2500.5`, false, func(t *testing.T, p *Package) {
+		{"card factor real", `UPDATE cards SET factor = 2500.5`, false, nil, false, 1, func(t *testing.T, p *Package) {
 			if p.Cards[0].Factor != 2501 {
 				t.Fatalf("factor: %d", p.Cards[0].Factor)
 			}
 		}},
-		{"invalid dconf", `UPDATE col SET dconf = 'invalid'`, false, func(t *testing.T, p *Package) {
+		{"invalid dconf", `UPDATE col SET dconf = 'invalid'`, false, nil, false, 1, func(t *testing.T, p *Package) {
 			if len(p.DeckConfigs) != 0 || !p.DeckConfigsSkipped {
 				t.Fatalf("configs: %+v, skipped: %v", p.DeckConfigs, p.DeckConfigsSkipped)
 			}
 		}},
-		{"one malformed dconf entry", `UPDATE col SET dconf = '{"1":{"id":1,"rev":{"maxIvl":36500.0}},"2":{"id":2,"name":"valid","rev":{"maxIvl":200}}}'`, false, func(t *testing.T, p *Package) {
+		{"one malformed dconf entry", `UPDATE col SET dconf = '{"1":{"id":1,"rev":{"maxIvl":36500.0}},"2":{"id":2,"name":"valid","rev":{"maxIvl":200}}}'`, false, nil, false, 1, func(t *testing.T, p *Package) {
 			want := []DeckConfig{{ID: 2, Name: "valid", MaximumReviewInterval: 200}}
 			if !reflect.DeepEqual(p.DeckConfigs, want) || !p.DeckConfigsSkipped {
 				t.Fatalf("configs: %+v, skipped: %v", p.DeckConfigs, p.DeckConfigsSkipped)
 			}
 		}},
-		{"invalid config protobuf", `UPDATE deck_config SET config = x'320100'`, true, func(t *testing.T, p *Package) {
+		{"invalid config protobuf", `UPDATE deck_config SET config = x'320100'`, true, nil, false, 0, func(t *testing.T, p *Package) {
 			if len(p.DeckConfigs) != 0 {
 				t.Fatalf("configs: %+v", p.DeckConfigs)
 			}
 		}},
-		{"unreadable revlog", `UPDATE revlog SET ivl = 'invalid'`, false, func(t *testing.T, p *Package) {
-			if p.RevlogErr == nil {
-				t.Fatal("missing revlog error")
+		{"unreadable revlog", `UPDATE revlog SET ivl = 'invalid'`, false, []string{`INSERT INTO revlog VALUES (1600000000001, 1, 0, 3, 9, 1, 2500, 100, 1)`}, true, 1, func(t *testing.T, p *Package) {
+			if p.Reviews[0].Interval != 9 {
+				t.Fatalf("readable reviews: %+v", p.Reviews)
 			}
 		}},
 	}
@@ -265,8 +268,8 @@ func TestSchedulingTolerance(t *testing.T) {
 			if _, err := db.Exec(tc.query); err != nil {
 				t.Fatal(err)
 			}
-			if tc.name == "unreadable revlog" {
-				if _, err := db.Exec(`INSERT INTO revlog VALUES (1600000000001, 1, 0, 3, 9, 1, 2500, 100, 1)`); err != nil {
+			for _, query := range tc.extraSetup {
+				if _, err := db.Exec(query); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -306,10 +309,13 @@ func TestSchedulingTolerance(t *testing.T) {
 			if len(pkg.Notes) == 0 || len(pkg.Cards) == 0 {
 				t.Fatalf("missing content: %+v", pkg)
 			}
-			if tc.name != "unreadable revlog" && pkg.RevlogErr != nil {
+			if tc.wantRevlogErr && !errors.Is(pkg.RevlogErr, ErrCorruptCollection) {
+				t.Fatalf("revlog: got %v, want ErrCorruptCollection", pkg.RevlogErr)
+			}
+			if !tc.wantRevlogErr && pkg.RevlogErr != nil {
 				t.Fatalf("revlog: %v", pkg.RevlogErr)
 			}
-			if tc.name == "unreadable revlog" && (len(pkg.Reviews) != 1 || pkg.Reviews[0].Interval != 9) {
+			if len(pkg.Reviews) != tc.wantReviews {
 				t.Fatalf("readable reviews: %+v", pkg.Reviews)
 			}
 			tc.check(t, pkg)

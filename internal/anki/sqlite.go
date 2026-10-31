@@ -296,7 +296,9 @@ func rejectRealIntegers(columns ...string) string {
 	return strings.Join(expressions, ", ")
 }
 
-// Preserve integers exactly and leave invalid values for Scan to reject.
+// roundedIntegers rounds REAL values in integer columns: Anki collections can contain
+// them, and before M18-13 one such value rejected the whole package. Integers stay
+// exact and invalid values remain available for Scan to reject.
 func roundedIntegers(columns ...string) string {
 	expressions := make([]string, len(columns))
 	for i, column := range columns {
