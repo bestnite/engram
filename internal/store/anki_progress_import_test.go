@@ -11,9 +11,62 @@ import (
 	"time"
 
 	fsrs "github.com/open-spaced-repetition/go-fsrs/v4"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/anki"
 )
+
+func TestAnkiProgressBatchStatements(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pkg.Notes, pkg.Cards = pkg.Notes[:1], pkg.Cards[:1]
+			card := &pkg.Cards[0]
+			card.Type, card.Queue, card.Data = 2, 2, `{"s":4.5,"d":6.2}`
+			for i := 0; i < 5000; i++ {
+				pkg.Reviews = append(pkg.Reviews, anki.Review{ID: 1600000000000 + int64(i)*86400000, CardID: card.ID, Ease: 3, Type: 1})
+			}
+			user := seedUsers(t, db, "batch_progress_"+driver)[0]
+			plan, report := planAnkiDecks(pkg), &PackageImportReport{}
+			if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{PresetMode: PackagePresetNew, Now: time.Now}, report); err != nil {
+				t.Fatal(err)
+			}
+			var row Card
+			if err := db.First(&row).Error; err != nil {
+				t.Fatal(err)
+			}
+			var note Note
+			if err := db.First(&note, row.NoteID).Error; err != nil {
+				t.Fatal(err)
+			}
+			count := 0
+			callback := func(tx *gorm.DB) { count++ }
+			if err := db.Callback().Query().Before("gorm:query").Register("test:progress_query", callback); err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Callback().Create().Before("gorm:create").Register("test:progress_create", callback); err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Callback().Update().Before("gorm:update").Register("test:progress_update", callback); err != nil {
+				t.Fatal(err)
+			}
+			defer db.Callback().Query().Remove("test:progress_query")
+			defer db.Callback().Create().Remove("test:progress_create")
+			defer db.Callback().Update().Remove("test:progress_update")
+			report = &PackageImportReport{}
+			if err := importAnkiProgress(context.Background(), db, user, note.DeckID, pkg, map[int64]uint64{card.ID: row.ID}, PackageImportOptions{IncludeProgress: true}, report, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("progress statements: %d; reviews applied: %d", count, report.ReviewsApplied)
+			if count >= 100 || report.ReviewsApplied != 5000 {
+				t.Fatalf("statements=%d report=%+v", count, report)
+			}
+		})
+	}
+}
 
 func TestAnkiDiscardedProgressCounts(t *testing.T) {
 	for _, tc := range []struct {

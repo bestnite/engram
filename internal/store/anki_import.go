@@ -1161,6 +1161,30 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		notesByID[pkg.Notes[i].ID] = &pkg.Notes[i]
 	}
 	existingCards := map[uint64]map[int]Card{}
+	skippedCards := map[uint64]map[int]Card{}
+	var skippedNoteIDs []uint64
+	skippedSeen := map[uint64]bool{}
+	for _, card := range pkg.Cards {
+		if id, ok := noteIDs[card.NoteID]; ok && !imported[card.NoteID] && !skippedSeen[id] {
+			skippedSeen[id] = true
+			skippedNoteIDs = append(skippedNoteIDs, id)
+		}
+	}
+	for start := 0; start < len(skippedNoteIDs); start += 500 {
+		end := min(start+500, len(skippedNoteIDs))
+		var rows []Card
+		if err := tx.WithContext(ctx).Where("note_id IN ?", skippedNoteIDs[start:end]).Order("id").Find(&rows).Error; err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if skippedCards[row.NoteID] == nil {
+				skippedCards[row.NoteID] = map[int]Card{}
+			}
+			if _, exists := skippedCards[row.NoteID][row.Ordinal]; !exists {
+				skippedCards[row.NoteID][row.Ordinal] = row
+			}
+		}
+	}
 	cardIDs := make(map[int64]uint64, len(pkg.Cards))
 	for _, card := range pkg.Cards {
 		noteID, ok := noteIDs[card.NoteID]
@@ -1172,11 +1196,8 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 			continue
 		}
 		if !imported[card.NoteID] {
-			var existing Card
-			if err := tx.WithContext(ctx).Where("note_id = ? AND ordinal = ?", noteID, card.Ordinal).First(&existing).Error; err == nil {
+			if existing, ok := skippedCards[noteID][card.Ordinal]; ok {
 				cardIDs[card.ID] = existing.ID
-			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
 			}
 			continue
 		}
@@ -1509,6 +1530,38 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		}
 	}
 	engine := fsrs.NewFSRS(params)
+	ids := make([]uint64, 0, len(cardIDs))
+	idSeen := map[uint64]bool{}
+	for _, id := range cardIDs {
+		if !idSeen[id] {
+			idSeen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	type reviewKey struct {
+		cardID uint64
+		at     time.Time
+		rating int
+	}
+	oldStates := map[uint64]CardState{}
+	reviewKeys := map[reviewKey]bool{}
+	for start := 0; start < len(ids); start += 500 {
+		end := min(start+500, len(ids))
+		var states []CardState
+		if err := tx.WithContext(ctx).Where("user_id = ? AND card_id IN ?", userID, ids[start:end]).Find(&states).Error; err != nil {
+			return fmt.Errorf("load Anki card state: %w", err)
+		}
+		for _, state := range states {
+			oldStates[state.CardID] = state
+		}
+		var reviews []Review
+		if err := tx.WithContext(ctx).Select("card_id", "reviewed_at", "rating").Where("user_id = ? AND card_id IN ?", userID, ids[start:end]).Find(&reviews).Error; err != nil {
+			return fmt.Errorf("check Anki review: %w", err)
+		}
+		for _, review := range reviews {
+			reviewKeys[reviewKey{review.CardID, review.ReviewedAt.UTC(), review.Rating}] = true
+		}
+	}
 	last := make(map[int64]int64)
 	previous := make(map[int64]int64)
 	histories := make(map[int64]fsrs.ReviewEntries)
@@ -1633,18 +1686,14 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		if previous[card.ID] != 0 && last[card.ID] >= previous[card.ID] {
 			state.ElapsedDays = int((last[card.ID] - previous[card.ID]) / 86400000)
 		}
-		var old CardState
-		err := tx.WithContext(ctx).Where("card_id = ? AND user_id = ?", id, userID).First(&old).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("load Anki card state: %w", err)
-		}
+		old, exists := oldStates[id]
 		if card.Queue == -1 {
 			state.SuspendedAt = &now
-			if err == nil && old.SuspendedAt != nil {
+			if exists && old.SuspendedAt != nil {
 				state.SuspendedAt = old.SuspendedAt
 			}
 		}
-		if err == nil {
+		if exists {
 			state.Version = old.Version
 			if equalAnkiState(old, state) {
 				report.StatesSkipped++
@@ -1657,9 +1706,11 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		} else if err := tx.WithContext(ctx).Create(&state).Error; err != nil {
 			return fmt.Errorf("create Anki card state: %w", err)
 		}
+		oldStates[id] = state
 		report.ProgressApplied++
 	}
 	seen := make(map[int64]bool)
+	var pendingReviews []Review
 	for _, r := range pkg.Reviews {
 		// Anki's log has no pre-rating state, so deriving it from the review type is lossy.
 		earlier := seen[r.CardID]
@@ -1684,11 +1735,8 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			continue
 		}
 		at := time.UnixMilli(r.ID).UTC()
-		var count int64
-		if err := tx.WithContext(ctx).Model(&Review{}).Where("card_id = ? AND user_id = ? AND reviewed_at = ? AND rating = ?", id, userID, at, r.Ease).Count(&count).Error; err != nil {
-			return fmt.Errorf("check Anki review: %w", err)
-		}
-		if count != 0 {
+		key := reviewKey{id, at, r.Ease}
+		if reviewKeys[key] {
 			report.ReviewsSkipped++
 			continue
 		}
@@ -1705,10 +1753,14 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			stability, difficulty = &memory.Stability, &memory.Difficulty
 		}
 		review := Review{CardID: id, UserID: userID, Rating: r.Ease, GradeSource: "self", ReviewedAt: at, ReviewDay: reviewday.Day(at, loc, cutoff), ElapsedMS: &elapsed, IntervalDays: &interval, DurationDays: duration, Stability: stability, Difficulty: difficulty, StateBefore: before}
-		if err := tx.WithContext(ctx).Create(&review).Error; err != nil {
+		pendingReviews = append(pendingReviews, review)
+		reviewKeys[key] = true
+		report.ReviewsApplied++
+	}
+	if len(pendingReviews) > 0 {
+		if err := tx.WithContext(ctx).CreateInBatches(&pendingReviews, 100).Error; err != nil {
 			return fmt.Errorf("create Anki review: %w", err)
 		}
-		report.ReviewsApplied++
 	}
 	return nil
 }
