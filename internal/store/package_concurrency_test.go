@@ -251,7 +251,7 @@ func TestAnkiImportClearsOrphanMarkBeforeTheTransaction(t *testing.T) {
 			actorCtx := WithActor(ctx, owner)
 			store := NewDeckStore(db)
 			placement, err := store.prepareAnkiImport(actorCtx, owner, bytes.NewReader(raw), int64(len(raw)), limits,
-				PackageImportOptions{Target: PackageTargetNewDeck, MediaRoot: root, Now: func() time.Time { return time.Now().UTC() }}, PackageTargetNewDeck, 0)
+				PackageImportOptions{Target: PackageTargetNewDeck, PresetMode: PackagePresetNew, MediaRoot: root, Now: func() time.Time { return time.Now().UTC() }}, PackageTargetNewDeck, 0)
 			if err != nil {
 				t.Fatalf("prepare import: %v", err)
 			}

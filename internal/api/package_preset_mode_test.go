@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
@@ -10,6 +11,52 @@ import (
 
 	"git.nite07.com/nite/engram/internal/store"
 )
+
+func TestImportPresetID(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "preset_resolver_owner", store.RoleUser)
+	other := seedUser(t, env.db, "preset_resolver_other", store.RoleUser)
+	preset := store.NewPreset(user.ID, "Selected")
+	if err := env.db.Create(&preset).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		owner  uint64
+		id     string
+		want   uint64
+		status int
+	}{
+		{"trimmed", user.ID, " \t" + preset.PublicID + " \n", preset.ID, 0},
+		{"empty", user.ID, " \t", 0, 0},
+		{"foreign", other.ID, preset.PublicID, 0, http.StatusBadRequest},
+		{"missing", user.ID, "missing", 0, http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := env.api.ImportPresetID(context.Background(), tc.owner, tc.id)
+			if got != tc.want || (tc.status == 0 && err != nil) {
+				t.Fatalf("got id %d, error %v; want id %d", got, err, tc.want)
+			}
+			if tc.status != 0 && (err == nil || asServiceError(err).Status != tc.status) {
+				t.Fatalf("got error %v, want status %d", err, tc.status)
+			}
+		})
+	}
+	sqlDB, err := env.db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = env.api.ImportPresetID(context.Background(), user.ID, preset.PublicID)
+	if err == nil {
+		t.Fatal("closed database returned no error")
+	}
+	if se := asServiceError(err); se.Status != http.StatusInternalServerError || se.Code != CodeInternal {
+		t.Fatalf("closed database error = %+v, want 500 internal", se)
+	}
+}
 
 func TestImportUploadPresetModes(t *testing.T) {
 	env := newTestEnv(t, 60, 60)

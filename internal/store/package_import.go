@@ -35,6 +35,12 @@ import (
 const (
 	// PackageTargetNewDeck creates a new deck under the package's deck name (a suffix is added on a name clash).
 	PackageTargetNewDeck = "new_deck"
+	// PackagePresetNew creates a preset from the imported package.
+	PackagePresetNew = "new"
+	// PackagePresetReuse attaches an existing owned preset.
+	PackagePresetReuse = "reuse"
+	// PackagePresetCopy attaches a copy of an existing owned preset.
+	PackagePresetCopy = "copy"
 )
 
 // PackageLimits holds the extraction safety caps ("safety").
@@ -219,8 +225,10 @@ func packageDeckMetaError(entries []string) error {
 
 // PackageImportOptions controls one import.
 type PackageImportOptions struct {
+	// PresetMode selects new, reuse or copy for a new deck; empty defaults to new.
 	PresetMode string
-	PresetID   uint64
+	// PresetID identifies the owner's preset for reuse or copy, preventing cross-owner selection.
+	PresetID uint64
 	// Target takes new_deck (the default), into_deck:<id>, replace_deck:<id>.
 	Target string
 	DryRun bool
@@ -261,7 +269,9 @@ type PackageImportError struct {
 
 // PackageImportReport is the report of an import (dry_run included), shaped like the bulk import report.
 type PackageImportReport struct {
+	// PresetMode reports the selection for a new deck and is omitted otherwise to protect shared settings.
 	PresetMode string `json:"preset_mode,omitempty"`
+	// PresetName reports the selected new deck preset and is omitted otherwise to protect shared settings.
 	PresetName string `json:"preset_name,omitempty"`
 	Target     string `json:"target"`
 	DryRun     bool   `json:"dry_run"`
@@ -586,21 +596,22 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	return report, nil
 }
 
-// ValidateImportPreset validates the selection before import or ticket issuance.
+// ValidateImportPreset validates the selection before import or ticket issuance. For a new
+// deck it rewrites an empty mode to new in opts, so later selection uses an explicit mode.
 func (s *DeckStore) ValidateImportPreset(ctx context.Context, owner uint64, targetKind string, opts *PackageImportOptions) error {
 	if opts.PresetMode == "" {
 		if targetKind != PackageTargetNewDeck {
 			return nil
 		}
-		opts.PresetMode = "new"
+		opts.PresetMode = PackagePresetNew
 	}
 	switch opts.PresetMode {
-	case "new":
+	case PackagePresetNew:
 		if opts.PresetID != 0 {
 			return &PackageError{Message: "invalid preset selection"}
 		}
 		return nil
-	case "reuse", "copy":
+	case PackagePresetReuse, PackagePresetCopy:
 	default:
 		return &PackageError{Message: "invalid preset selection"}
 	}
@@ -1299,8 +1310,10 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 	}
 }
 
+// selectImportPreset applies a validated mode inside the import transaction, checking ownership
+// again so a preset removed or transferred after validation cannot be selected.
 func selectImportPreset(ctx context.Context, tx *gorm.DB, owner uint64, opts PackageImportOptions, create func() (Preset, error)) (Preset, error) {
-	if opts.PresetMode == "new" || opts.PresetMode == "" {
+	if opts.PresetMode == PackagePresetNew {
 		return create()
 	}
 	var p Preset
@@ -1310,7 +1323,7 @@ func selectImportPreset(ctx context.Context, tx *gorm.DB, owner uint64, opts Pac
 		}
 		return Preset{}, err
 	}
-	if opts.PresetMode == "reuse" {
+	if opts.PresetMode == PackagePresetReuse {
 		return p, nil
 	}
 	name, err := uniqueOwnerName(ctx, tx, &Preset{}, owner, p.Name+" (copy)")

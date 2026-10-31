@@ -100,7 +100,7 @@ func TestAnkiProgressImport(t *testing.T) {
 						{ID: 1600000000007, CardID: 99999, Ease: 3, Type: 1},
 					}
 					now := time.Unix(1700000000, 0).UTC()
-					opts := PackageImportOptions{IncludeProgress: enabled, ApplyWeights: true, OnConflict: "update", Now: func() time.Time { return now }}
+					opts := PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: enabled, ApplyWeights: true, OnConflict: "update", Now: func() time.Time { return now }}
 					plan := planAnkiDecks(pkg)
 					report := &PackageImportReport{}
 					s := NewDeckStore(db)
@@ -185,7 +185,7 @@ func TestAnkiProgressMissingMemory(t *testing.T) {
 				}
 				report := &PackageImportReport{}
 				plan := planAnkiDecks(pkg)
-				opts := PackageImportOptions{IncludeProgress: true, Now: time.Now}
+				opts := PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: true, Now: time.Now}
 				if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, opts, report); err != nil {
 					t.Fatal(err)
 				}
@@ -229,7 +229,7 @@ func TestAnkiProgressReplayUsesStudyWeightsAndReviewDays(t *testing.T) {
 			pkg.DeckConfigs[0].Weights = append([]float64(nil), weights[:]...)
 			plan := planAnkiDecks(pkg)
 			report := &PackageImportReport{}
-			if err := NewDeckStore(db).importAnkiInTx(ctx, db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{IncludeProgress: true, ApplyWeights: true, Now: time.Now}, report); err != nil {
+			if err := NewDeckStore(db).importAnkiInTx(ctx, db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: true, ApplyWeights: true, Now: time.Now}, report); err != nil {
 				t.Fatal(err)
 			}
 			params := fsrs.DefaultParam()
