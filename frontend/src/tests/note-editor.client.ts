@@ -705,6 +705,22 @@ describe('unified note editor — create mode', () => {
     expect(get(routeStore).path).toBe(pathBefore);
   });
 
+  it('hides the note type selector when the deck has only one note type', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5' }, {}, [basicNoteType()]);
+    await flush();
+    expect(target.querySelector('[data-testid="note-edit-type"]')).toBeNull();
+    // The form is still built from that one type.
+    expect(target.querySelector(`[data-testid="${FRONT}"]`)).not.toBeNull();
+  });
+
+  it('shows the note type selector when the deck has several note types', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5' });
+    await flush();
+    expect(target.querySelector('[data-testid="note-edit-type"]')).not.toBeNull();
+  });
+
   it('carries no page-level insertion section: each field has its own tools instead', async () => {
     vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
 
@@ -837,8 +853,8 @@ describe('unified note editor — edit mode', () => {
     mountEditor({ id: '5', noteId: '9' }, {}, [custom]);
     await flush();
 
-    // The note's own type is selected and its fields are shown in config order, labelled by field name.
-    expect(target.querySelector('[data-testid="note-edit-type"]')?.textContent).toContain('Custom layout');
+    // The deck has only this type, so no selector is shown; its fields are shown in config order, labelled by field name.
+    expect(target.querySelector('[data-testid="note-edit-type"]')).toBeNull();
     const frame = frameFor(QUESTION);
     fromFrame(frame, { type: 'ready' });
     await flush();

@@ -561,17 +561,20 @@
              and the tags; the tools sit on the field they write into, so nothing has to be scrolled to on a phone. -->
         <div class="min-w-0 space-y-8">
           <div class="space-y-5">
-            <div>
-              <span class="block text-sm font-medium text-foreground">{$t('note_edit.type.label')}</span>
-              <Select
-                class="mt-1.5 w-full"
-                testId="note-edit-type"
-                value={noteTypeId}
-                onValueChange={changeNoteType}
-                options={typeOptions}
-              />
-              <p class="mt-1.5 text-xs text-muted-foreground">{$t('note_edit.type.hint')}</p>
-            </div>
+            <!-- With a single note type there is nothing to choose, so the selector would only take space. -->
+            {#if noteTypes.length > 1}
+              <div>
+                <span class="block text-sm font-medium text-foreground">{$t('note_edit.type.label')}</span>
+                <Select
+                  class="mt-1.5 w-full"
+                  testId="note-edit-type"
+                  value={noteTypeId}
+                  onValueChange={changeNoteType}
+                  options={typeOptions}
+                />
+                <p class="mt-1.5 text-xs text-muted-foreground">{$t('note_edit.type.hint')}</p>
+              </div>
+            {/if}
 
             <NoteFieldsForm
               {specs}
