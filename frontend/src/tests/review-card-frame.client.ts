@@ -221,4 +221,48 @@ describe('ReviewView card faces in the frame', () => {
     expect(backStyle?.textContent).toBe(`${REVIEW_BACK_CSS}\n${backCSS}`);
     expect(back.body.className).toBe('card type-back card1');
   });
+
+  it('retries the render request from the failure notice and clears it on success', async () => {
+    const card: DueCard = {
+      card_id: 'r1',
+      note_id: 'n1',
+      deck_id: 'd1',
+      state: 'new',
+      due_at: '',
+      retrievability: 0,
+      fields: { text: '<p><ruby>你好<rt>nǐ hǎo</rt></ruby></p>' },
+      tags: [],
+      template: 'cloze',
+      version: 0,
+      answer_control: null,
+      machine_graded: false,
+      field_order: ['text'],
+    };
+    const renderReviewCard = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('render failed'))
+      .mockResolvedValueOnce({
+        card_id: 'r1',
+        ...faces('<p>你好</p>', '<p>nǐ hǎo</p>', '/fm/token/'),
+        edit_href: '/decks/d1/notes/n1',
+      });
+    const target = await mountView(card, { renderReviewCard });
+
+    // The failed request shows the notice above a plain-text fallback, whose markup was reduced to text.
+    expect(target.querySelector('[data-testid="review-render-notice"]')).not.toBeNull();
+    expect(target.textContent).toContain('卡片内容暂时没有加载出来');
+    expect(target.textContent).toContain('你好');
+    expect(target.textContent).not.toContain('<p>');
+
+    const retry = target.querySelector('[data-testid="review-render-retry"]') as HTMLElement;
+    expect(retry).not.toBeNull();
+    retry.click();
+    await flush();
+
+    // The retry asks the same card again and the successful response clears the notice.
+    expect(renderReviewCard).toHaveBeenCalledTimes(2);
+    expect(renderReviewCard.mock.calls[1]![0]).toMatchObject({ card_id: 'r1' });
+    expect(target.querySelector('[data-testid="review-render-notice"]')).toBeNull();
+    expect((await shownFaces(target))[0]).toMatchObject({ html: '<p>你好</p>', side: 'question' });
+  });
 });

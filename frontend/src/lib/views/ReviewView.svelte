@@ -2,7 +2,7 @@
   import Page from '../components/ui/Page.svelte';
   import { onMount, tick } from 'svelte';
   import { t } from '../i18n';
-  import { fieldText } from '../format';
+  import { fieldText, htmlToText } from '../format';
   import { apiClient, ApiClientError } from '../api';
   import type { ApiClient, AVTag, CardFace, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
   import { toast } from '../components/ui/toast';
@@ -33,6 +33,8 @@
     initialBackFace?: CardFace | null;
     /** Test injection: whether the answer face already shows the question (the render response's answer_includes_question). */
     initialAnswerIncludesQuestion?: boolean;
+    /** Test injection: whether the faces already failed to load, so the fallback notice renders without a request. */
+    initialRenderFailed?: boolean;
     initialEditHref?: string;
     /** Whether the self-graded card is already flipped (flipped by reveal() in production; the initial value overrides it in tests). */
     initialRevealed?: boolean;
@@ -50,6 +52,7 @@
     initialFrontFace = null,
     initialBackFace = null,
     initialAnswerIncludesQuestion = false,
+    initialRenderFailed = false,
     initialEditHref = '',
     initialRevealed = false,
     initialLastUndo = null,
@@ -116,7 +119,8 @@
   let backFace = $state<CardFace | null>(initialBackFace);
   // Whether fetching the current card's faces failed. Only then does the page print the field text itself: while the
   // faces are on their way the frames stay mounted and empty, so a card change never shows the unstyled text first.
-  let renderFailed = $state(false);
+  // svelte-ignore state_referenced_locally
+  let renderFailed = $state(initialRenderFailed);
   // A frame is used for a face unless the faces failed to load or the loaded face is empty. Keeping the frame mounted
   // across cards keeps its document and runtime loaded, so the next card appears in one step.
   const frontInFrame = $derived(renderFailed ? false : frontFace === null || frontFace.html !== '');
@@ -171,13 +175,24 @@
   // Edit entry: prefer the edit_href returned by the server's render; when it has not been fetched, join it per the canonical path.
   const fallbackEditHref = $derived(current ? `/decks/${current.deck_id}/notes/${current.note_id}` : '');
 
-  /** The note's field values in the note type's field order, for the plain-text fallback when the face HTML is missing. */
+  /**
+   * The note's field values in the note type's field order, for the plain-text fallback when the face HTML is missing.
+   * The stored value is a field's HTML, and the parent page is not a sandbox, so it is reduced to text here: stored
+   * markup is shown only inside the card frame and never printed as literal tags outside it.
+   */
   function fieldValues(card: DueCard): string[] {
     const fields = card.fields || {};
     return card.field_order.flatMap((id) => {
       const value = fields[id];
-      return value === undefined ? [] : [fieldText(value)];
+      return value === undefined ? [] : [htmlToText(fieldText(value))];
     });
+  }
+
+  /** Fetch the current card's faces again after a failed render; a success clears the notice in loadRender. */
+  function retryRender(): void {
+    const card = current;
+    if (!card) return;
+    void loadRender(card, ++renderToken);
   }
 
   function resetAnswerState(): void {
@@ -948,6 +963,20 @@
             <span>{$t('review.edit')}</span>
           </button>
         </div>
+
+        {#if renderFailed}
+          <div
+            class="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+            role="alert"
+            data-testid="review-render-notice"
+          >
+            <span>{$t('review.render_failed')}</span>
+            <Button variant="outline" size="sm" testId="review-render-retry" onclick={retryRender}>
+              <RefreshCw class="size-4" aria-hidden="true" />
+              <span>{$t('review.render_retry')}</span>
+            </Button>
+          </div>
+        {/if}
 
         {#if !machineGraded}
           <div class={questionHidden ? 'hidden' : 'min-h-28'} data-testid="review-front">

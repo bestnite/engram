@@ -1685,4 +1685,7 @@ export const en: LocaleCatalog = {
   'editor.source.hint': 'Formatting is unavailable while the HTML source is shown.',
   // ---- Rich-text field editor: wrapping ----
   'editor.wrap.label': 'Wrap long lines in “{field}”',
+  // ---- Review page: render failure fallback and retry ----
+  'review.render_failed': 'The card content could not be loaded. The plain text below is shown instead.',
+  'review.render_retry': 'Try again',
 };

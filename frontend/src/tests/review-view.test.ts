@@ -219,6 +219,42 @@ describe('ReviewView face HTML in the frame, edit, and bury parity', () => {
     });
     expect(html).toContain('Plain front');
     expect(html).toContain('Plain back');
+    // An empty face is not a failed request: the retry notice only appears when the render request itself failed.
+    expect(html).not.toContain('data-testid="review-render-notice"');
+  });
+
+  it('prints stored field HTML as plain text when the render request failed and offers retry', () => {
+    const html = `<p><span style="color: rgb(244, 244, 245); text-align: start; font-weight: 400; font-style: normal"><ruby>{{c1::你好}}<rt>nǐ hǎo</rt></ruby></span><!--EndFragment--></p>`;
+    const card: DueCard = {
+      card_id: '61',
+      note_id: '71',
+      deck_id: '5',
+      state: 'new',
+      due_at: '2026-10-06T00:00:00Z',
+      retrievability: 0,
+      fields: { text: html },
+      tags: [],
+      template: 'cloze',
+      version: 0,
+      answer_control: null,
+      machine_graded: false,
+      field_order: ['text'],
+    };
+    const { html: rendered } = render(ReviewView, {
+      props: { initialLoading: false, initialCards: [card], initialRenderFailed: true },
+    });
+
+    // The fallback is the field's text, never its stored markup: the parent page is not a sandbox.
+    expect(rendered).toContain('data-testid="review-render-notice"');
+    expect(rendered).toContain('data-testid="review-render-retry"');
+    expect(rendered).toContain('卡片内容暂时没有加载出来');
+    expect(rendered).toContain('重新加载');
+    expect(rendered).toContain('你好');
+    // No tag of the stored markup survives, escaped or literal.
+    expect(rendered).not.toContain('&lt;p');
+    expect(rendered).not.toContain('<ruby');
+    expect(rendered).not.toContain('EndFragment');
+    expect(rendered).not.toContain('rgb(244, 244, 245)');
   });
 
   it('renders the front face HTML for a graded prompt', () => {

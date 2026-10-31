@@ -1684,4 +1684,7 @@ export const zhCN: LocaleCatalog = {
   'editor.source.hint': '显示 HTML 源码时无法使用格式工具。',
   // ---- Rich-text field editor: wrapping ----
   'editor.wrap.label': '“{field}”自动换行',
+  // ---- 复习页：渲染失败的回退与重试 ----
+  'review.render_failed': '卡片内容暂时没有加载出来，下面显示的是纯文本。',
+  'review.render_retry': '重新加载',
 };
