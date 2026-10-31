@@ -407,6 +407,12 @@
     return controlFor(template.answer?.control)?.roles ?? [];
   }
 
+  /** The catalog label of a role, or its registry name when the catalog has no entry yet. */
+  function roleLabel(role: AnswerControlRole): string {
+    const label = $t(role.label_key);
+    return label === role.label_key ? role.name : label;
+  }
+
   function answerControlValue(template: NoteTypeTemplate): string {
     return template.answer?.control ?? '';
   }
@@ -1357,7 +1363,7 @@
                       {#each rolesFor(selectedTemplate) as role (role.name)}
                         <div>
                           <span class="text-xs text-muted-foreground">
-                            {$t('notetype.answer.role', { role: role.name })}
+                            {$t('notetype.answer.role', { role: roleLabel(role) })}
                             {#if role.required}<span class="text-destructive-foreground">*</span>{/if}
                           </span>
                           <Select
@@ -1371,7 +1377,7 @@
                             }}
                             options={draft.config.fields.map((field) => ({ value: field.id, label: field.name }))}
                             placeholder={$t('notetype.answer.unbound')}
-                            ariaLabel={$t('notetype.answer.role', { role: role.name })}
+                            ariaLabel={$t('notetype.answer.role', { role: roleLabel(role) })}
                           />
                         </div>
                       {/each}

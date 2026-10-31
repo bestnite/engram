@@ -118,8 +118,11 @@ func (a *API) noteTypeStocks(c *gin.Context) {
 
 // AnswerControlRoleJSON is one role an answer control reads. Kind is the parse the role uses
 // ("text", "lines", "bool" or "number"), and Required says whether the answer spec must bind it.
+// LabelKey names the translation catalog entry for the role's display name, so the editor never
+// shows the registry identifier.
 type AnswerControlRoleJSON struct {
 	Name     string `json:"name"`
+	LabelKey string `json:"label_key"`
 	Kind     string `json:"kind"`
 	Required bool   `json:"required"`
 }
@@ -156,6 +159,7 @@ func (a *API) AnswerControls() AnswerControlsResponse {
 		for _, role := range declared.Roles() {
 			roles = append(roles, AnswerControlRoleJSON{
 				Name:     role.Name,
+				LabelKey: "notetype.answer.role." + role.Name,
 				Kind:     answerRoleKindName(role.Kind),
 				Required: role.Required,
 			})

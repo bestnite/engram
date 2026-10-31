@@ -137,6 +137,9 @@ func TestAnswerControlsList(t *testing.T) {
 	if value == nil || value.Kind != "number" || !value.Required {
 		t.Fatalf("numeric roles = %+v, want a required number value role", numeric.Roles)
 	}
+	if value.LabelKey != "notetype.answer.role.value" {
+		t.Fatalf("value role label_key = %q, want notetype.answer.role.value", value.LabelKey)
+	}
 	if numeric.LabelKey != "notetype.answer.control.numeric" {
 		t.Fatalf("numeric label_key = %q, want notetype.answer.control.numeric", numeric.LabelKey)
 	}

@@ -179,8 +179,9 @@ change.
   uses the type. A reader may list and read note types but only an editor may change them. A create
   may send `stock_id` instead of a config; `GET /note-type-stocks` lists the source-prefixed ids of
   Anki's six and engram's ten stock definitions, and the server builds the config from the chosen
-  definition. `GET /answer-controls` lists the registered controls with their role names, parses and
-  translation label keys, so a client builds a localised answer spec without a second hard-coded list.
+  definition. `GET /answer-controls` lists the registered controls and their roles with the names,
+  parses and translation label keys of both, so a client builds a localised answer spec without a
+  second hard-coded list.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on
   every request. `list_note_types` and `get_note_type` expose a deck's note types; `create_notes`
   and `update_note` take `note_type` and send field values as an HTML map.

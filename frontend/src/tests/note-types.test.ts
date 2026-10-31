@@ -45,8 +45,8 @@ const controls: AnswerControl[] = [
     name: 'text',
     label_key: 'notetype.answer.control.text',
     roles: [
-      { name: 'answer', kind: 'text', required: true },
-      { name: 'accept', kind: 'lines', required: false },
+      { name: 'answer', label_key: 'notetype.answer.role.answer', kind: 'text', required: true },
+      { name: 'accept', label_key: 'notetype.answer.role.accept', kind: 'lines', required: false },
     ],
   },
 ];
@@ -103,6 +103,9 @@ describe('NoteTypesView', () => {
     expect(html).toContain('data-testid="notetype-answer-binding-answer"');
     // The control picker shows the catalog label, not the registry identifier.
     expect(html).toContain('文本答案');
+    // The role labels are catalog entries too, not the registry identifiers.
+    expect(html).toContain('角色「答案」');
+    expect(html).toContain('角色「其他可接受写法」');
     expect(html).toContain('版本 3');
   });
 
@@ -168,6 +171,21 @@ describe('common template catalog keys', () => {
       const { formatMessage } = await import('../lib/i18n');
       for (const locale of ['zh-CN', 'en'] as const) {
         const key = `notetype.answer.control.${control}`;
+        expect(formatMessage(locale, key)).not.toBe(key);
+      }
+    },
+  );
+
+  it.each([
+    'answer', 'answers', 'accept', 'reference', 'text', 'value', 'unit',
+    'tolerance_absolute', 'tolerance_relative', 'items', 'options', 'ordered',
+    'ignore_case', 'ignore_whitespace', 'regex',
+  ])(
+    'answer role %s has a label in both catalogs',
+    async (role) => {
+      const { formatMessage } = await import('../lib/i18n');
+      for (const locale of ['zh-CN', 'en'] as const) {
+        const key = `notetype.answer.role.${role}`;
         expect(formatMessage(locale, key)).not.toBe(key);
       }
     },

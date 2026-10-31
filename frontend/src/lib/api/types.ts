@@ -344,6 +344,8 @@ export interface NoteTypeStocksResponse {
 /** One role an answer control reads (GET /api/v1/answer-controls). */
 export interface AnswerControlRole {
   name: string;
+  /** Translation catalog entry for the role's display name; the UI never shows the raw registry name. */
+  label_key: string;
   kind: 'text' | 'lines' | 'bool' | 'number';
   required: boolean;
 }
