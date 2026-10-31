@@ -6,18 +6,20 @@ body {
 }
 
 body {
-  /* The editor mirrors the card frame: the parent page's tokens are not inherited across the
-     iframe boundary, so the frame carries its own light and dark colours. */
-  color: #1f2937;
-  background: #ffffff;
+  /* The parent page's tokens are not inherited across the iframe boundary, so the frame repeats the
+     foreground values of app.css (--foreground, light and dark). The background stays transparent:
+     the field frame around the iframe already paints --background, and a second colour here would
+     show as a differently tinted box inside it. The runtime sets color-scheme to the page's theme,
+     which is what lets the browser keep a transparent frame transparent. */
+  color: #18181b;
+  background: transparent;
   font-family: system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.5;
 }
 
 .dark body {
-  color: #e5e7eb;
-  background: #111827;
+  color: #f4f4f5;
 }
 
 .edit-surface {
@@ -49,13 +51,14 @@ body {
   position: absolute;
   inset-inline-start: 0.75rem;
   inset-block-start: 0.5rem;
-  color: #9ca3af;
+  /* --muted-foreground of app.css, light and dark. */
+  color: #71717a;
   pointer-events: none;
   user-select: none;
 }
 
 .dark .edit-placeholder {
-  color: #6b7280;
+  color: #a1a1aa;
 }
 
 .edit-placeholder.is-hidden {

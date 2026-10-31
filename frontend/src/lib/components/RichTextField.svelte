@@ -536,8 +536,9 @@
       </div>
     </div>
   {/if}
-  <div class="flex items-center justify-end gap-1 px-1.5 py-0.5">
-    {#if options.collapsed}
+  {#if options.collapsed}
+    <!-- Only a collapsible field has this row: an empty row would draw a strip between the toolbar and the text. -->
+    <div class="flex items-center justify-end gap-1 px-1.5 py-0.5">
       <button
         type="button"
         class={toolbarButton}
@@ -553,8 +554,8 @@
           <ChevronDown class="size-4" aria-hidden="true" />
         {/if}
       </button>
-    {/if}
-  </div>
+    </div>
+  {/if}
   {#if expanded}
     <iframe
       bind:this={iframe}
