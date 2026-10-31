@@ -1,13 +1,63 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"git.nite07.com/nite/engram/internal/anki"
 )
+
+// TestRealAnkiPackage optionally exercises an externally generated Anki export.
+func TestRealAnkiPackage(t *testing.T) {
+	name := os.Getenv("TEST_ANKI_PACKAGE")
+	if name == "" {
+		t.Skip("TEST_ANKI_PACKAGE not set")
+	}
+	raw, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			user := seedUsers(t, db, "real_anki")[0]
+			report, err := NewDeckStore(db).ImportPackage(ctx, user, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var states []CardState
+			var reviews []Review
+			if err := db.Where("user_id = ? AND reps > 0", user).Find(&states).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Where("user_id = ?", user).Order("reviewed_at").Find(&reviews).Error; err != nil {
+				t.Fatal(err)
+			}
+			var deck Deck
+			if err := db.First(&deck, report.DeckID).Error; err != nil {
+				t.Fatal(err)
+			}
+			var preset Preset
+			if err := db.First(&preset, deck.PresetID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if len(states) != 1 || len(reviews) < 2 || states[0].Stability == nil || states[0].Difficulty == nil || states[0].LastReviewAt == nil || states[0].LastReviewAt.Year() < 2020 || preset.WeightsJSON == nil {
+				t.Fatalf("states=%+v reviews=%+v preset=%+v", states, reviews, preset)
+			}
+			for _, s := range states {
+				t.Logf("state state=%s due=%v stability=%g difficulty=%g reps=%d lapses=%d last_review=%s", s.State, s.DueAt, *s.Stability, *s.Difficulty, s.Reps, s.Lapses, s.LastReviewAt.Format(time.RFC3339))
+			}
+			for _, r := range reviews {
+				t.Logf("review rating=%d reviewed_at=%s elapsed_ms=%d duration_days=%g state_before=%d review_day=%s", r.Rating, r.ReviewedAt.Format(time.RFC3339Nano), *r.ElapsedMS, *r.DurationDays, r.StateBefore, r.ReviewDay)
+			}
+			t.Logf("preset retention=%g learning=%s relearning=%s maximum_interval=%d weights=%s", preset.DesiredRetention, preset.LearningSteps, preset.RelearningSteps, preset.MaximumIntervalDays, *preset.WeightsJSON)
+		})
+	}
+}
 
 func TestAnkiProgressImport(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
@@ -31,6 +81,7 @@ func TestAnkiProgressImport(t *testing.T) {
 					pkg.Cards[0].Interval, pkg.Cards[0].Reps, pkg.Cards[0].Lapses = 7, 3, 1
 					pkg.Cards[0].Data = `{"s":4.5,"d":6.2,"lrt":1600000000000}`
 					pkg.Cards[1].Queue = -1
+					pkg.Cards[1].Data = `{"lrt":1600000000}`
 					cid, newID := pkg.Cards[0].ID, pkg.Cards[1].ID
 					pkg.Reviews = []anki.Review{
 						{ID: 1600000000001, CardID: cid, Ease: 3, Interval: 7, Time: 1200, Type: 1},
@@ -81,7 +132,7 @@ func TestAnkiProgressImport(t *testing.T) {
 					if first.State != "review" || first.Stability == nil || *first.Stability != 4.5 || first.Difficulty == nil || *first.Difficulty != 6.2 || first.LastReviewAt == nil || first.LastReviewAt.UnixMilli() != 1600000000000 || first.DueAt == nil || first.DueAt.Unix() != pkg.CreatedAt+5*86400 || first.Reps != 3 || first.ScheduledDays != 7 {
 						t.Fatalf("review state: %+v", first)
 					}
-					if second.State != "new" || second.SuspendedAt == nil || !second.SuspendedAt.Equal(now) {
+					if second.State != "new" || second.SuspendedAt == nil || !second.SuspendedAt.Equal(now) || second.LastReviewAt == nil || second.LastReviewAt.Unix() != 1600000000 {
 						t.Fatalf("suspended state: %+v", second)
 					}
 					if reviews[0].StateBefore != 2 || reviews[0].GradeSource != "self" || reviews[0].ElapsedMS == nil || *reviews[0].ElapsedMS != 1200 || reviews[0].DurationDays == nil || *reviews[0].DurationDays != 7 || reviews[0].PublicID == "" || reviews[1].StateBefore != 0 {

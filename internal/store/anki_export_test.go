@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -101,7 +102,8 @@ func seedAnkiExportDeck(t *testing.T, db *gorm.DB, owner uint64) ankiExportFixtu
 		t.Fatalf("set subdeck path: %v", err)
 	}
 
-	dueAt := time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
+	// Anki stores review due dates as whole days relative to collection creation.
+	dueAt := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	if err := db.Create(&CardState{
 		CardID: basicCards[0].ID, UserID: owner, State: "review", DueAt: &dueAt,
 		StepIndex: 0, Stability: Ptr(4.5), Difficulty: Ptr(6.2), Reps: 3, Lapses: 1,
@@ -127,10 +129,7 @@ func seedAnkiExportDeck(t *testing.T, db *gorm.DB, owner uint64) ankiExportFixtu
 	}
 }
 
-// TestExportAnkiPackageRoundTrip exports with every switch on, proves two exports are
-// byte-identical, imports the bytes into a fresh user and compares the content. The
-// importer does not yet read card states or the review log (that is the next milestone),
-// so those two are checked against the exported collection directly.
+// TestExportAnkiPackageRoundTrip checks content and progress through both package paths.
 func TestExportAnkiPackageRoundTrip(t *testing.T) {
 	sources := packageDatabases(t)
 	destinations := packageDatabases(t)
@@ -157,14 +156,12 @@ func TestExportAnkiPackageRoundTrip(t *testing.T) {
 				t.Fatalf("two exports of one deck differ: %d vs %d bytes", len(first), len(second))
 			}
 
-			// The archive's scheduling half: the state and review rows the importer of the
-			// next milestone will read.
 			assertAnkiExportScheduling(t, first)
 
 			importer := seedUsers(t, dst, "anki_export_importer")[0]
 			dstRoot := t.TempDir()
 			report, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(first), PackageImportOptions{
-				Target: PackageTargetNewDeck, MediaRoot: dstRoot, NewDeckName: "Imported deck",
+				Target: PackageTargetNewDeck, MediaRoot: dstRoot, NewDeckName: "Imported deck", IncludeProgress: true,
 			})
 			if err != nil {
 				t.Fatalf("ImportPackage: %v", err)
@@ -176,6 +173,61 @@ func TestExportAnkiPackageRoundTrip(t *testing.T) {
 			assertAnkiExportNoteTypes(t, db, dst, fixture, report.DeckID)
 			assertAnkiExportNotesAndCards(t, dst, report.DeckID)
 			assertAnkiExportMedia(t, dst, dstRoot, report.DeckID)
+			var source CardState
+			if err := db.Where("card_id = ? AND user_id = ?", fixture.basicCardID, owner).First(&source).Error; err != nil {
+				t.Fatal(err)
+			}
+			var notes []Note
+			if err := dst.Where("deck_id = ?", report.DeckID).Find(&notes).Error; err != nil {
+				t.Fatal(err)
+			}
+			var note Note
+			for _, n := range notes {
+				if n.ExternalRef != nil && *n.ExternalRef == "anki:stock-guid-1" {
+					note = n
+				}
+			}
+			var card Card
+			if err := dst.Where("note_id = ?", note.ID).First(&card).Error; err != nil {
+				t.Fatal(err)
+			}
+			var got CardState
+			if err := dst.Where("card_id = ? AND user_id = ?", card.ID, importer).First(&got).Error; err != nil {
+				t.Fatal(err)
+			}
+			if got.State != source.State || got.DueAt == nil || !got.DueAt.Equal(*source.DueAt) || got.Stability == nil || *got.Stability != *source.Stability || got.Difficulty == nil || *got.Difficulty != *source.Difficulty || got.Reps != source.Reps || got.Lapses != source.Lapses {
+				t.Fatalf("state: got %+v want %+v", got, source)
+			}
+			var sourceReview, review Review
+			if err := db.Where("user_id = ?", owner).First(&sourceReview).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := dst.Where("user_id = ?", importer).First(&review).Error; err != nil {
+				t.Fatal(err)
+			}
+			if review.Rating != sourceReview.Rating || !review.ReviewedAt.Equal(sourceReview.ReviewedAt) || review.ElapsedMS == nil || *review.ElapsedMS != *sourceReview.ElapsedMS || review.StateBefore != sourceReview.StateBefore {
+				t.Fatalf("review: got %+v want %+v", review, sourceReview)
+			}
+			again, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(first), PackageImportOptions{Target: "into_deck:" + strconv.FormatUint(report.DeckID, 10), MediaRoot: dstRoot, IncludeProgress: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var stateCount, reviewCount int64
+			dst.Model(&CardState{}).Where("user_id = ?", importer).Count(&stateCount)
+			dst.Model(&Review{}).Where("user_id = ?", importer).Count(&reviewCount)
+			if stateCount != 2 || reviewCount != 1 || again.ProgressApplied != 0 || again.ReviewsApplied != 0 {
+				t.Fatalf("repeat: states=%d reviews=%d report=%+v", stateCount, reviewCount, again)
+			}
+			offUser := seedUsers(t, dst, "anki_progress_off")[0]
+			off, err := NewDeckStore(dst).ImportPackage(ctx, offUser, bytes.NewReader(first), PackageImportOptions{Target: PackageTargetNewDeck, MediaRoot: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			dst.Model(&CardState{}).Where("user_id = ?", offUser).Count(&stateCount)
+			dst.Model(&Review{}).Where("user_id = ?", offUser).Count(&reviewCount)
+			if stateCount != 0 || reviewCount != 0 || off.StatesDiscarded == 0 || off.ReviewsDiscarded == 0 {
+				t.Fatalf("off: states=%d reviews=%d report=%+v", stateCount, reviewCount, off)
+			}
 		})
 	}
 }
@@ -402,6 +454,10 @@ func assertAnkiExportNotesAndCards(t *testing.T, db *gorm.DB, deckID uint64) {
 	answerValues := ankiFieldValuesByName(t, db, &answerNote)
 	if answerValues["Front"] != "2 + 2?" || answerValues["Back"] != "4" {
 		t.Errorf("answer fields = %v, want Front=2 + 2? Back=4", answerValues)
+	}
+	answerTags, err := ParseTags(answerNote.TagsJSON)
+	if err != nil || len(answerTags) != 1 || answerTags[0] != "math" {
+		t.Errorf("answer tags = %v (%v), want [math]", answerTags, err)
 	}
 
 	var cards []Card

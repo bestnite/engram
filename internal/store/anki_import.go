@@ -1494,7 +1494,15 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID uint64, pkg *an
 		}
 		state.Stability, state.Difficulty = data.Stability, data.Difficulty
 		if data.LastReview != nil {
-			at := time.UnixMilli(*data.LastReview).UTC()
+			// Anki writes lrt in seconds; also accept millisecond timestamps from packages
+			// that use the same precision as the review log.
+			stamp := *data.LastReview
+			var at time.Time
+			if stamp > -100000000000 && stamp < 100000000000 {
+				at = time.Unix(stamp, 0).UTC()
+			} else {
+				at = time.UnixMilli(stamp).UTC()
+			}
 			state.LastReviewAt = &at
 		}
 		if previous[card.ID] != 0 && last[card.ID] >= previous[card.ID] {
