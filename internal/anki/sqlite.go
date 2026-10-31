@@ -136,6 +136,7 @@ type legacyDeck struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 	Desc string `json:"desc"`
+	Conf int64  `json:"conf"`
 }
 
 func legacyNoteTypes(models map[string]legacyModel) ([]NoteType, error) {
@@ -224,7 +225,7 @@ func legacyDecks(decks map[string]legacyDeck) ([]Deck, error) {
 	out := make([]Deck, 0, len(ids))
 	for _, id := range ids {
 		deck := byID[id]
-		out = append(out, Deck{ID: deck.ID, Name: deck.Name, Description: deck.Desc})
+		out = append(out, Deck{ID: deck.ID, Name: deck.Name, Description: deck.Desc, ConfigID: deck.Conf})
 	}
 	return out, nil
 }
@@ -260,7 +261,7 @@ func readNotes(db *gorm.DB) ([]Note, error) {
 // readCards reads the cards table. Schema 11 and schema 18 use the same
 // columns, so both layouts share this query.
 func readCards(db *gorm.DB) ([]Card, error) {
-	rows, err := db.Raw("SELECT id, nid, did, ord FROM cards ORDER BY id").Rows()
+	rows, err := db.Raw("SELECT id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data FROM cards ORDER BY id").Rows()
 	if err != nil {
 		return nil, fmt.Errorf("%w: cards table: %v", ErrCorruptCollection, err)
 	}
@@ -268,7 +269,7 @@ func readCards(db *gorm.DB) ([]Card, error) {
 	var cards []Card
 	for rows.Next() {
 		var card Card
-		if err := rows.Scan(&card.ID, &card.NoteID, &card.DeckID, &card.Ordinal); err != nil {
+		if err := rows.Scan(&card.ID, &card.NoteID, &card.DeckID, &card.Ordinal, &card.Modified, &card.USN, &card.Type, &card.Queue, &card.Due, &card.Interval, &card.Factor, &card.Reps, &card.Lapses, &card.Left, &card.OriginalDue, &card.OriginalDeckID, &card.Flags, &card.Data); err != nil {
 			return nil, fmt.Errorf("%w: cards table: %v", ErrCorruptCollection, err)
 		}
 		cards = append(cards, card)
@@ -482,6 +483,7 @@ func modernDecks(db *gorm.DB) ([]Deck, error) {
 			Name:                strings.ReplaceAll(name, "\x1f", "::"),
 			Description:         cfg.Description,
 			MarkdownDescription: cfg.MarkdownDescription,
+			ConfigID:            cfg.ConfigID,
 		})
 	}
 	if err := rows.Err(); err != nil {

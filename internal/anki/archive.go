@@ -73,6 +73,9 @@ func ReadWithLimits(r io.ReaderAt, size int64, limits Limits) (*Package, error) 
 	if err != nil {
 		return nil, err
 	}
+	if err := readScheduling(db, pkg); err != nil {
+		return nil, err
+	}
 	pkg.Media, err = readMedia(format, entries, limits, &total)
 	if err != nil {
 		return nil, err

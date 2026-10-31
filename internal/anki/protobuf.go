@@ -1,7 +1,9 @@
 package anki
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math"
 
 	"google.golang.org/protobuf/encoding/protowire"
 )
@@ -253,6 +255,7 @@ func decodeTemplateConfig(b []byte) (templateConfig, error) {
 type deckConfig struct {
 	Description         string
 	MarkdownDescription bool
+	ConfigID            int64
 }
 
 // decodeDeckKind reads Deck.kind. The oneof carries Normal in field 1 and
@@ -264,6 +267,9 @@ func decodeDeckKind(b []byte) (deckConfig, error) {
 			return nil
 		}
 		return walkProto(raw, func(num protowire.Number, typ protowire.Type, v uint64, raw []byte) error {
+			if typ == protowire.VarintType && num == 1 {
+				cfg.ConfigID = int64(v)
+			}
 			if typ == protowire.BytesType && num == 4 {
 				cfg.Description = string(raw)
 			}
@@ -277,6 +283,52 @@ func decodeDeckKind(b []byte) (deckConfig, error) {
 		return deckConfig{}, err
 	}
 	return cfg, nil
+}
+
+// decodeDeckConfig decodes the scheduling fields in DeckConfig.Config.
+func decodeDeckConfig(b []byte) (DeckConfig, error) {
+	var cfg DeckConfig
+	weights := map[protowire.Number][]float64{}
+	err := walkProto(b, func(num protowire.Number, typ protowire.Type, v uint64, raw []byte) error {
+		if num == 16 && typ == protowire.VarintType {
+			cfg.MaximumReviewInterval = int(v)
+		}
+		if num == 37 && typ == protowire.Fixed32Type {
+			cfg.DesiredRetention = float64(math.Float32frombits(uint32(v)))
+		}
+		if num != 1 && num != 2 && num != 3 && num != 5 && num != 6 {
+			return nil
+		}
+		var values []float64
+		if typ == protowire.Fixed32Type {
+			values = append(values, float64(math.Float32frombits(uint32(v))))
+		}
+		if typ == protowire.BytesType {
+			if len(raw)%4 != 0 {
+				return errMalformedProto
+			}
+			for len(raw) > 0 {
+				values = append(values, float64(math.Float32frombits(binary.LittleEndian.Uint32(raw))))
+				raw = raw[4:]
+			}
+		}
+		switch num {
+		case 1:
+			cfg.LearnSteps = append(cfg.LearnSteps, values...)
+		case 2:
+			cfg.RelearnSteps = append(cfg.RelearnSteps, values...)
+		default:
+			weights[num] = append(weights[num], values...)
+		}
+		return nil
+	})
+	for _, n := range []protowire.Number{6, 5, 3} {
+		if len(weights[n]) != 0 {
+			cfg.Weights = weights[n]
+			break
+		}
+	}
+	return cfg, err
 }
 
 // mediaMeta is one MediaEntry of the modern media protobuf.

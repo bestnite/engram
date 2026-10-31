@@ -77,10 +77,12 @@ func assertSameModel(t *testing.T, name string, want, got *anki.Package) {
 	wantCopy.Format = 0
 	wantCopy.Media = nil
 	wantCopy.UnpackedBytes = 0
+	wantCopy.DeckConfigs = nil
 	gotCopy := *got
 	gotCopy.Format = 0
 	gotCopy.Media = nil
 	gotCopy.UnpackedBytes = 0
+	gotCopy.DeckConfigs = nil
 	if len(want.Media) != len(got.Media) {
 		t.Fatalf("%s: media entries = %d, want %d", name, len(got.Media), len(want.Media))
 	}
@@ -96,6 +98,27 @@ func assertSameModel(t *testing.T, name string, want, got *anki.Package) {
 	wantJSON, _ := json.MarshalIndent(wantCopy, "", "  ")
 	gotJSON, _ := json.MarshalIndent(gotCopy, "", "  ")
 	t.Fatalf("%s does not decode to the same model as %s\nwant: %s\ngot:  %s", name, stockFixtures[0].file, wantJSON, gotJSON)
+}
+
+func TestFixtureScheduling(t *testing.T) {
+	for _, fixture := range stockFixtures {
+		t.Run(fixture.file, func(t *testing.T) {
+			pkg, err := anki.ReadFile(fixturePath(fixture.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if pkg.CreatedAt != 1600000000 || len(pkg.DeckConfigs) != 1 || pkg.Decks[0].ConfigID != pkg.DeckConfigs[0].ID {
+				t.Fatalf("collection scheduling: %+v %+v", pkg.Decks, pkg.DeckConfigs)
+			}
+			cfg := pkg.DeckConfigs[0]
+			if cfg.DesiredRetention < .899 || cfg.DesiredRetention > .901 || cfg.MaximumReviewInterval != 36500 || !reflect.DeepEqual(cfg.LearnSteps, []float64{1, 10}) || !reflect.DeepEqual(cfg.RelearnSteps, []float64{10}) {
+				t.Fatalf("configuration: %+v", cfg)
+			}
+			if len(pkg.Reviews) != 0 || pkg.Cards[0].Due != 1 || pkg.Cards[0].Data != "{}" {
+				t.Fatalf("scheduling: %+v %+v", pkg.Cards[0], pkg.Reviews)
+			}
+		})
+	}
 }
 
 func TestModernMediaMatchesMetaAndEntry(t *testing.T) {

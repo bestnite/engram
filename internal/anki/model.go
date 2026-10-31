@@ -5,12 +5,15 @@ import "io"
 // Package is one decoded .apkg package. Slices are ordered deterministically:
 // note types, decks, notes and cards by ID, media by the archive index.
 type Package struct {
-	Format    Format
-	NoteTypes []NoteType
-	Decks     []Deck
-	Notes     []Note
-	Cards     []Card
-	Media     []MediaEntry
+	Format      Format
+	NoteTypes   []NoteType
+	Decks       []Deck
+	Notes       []Note
+	Cards       []Card
+	Reviews     []Review
+	DeckConfigs []DeckConfig
+	CreatedAt   int64
+	Media       []MediaEntry
 	// UnpackedBytes is the decompressed size of what the reader itself produced: the
 	// collection, the meta entry and the media table. Media payloads are streamed by the
 	// caller, so their bytes are added by the caller when it enforces the total cap.
@@ -81,6 +84,18 @@ type Deck struct {
 	Name                string
 	Description         string
 	MarkdownDescription bool
+	ConfigID            int64
+}
+
+// DeckConfig is the scheduling configuration associated with an Anki deck.
+type DeckConfig struct {
+	ID                    int64
+	Name                  string
+	DesiredRetention      float64
+	LearnSteps            []float64
+	RelearnSteps          []float64
+	MaximumReviewInterval int
+	Weights               []float64
 }
 
 // Note is one note. Fields holds the field values in the note type's field
@@ -98,10 +113,37 @@ type Note struct {
 // Card is one card. Ordinal is the template index, or for a cloze note the
 // cloze number minus one.
 type Card struct {
-	ID      int64
-	NoteID  int64
-	DeckID  int64
-	Ordinal int
+	ID             int64
+	NoteID         int64
+	DeckID         int64
+	Ordinal        int
+	Modified       int64
+	USN            int
+	Type           int
+	Queue          int
+	Due            int64
+	Interval       int
+	Factor         int
+	Reps           int
+	Lapses         int
+	Left           int
+	OriginalDue    int64
+	OriginalDeckID int64
+	Flags          int
+	Data           string
+}
+
+// Review is an Anki revlog row. ID is its timestamp in milliseconds.
+type Review struct {
+	ID           int64
+	CardID       int64
+	USN          int
+	Ease         int
+	Interval     int
+	LastInterval int
+	Factor       int
+	Time         int
+	Type         int
 }
 
 // MediaEntry is one media file. Name is the file name as stored by Anki, not
