@@ -206,20 +206,6 @@ this file, so only the parent does it, with the maintainer present.
   imports with the due dates Anki shows for it. Evidence is the raw scoped `go test` and `go vet`
   output and the oracle script's output.
 
-- [ ] **M18-13 A scheduling column Anki can hold does not block a content import** — since `M18-2`,
-  `internal/anki` reads the whole revlog, every scheduling column of `cards`, and the deck
-  configurations on every import, even with `include_progress` off, and scans them into Go integers. A
-  single REAL value in one of those columns rejects the whole package: a revlog `ivl` of `7.5` fails
-  with `converting driver.Value type float64 ("7.5") to a int`. A package that imported before
-  `M18-2` can now fail. The fix: numeric scheduling columns are read so that a REAL value is rounded to
-  the nearest integer instead of failing (`CAST(ROUND(x) AS INTEGER)` in the query, or a float scan);
-  an undecodable deck configuration falls back to the preset defaults instead of failing the import;
-  an unreadable revlog fails the import only when `include_progress` is on. Files:
-  `internal/anki/scheduling.go`, `internal/anki/sqlite.go`. *Acceptance:* table tests cover a REAL
-  value in revlog `ivl`, in `cards.due` and in `cards.factor`, a `col.dconf` that is not valid JSON,
-  and a malformed `deck_config.config`; each one imports its content with `include_progress` off.
-  Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-14 `.apkg` progress report counts and transport tests** — with `include_progress` off,
   `importAnkiProgress` sets `states_discarded` to the number of all package cards and
   `progress_discarded` to true for every package that has a card, including a package whose cards are
