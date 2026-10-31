@@ -1630,4 +1630,13 @@ export const zhCN: LocaleCatalog = {
   'editor.tts.visible': '同时在卡片上显示文字',
   'editor.tts.bad_lang': '请填写语言代码，例如 ja_JP、en_US、zh_CN。',
   'editor.tts.bad_speed': '语速请填入大于 0 的数字，或留空。',
+  // ---- 笔记类型：常用模板与来源 ----
+  'notetype.stock.template.vocabulary': '词汇卡（带读音）',
+  'notetype.stock.template.japanese_furigana': '日语注音卡',
+  'notetype.stock.template.listening': '听力卡（TTS 朗读）',
+  'notetype.stock.template.basic_extra': '基础 + 补充说明',
+  'notetype.stock.source.anki': 'Anki',
+  'notetype.stock.source.template': '常用模板',
+  'notetype.stock.source.engram': 'engram 题型',
+  'notetype.stock.option': '{name} · {source}',
 };

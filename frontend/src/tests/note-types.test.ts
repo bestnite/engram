@@ -123,3 +123,21 @@ describe('NoteTypesView', () => {
     expect(html).toContain('填空笔记类型只能有一个模板');
   });
 });
+
+describe('common template catalog keys', () => {
+  it.each(['vocabulary', 'japanese_furigana', 'listening', 'basic_extra'])('%s has a label in both catalogs', async (kind) => {
+    const { formatMessage } = await import('../lib/i18n');
+    for (const locale of ['zh-CN', 'en'] as const) {
+      const key = `notetype.stock.template.${kind}`;
+      expect(formatMessage(locale, key)).not.toBe(key);
+    }
+  });
+
+  it.each(['anki', 'template', 'engram'])('source %s has a label in both catalogs', async (source) => {
+    const { formatMessage } = await import('../lib/i18n');
+    for (const locale of ['zh-CN', 'en'] as const) {
+      const key = `notetype.stock.source.${source}`;
+      expect(formatMessage(locale, key)).not.toBe(key);
+    }
+  });
+});

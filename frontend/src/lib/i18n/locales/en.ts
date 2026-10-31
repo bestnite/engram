@@ -1631,4 +1631,13 @@ export const en: LocaleCatalog = {
   'editor.tts.visible': 'Also show the text on the card',
   'editor.tts.bad_lang': 'Enter a language code such as ja_JP, en_US or zh_CN.',
   'editor.tts.bad_speed': 'Enter a speed greater than 0, or leave it empty.',
+  // ---- Note types: common templates and sources ----
+  'notetype.stock.template.vocabulary': 'Vocabulary (with reading)',
+  'notetype.stock.template.japanese_furigana': 'Japanese (furigana)',
+  'notetype.stock.template.listening': 'Listening (TTS)',
+  'notetype.stock.template.basic_extra': 'Basic (with extra)',
+  'notetype.stock.source.anki': 'Anki',
+  'notetype.stock.source.template': 'Common template',
+  'notetype.stock.source.engram': 'engram question type',
+  'notetype.stock.option': '{name} · {source}',
 };

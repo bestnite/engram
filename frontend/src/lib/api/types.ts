@@ -331,12 +331,12 @@ export interface NoteTypePreviewResponse {
  */
 export interface NoteTypeStock {
   id: string;
-  source: 'anki' | 'engram';
+  source: 'anki' | 'template' | 'engram';
   name: string;
   label_key: string;
 }
 
-/** GET /api/v1/note-type-stocks response; Anki's six definitions followed by engram's ten. */
+/** GET /api/v1/note-type-stocks response: Anki's six definitions, the four common templates, then engram's ten. */
 export interface NoteTypeStocksResponse {
   stocks: NoteTypeStock[];
 }

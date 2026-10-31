@@ -127,9 +127,13 @@
   );
 
   // Stock picker labels come from the translation catalog through the server's label_key; the
-  // stock's canonical English name is only the default note type name.
+  // stock's canonical English name is only the default note type name. Each label names its source,
+  // because Anki's types and engram's question types share names such as Basic and Cloze.
   const stockOptions = $derived(
-    stocks.map((stock) => ({ value: stock.id, label: $t(stock.label_key) })),
+    stocks.map((stock) => ({
+      value: stock.id,
+      label: $t('notetype.stock.option', { name: $t(stock.label_key), source: $t(`notetype.stock.source.${stock.source}`) }),
+    })),
   );
 
   const copyOptions = $derived(

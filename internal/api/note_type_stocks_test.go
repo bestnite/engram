@@ -10,8 +10,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestNoteTypeStocksList covers the static stock definition list: Anki's six definitions followed
-// by engram's ten, each with a unambiguous source-prefixed id and a catalog key.
+// TestNoteTypeStocksList covers the static stock definition list: Anki's six definitions, the four
+// common templates, then engram's ten, each with an unambiguous source-prefixed id and a catalog key.
 func TestNoteTypeStocksList(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
 	router := env.router()
@@ -26,17 +26,27 @@ func TestNoteTypeStocksList(t *testing.T) {
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("stock list is not JSON: %v (%s)", err, raw)
 	}
-	if len(body.Stocks) != 16 {
-		t.Fatalf("stock count = %d, want 16 (Anki six and engram ten)", len(body.Stocks))
+	if len(body.Stocks) != 20 {
+		t.Fatalf("stock count = %d, want 20 (Anki six, four templates, engram ten)", len(body.Stocks))
 	}
 	if body.Stocks[0].ID != "anki:basic" || body.Stocks[0].Source != stockSourceAnki || body.Stocks[0].LabelKey != "notetype.stock.anki.basic" {
 		t.Fatalf("first stock = %+v, want Anki basic", body.Stocks[0])
 	}
-	if body.Stocks[6].ID != "engram:basic" || body.Stocks[6].Source != stockSourceEngram || body.Stocks[6].LabelKey != "notetype.stock.engram.basic" {
-		t.Fatalf("seventh stock = %+v, want engram basic", body.Stocks[6])
+	if body.Stocks[6].ID != "template:vocabulary" || body.Stocks[6].Source != stockSourceTemplate || body.Stocks[6].LabelKey != "notetype.stock.template.vocabulary" {
+		t.Fatalf("seventh stock = %+v, want the vocabulary template", body.Stocks[6])
 	}
-	if body.Stocks[6].Name == "" {
-		t.Fatalf("engram stock name is empty")
+	if body.Stocks[10].ID != "engram:basic" || body.Stocks[10].Source != stockSourceEngram || body.Stocks[10].LabelKey != "notetype.stock.engram.basic" {
+		t.Fatalf("eleventh stock = %+v, want engram basic", body.Stocks[10])
+	}
+	ids := map[string]bool{}
+	for _, stock := range body.Stocks {
+		if stock.Name == "" {
+			t.Errorf("stock %q has no name", stock.ID)
+		}
+		if ids[stock.ID] {
+			t.Errorf("duplicate stock id %q", stock.ID)
+		}
+		ids[stock.ID] = true
 	}
 }
 
@@ -68,6 +78,19 @@ func TestCreateNoteTypeFromStock(t *testing.T) {
 	}
 	if created.Config.Kind != want.Config.Kind || len(created.Config.Fields) != len(want.Config.Fields) || len(created.Config.Templates) != len(want.Config.Templates) {
 		t.Fatalf("created config = %+v, want the engram numeric stock config", created.Config)
+	}
+
+	// A common template creates the same way, from its id alone.
+	code, raw = doJSON(t, router, http.MethodPost, base, key, `{"stock_id":"template:listening"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("POST template note type = %d, want 201 (body %s)", code, raw)
+	}
+	var listening NoteTypeJSON
+	if err := json.Unmarshal(raw, &listening); err != nil {
+		t.Fatalf("created template note type is not JSON: %v (%s)", err, raw)
+	}
+	if listening.Name != "Listening (TTS)" || len(listening.Config.Fields) != 2 || listening.Config.Templates[0].QFormat != "{{tts zh_CN:Text}}" {
+		t.Fatalf("created template note type = %+v, want the listening template", listening)
 	}
 
 	code, raw = doJSON(t, router, http.MethodPost, base, key, `{"stock_id":"anki:does_not_exist"}`)

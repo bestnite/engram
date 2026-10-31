@@ -12,10 +12,12 @@ import (
 
 // The source names a stock definition id starts with. A stock id is "source:kind", because
 // Anki's six stock types and engram's ten share kind values (both have "basic" and "cloze")
-// while their configs differ. A bare kind would therefore be ambiguous.
+// while their configs differ. A bare kind would therefore be ambiguous. The template source
+// holds the common templates of notetype.TemplateStockConfigs.
 const (
-	stockSourceAnki   = "anki"
-	stockSourceEngram = "engram"
+	stockSourceAnki     = "anki"
+	stockSourceTemplate = "template"
+	stockSourceEngram   = "engram"
 )
 
 // NoteTypeStockJSON is one stock note type a deck can create from. The config itself is not
@@ -41,10 +43,13 @@ type stockNoteTypeDefinition struct {
 	Config notetype.Config
 }
 
-// stockNoteTypeDefinitions returns Anki's six stock definitions followed by engram's ten, in
-// their fixed declaration order, so the picker shows the same list on every call.
+// stockNoteTypeDefinitions returns Anki's six stock definitions, then the common templates,
+// then engram's ten question types, each group in its fixed declaration order, so the picker
+// shows the same list on every call. The common templates follow Anki's because they are the
+// same kind of general-purpose layout; the question types with their answer controls come last.
 func stockNoteTypeDefinitions() []stockNoteTypeDefinition {
-	out := make([]stockNoteTypeDefinition, 0, 16)
+	templates := notetype.TemplateStockConfigs()
+	out := make([]stockNoteTypeDefinition, 0, 16+len(templates))
 	for _, cfg := range notetype.StockConfigs() {
 		if cfg.OriginalStockKind == nil {
 			continue
@@ -58,6 +63,17 @@ func stockNoteTypeDefinitions() []stockNoteTypeDefinition {
 				LabelKey: "notetype.stock.anki." + string(kind),
 			},
 			Config: cfg,
+		})
+	}
+	for _, stock := range templates {
+		out = append(out, stockNoteTypeDefinition{
+			JSON: NoteTypeStockJSON{
+				ID:       stockSourceTemplate + ":" + stock.Kind,
+				Source:   stockSourceTemplate,
+				Name:     stock.Name,
+				LabelKey: "notetype.stock.template." + stock.Kind,
+			},
+			Config: stock.Config,
 		})
 	}
 	for _, stock := range notetype.EngramStockConfigs() {

@@ -229,3 +229,39 @@ describe('NoteTypesView editor', () => {
     expect(shows.at(-1)?.html).toContain('SERVER-FRONT');
   });
 });
+
+describe('NoteTypesView stock picker', () => {
+  let instance: ReturnType<typeof mount> | null = null;
+
+  afterEach(() => {
+    if (instance) unmount(instance);
+    instance = null;
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+  });
+
+  it('labels each stock with its source, so equally named types stay distinguishable', async () => {
+    setLocale('zh-CN');
+    routeStore.set(matchRoute('/decks/d1/note-types'));
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(NoteTypesView, {
+      target,
+      props: {
+        initialLoading: false,
+        initialNoteTypes: [],
+        initialStocks: [
+          { id: 'template:vocabulary', source: 'template', name: 'Vocabulary', label_key: 'notetype.stock.template.vocabulary' },
+          { id: 'anki:basic', source: 'anki', name: 'Basic', label_key: 'notetype.stock.anki.basic' },
+        ],
+        initialControls: [],
+      },
+    });
+    flushSync();
+    (target.querySelector('[data-testid="note-types-empty-create"]') as HTMLButtonElement).click();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+    const picker = document.body.querySelector('[data-testid="notetype-create-stock"]');
+    expect(picker?.textContent).toContain('词汇卡（带读音） · 常用模板');
+  });
+});
