@@ -644,19 +644,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   `{"target":"into_deck:<id>","preset_id":<own>}`, answered with 400 `invalid_request` and no new
   `action_tokens` row. Evidence is the raw scoped `go test` and `go vet` output.
 
-- [ ] **M18-43 The `M18-4` preset tests pass on PostgreSQL** — the acceptance of `M18-32` required
-  `TestImportPresetModes` and `TestAnkiImportPresetModes` to pass with `TEST_PG_DSN` set, because the
-  `copy` mode writes a preset inside the import transaction. The commit that closed `M18-32`
-  (`55b5da7`) records that clause as not verified, and section 7 of `AGENTS.md` lets an entry leave the
-  backlog only when its acceptance criteria pass with evidence. The commits that closed `M18-29`,
-  `M18-30`, `M18-31` and `M18-33` record the same gap. `M18-29` added `TestImportReportPresetByTarget`,
-  which imports into all three targets on both drivers and has never run on PostgreSQL either. This
-  task runs tests and changes no file. A PostgreSQL case that fails is recorded as a new entry that
-  names the failure; it is not fixed under this ID. *Acceptance:*
-  `go test -count=1 -v -run 'TestImportPresetModes|TestAnkiImportPresetModes|TestImportReportPresetByTarget' ./internal/store/`
-  with `TEST_PG_DSN` set passes, and its output shows the `postgres` subtests of all three tests as
-  `PASS`, none as `SKIP`. Evidence is that raw output.
-
 - [ ] **M18-44 Preset-choice comments state what the code does** — the `M18-33` fix asked for a comment
   on every preset field and function that states its rule and why. The landed code leaves five comment
   gaps and one unwrapped error. First, the comment on `PackageImportOptions.PresetID` in
