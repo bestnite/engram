@@ -488,30 +488,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   naming `M18-4`; the sentence in `AGENTS.md` section 2.7 names `reuse` and `copy`. Evidence is the
   output of `grep -n 'M18-4\b' ROADMAP.md` limited to the ledger section and the `AGENTS.md` diff.
 
-- [ ] **M18-36 A memory state the package carries is checked like a derived one** — `M18-7` checks
-  only the state it derives: `importAnkiProgress` in `internal/store/anki_import.go` skips a derived
-  state whose stability is below 0.001 or not finite, or whose difficulty is outside 1–10 or not
-  finite, but it stores the `s` and `d` of `cards.data` without any check. go-fsrs v4.0.0
-  `validateCard` refuses a non-new card whose stability is below 0.001 or whose difficulty is below
-  1, so such a card fails every preview and every review submission, which is the failure `M18-7`
-  removed for a missing state. Reproduced on `main`: a review card written by `anki.WriteArchive`
-  with `s`=0 and `d`=5, with `s`=5 and `d`=0, and with `s`=−1 and `d`=5, imported with
-  `include_progress` on, each reported `progress_applied` 1 and `states_skipped` 0, and
-  `Scheduler.Preview` on the stored state returned `fsrs: invalid stability: 0 (minimum 0.001 for
-  non-New cards)`, `fsrs: invalid difficulty: 0 (minimum 1 for non-New cards)` and `fsrs: invalid
-  stability: -1 (minimum 0.001 for non-New cards)`. The fix: one unexported function in
-  `internal/store/anki_import.go` decides whether a memory state is usable (both values finite,
-  stability at least 0.001, difficulty from 1 to 10), and both the package's state and the derived
-  state go through it. On a non-new card, a package state that is not usable is treated exactly
-  like a missing one: the importer derives the state from the kept revlog rows, else from SM-2, and
-  skips the card and counts it in `states_skipped` when neither result is usable. *Acceptance:* a
-  table test in `internal/store/anki_progress_import_test.go` imports a review card with each of
-  `{"s":0,"d":5}`, `{"s":5,"d":0}`, `{"s":-1,"d":5}` and `{"s":5,"d":11}`, once with two kept revlog
-  rows (the stored state equals the replay of those rows) and once with no revlog row and factor 0
-  (the card is counted in `states_skipped` and has no state row); a card with `{"s":5,"d":5}` keeps
-  those values; a test in `internal/schedule` calls `Preview` on every written state and gets no
-  error. Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-37 The replay starts where the card's memory actually starts** — `M18-7` replays every
   kept revlog row of a card (type 0–3, ease 1–4) from an empty memory state. Two kinds of history
   make that result wrong. First, a history that does not begin with the card's first learning row,
