@@ -148,6 +148,71 @@ func TestImportPresetReuseResponse(t *testing.T) {
 	}
 }
 
+func TestImportMultipartRejectsPresetOptions(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "multipart_preset_owner", store.RoleUser)
+	other := seedUser(t, env.db, "multipart_preset_other", store.RoleUser)
+	key := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
+	deck := seedDeck(t, env.db, user.ID)
+	owned, foreign := store.NewPreset(user.ID, "Owned"), store.NewPreset(other.ID, "Foreign")
+	for _, p := range []*store.Preset{&owned, &foreign} {
+		if err := env.db.Create(p).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		name   string
+		fields map[string]string
+	}{
+		{"unknown mode", map[string]string{"preset_mode": "bad"}},
+		{"missing preset", map[string]string{"preset_mode": "reuse"}},
+		{"foreign preset", map[string]string{"preset_mode": "reuse", "preset_id": foreign.PublicID}},
+		{"reuse weights", map[string]string{"preset_mode": "reuse", "preset_id": owned.PublicID, "apply_weights": "1"}},
+		{"copy weights", map[string]string{"preset_mode": "copy", "preset_id": owned.PublicID, "apply_weights": "1"}},
+		{"existing target", map[string]string{"preset_mode": "reuse", "preset_id": owned.PublicID, "target": "into_deck:" + deck.PublicID}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var beforeDecks, beforePresets, afterDecks, afterPresets int64
+			if err := env.db.Model(&store.Deck{}).Count(&beforeDecks).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := env.db.Model(&store.Preset{}).Count(&beforePresets).Error; err != nil {
+				t.Fatal(err)
+			}
+			var body bytes.Buffer
+			w := multipart.NewWriter(&body)
+			f, err := w.CreateFormFile("file", "import.edeck")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.Write(minimalPackageZip(t)); err != nil {
+				t.Fatal(err)
+			}
+			for k, v := range tc.fields {
+				if err := w.WriteField(k, v); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			rec := postImport(t, env, key.Plaintext, &body, w.FormDataContentType())
+			if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != CodeInvalidRequest {
+				t.Fatalf("response = %d %s, want 400 invalid_request", rec.Code, rec.Body.String())
+			}
+			if err := env.db.Model(&store.Deck{}).Count(&afterDecks).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := env.db.Model(&store.Preset{}).Count(&afterPresets).Error; err != nil {
+				t.Fatal(err)
+			}
+			if beforeDecks != afterDecks || beforePresets != afterPresets {
+				t.Fatalf("decks %d -> %d, presets %d -> %d", beforeDecks, afterDecks, beforePresets, afterPresets)
+			}
+		})
+	}
+}
+
 func TestImportSharedDeckOmitsOwnerPreset(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	owner := seedUser(t, env.db, "report_owner", store.RoleUser)

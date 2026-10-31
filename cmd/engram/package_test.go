@@ -150,6 +150,27 @@ func TestCLIImportReusePreset(t *testing.T) {
 	}
 }
 
+func TestCLIImportRejectsCopyWithWeights(t *testing.T) {
+	db, target, pkgPath := importFixture(t)
+	preset := store.NewPreset(target.ID, "Selected")
+	if err := db.Create(&preset).Error; err != nil {
+		t.Fatal(err)
+	}
+	before := countDecks(t, db)
+	err, output := cliRun(func() error {
+		return run(context.Background(), []string{"import", "--package", pkgPath, "--user", target.Username, "--preset-mode", "copy", "--preset-id", preset.PublicID, "--apply-weights"})
+	})
+	if err == nil {
+		t.Fatalf("import unexpectedly succeeded: %s", output)
+	}
+	if !strings.Contains(err.Error(), "invalid preset selection") {
+		t.Fatalf("unexpected import error: %v", err)
+	}
+	if after := countDecks(t, db); after != before {
+		t.Fatalf("decks %d -> %d", before, after)
+	}
+}
+
 // captureCLI temporarily redirects the CLI diagnostic output into a buffer and returns the text.
 func captureCLI(t *testing.T, fn func() error) string {
 	t.Helper()

@@ -57,6 +57,56 @@ func TestImportToolsPresetSelection(t *testing.T) {
 	}
 }
 
+func TestImportToolsRejectPresetOptions(t *testing.T) {
+	_, db, keys, ts := newEnv(t)
+	u := seedUser(t, db, "mcp_reject_owner")
+	other := seedUser(t, db, "mcp_reject_other")
+	key := newKey(t, keys, u.ID, []string{store.ScopeWrite})
+	cs := connect(t, ts.URL, key)
+	owned, foreign := store.NewPreset(u.ID, "Owned"), store.NewPreset(other.ID, "Foreign")
+	for _, p := range []*store.Preset{&owned, &foreign} {
+		if err := db.Create(p).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tool := range []string{"import_deck", "create_import_upload"} {
+		for _, tc := range []struct {
+			name, id string
+			weights  bool
+		}{
+			{"foreign preset", foreign.PublicID, false},
+			{"copy weights", owned.PublicID, true},
+		} {
+			t.Run(tool+"/"+tc.name, func(t *testing.T) {
+				models := []any{&store.Deck{}, &store.Preset{}, &store.ActionToken{}, &store.Note{}, &store.Card{}}
+				before := make([]int64, len(models))
+				for i, model := range models {
+					if err := db.Model(model).Count(&before[i]).Error; err != nil {
+						t.Fatal(err)
+					}
+				}
+				args := map[string]any{"preset_mode": "copy", "preset_id": tc.id, "apply_weights": tc.weights}
+				if tool == "import_deck" {
+					args["package"] = base64.StdEncoding.EncodeToString(mcpMinimalPackageZip(t))
+				}
+				_, isErr, text := callTool(t, cs, tool, args)
+				if !isErr || !strings.Contains(text, "invalid_request") {
+					t.Fatalf("%s = (isErr=%v, %q), want invalid_request", tool, isErr, text)
+				}
+				for i, model := range models {
+					var after int64
+					if err := db.Model(model).Count(&after).Error; err != nil {
+						t.Fatal(err)
+					}
+					if before[i] != after {
+						t.Errorf("%T count %d -> %d", model, before[i], after)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestImportURLRejectsReuseWithWeightsBeforeFetch(t *testing.T) {
 	f := &stubPackageFetcher{body: mcpMinimalPackageZip(t)}
 	_, db, keys, _, ts := newEnvWithPackageFetcher(t, f)
