@@ -145,25 +145,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-19 `.edeck` import checks package weights the way `.apkg` does** —
-  `createPresetFromPackage` in `internal/store/package_import.go` writes the `weights` of
-  `preset.json` into the new preset whenever `apply_weights` is on and the list is not empty, and
-  `importInTx` sets `weights_applied` from the option and the target alone. Nothing checks the list
-  at import time: `schema/deck-package.schema.json` declares 21 values, but no import path validates a
-  package against the schema. An `.edeck` whose `weights` is `[1,2,3]`, imported with
-  `apply_weights` on, therefore yields a preset for which `schedule.NewScheduler` returns an error, so
-  every preview and every review submission in the deck fails while the report says
-  `weights_applied` — the defect `M18-9` fixed for `.apkg` only. The fix: the weights,
-  `weights_review_count` and `weights_optimized_at` are written only when `fsrs.MigrateWeights`
-  accepts the list; `weights_applied` is true only when they were written; `weights_discarded` is
-  true when the package carried weights that were not written; once `M18-18` has landed,
-  `weights_invalid` follows the rule that entry defines. If `M18-5` lands first, this entry is
-  deleted with a commit message that names `M18-5`. *Acceptance:* the table of
-  `TestImportPackageApplyWeights` in `internal/store/package_weights_test.go` gains a `[1,2,3]` case
-  with `apply_weights` on, which stores no weights and no weight metadata and reports
-  `weights_applied` false and `weights_discarded` true; every existing case keeps its result.
-  Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-20 Weight import tests: older Anki weight sets, schema-18 packages and the scheduler's
   use of the weights** — `TestAnkiImportWeightsSchedule` in `internal/api/anki_weights_import_test.go`
   imports one 21-value set and one 3-value set, both through a schema-11 package written by
