@@ -75,6 +75,10 @@ const (
 	// CodeImportUploadInvalid means the upload ticket does not exist, has expired, was already used, or the account / API key that issued it
 	// is no longer valid. The reasons collapse into one code: the remedy is the same (request a new ticket), and it does not reveal the reason to whoever holds the URL.
 	CodeImportUploadInvalid = "deck_import_upload_invalid"
+	// CodeDeckImportBusy means every package-import slot is taken: package_max_concurrent_imports
+	// imports already run in this server process. The request is refused before its body is read,
+	// so nothing is spooled to a temporary file.
+	CodeDeckImportBusy = "deck_import_busy"
 )
 
 // errorBody is the error object of the error envelope: {"error":{"code":"...","message":"..."}}.
@@ -117,6 +121,9 @@ var errorMessages = map[string]string{
 
 	// Stable codes for upload-ticket import (PUT /decks/import-uploads/:token).
 	CodeImportUploadInvalid: "The upload URL is invalid, expired or already used; request a new one.",
+
+	// Stable code for a package import refused because every import slot is taken.
+	CodeDeckImportBusy: "Too many package imports are already running. Try again when one finishes.",
 
 	// Stable codes for deck package import (store.PackageError.Code).
 	store.CodePackageUnsafeEntry:     "The package contains an unsafe entry.",

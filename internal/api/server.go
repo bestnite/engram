@@ -69,6 +69,8 @@ type API struct {
 	fetcher PackageFetcher
 	// importURL is the per-user direct-link import limiter: this entry triggers outbound requests and needs its own limit.
 	importURL *RateLimiter
+	// importSlots bounds how many package imports run at once; see ImportSlot.
+	importSlots *importSlotGate
 	// tokens stores upload tickets (action_tokens table, digests only, one-time consumption).
 	tokens *store.ActionTokenStore
 	// baseURL is the instance root address without a trailing slash; see Deps.BaseURL.
@@ -154,8 +156,10 @@ func New(deps Deps) (*API, error) {
 		mediaRoot: deps.MediaRoot,
 		fetcher:   fetcher,
 		importURL: NewRateLimiter(importURLRateLimit, importURLRateWindow, now),
-		tokens:    store.NewActionTokenStore(deps.DB),
-		baseURL:   strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
+		// One gate per server process: every import entry of this process shares the same slots.
+		importSlots: &importSlotGate{},
+		tokens:      store.NewActionTokenStore(deps.DB),
+		baseURL:     strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
 		// Default page size for export pagination; see the note on API.exportPageSize.
 		exportPageSize: exportDefaultPageSize,
 	}, nil

@@ -76,6 +76,15 @@ func mediaSettingSpecs() []settingSpec {
 				return strconv.FormatInt(store.DefaultPackageImportLimits().MaxUnpackedBytes, 10)
 			},
 		},
+		{
+			// How many package imports one server process runs at the same time. Each import may
+			// spool up to package_max_bytes to a temporary file, so the cap keeps a few
+			// simultaneous imports from filling the temporary disk.
+			key: store.SettingKeyPackageMaxConcurrentImports, envVar: store.EnvPackageMaxConcurrentImports,
+			def: func(*i18n.Localizer) string {
+				return strconv.Itoa(store.DefaultPackageMaxConcurrentImports)
+			},
+		},
 	}
 }
 

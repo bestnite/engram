@@ -167,6 +167,12 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 	if _, err := a.authorizeImportTarget(ctx, u.ID, opts.Target); err != nil {
 		return nil, err
 	}
+	// Take the import slot before the body is read: a refused request spools nothing to a temporary file.
+	release, err := a.ImportSlot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	limited := &overflowReader{r: body, remaining: store.ResolvePackageLimits(ctx, a.db).MaxPackageBytes}
 	r, err := uploadPackageReader(limited)
 	if err != nil {

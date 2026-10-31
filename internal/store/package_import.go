@@ -62,6 +62,12 @@ const (
 	EnvPackageMaxEntries              = "PACKAGE_MAX_ENTRIES"
 	SettingKeyPackageMaxUnpackedBytes = "package_max_unpacked_bytes"
 	EnvPackageMaxUnpackedBytes        = "PACKAGE_MAX_UNPACKED_BYTES"
+	// SettingKeyPackageMaxConcurrentImports bounds how many package imports run at the same time in
+	// one server process. Every import may spool up to package_max_bytes to a temporary file before
+	// it parses the package, so an unbounded number of simultaneous imports can fill the temporary
+	// disk even though each one stays within its own cap.
+	SettingKeyPackageMaxConcurrentImports = "package_max_concurrent_imports"
+	EnvPackageMaxConcurrentImports        = "PACKAGE_MAX_CONCURRENT_IMPORTS"
 )
 
 // Defaults of the import caps: 2 GiB accepted package, 100 000 entries, 4 GiB decompressed.
@@ -70,6 +76,16 @@ const (
 	defaultPackageMaxEntries       = 100_000
 	defaultPackageMaxUnpackedBytes = 4 << 30
 )
+
+// DefaultPackageMaxConcurrentImports is the default number of package imports one server process
+// runs at once.
+const DefaultPackageMaxConcurrentImports = 2
+
+// ResolvePackageMaxConcurrentImports resolves the concurrency cap: environment variable, then
+// settings table, then the default 2.
+func ResolvePackageMaxConcurrentImports(ctx context.Context, db *gorm.DB) int {
+	return int(resolvePackageInt64(ctx, db, SettingKeyPackageMaxConcurrentImports, EnvPackageMaxConcurrentImports, DefaultPackageMaxConcurrentImports))
+}
 
 // PackageImportLimits are the deployment caps applied to one package import.
 //

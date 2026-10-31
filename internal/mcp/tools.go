@@ -416,6 +416,14 @@ func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (
 	if in.Package == nil {
 		return nil, api.InvalidRequest("package or url is required")
 	}
+	// The URL path takes its slot inside ImportDeckPackageURL, before the download. A package
+	// document already sits in memory, but its import still counts against the same process-wide
+	// cap, so a tool caller gets the same deck_import_busy refusal as a REST caller.
+	release, err := s.api.ImportSlot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	r, err := store.PackageReader(in.Package)
 	if err != nil {
 		return nil, err

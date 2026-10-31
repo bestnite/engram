@@ -177,7 +177,7 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 				adminError(c, http.StatusBadRequest, "invalid_number")
 				return
 			}
-		case store.SettingKeyPackageMaxBytes, store.SettingKeyPackageMaxEntries, store.SettingKeyPackageMaxUnpackedBytes:
+		case store.SettingKeyPackageMaxBytes, store.SettingKeyPackageMaxEntries, store.SettingKeyPackageMaxUnpackedBytes, store.SettingKeyPackageMaxConcurrentImports:
 			// Every package cap is a positive count, so zero and negatives are invalid.
 			if n, err := strconv.ParseInt(raw, 10, 64); err != nil || n <= 0 {
 				adminError(c, http.StatusBadRequest, "invalid_number")

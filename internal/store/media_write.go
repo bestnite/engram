@@ -73,7 +73,7 @@ func (s *MediaStore) Put(ctx context.Context, root string, in MediaPut) (row *Me
 		return s.reuse(ctx, existing, in.CreatedBy)
 	}
 
-	rel := filepath.Join(in.Sha256[:2], in.Sha256+"."+mediatype.Ext(in.Mime))
+	rel := contentAddressedRelPath(in.Sha256, in.Mime)
 	abs := filepath.Join(root, rel)
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return nil, "", fmt.Errorf("media: create shard dir: %w", err)
@@ -96,29 +96,44 @@ func (s *MediaStore) Put(ctx context.Context, root string, in MediaPut) (row *Me
 		CreatedBy: in.CreatedBy,
 		CreatedAt: time.Now().UTC(),
 	}
-	// DO NOTHING instead of catching the unique violation: on PostgreSQL a failed INSERT aborts the surrounding transaction,
-	// which would make the re-read below fail inside a package import.
+	stored, inserted, err := s.writeRow(ctx, row, in.CreatedBy)
+	if err != nil {
+		return nil, written, err
+	}
+	if !inserted {
+		// A concurrent writer committed the same sha first: its row owns the file, so nothing here counts as newly written.
+		return stored, "", nil
+	}
+	return stored, written, nil
+}
+
+// writeRow inserts one media metadata row and reports whether this call inserted it.
+//
+// DO NOTHING instead of catching the unique violation: on PostgreSQL a failed INSERT aborts the surrounding transaction,
+// which would make the re-read below fail inside a package import. When another writer committed the same sha first, its
+// row wins and this caller still becomes an uploader, exactly as a fresh insert does.
+func (s *MediaStore) writeRow(ctx context.Context, row *Media, createdBy *uint64) (*Media, bool, error) {
 	res := s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(row)
 	if res.Error != nil {
-		return nil, written, fmt.Errorf("media: record metadata: %w", res.Error)
+		return nil, false, fmt.Errorf("media: record metadata: %w", res.Error)
 	}
 	if res.RowsAffected == 0 {
-		// A concurrent writer committed the same sha first: its row owns the file, so nothing here counts as newly written.
-		existing, err := s.BySha256(ctx, in.Sha256)
+		existing, err := s.BySha256(ctx, row.Sha256)
 		if err != nil {
-			return nil, "", fmt.Errorf("media: reload concurrent metadata: %w", err)
+			return nil, false, fmt.Errorf("media: reload concurrent metadata: %w", err)
 		}
 		if existing == nil {
-			return nil, "", fmt.Errorf("media: metadata for %s conflicted on insert but is not readable", in.Sha256)
+			return nil, false, fmt.Errorf("media: metadata for %s conflicted on insert but is not readable", row.Sha256)
 		}
-		return s.reuse(ctx, existing, in.CreatedBy)
+		reused, _, err := s.reuse(ctx, existing, createdBy)
+		return reused, false, err
 	}
-	if in.CreatedBy != nil {
-		if err := RecordMediaUploader(ctx, s.db, in.Sha256, *in.CreatedBy); err != nil {
-			return nil, written, err
+	if createdBy != nil {
+		if err := RecordMediaUploader(ctx, s.db, row.Sha256, *createdBy); err != nil {
+			return nil, true, err
 		}
 	}
-	return row, written, nil
+	return row, true, nil
 }
 
 // reuse applies the dedup-hit rules to an existing row: record this caller as an uploader, so it can still read the bytes it
@@ -183,6 +198,92 @@ func (s *MediaStore) SaveStreamTracked(ctx context.Context, root, mime string, r
 		TempPath:  tmpName,
 		CreatedBy: createdBy,
 	})
+}
+
+// mediaFileWrite is one stream this process placed at its content address before a database
+// transaction opened.
+//
+// It exists for imports that may decompress to gigabytes: copying the bytes inside the transaction
+// would hold the database write lock for the whole copy (on SQLite every other writer waits or
+// fails), so the file is placed first and only the metadata row is written inside the transaction.
+type mediaFileWrite struct {
+	Sha256 string
+	Mime   string
+	Bytes  int64
+	// AbsPath is the content-addressed path the bytes were placed at.
+	AbsPath string
+	// Created is true only when this call created the file. An existing path is never reported as
+	// created, so a caller that removes the files of a failed run never removes a file that was
+	// there before it started.
+	Created bool
+}
+
+// saveStreamFile places r at its content-addressed path without touching the database.
+//
+// sha is the digest the caller already computed and must equal the digest of the stream; a mismatch
+// is an error rather than a silently misaddressed file. The temporary file lives under root/tmp and
+// is renamed into the shard directory, so a reader never sees a half-written file. The metadata row
+// is the caller's to write later, inside its transaction, with recordFile.
+func (s *MediaStore) saveStreamFile(root, mime, sha string, r io.Reader) (mediaFileWrite, error) {
+	if len(sha) < 2 {
+		return mediaFileWrite{}, fmt.Errorf("media: content address %q is too short", sha)
+	}
+	sum := sha256.New()
+	tmpName, err := s.stageBytes(root, io.TeeReader(r, sum))
+	if err != nil {
+		return mediaFileWrite{}, err
+	}
+	defer func() { _ = os.Remove(tmpName) }()
+	if got := hex.EncodeToString(sum.Sum(nil)); got != sha {
+		return mediaFileWrite{}, fmt.Errorf("media: stream digest %s does not match %s", got, sha)
+	}
+	info, err := os.Stat(tmpName)
+	if err != nil {
+		return mediaFileWrite{}, fmt.Errorf("media: stat temporary file: %w", err)
+	}
+	abs := contentAddressedPath(root, sha, mime)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return mediaFileWrite{}, fmt.Errorf("media: create shard dir: %w", err)
+	}
+	_, statErr := os.Stat(abs)
+	existed := statErr == nil
+	if err := os.Rename(tmpName, abs); err != nil {
+		if _, retryErr := os.Stat(abs); retryErr != nil {
+			return mediaFileWrite{}, fmt.Errorf("media: commit file: %w", err)
+		}
+		// A concurrent writer placed the same bytes: the path already held them.
+		existed = true
+	}
+	return mediaFileWrite{Sha256: sha, Mime: mime, Bytes: info.Size(), AbsPath: abs, Created: !existed}, nil
+}
+
+// recordFile writes the metadata row of a file placed by saveStreamFile or Put, carrying the same
+// dedup rules as Put: a row another writer committed first wins, and this caller still becomes an
+// uploader.
+func (s *MediaStore) recordFile(ctx context.Context, file mediaFileWrite, createdBy *uint64) (*Media, error) {
+	if len(file.Sha256) < 2 {
+		return nil, fmt.Errorf("media: content address %q is too short", file.Sha256)
+	}
+	row := &Media{
+		Sha256:    file.Sha256,
+		RelPath:   contentAddressedRelPath(file.Sha256, file.Mime),
+		Mime:      file.Mime,
+		Bytes:     file.Bytes,
+		CreatedBy: createdBy,
+		CreatedAt: time.Now().UTC(),
+	}
+	stored, _, err := s.writeRow(ctx, row, createdBy)
+	return stored, err
+}
+
+// contentAddressedRelPath is the one on-disk layout of media bytes: <sha256[:2]>/<sha256>.<ext>.
+func contentAddressedRelPath(sha, mime string) string {
+	return filepath.Join(sha[:2], sha+"."+mediatype.Ext(mime))
+}
+
+// contentAddressedPath is the absolute form of contentAddressedRelPath under root.
+func contentAddressedPath(root, sha, mime string) string {
+	return filepath.Join(root, contentAddressedRelPath(sha, mime))
 }
 
 // stageBytes copies one stream into a fresh temporary file under root/tmp and returns its path.

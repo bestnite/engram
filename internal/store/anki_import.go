@@ -805,8 +805,8 @@ func ankiValues(note *anki.Note, target *ankiTypeTarget) map[string]string {
 // collide with another import's reference.
 func ankiNoteRef(guid string) string { return "anki:" + guid }
 
-// importAnkiPackage imports one decoded .apkg package. Everything the import writes happens in one
-// transaction; under dry_run the transaction rolls back and no media file is written.
+// importAnkiPackage imports one decoded .apkg package. The media files are placed on disk before the
+// transaction opens; the transaction writes rows only and is rolled back under dry_run.
 func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r io.ReaderAt, size int64, limits PackageImportLimits, opts PackageImportOptions, targetKind string, targetDeckID uint64) (*PackageImportReport, error) {
 	ankiLimits := limits.ankiLimits()
 	pkg, err := anki.ReadWithLimits(r, size, ankiLimits)
@@ -831,9 +831,14 @@ func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r
 		MatchRule: "anki_guid",
 		Errors:    []PackageImportError{},
 	}
-	var writtenMedia []mediaWrite
+	placed, writtenMedia, err := s.placeAnkiMedia(ctx, files, opts, report)
+	if err != nil {
+		// A failure while placing the bytes removes only the files this run created.
+		s.cleanupMediaWrites(ctx, writtenMedia)
+		return nil, err
+	}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return s.importAnkiInTx(ctx, tx, actorUserID, pkg, files, &plan, targetKind, targetDeckID, opts, report, &writtenMedia)
+		return s.importAnkiInTx(ctx, tx, actorUserID, pkg, files, placed, &plan, targetKind, targetDeckID, opts, report)
 	})
 	if err != nil {
 		s.cleanupMediaWrites(ctx, writtenMedia)
@@ -842,6 +847,59 @@ func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r
 		return nil, err
 	}
 	return report, nil
+}
+
+// placeAnkiMedia writes every new media file of the package to the content-addressed store before
+// the import's database transaction opens.
+//
+// An .apkg may decompress to 4 GiB, so copying those bytes inside the transaction would hold the
+// database write lock for minutes: on SQLite every other writer waits or fails, and every other
+// user's review submission is a writer. The transaction that follows therefore writes rows only.
+// A sha that already has a metadata row is not rewritten; the transaction reuses it. A dry run
+// places no file. writtenMedia records only the files this call created, so a rollback or a failed
+// run removes exactly those and never a file that existed before. placed carries the files whose
+// metadata row the transaction must write.
+func (s *DeckStore) placeAnkiMedia(ctx context.Context, files []ankiMediaFile, opts PackageImportOptions, report *PackageImportReport) (map[string]mediaFileWrite, []mediaWrite, error) {
+	placed := make(map[string]mediaFileWrite, len(files))
+	if opts.MediaRoot == "" {
+		return placed, nil, nil
+	}
+	seen := make(map[string]bool, len(files))
+	mstore := NewMediaStore(s.db)
+	var writtenMedia []mediaWrite
+	for i := range files {
+		file := &files[i]
+		if file.size == 0 || seen[file.sha256hex] {
+			continue
+		}
+		seen[file.sha256hex] = true
+		stored, err := mstore.BySha256(ctx, file.sha256hex)
+		if err != nil {
+			return placed, writtenMedia, fmt.Errorf("import Anki package: check media %s: %w", file.sha256hex, err)
+		}
+		if stored != nil {
+			continue
+		}
+		report.MediaNew++
+		if opts.DryRun {
+			continue
+		}
+		rc, err := file.entry.Open()
+		if err != nil {
+			return placed, writtenMedia, fmt.Errorf("import Anki package: open media %q: %w", file.entry.Name, err)
+		}
+		mime, _ := mediatype.Classify(file.head, file.entry.Name)
+		write, err := mstore.saveStreamFile(opts.MediaRoot, mime, file.sha256hex, rc)
+		rc.Close()
+		if err != nil {
+			return placed, writtenMedia, err
+		}
+		if write.Created {
+			writtenMedia = append(writtenMedia, mediaWrite{sha: file.sha256hex, abs: write.AbsPath})
+		}
+		placed[file.sha256hex] = write
+	}
+	return placed, writtenMedia, nil
 }
 
 // dropUnusedAnkiNoteTypes removes the package's note types that no note uses.
@@ -868,7 +926,7 @@ func dropUnusedAnkiNoteTypes(pkg *anki.Package) {
 }
 
 // importAnkiInTx performs the Anki mapping inside one transaction.
-func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *anki.Package, files []ankiMediaFile, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport, writtenMedia *[]mediaWrite) error {
+func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *anki.Package, files []ankiMediaFile, placed map[string]mediaFileWrite, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport) error {
 	// The unused note types leave no trace in the target: they are not created, they contribute no
 	// media references to the report, and no stored row points at them.
 	dropUnusedAnkiNoteTypes(pkg)
@@ -1110,48 +1168,40 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		report.CardsRemoved += removed
 	}
 
-	// Media bytes last, on the transaction handle so metadata and content are atomic. The entry is
-	// streamed through the hashing pass's digest into a temporary file and renamed into place, so
-	// a media payload is never held in memory. dry_run only counts; it neither writes a file nor a
-	// row.
+	// Media rows last. The bytes were placed on disk before this transaction opened (see
+	// placeAnkiMedia), so the transaction writes rows only and its hold time does not grow with the
+	// package's media size. A sha that already had a metadata row is reused here. dry_run writes
+	// neither a file nor a row.
 	for i := range files {
 		file := &files[i]
 		if opts.MediaRoot == "" || file.size == 0 {
 			continue
 		}
 		mstore := NewMediaStore(tx)
+		if write, ok := placed[file.sha256hex]; ok {
+			row, err := mstore.recordFile(ctx, write, Ptr(actorUserID))
+			if err != nil {
+				return fmt.Errorf("import Anki package: record media %s: %w", file.sha256hex, err)
+			}
+			if row.Sha256 != file.sha256hex {
+				return fmt.Errorf("import Anki package: media %q was recorded under an unexpected digest", file.entry.Name)
+			}
+			continue
+		}
+		if opts.DryRun {
+			continue
+		}
 		stored, err := mstore.BySha256(ctx, file.sha256hex)
 		if err != nil {
 			return fmt.Errorf("import Anki package: check media %s: %w", file.sha256hex, err)
 		}
-		if stored != nil {
-			if opts.DryRun {
-				continue
-			}
-			if _, _, err := mstore.reuse(ctx, stored, Ptr(actorUserID)); err != nil {
-				return err
-			}
-			continue
+		if stored == nil {
+			// The bytes are written before the transaction; a missing row here means the package's
+			// media never reached the store, which must not be recorded as an empty import.
+			return fmt.Errorf("import Anki package: media %s was not written before the transaction", file.sha256hex)
 		}
-		report.MediaNew++
-		if opts.DryRun {
-			continue
-		}
-		rc, err := file.entry.Open()
-		if err != nil {
-			return fmt.Errorf("import Anki package: open media %q: %w", file.entry.Name, err)
-		}
-		mime, _ := mediatype.Classify(file.head, file.entry.Name)
-		row, abs, err := mstore.SaveStreamTracked(ctx, opts.MediaRoot, mime, rc, Ptr(actorUserID))
-		rc.Close()
-		if abs != "" {
-			*writtenMedia = append(*writtenMedia, mediaWrite{sha: file.sha256hex, abs: abs})
-		}
-		if err != nil {
+		if _, _, err := mstore.reuse(ctx, stored, Ptr(actorUserID)); err != nil {
 			return err
-		}
-		if row.Sha256 != file.sha256hex {
-			return fmt.Errorf("import Anki package: media %q streamed under an unexpected digest", file.entry.Name)
 		}
 	}
 

@@ -1618,4 +1618,6 @@ export const en: LocaleCatalog = {
   'occlusion.empty': 'No shapes yet. Add one with the buttons above.',
   'occlusion.remove': 'Remove this shape',
   'notetype.change.cards_added': 'Cards added',
+  // ---- Package import: every import slot is taken ----
+  'import.busy.refused': 'Another package import is already running on this server. Wait for it to finish, then try again.',
 };

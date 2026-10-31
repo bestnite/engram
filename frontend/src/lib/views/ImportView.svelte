@@ -95,6 +95,8 @@
       case 'package_too_large':
       case 'media_quota_exceeded':
         return 'package.error.too_large';
+      case 'deck_import_busy':
+        return 'import.busy.refused';
       case 'package_unknown_kind':
       case 'package_bad_format':
       case 'package_deck_meta_invalid':

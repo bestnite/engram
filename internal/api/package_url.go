@@ -62,6 +62,13 @@ func (a *API) ImportDeckPackageURL(ctx context.Context, u *store.User, apiKeyID 
 	if !a.importURL.Allow(urlImportLimitKey(u.ID)) {
 		return nil, newServiceError(http.StatusTooManyRequests, CodeRateLimited, "")
 	}
+	// Take the import slot before the download: a refused request starts no outbound request and
+	// spools nothing. The slot is released on every return path, including a panic.
+	release, err := a.ImportSlot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	// Download: address shape, public-address pinning and byte cap all live in the fetcher; the cap is
 	// package_max_bytes, the same source as file import.
 	limit := store.ResolvePackageLimits(ctx, a.db).MaxPackageBytes

@@ -1617,4 +1617,6 @@ export const zhCN: LocaleCatalog = {
   'occlusion.empty': '还没有图形。请用上方的按钮添加。',
   'occlusion.remove': '删除此图形',
   'notetype.change.cards_added': '新增卡片',
+  // ---- 卡组导入：所有导入名额都被占用 ----
+  'import.busy.refused': '服务器上已有另一个卡组导入正在进行。请等它结束后再试。',
 };

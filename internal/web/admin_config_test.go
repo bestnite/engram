@@ -59,17 +59,18 @@ func TestAdminSettingsReadAndSave(t *testing.T) {
 				}
 			}
 			switch row.Key {
-			case store.SettingKeyPackageMaxBytes, store.SettingKeyPackageMaxEntries, store.SettingKeyPackageMaxUnpackedBytes:
+			case store.SettingKeyPackageMaxBytes, store.SettingKeyPackageMaxEntries, store.SettingKeyPackageMaxUnpackedBytes, store.SettingKeyPackageMaxConcurrentImports:
 				packageDefaults[row.Key] = row.Value
 			}
 		}
 	}
-	// The three package caps are documented in the media section with their defaults.
+	// The four package caps are documented in the media section with their defaults.
 	wantDefaults := store.DefaultPackageImportLimits()
 	if packageDefaults[store.SettingKeyPackageMaxBytes] != strconv.FormatInt(wantDefaults.MaxPackageBytes, 10) ||
 		packageDefaults[store.SettingKeyPackageMaxEntries] != strconv.Itoa(wantDefaults.MaxEntries) ||
-		packageDefaults[store.SettingKeyPackageMaxUnpackedBytes] != strconv.FormatInt(wantDefaults.MaxUnpackedBytes, 10) {
-		t.Errorf("package cap defaults = %v, want %+v", packageDefaults, wantDefaults)
+		packageDefaults[store.SettingKeyPackageMaxUnpackedBytes] != strconv.FormatInt(wantDefaults.MaxUnpackedBytes, 10) ||
+		packageDefaults[store.SettingKeyPackageMaxConcurrentImports] != strconv.Itoa(store.DefaultPackageMaxConcurrentImports) {
+		t.Errorf("package cap defaults = %v, want %+v plus concurrent imports %d", packageDefaults, wantDefaults, store.DefaultPackageMaxConcurrentImports)
 	}
 	for _, want := range []string{"general", "media", "optimize"} {
 		if !names[want] {

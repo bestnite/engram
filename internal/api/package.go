@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 
@@ -214,6 +216,13 @@ func isRequestBodyTooLarge(err error) bool {
 // handleImportPackage is POST /api/v1/decks/import (multipart file upload).
 func (a *API) handleImportPackage(c *gin.Context) {
 	u, _ := CurrentUser(c)
+	// Take the import slot before the body is touched: a refused request must read and spool nothing.
+	release, err := a.ImportSlot(c.Request.Context())
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	defer release()
 	// Cap the request body at package_max_bytes before parsing multipart: gin spills parts beyond MaxMultipartMemory
 	// to a temp file, so setting no limit first would invite memory/disk amplification. This is the package cap,
 	// not the single-media upload cap: a 12 MB deck is a normal package even with the default 10 MiB media limit.
@@ -251,6 +260,56 @@ func (a *API) handleImportPackage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, report)
+}
+
+// importSlotGate bounds how many package imports run at the same time in one server process.
+//
+// Each import may spool a package body of up to package_max_bytes to a temporary file before it
+// parses anything, so a few simultaneous imports can fill the temporary disk. The gate never
+// waits: a request that finds no free slot is refused at once, because waiting would hold the
+// connection while a multi-gigabyte import finishes.
+type importSlotGate struct {
+	mu      sync.Mutex
+	running int
+}
+
+// acquire takes one slot when fewer than limit imports hold one, and reports whether it did.
+// A limit below 1 counts as 1: the setting may be edited at runtime and the gate must stay a gate.
+func (g *importSlotGate) acquire(limit int) bool {
+	if limit < 1 {
+		limit = 1
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.running >= limit {
+		return false
+	}
+	g.running++
+	return true
+}
+
+// release returns one slot to the gate.
+func (g *importSlotGate) release() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.running > 0 {
+		g.running--
+	}
+}
+
+// ImportSlot takes one package-import slot and returns the function that releases it.
+//
+// Every transport that can start an import calls this before it reads the request body or starts
+// a download; the returned function must be deferred so a panic also releases the slot. When no
+// slot is free the error is 429 deck_import_busy and names the configured limit.
+func (a *API) ImportSlot(ctx context.Context) (func(), error) {
+	limit := store.ResolvePackageMaxConcurrentImports(ctx, a.db)
+	if !a.importSlots.acquire(limit) {
+		return nil, newServiceError(http.StatusTooManyRequests, CodeDeckImportBusy,
+			fmt.Sprintf("the configured limit is %d", limit))
+	}
+	var once sync.Once
+	return func() { once.Do(a.importSlots.release) }, nil
 }
 
 // formatTargetID is used inline by strconv, no separate function is needed.
