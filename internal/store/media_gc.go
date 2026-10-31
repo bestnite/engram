@@ -42,6 +42,26 @@ func MarkOrphanedMedia(ctx context.Context, db *gorm.DB, now time.Time) (marked,
 	return marked, res.RowsAffected, nil
 }
 
+// clearOrphanedMedia clears the orphan mark on the given shas and returns the number of rows changed.
+//
+// A caller that is about to reuse already stored bytes calls this before its reuse becomes visible:
+// while the mark is set, a collection run may select the row and delete it together with its file,
+// and the caller would then reference bytes that no longer exist. Reusing the bytes through
+// MediaStore.Put or MediaStore.reuse clears the mark as part of the same write, but a caller that
+// reuses a row in a later transaction needs the mark cleared earlier.
+func clearOrphanedMedia(ctx context.Context, db *gorm.DB, shas []string) (int64, error) {
+	if len(shas) == 0 {
+		return 0, nil
+	}
+	res := db.WithContext(ctx).Model(&Media{}).
+		Where("sha256 IN ?", shas).Where("orphaned_at IS NOT NULL").
+		Update("orphaned_at", nil)
+	if res.Error != nil {
+		return 0, fmt.Errorf("store: clear orphaned media: %w", res.Error)
+	}
+	return res.RowsAffected, nil
+}
+
 // DeleteOrphanedMedia deletes media rows orphaned no later than before and still orphaned right now (at most limit rows),
 // together with their media_uploaders rows, returning the deleted rows (callers delete files based on RelPath).
 //

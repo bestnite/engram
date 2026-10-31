@@ -805,9 +805,42 @@ func ankiValues(note *anki.Note, target *ankiTypeTarget) map[string]string {
 // collide with another import's reference.
 func ankiNoteRef(guid string) string { return "anki:" + guid }
 
-// importAnkiPackage imports one decoded .apkg package. The media files are placed on disk before the
-// transaction opens; the transaction writes rows only and is rolled back under dry_run.
+// ankiImportPlacement is the state the media placement phase hands to the transaction phase of an
+// Anki import: the decoded package, the hashed media, the deck plan, the files placed on disk and
+// the report being filled. Keeping the two phases separate lets a test run a media collection
+// between them, which is the ordering the placement has to survive.
+type ankiImportPlacement struct {
+	actorUserID  uint64
+	opts         PackageImportOptions
+	targetKind   string
+	targetDeckID uint64
+	pkg          *anki.Package
+	files        []ankiMediaFile
+	plan         ankiDeckPlan
+	placed       map[string]mediaFileWrite
+	writtenMedia []mediaWrite
+	report       *PackageImportReport
+}
+
+// importAnkiPackage imports one decoded .apkg package in two phases: prepareAnkiImport places the
+// media files on disk before the transaction opens, and importAnkiPlacement opens the transaction
+// that writes the rows only.
 func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r io.ReaderAt, size int64, limits PackageImportLimits, opts PackageImportOptions, targetKind string, targetDeckID uint64) (*PackageImportReport, error) {
+	placement, err := s.prepareAnkiImport(ctx, actorUserID, r, size, limits, opts, targetKind, targetDeckID)
+	if err != nil {
+		return nil, err
+	}
+	return s.importAnkiPlacement(ctx, placement)
+}
+
+// prepareAnkiImport decodes the package, hashes its media, plans the decks, checks the media quota
+// and places the media bytes on disk. It returns the placement the transaction phase imports.
+//
+// The bytes are placed here, outside the transaction, because an .apkg may decompress to 4 GiB:
+// copying them inside the transaction would hold the database write lock for minutes, and on
+// SQLite every other user's review submission is a writer that would wait or fail. A failure while
+// placing removes only the files this run created.
+func (s *DeckStore) prepareAnkiImport(ctx context.Context, actorUserID uint64, r io.ReaderAt, size int64, limits PackageImportLimits, opts PackageImportOptions, targetKind string, targetDeckID uint64) (*ankiImportPlacement, error) {
 	ankiLimits := limits.ankiLimits()
 	pkg, err := anki.ReadWithLimits(r, size, ankiLimits)
 	if err != nil {
@@ -837,16 +870,33 @@ func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r
 		s.cleanupMediaWrites(ctx, writtenMedia)
 		return nil, err
 	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return s.importAnkiInTx(ctx, tx, actorUserID, pkg, files, placed, &plan, targetKind, targetDeckID, opts, report)
+	return &ankiImportPlacement{
+		actorUserID:  actorUserID,
+		opts:         opts,
+		targetKind:   targetKind,
+		targetDeckID: targetDeckID,
+		pkg:          pkg,
+		files:        files,
+		plan:         plan,
+		placed:       placed,
+		writtenMedia: writtenMedia,
+		report:       report,
+	}, nil
+}
+
+// importAnkiPlacement runs the import transaction over a prepared placement and removes the files
+// this run created when the transaction fails or rolls back under dry_run.
+func (s *DeckStore) importAnkiPlacement(ctx context.Context, placement *ankiImportPlacement) (*PackageImportReport, error) {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return s.importAnkiInTx(ctx, tx, placement.actorUserID, placement.pkg, placement.files, placement.placed, &placement.plan, placement.targetKind, placement.targetDeckID, placement.opts, placement.report)
 	})
 	if err != nil {
-		s.cleanupMediaWrites(ctx, writtenMedia)
+		s.cleanupMediaWrites(ctx, placement.writtenMedia)
 	}
 	if err != nil && !errors.Is(err, ErrPackageDryRun) {
 		return nil, err
 	}
-	return report, nil
+	return placement.report, nil
 }
 
 // placeAnkiMedia writes every new media file of the package to the content-addressed store before
@@ -855,16 +905,23 @@ func (s *DeckStore) importAnkiPackage(ctx context.Context, actorUserID uint64, r
 // An .apkg may decompress to 4 GiB, so copying those bytes inside the transaction would hold the
 // database write lock for minutes: on SQLite every other writer waits or fails, and every other
 // user's review submission is a writer. The transaction that follows therefore writes rows only.
-// A sha that already has a metadata row is not rewritten; the transaction reuses it. A dry run
-// places no file. writtenMedia records only the files this call created, so a rollback or a failed
-// run removes exactly those and never a file that existed before. placed carries the files whose
-// metadata row the transaction must write.
+// A sha that already has a metadata row is not rewritten; the transaction reuses it. Such a row
+// may still carry an orphan mark from an earlier collection run, so this call clears the mark
+// before the transaction opens: otherwise a collection run between the two phases could delete the
+// row and its file, and the transaction would then fail on media whose bytes it never wrote. A dry
+// run places no file and clears no mark. writtenMedia records only the files this call created, so
+// a rollback or a failed run removes exactly those and never a file that existed before. placed
+// carries the files whose metadata row the transaction must write.
 func (s *DeckStore) placeAnkiMedia(ctx context.Context, files []ankiMediaFile, opts PackageImportOptions, report *PackageImportReport) (map[string]mediaFileWrite, []mediaWrite, error) {
 	placed := make(map[string]mediaFileWrite, len(files))
 	if opts.MediaRoot == "" {
 		return placed, nil, nil
 	}
 	seen := make(map[string]bool, len(files))
+	// reusedShas are the stored rows this import will reuse in the transaction. Their orphan mark
+	// is cleared before the transaction opens, so a collection run that starts meanwhile cannot
+	// select them; a dry run clears nothing.
+	var reusedShas []string
 	mstore := NewMediaStore(s.db)
 	var writtenMedia []mediaWrite
 	for i := range files {
@@ -878,6 +935,9 @@ func (s *DeckStore) placeAnkiMedia(ctx context.Context, files []ankiMediaFile, o
 			return placed, writtenMedia, fmt.Errorf("import Anki package: check media %s: %w", file.sha256hex, err)
 		}
 		if stored != nil {
+			if !opts.DryRun {
+				reusedShas = append(reusedShas, file.sha256hex)
+			}
 			continue
 		}
 		report.MediaNew++
@@ -898,6 +958,9 @@ func (s *DeckStore) placeAnkiMedia(ctx context.Context, files []ankiMediaFile, o
 			writtenMedia = append(writtenMedia, mediaWrite{sha: file.sha256hex, abs: write.AbsPath})
 		}
 		placed[file.sha256hex] = write
+	}
+	if _, err := clearOrphanedMedia(ctx, s.db, reusedShas); err != nil {
+		return placed, writtenMedia, fmt.Errorf("import Anki package: %w", err)
 	}
 	return placed, writtenMedia, nil
 }
