@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	fsrs "github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -1042,7 +1043,6 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 	}
 	report.DeckID = deckID
 	if len(pkg.Preset.Weights) > 0 {
-		report.WeightsApplied = targetKind == PackageTargetNewDeck && opts.ApplyWeights
 		report.WeightsDiscarded = !report.WeightsApplied
 	}
 	pid, err := deckPublicID(ctx, tx, deckID)
@@ -1284,7 +1284,16 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 			return 0, err
 		}
 		preset, err := selectImportPreset(ctx, tx, actorUserID, opts, func() (Preset, error) {
-			return createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset, name, opts.ApplyWeights)
+			if opts.ApplyWeights && len(pkg.Preset.Weights) > 0 {
+				if _, err := fsrs.MigrateWeights(pkg.Preset.Weights); err != nil {
+					report.WeightsInvalid = true
+				}
+			}
+			p, err := createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset, name, opts.ApplyWeights)
+			if err == nil && p.WeightsJSON != nil {
+				report.WeightsApplied = true
+			}
+			return p, err
 		})
 		if err != nil {
 			return 0, err
@@ -1415,7 +1424,8 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 	if p.MaximumIntervalDays <= 0 {
 		p.MaximumIntervalDays = DefaultMaximumIntervalDays
 	}
-	if applyWeights && len(pp.Weights) > 0 {
+	_, weightsErr := fsrs.MigrateWeights(pp.Weights)
+	if applyWeights && len(pp.Weights) > 0 && weightsErr == nil {
 		raw, err := json.Marshal(pp.Weights)
 		if err != nil {
 			return Preset{}, err

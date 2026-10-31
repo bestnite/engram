@@ -124,6 +124,10 @@ func TestImportPackageApplyWeights(t *testing.T) {
 			weightedDeck := seedWeightedPackageDeck(t, src, owner)
 			withWeights := exportZip(t, src, owner, weightedDeck, PackageOptions{IncludeWeights: true})
 			withoutWeights := exportZip(t, src, owner, weightedDeck, PackageOptions{})
+			if err := src.Model(&Preset{}).Where("id = ?", deckPreset(t, src, weightedDeck).ID).Update("weights_json", "[1,2,3]").Error; err != nil {
+				t.Fatal(err)
+			}
+			invalidWeights := exportZip(t, src, owner, weightedDeck, PackageOptions{IncludeWeights: true})
 
 			importer := seedUsers(t, dst, "pkg_w_dst")[0]
 			existing := seedPresetDeck(t, dst, importer)
@@ -136,11 +140,15 @@ func TestImportPackageApplyWeights(t *testing.T) {
 				apply         bool
 				wantApplied   bool
 				wantDiscarded bool
+				wantInvalid   bool
 			}{
-				{"new deck ignores weights by default", withWeights, PackageTargetNewDeck, false, false, true},
-				{"new deck applies weights when asked", withWeights, PackageTargetNewDeck, true, true, false},
-				{"into deck never touches the target preset", withWeights, fmt.Sprintf("into_deck:%d", existing), true, false, true},
-				{"package without weights reports neither", withoutWeights, PackageTargetNewDeck, true, false, false},
+				{"new deck ignores weights by default", withWeights, PackageTargetNewDeck, false, false, true, false},
+				{"new deck applies weights when asked", withWeights, PackageTargetNewDeck, true, true, false, false},
+				{"into deck never touches the target preset", withWeights, fmt.Sprintf("into_deck:%d", existing), true, false, true, false},
+				{"package without weights reports neither", withoutWeights, PackageTargetNewDeck, true, false, false, false},
+				{"invalid weights are discarded", invalidWeights, PackageTargetNewDeck, true, false, true, true},
+				{"invalid weights ignored when disabled", invalidWeights, PackageTargetNewDeck, false, false, true, false},
+				{"invalid weights ignored for existing deck", invalidWeights, fmt.Sprintf("into_deck:%d", existing), true, false, true, false},
 			}
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
@@ -153,6 +161,9 @@ func TestImportPackageApplyWeights(t *testing.T) {
 					if report.WeightsApplied != tc.wantApplied || report.WeightsDiscarded != tc.wantDiscarded {
 						t.Fatalf("weights_applied/discarded = %v/%v, want %v/%v",
 							report.WeightsApplied, report.WeightsDiscarded, tc.wantApplied, tc.wantDiscarded)
+					}
+					if report.WeightsInvalid != tc.wantInvalid {
+						t.Fatalf("weights_invalid = %v, want %v", report.WeightsInvalid, tc.wantInvalid)
 					}
 					got := deckPreset(t, dst, report.DeckID)
 					if tc.target != PackageTargetNewDeck {
