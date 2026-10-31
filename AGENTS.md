@@ -151,8 +151,13 @@ this file, and commit messages.
 - **Not covered by the compatibility target.** Schedulers other than FSRS, queue behaviour (sibling
   burying, display order, new-card position, leeches, subdeck limits, auto-advance, timers),
   importing progress or the review log from an `.apkg` (imported cards start as new cards), deck
-  hierarchy behaviour, `.apkg` export, and Anki's browser, search syntax, sync, statistics and
-  add-ons. Adding any of them is a new decision, not a compatibility fix.
+  hierarchy behaviour, and Anki's browser, search syntax, sync, statistics and add-ons. Adding any of
+  them is a new decision, not a compatibility fix.
+- **Export format.** engram writes an `.apkg` the reference release imports: the collection is legacy
+  schema 11 in `collection.anki21`; note types, notes, cards, media and one deck configuration travel;
+  the caller's own card states, review log and FSRS weights travel only when requested; and answer
+  controls ride in one note type key (`engram`) that Anki keeps through import and export. Parameters
+  the legacy deck configuration cannot express are left out deliberately.
 - **Ported files.** A Go or TypeScript file ported from Anki keeps Anki's header
   (`Copyright: Ankitects Pty Ltd and contributors`, `License: GNU AGPL, version 3 or later`) and
   names the upstream path it was ported from, at the reference tag.
