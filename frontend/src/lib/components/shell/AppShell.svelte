@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { Dialog as BitsDialog } from 'bits-ui';
-  import { Menu, X } from '@lucide/svelte';
+  import { Menu } from '@lucide/svelte';
   import { t } from '../../i18n';
   import { routeStore } from '../../router';
   import { authStore } from '../../auth';
@@ -18,7 +18,7 @@
    * App shell: picks one of three layouts by route and login state.
    *
    * - sidebar: regular pages when logged in. On desktop the sidebar is persistent (collapsible into an icon rail); on narrow screens it becomes a top bar + drawer.
-   * - focus: the review page. Only a thin top bar and "exit" are kept so navigation does not distract.
+   * - focus: the review page. No app bar and no navigation: a long card needs the height, and the page carries its own exit link.
    * - bare: logged-out pages such as login, registration and password recovery, plus public pages accessed while logged out (share browsing, unsubscribe).
    *
    * While the session is still loading it lays out as "logged in": the vast majority of visits come from logged-in users, and drawing the sidebar first and then switching away
@@ -116,17 +116,6 @@
   </div>
 {:else if layout === 'focus'}
   <div class="flex min-h-screen flex-col bg-background text-foreground">
-    <header class="flex h-14 items-center justify-between border-b border-border px-4">
-      <AppLogo />
-      <a
-        href="/"
-        class="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        data-testid="focus-exit"
-      >
-        <X class="size-4" aria-hidden="true" />
-        {$t('sidebar.exit_review')}
-      </a>
-    </header>
     <main class="min-w-0 flex-1">
       {@render children()}
     </main>

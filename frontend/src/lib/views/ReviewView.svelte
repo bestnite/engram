@@ -842,19 +842,34 @@
 {/snippet}
 
 <Page as="section">
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-foreground">{$t('review.title')}</h1>
-      {#if scopeTags.length}
-        <div class="mt-1.5 flex flex-wrap items-center gap-1" data-testid="review-scope-tags">
-          <span class="text-xs text-muted-foreground">{$t('review.tag_scope')}</span>
-          {#each scopeTags as tag (tag)}
-            <span class="inline-flex h-5 max-w-full items-center truncate rounded-full border border-border px-2 text-xs text-muted-foreground">{tag}</span>
-          {/each}
-        </div>
-      {/if}
-    </div>
-    <div class="flex items-center gap-2 self-start sm:self-auto">
+  <!-- The review page has no app bar: a long card needs the height. The title stays for assistive technology only, and the
+       row keeps the queue status on the left and the way out on the right. -->
+  <h1 class="sr-only">{$t('review.title')}</h1>
+  <div class="mb-5 flex items-start justify-between gap-3">
+    <div class="flex min-w-0 flex-wrap items-center gap-2">
+      <div
+        class="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-border shadow-xs text-xs font-medium text-muted-foreground"
+        aria-live="polite"
+      >
+        <!-- The pulse marks the due queue as a whole, not one half of the split: it stays whether or not any new cards are left. -->
+        <span class="w-2 h-2 shrink-0 rounded-full bg-blue-500 animate-pulse"></span>
+        <!-- A new count of zero is hidden instead of shown as "new 0": the review count already reports the whole due total. -->
+        {#if newRemaining > 0}
+          <span class="inline-flex items-center gap-1.5" data-testid="review-due-new">
+            <span>{$t('review.due_new')}</span>
+            <strong class="font-mono text-foreground text-sm">{newRemaining}</strong>
+          </span>
+          <span class="w-1 h-3 border-r border-input"></span>
+        {/if}
+        <span class="inline-flex items-center gap-1.5" data-testid="review-due-review">
+          <span>{$t('review.due_review')}</span>
+          <strong class="font-mono text-foreground text-sm">{reviewRemaining}</strong>
+        </span>
+        <span class="w-1 h-3 border-r border-input"></span>
+        <span class="text-muted-foreground">
+          {$t('review.done', { count: done })}
+        </span>
+      </div>
       <!-- Undo the last rating: a self-graded submission has no result panel, so the entry lives here; it is hidden while the graded card's panel is open, avoiding two entries. -->
       {#if lastUndo && !feedback}
         <Button variant="outline" size="sm" testId="review-undo-last" disabled={submitting} onclick={() => void undo()}>
@@ -862,30 +877,25 @@
           <span>{undoLabel()}</span>
         </Button>
       {/if}
-      <div
-        class="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white dark:bg-zinc-900 border border-border shadow-xs text-xs font-medium text-muted-foreground"
-        aria-live="polite"
-      >
-      <!-- The pulse marks the due queue as a whole, not one half of the split: it stays whether or not any new cards are left. -->
-      <span class="w-2 h-2 shrink-0 rounded-full bg-blue-500 animate-pulse"></span>
-      <!-- A new count of zero is hidden instead of shown as "new 0": the review count already reports the whole due total. -->
-      {#if newRemaining > 0}
-        <span class="inline-flex items-center gap-1.5" data-testid="review-due-new">
-          <span>{$t('review.due_new')}</span>
-          <strong class="font-mono text-foreground text-sm">{newRemaining}</strong>
-        </span>
-        <span class="w-1 h-3 border-r border-input"></span>
+      {#if scopeTags.length}
+        <div class="flex flex-wrap items-center gap-1" data-testid="review-scope-tags">
+          <span class="text-xs text-muted-foreground">{$t('review.tag_scope')}</span>
+          {#each scopeTags as tag (tag)}
+            <span class="inline-flex h-5 max-w-full items-center truncate rounded-full border border-border px-2 text-xs text-muted-foreground">{tag}</span>
+          {/each}
+        </div>
       {/if}
-      <span class="inline-flex items-center gap-1.5" data-testid="review-due-review">
-        <span>{$t('review.due_review')}</span>
-        <strong class="font-mono text-foreground text-sm">{reviewRemaining}</strong>
-      </span>
-      <span class="w-1 h-3 border-r border-input"></span>
-      <span class="text-muted-foreground">
-        {$t('review.done', { count: done })}
-      </span>
-      </div>
     </div>
+    <!-- On a narrow screen the label gives way to the status row; the icon keeps the link's name through aria-label. -->
+    <a
+      href="/"
+      class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      aria-label={$t('sidebar.exit_review')}
+      data-testid="review-exit"
+    >
+      <X class="size-4" aria-hidden="true" />
+      <span class="hidden sm:inline">{$t('sidebar.exit_review')}</span>
+    </a>
   </div>
   <div
     class="card-elevated min-h-72 p-6 sm:p-10 rounded-2xl flex flex-col justify-center touch-manipulation select-none"
