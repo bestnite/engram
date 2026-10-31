@@ -1474,6 +1474,10 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID uint64, pkg *an
 		}
 		states := [...]string{"new", "learning", "review", "relearning"}
 		state := CardState{CardID: id, UserID: userID, State: states[card.Type], Reps: card.Reps, Lapses: card.Lapses, ScheduledDays: card.Interval, StepIndex: card.Left}
+		// Anki uses negative intervals for learning steps in seconds, not day counts.
+		if state.ScheduledDays < 0 {
+			state.ScheduledDays = 0
+		}
 		if card.Type == 1 || card.Type == 3 {
 			due := time.Unix(card.Due, 0).UTC()
 			state.DueAt = &due
@@ -1567,8 +1571,14 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID uint64, pkg *an
 			report.ReviewsSkipped++
 			continue
 		}
-		elapsed, duration := r.Time, float64(r.Interval)
-		review := Review{CardID: id, UserID: userID, Rating: r.Ease, GradeSource: "self", ReviewedAt: at, ReviewDay: reviewday.Day(at, loc, cutoff), ElapsedMS: &elapsed, DurationDays: &duration, StateBefore: before}
+		elapsed := r.Time
+		var duration *float64
+		// A negative interval encodes seconds until a learning step, not days.
+		if r.Interval >= 0 {
+			value := float64(r.Interval)
+			duration = &value
+		}
+		review := Review{CardID: id, UserID: userID, Rating: r.Ease, GradeSource: "self", ReviewedAt: at, ReviewDay: reviewday.Day(at, loc, cutoff), ElapsedMS: &elapsed, DurationDays: duration, StateBefore: before}
 		if err := tx.WithContext(ctx).Create(&review).Error; err != nil {
 			return fmt.Errorf("create Anki review: %w", err)
 		}

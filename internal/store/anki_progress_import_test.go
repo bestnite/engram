@@ -52,7 +52,11 @@ func TestRealAnkiPackage(t *testing.T) {
 				t.Logf("state state=%s due=%v stability=%g difficulty=%g reps=%d lapses=%d last_review=%s", s.State, s.DueAt, *s.Stability, *s.Difficulty, s.Reps, s.Lapses, s.LastReviewAt.Format(time.RFC3339))
 			}
 			for _, r := range reviews {
-				t.Logf("review rating=%d reviewed_at=%s elapsed_ms=%d duration_days=%g state_before=%d review_day=%s", r.Rating, r.ReviewedAt.Format(time.RFC3339Nano), *r.ElapsedMS, *r.DurationDays, r.StateBefore, r.ReviewDay)
+				duration := "NULL"
+				if r.DurationDays != nil {
+					duration = fmt.Sprint(*r.DurationDays)
+				}
+				t.Logf("review rating=%d reviewed_at=%s elapsed_ms=%d duration_days=%s state_before=%d review_day=%s", r.Rating, r.ReviewedAt.Format(time.RFC3339Nano), *r.ElapsedMS, duration, r.StateBefore, r.ReviewDay)
 			}
 			t.Logf("preset retention=%g learning=%s relearning=%s maximum_interval=%d weights=%s", preset.DesiredRetention, preset.LearningSteps, preset.RelearningSteps, preset.MaximumIntervalDays, *preset.WeightsJSON)
 		})
@@ -81,11 +85,12 @@ func TestAnkiProgressImport(t *testing.T) {
 					pkg.Cards[0].Interval, pkg.Cards[0].Reps, pkg.Cards[0].Lapses = 7, 3, 1
 					pkg.Cards[0].Data = `{"s":4.5,"d":6.2,"lrt":1600000000000}`
 					pkg.Cards[1].Queue = -1
+					pkg.Cards[1].Interval = -600
 					pkg.Cards[1].Data = `{"lrt":1600000000}`
 					cid, newID := pkg.Cards[0].ID, pkg.Cards[1].ID
 					pkg.Reviews = []anki.Review{
 						{ID: 1600000000001, CardID: cid, Ease: 3, Interval: 7, Time: 1200, Type: 1},
-						{ID: 1600000000002, CardID: newID, Ease: 4, Interval: 1, Time: 500, Type: 0},
+						{ID: 1600000000002, CardID: newID, Ease: 4, Interval: -600, Time: 500, Type: 0},
 						{ID: 1600000000003, CardID: cid, Ease: 0, Type: 0},
 						{ID: 1600000000004, CardID: cid, Ease: 5, Type: 0},
 						{ID: 1600000000005, CardID: cid, Ease: 3, Type: 4},
@@ -132,10 +137,10 @@ func TestAnkiProgressImport(t *testing.T) {
 					if first.State != "review" || first.Stability == nil || *first.Stability != 4.5 || first.Difficulty == nil || *first.Difficulty != 6.2 || first.LastReviewAt == nil || first.LastReviewAt.UnixMilli() != 1600000000000 || first.DueAt == nil || first.DueAt.Unix() != pkg.CreatedAt+5*86400 || first.Reps != 3 || first.ScheduledDays != 7 {
 						t.Fatalf("review state: %+v", first)
 					}
-					if second.State != "new" || second.SuspendedAt == nil || !second.SuspendedAt.Equal(now) || second.LastReviewAt == nil || second.LastReviewAt.Unix() != 1600000000 {
+					if second.State != "new" || second.ScheduledDays != 0 || second.SuspendedAt == nil || !second.SuspendedAt.Equal(now) || second.LastReviewAt == nil || second.LastReviewAt.Unix() != 1600000000 {
 						t.Fatalf("suspended state: %+v", second)
 					}
-					if reviews[0].StateBefore != 2 || reviews[0].GradeSource != "self" || reviews[0].ElapsedMS == nil || *reviews[0].ElapsedMS != 1200 || reviews[0].DurationDays == nil || *reviews[0].DurationDays != 7 || reviews[0].PublicID == "" || reviews[1].StateBefore != 0 {
+					if reviews[0].StateBefore != 2 || reviews[0].GradeSource != "self" || reviews[0].ElapsedMS == nil || *reviews[0].ElapsedMS != 1200 || reviews[0].DurationDays == nil || *reviews[0].DurationDays != 7 || reviews[0].PublicID == "" || reviews[1].StateBefore != 0 || reviews[1].DurationDays != nil || reviews[1].Rating != 4 || reviews[1].ElapsedMS == nil || *reviews[1].ElapsedMS != 500 || reviews[1].ReviewedAt.UnixMilli() != 1600000000002 || reviews[1].GradeSource != "self" {
 						t.Fatalf("reviews: %+v", reviews)
 					}
 					again := &PackageImportReport{}
