@@ -1517,6 +1517,15 @@ export class ApiClient {
     });
   }
 
+  /** Set one user's media quota (POST /api/v1/admin/users/:id/media-quota). */
+  async setAdminUserMediaQuota(id: string, body: import('./types').AdminUserMediaQuotaRequest): Promise<void> {
+    if (!this.csrfToken) await this.getSession();
+    await this.request<void>(`/api/v1/admin/users/${encodeURIComponent(String(id))}/media-quota`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
   /** Read registration policy, allowlist and invite list (GET /api/v1/admin/registration). */
   async getAdminRegistration(): Promise<import('./types').AdminRegistrationResponse> {
     return this.request<import('./types').AdminRegistrationResponse>('/api/v1/admin/registration');

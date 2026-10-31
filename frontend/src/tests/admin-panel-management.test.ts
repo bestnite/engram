@@ -13,13 +13,15 @@ import { routes } from '../lib/router/routes';
 
 const users: AdminUsersResponse = {
   users: [
-    { id: '1', username: 'owner', email: 'owner@example.com', display_name: 'Owner', role: 'admin', status: 'active', decks: 2, cards: 5, reviews: 9, is_self: true },
-    { id: '2', username: 'alice', email: 'alice@example.com', display_name: 'Alice', role: 'user', status: 'disabled', decks: 1, cards: 1, reviews: 0, is_self: false },
+    { id: '1', username: 'owner', email: 'owner@example.com', display_name: 'Owner', role: 'admin', status: 'active', decks: 2, cards: 5, reviews: 9, is_self: true, media_quota_bytes: null, media_used_bytes: 1536 },
+    { id: '2', username: 'alice', email: 'alice@example.com', display_name: 'Alice', role: 'user', status: 'disabled', decks: 1, cards: 1, reviews: 0, is_self: false, media_quota_bytes: 0, media_used_bytes: 0 },
+    { id: '4', username: 'bob', email: 'bob@example.com', display_name: 'Bob', role: 'user', status: 'active', decks: 0, cards: 0, reviews: 0, is_self: false, media_quota_bytes: 10485760, media_used_bytes: 2097152 },
   ],
   page: 1,
   pages: 2,
   total: 7,
   query: '',
+  default_media_quota_bytes: 104857600,
 };
 
 const registration: AdminRegistrationResponse = {
@@ -50,6 +52,19 @@ describe('Admin management views render server-provided truth', () => {
     expect(html).toContain('已禁用');
     // Creating a user moved into a dialog: the page has the button that opens it, and the form is inside the dialog.
     expect(html).toContain('data-testid="admin-users-create-open"');
+  });
+
+  it('shows each user\'s media usage against the quota that applies to them', () => {
+    const { html } = render(AdminUsersView, { props: { initialLoading: false, initialData: users } });
+    const cell = (id: string) => {
+      const match = new RegExp(`data-testid="admin-users-media-${id}"[^>]*>([\\s\\S]*?)</td>`).exec(html);
+      return (match?.[1] ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    };
+    // No setting of their own: the instance quota, and no badge.
+    expect(cell('1')).toBe('1.5 KiB / 100 MiB');
+    // An explicit unlimited and a personal limit are both marked as set for this user.
+    expect(cell('2')).toBe('0 B / 不限 单独设置');
+    expect(cell('4')).toBe('2 MiB / 10 MiB 单独设置');
   });
 
   it('renders the registration policy, domains and invite table', () => {

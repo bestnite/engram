@@ -11,4 +11,7 @@ const (
 	ActionUserPasswordReset = "user.password_reset"
 	ActionUserForceLogout   = "user.force_logout"
 	ActionUserDelete        = "user.delete"
+	// ActionUserMediaQuota records an administrator changing one user's media quota; the detail holds the old and the
+	// new value in bytes, null meaning 'follows the instance-wide quota'.
+	ActionUserMediaQuota = "user.media_quota_change"
 )

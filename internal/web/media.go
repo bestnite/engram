@@ -60,11 +60,12 @@ func (s *Server) deckMediaUpload(c *gin.Context) {
 	s.storeUpload(c, user)
 }
 
-// userMediaQuota resolves the effective per-user total media quota (bytes): environment variable > settings table > 0.
-// 0 (including unconfigured) means unlimited — being off by default is deliberate: no picking a number for the admin that nobody agreed to.
-// The parsing shares internal/media.ResolveUserQuotaBytes with the deck package import chain, so the rules cannot drift apart.
-func (s *Server) userMediaQuota(ctx context.Context) int64 {
-	return media.ResolveUserQuotaBytes(ctx, s.db)
+// userMediaQuota resolves the media quota (bytes) of one user: the administrator's setting for that user, otherwise
+// environment variable > settings table > 0. 0 (including unconfigured) means unlimited — being off by default is
+// deliberate: no picking a number for the admin that nobody agreed to. The rule is internal/media.UserQuotaBytes, shared
+// with the deck package import chain, so the two cannot drift apart.
+func (s *Server) userMediaQuota(ctx context.Context, user *store.User) int64 {
+	return media.UserQuotaBytes(ctx, s.db, user)
 }
 
 // multipartOverheadBytes is the allowance for the upload body beyond the single-file limit (boundaries, part headers, other small fields).
@@ -122,7 +123,7 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		return
 	}
 	// Per-user total quota: checked only when a positive limit is configured; 0/unconfigured = unlimited.
-	if quota := s.userMediaQuota(ctx); quota > 0 {
+	if quota := s.userMediaQuota(ctx, user); quota > 0 {
 		if !s.checkMediaQuota(c, user, raw, quota) {
 			return
 		}

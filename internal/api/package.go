@@ -45,9 +45,10 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 	}
 	opts.Target = target
 	opts.MediaRoot = a.mediaRoot
-	// Hand the importer's currently effective media quota to the store layer; all four entries (REST/MCP/CLI/Web) go through this method,
-	// so they share one resolution and nobody can bypass the quota check.
-	opts.MediaQuotaBytes = media.ResolveUserQuotaBytes(ctx, a.db)
+	// Hand the importer's currently effective media quota (their own setting, else the instance-wide one) to the store
+	// layer; all four entries (REST/MCP/CLI/Web) go through this method, so they share one resolution and nobody can
+	// bypass the quota check.
+	opts.MediaQuotaBytes = media.UserQuotaBytes(ctx, a.db, u)
 	// The package caps are deployment settings resolved once per import, the same way the media
 	// quota is: every transport that reaches this method uses the same values.
 	opts.Limits = store.ResolvePackageLimits(ctx, a.db)

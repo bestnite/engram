@@ -98,6 +98,7 @@ func (s *Server) registerAdminAPIRoutes(router *gin.Engine) {
 	g.POST("/users/:id/password", s.sessions.CSRFMiddleware(), s.adminUserResetPassword)
 	g.POST("/users/:id/logout", s.sessions.CSRFMiddleware(), s.adminUserForceLogout)
 	g.POST("/users/:id/delete", s.sessions.CSRFMiddleware(), s.adminUserDelete)
+	g.POST("/users/:id/media-quota", s.sessions.CSRFMiddleware(), s.adminUserMediaQuota)
 
 	// Mail templates: list reads + save / delete / preview / test send (writes go through CSRF).
 	g.GET("/mail-templates", s.adminMailTemplates)

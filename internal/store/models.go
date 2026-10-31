@@ -40,7 +40,11 @@ type User struct {
 	LearnAheadMinutes *int `gorm:"column:learn_ahead_minutes" json:"learn_ahead_minutes,omitempty"`
 	// ShareAcceptFrom is 'who may share decks with me': anyone | whitelist | nobody.
 	// NULL is treated as anyone (matching the behavior before this shipped: back then anyone could be shared with).
-	ShareAcceptFrom *string    `gorm:"column:share_accept_from" json:"share_accept_from,omitempty"`
+	ShareAcceptFrom *string `gorm:"column:share_accept_from" json:"share_accept_from,omitempty"`
+	// MediaQuotaBytes is the administrator's media quota for this user alone, in bytes. NULL follows the instance-wide
+	// quota, 0 is unlimited and a positive value is the limit. It is a nullable pointer because 0 is a legal value that
+	// must stay distinct from 'not set'. It is not part of the user's JSON: only the admin user list reports it.
+	MediaQuotaBytes *int64     `gorm:"column:media_quota_bytes" json:"-"`
 	CreatedAt       time.Time  `gorm:"not null" json:"created_at"`
 	LastSeenAt      *time.Time `json:"last_seen_at,omitempty"`
 }

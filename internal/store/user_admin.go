@@ -178,3 +178,19 @@ func DeleteUserTx(ctx context.Context, tx *gorm.DB, userID uint64) error {
 	}
 	return nil
 }
+
+// SetMediaQuota stores one user's media quota in bytes: nil follows the instance-wide quota, 0 is unlimited and a
+// positive value is the limit. A negative value is rejected, because it has no meaning a reader could rely on.
+func (s *UserStore) SetMediaQuota(ctx context.Context, userID uint64, quota *int64) error {
+	if quota != nil && *quota < 0 {
+		return fmt.Errorf("store: media quota %d for user %d is negative", *quota, userID)
+	}
+	res := s.db.WithContext(ctx).Model(&User{}).Where("id = ?", userID).Update("media_quota_bytes", quota)
+	if res.Error != nil {
+		return fmt.Errorf("store: set media quota for user %d: %w", userID, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}

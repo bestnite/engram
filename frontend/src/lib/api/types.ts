@@ -1470,6 +1470,10 @@ export interface AdminUser {
   cards: number;
   reviews: number;
   is_self: boolean;
+  /** The administrator's media quota for this user in bytes: null follows the instance-wide quota, 0 is unlimited. */
+  media_quota_bytes: number | null;
+  /** The media bytes charged to this user. */
+  media_used_bytes: number;
 }
 
 /** GET /api/v1/admin/users response. */
@@ -1479,7 +1483,17 @@ export interface AdminUsersResponse {
   pages: number;
   total: number;
   query: string;
+  /** The instance-wide media quota a user without their own setting gets; 0 is unlimited. */
+  default_media_quota_bytes: number;
 }
+
+/**
+ * POST /api/v1/admin/users/:id/media-quota body: follow the instance-wide quota, no limit, or a limit of `bytes` (> 0).
+ */
+export type AdminUserMediaQuotaRequest =
+  | { mode: 'default' }
+  | { mode: 'unlimited' }
+  | { mode: 'limit'; bytes: number };
 
 /** POST /api/v1/admin/users request. */
 export interface AdminUserCreateRequest {

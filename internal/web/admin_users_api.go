@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/auth"
+	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -30,6 +31,10 @@ type adminUser struct {
 	Cards       int64  `json:"cards"`
 	Reviews     int64  `json:"reviews"`
 	IsSelf      bool   `json:"is_self"`
+	// MediaQuotaBytes is the administrator's quota for this user: null follows the instance-wide quota, 0 is unlimited.
+	MediaQuotaBytes *int64 `json:"media_quota_bytes"`
+	// MediaUsedBytes is the media charged to this user, by the rule of store.UserMediaUsage.
+	MediaUsedBytes int64 `json:"media_used_bytes"`
 }
 
 // adminUsersResponse is the user list response; query echoes the search term so paging links keep the filter.
@@ -39,6 +44,8 @@ type adminUsersResponse struct {
 	Pages int         `json:"pages"`
 	Total int64       `json:"total"`
 	Query string      `json:"query"`
+	// DefaultMediaQuotaBytes is the instance-wide quota a user without their own setting gets; 0 is unlimited.
+	DefaultMediaQuotaBytes int64 `json:"default_media_quota_bytes"`
 }
 
 // adminUserCreateRequest is the request body for creating a local account.
@@ -59,6 +66,13 @@ type adminUserStatusRequest struct {
 type adminUserRoleRequest struct {
 	Role    string `json:"role"`
 	Confirm bool   `json:"confirm"`
+}
+
+// adminUserMediaQuotaRequest sets one user's media quota. mode is default (follow the instance-wide quota), unlimited,
+// or limit, which needs a positive bytes value.
+type adminUserMediaQuotaRequest struct {
+	Mode  string `json:"mode"`
+	Bytes int64  `json:"bytes"`
 }
 
 // adminUserConfirmRequest is the request body for dangerous actions that only need confirmation (reset password / delete).
@@ -94,18 +108,27 @@ func (s *Server) adminUsers(c *gin.Context) {
 		if err != nil {
 			s.logger.Error("spa admin: usage counts failed", "user_id", u.ID, "error", err)
 		}
+		mediaUsage, err := store.UserMediaUsage(ctx, s.db, u.ID)
+		if err != nil {
+			s.logger.Error("spa admin: media usage failed", "user_id", u.ID, "error", err)
+		}
 		rows = append(rows, adminUser{
 			ID: u.PublicID, Username: u.Username, Email: u.Email, DisplayName: u.DisplayName,
 			Role: u.Role, Status: u.Status,
 			Decks: usage.Decks, Cards: usage.Cards, Reviews: usage.Reviews,
-			IsSelf: u.ID == currentID,
+			IsSelf:          u.ID == currentID,
+			MediaQuotaBytes: u.MediaQuotaBytes,
+			MediaUsedBytes:  mediaUsage.Bytes,
 		})
 	}
 	pages := int((total + int64(size) - 1) / int64(size))
 	if pages < 1 {
 		pages = 1
 	}
-	c.JSON(http.StatusOK, adminUsersResponse{Users: rows, Page: page, Pages: pages, Total: total, Query: query})
+	c.JSON(http.StatusOK, adminUsersResponse{
+		Users: rows, Page: page, Pages: pages, Total: total, Query: query,
+		DefaultMediaQuotaBytes: media.ResolveUserQuotaBytes(ctx, s.db),
+	})
 }
 
 // adminUserCreate creates a local account (admins only). Validation reuses registerInputErrorCode,
@@ -358,6 +381,53 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 		UserID: store.Ptr(actor.ID), Action: store.ActionUserDelete,
 		TargetType: "user", TargetID: store.Ptr(target.ID),
 		Detail: map[string]any{"username": target.Username},
+	})
+	c.Status(http.StatusNoContent)
+}
+
+// adminUserMediaQuota sets or clears one user's media quota. The new value applies to the next upload or import; media
+// already stored is never removed, so lowering the quota below the current usage only blocks further additions.
+func (s *Server) adminUserMediaQuota(c *gin.Context) {
+	actor, ok := auth.CurrentUser(c)
+	if !ok {
+		adminError(c, http.StatusForbidden, "forbidden")
+		return
+	}
+	var req adminUserMediaQuotaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		adminError(c, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	var quota *int64
+	switch strings.TrimSpace(req.Mode) {
+	case "default":
+		quota = nil
+	case "unlimited":
+		quota = store.Ptr(int64(0))
+	case "limit":
+		if req.Bytes <= 0 {
+			adminError(c, http.StatusBadRequest, "invalid_quota")
+			return
+		}
+		quota = store.Ptr(req.Bytes)
+	default:
+		adminError(c, http.StatusBadRequest, "invalid_quota")
+		return
+	}
+	target, ok := s.adminTargetUser(c)
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	if err := s.users.SetMediaQuota(ctx, target.ID, quota); err != nil {
+		s.logger.Error("spa admin: set media quota failed", "user_id", target.ID, "error", err)
+		adminError(c, http.StatusInternalServerError, "save_failed")
+		return
+	}
+	s.auditor.Record(ctx, store.AuditEntry{
+		UserID: store.Ptr(actor.ID), Action: store.ActionUserMediaQuota,
+		TargetType: "user", TargetID: store.Ptr(target.ID),
+		Detail: map[string]any{"from": target.MediaQuotaBytes, "to": quota},
 	})
 	c.Status(http.StatusNoContent)
 }

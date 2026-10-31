@@ -98,3 +98,39 @@ func TestImportPackageCountsMediaAgainstImporterQuota(t *testing.T) {
 		t.Fatalf("rejected import created %d deck(s), want 0", decks)
 	}
 }
+
+// TestImportPackageUsesTheImportersOwnQuota asserts the REST import charges media against the importer's own quota
+// when an administrator set one: a personal limit refuses a package the instance quota would accept, and a personal
+// 'unlimited' accepts a package the instance quota would refuse.
+func TestImportPackageUsesTheImportersOwnQuota(t *testing.T) {
+	cases := []struct {
+		name     string
+		instance string
+		personal int64
+		want     int
+	}{
+		{name: "personal limit below the package", instance: "0", personal: 16, want: http.StatusRequestEntityTooLarge},
+		{name: "personal unlimited above the instance quota", instance: "16", personal: 0, want: http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t, 60, 60)
+			user := seedUser(t, env.db, "pkg_own_quota", store.RoleUser)
+			k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
+			t.Setenv("MEDIA_USER_QUOTA_BYTES", "")
+			if err := store.PutSetting(context.Background(), env.db, "media_user_quota_bytes", tc.instance, nil, time.Now().UTC()); err != nil {
+				t.Fatalf("PutSetting: %v", err)
+			}
+			if err := store.NewUserStore(env.db).SetMediaQuota(context.Background(), user.ID, store.Ptr(tc.personal)); err != nil {
+				t.Fatalf("SetMediaQuota: %v", err)
+			}
+
+			raw, _ := apiMediaPackageZip(t, apiPNGBody(64))
+			body, ct := multipartBody(t, "deck.edeck", raw)
+			rec := postImport(t, env, k.Plaintext, body, ct)
+			if rec.Code != tc.want {
+				t.Fatalf("import status = %d, want %d (body %s)", rec.Code, tc.want, rec.Body.String())
+			}
+		})
+	}
+}

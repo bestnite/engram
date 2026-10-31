@@ -2,7 +2,8 @@
   import { askConfirm } from '../../components/ui/confirm';
   import Page from '../../components/ui/Page.svelte';
   import { onMount } from 'svelte';
-  import { t } from '../../i18n';
+  import { t, localeStore } from '../../i18n';
+  import { formatBytes } from '../../format';
   import { apiClient, ApiClientError } from '../../api';
   import type { AdminUsersResponse, AdminUser } from '../../api';
   import AdminNav from './AdminNav.svelte';
@@ -16,7 +17,7 @@
   import { listClasses, menuClasses } from '../../components/ui/variants';
   import { toast } from '../../components/ui/toast';
   import { DropdownMenu } from 'bits-ui';
-  import { Ban, CheckCircle, Copy, KeyRound, LogOut, MoreHorizontal, Plus, RefreshCw, Search, Shield, Trash2, User, Users, X } from '@lucide/svelte';
+  import { Ban, CheckCircle, Copy, HardDrive, KeyRound, LogOut, MoreHorizontal, Plus, RefreshCw, Search, Shield, Trash2, User, Users, X } from '@lucide/svelte';
   import EmptyState from '../../components/ui/EmptyState.svelte';
 
   interface Props {
@@ -77,6 +78,7 @@
       invalid_user: 'admin.users.notice.invalid_user',
       save_failed: 'admin.users.notice.save_failed',
       create_failed: 'admin.users.notice.create_failed',
+      invalid_quota: 'admin.users.quota.invalid',
     };
     return map[code] || 'admin.users.notice.save_failed';
   }
@@ -197,6 +199,81 @@
     });
   }
 
+  // Per-user media quota dialog. The limit is typed in MiB, the unit an administrator thinks in, and sent in bytes.
+  const MIB = 1024 * 1024;
+  type QuotaMode = 'default' | 'unlimited' | 'limit';
+  let quotaUser = $state<AdminUser | null>(null);
+  let quotaOpen = $state(false);
+  let quotaMode = $state<QuotaMode>('default');
+  let quotaMiB = $state('');
+  let quotaError = $state('');
+  let quotaSaving = $state(false);
+
+  /** The quota that applies to the user, in bytes; 0 is unlimited. */
+  function effectiveQuota(u: AdminUser): number {
+    return u.media_quota_bytes ?? data?.default_media_quota_bytes ?? 0;
+  }
+
+  /** "used / limit" for the list; an unlimited quota shows the usage with the word for unlimited. */
+  function quotaSummary(u: AdminUser): string {
+    const used = formatBytes(u.media_used_bytes, $localeStore);
+    const limit = effectiveQuota(u);
+    return limit > 0
+      ? `${used} / ${formatBytes(limit, $localeStore)}`
+      : `${used} / ${$t('admin.users.quota.unlimited_short')}`;
+  }
+
+  function defaultQuotaLabel(): string {
+    const bytes = data?.default_media_quota_bytes ?? 0;
+    return bytes > 0 ? formatBytes(bytes, $localeStore) : $t('admin.users.quota.unlimited_short');
+  }
+
+  function openQuota(u: AdminUser): void {
+    quotaUser = u;
+    quotaError = '';
+    if (u.media_quota_bytes === null) {
+      quotaMode = 'default';
+      quotaMiB = '';
+    } else if (u.media_quota_bytes === 0) {
+      quotaMode = 'unlimited';
+      quotaMiB = '';
+    } else {
+      quotaMode = 'limit';
+      quotaMiB = String(Math.round((u.media_quota_bytes / MIB) * 100) / 100);
+    }
+    quotaOpen = true;
+  }
+
+  async function saveQuota(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    const target = quotaUser;
+    if (!target || quotaSaving) return;
+    let body: { mode: 'default' } | { mode: 'unlimited' } | { mode: 'limit'; bytes: number };
+    if (quotaMode === 'limit') {
+      const mib = Number(quotaMiB);
+      const bytes = Math.round(mib * MIB);
+      if (!Number.isFinite(mib) || bytes <= 0) {
+        quotaError = 'admin.users.quota.invalid';
+        return;
+      }
+      body = { mode: 'limit', bytes };
+    } else {
+      body = { mode: quotaMode };
+    }
+    quotaSaving = true;
+    quotaError = '';
+    try {
+      await apiClient.setAdminUserMediaQuota(target.id, body);
+      quotaOpen = false;
+      notice = 'admin.users.notice.updated';
+      await load(data?.page ?? 1);
+    } catch (err) {
+      quotaError = actionErrorKey(err);
+    } finally {
+      quotaSaving = false;
+    }
+  }
+
   onMount(() => {
     if (initialData === null && initialError === null) {
       load(1);
@@ -255,7 +332,7 @@
       <EmptyState testId="admin-users-empty" icon={Users} text={$t('admin.users.empty')} />
     {:else}
       <div class="{listClasses.root} overflow-x-auto">
-        <table class="w-full min-w-[760px] text-left text-sm">
+        <table class="w-full min-w-[860px] text-left text-sm">
           <thead class="border-b border-border bg-surface text-xs text-muted-foreground">
             <tr>
               <th class="px-4 py-2.5 font-medium">{$t('admin.users.col.user')}</th>
@@ -264,6 +341,7 @@
               <th class="px-4 py-2.5 text-right font-medium">{$t('admin.users.col.decks')}</th>
               <th class="px-4 py-2.5 text-right font-medium">{$t('admin.users.col.cards')}</th>
               <th class="px-4 py-2.5 text-right font-medium">{$t('admin.users.col.reviews')}</th>
+              <th class="px-4 py-2.5 text-right font-medium">{$t('admin.users.col.media')}</th>
               <th class="w-14 px-4 py-2.5"><span class="sr-only">{$t('admin.users.col.actions')}</span></th>
             </tr>
           </thead>
@@ -279,6 +357,12 @@
                 <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{u.decks}</td>
                 <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{u.cards}</td>
                 <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{u.reviews}</td>
+                <td class="px-4 py-2.5 text-right tabular-nums text-muted-foreground" data-testid="admin-users-media-{u.id}">
+                  <div class="whitespace-nowrap">{quotaSummary(u)}</div>
+                  {#if u.media_quota_bytes !== null}
+                    <div class="text-[11px] text-brand">{$t('admin.users.quota.custom_badge')}</div>
+                  {/if}
+                </td>
                 <td class="px-4 py-2.5 text-right">
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger
@@ -298,6 +382,9 @@
                         </DropdownMenu.Item>
                         <DropdownMenu.Item class={menuClasses.item} data-testid="admin-users-password-{u.id}" onSelect={() => resetPassword(u)}>
                           <KeyRound aria-hidden="true" />{$t('admin.users.reset_password')}
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item class={menuClasses.item} data-testid="admin-users-quota-{u.id}" onSelect={() => openQuota(u)}>
+                          <HardDrive aria-hidden="true" />{$t('admin.users.quota.open')}…
                         </DropdownMenu.Item>
                         <DropdownMenu.Item class={menuClasses.item} data-testid="admin-users-logout-{u.id}" onSelect={() => forceLogout(u)}>
                           <LogOut aria-hidden="true" />{$t('admin.users.force_logout')}
@@ -352,6 +439,62 @@
       <Button variant="outline" size="lg" onclick={() => (createOpen = false)}>{$t('common.cancel')}</Button>
       <Button type="submit" testId="admin-users-create-submit" loading={creating} variant="primary" size="lg">
         {$t('admin.users.create_submit')}
+      </Button>
+    </div>
+  </form>
+</Dialog>
+
+<Dialog
+  bind:open={quotaOpen}
+  title={$t('admin.users.quota.title', { name: quotaUser?.username ?? '' })}
+  description={$t('admin.users.quota.description')}
+  testId="admin-users-quota-dialog"
+>
+  <form onsubmit={saveQuota} data-testid="admin-users-quota-form" class="space-y-4">
+    {#if quotaUser}
+      <p class="text-sm text-muted-foreground" data-testid="admin-users-quota-usage">
+        {$t('admin.users.quota.used', { used: formatBytes(quotaUser.media_used_bytes, $localeStore) })}
+      </p>
+    {/if}
+    <div>
+      <span class="block text-sm font-medium text-foreground">{$t('admin.users.quota.mode')}</span>
+      <Select
+        class="mt-1.5 w-full"
+        value={quotaMode}
+        onValueChange={(next) => {
+          quotaMode = next as QuotaMode;
+          quotaError = '';
+        }}
+        testId="admin-users-quota-mode"
+        ariaLabel={$t('admin.users.quota.mode')}
+        options={[
+          { value: 'default', label: $t('admin.users.quota.mode.default', { quota: defaultQuotaLabel() }) },
+          { value: 'unlimited', label: $t('admin.users.quota.mode.unlimited') },
+          { value: 'limit', label: $t('admin.users.quota.mode.limit') },
+        ]}
+      />
+    </div>
+    {#if quotaMode === 'limit'}
+      <label class="block text-sm font-medium text-foreground">{$t('admin.users.quota.limit_mib')}
+        <input
+          data-testid="admin-users-quota-mib"
+          type="number"
+          min="0.01"
+          step="any"
+          inputmode="decimal"
+          bind:value={quotaMiB}
+          class="field-input mt-1.5 w-full text-sm font-normal"
+        />
+      </label>
+      <p class="text-xs text-muted-foreground">{$t('admin.users.quota.limit_hint')}</p>
+    {/if}
+    {#if quotaError}
+      <p data-testid="admin-users-quota-error" role="alert" class="text-sm text-destructive-foreground">{$t(quotaError)}</p>
+    {/if}
+    <div class="flex justify-end gap-2">
+      <Button variant="outline" size="lg" onclick={() => (quotaOpen = false)}>{$t('common.cancel')}</Button>
+      <Button type="submit" testId="admin-users-quota-submit" loading={quotaSaving} variant="primary" size="lg">
+        {$t('admin.users.quota.save')}
       </Button>
     </div>
   </form>

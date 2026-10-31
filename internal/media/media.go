@@ -118,6 +118,22 @@ func ResolveUserQuotaBytes(ctx context.Context, db *gorm.DB) int64 {
 	return 0
 }
 
+// UserQuotaBytes resolves the media quota (bytes) that applies to one user: the administrator's setting for that user
+// when there is one, otherwise the instance-wide quota from ResolveUserQuotaBytes. 0 means unlimited.
+//
+// The per-user setting wins over the environment variable as well: it is the more specific decision, taken by an
+// administrator for this account, while the environment variable only replaces the instance-wide default. A stored
+// value of 0 is an explicit 'unlimited' for this user, so it is returned as is rather than falling through.
+//
+// Every entry point that charges media to a user (web upload, and the REST/MCP/CLI/web package import) resolves the
+// quota here, so the per-user setting cannot be bypassed by switching transports.
+func UserQuotaBytes(ctx context.Context, db *gorm.DB, user *store.User) int64 {
+	if user != nil && user.MediaQuotaBytes != nil && *user.MediaQuotaBytes >= 0 {
+		return *user.MediaQuotaBytes
+	}
+	return ResolveUserQuotaBytes(ctx, db)
+}
+
 // Store is the local media store: root is the directory root, db records metadata.
 type Store struct {
 	root string
