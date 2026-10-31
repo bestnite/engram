@@ -504,31 +504,6 @@ adds a test in `internal/schedule` beside the one `M18-41` moves there.
   new deck; `TestImportPresetModes` and `TestAnkiImportPresetModes` pass with `TEST_PG_DSN` set.
   Evidence is the raw scoped `go test` and `go vet` output, including the run with `TEST_PG_DSN` set.
 
-- [ ] **M18-33 Preset-choice code states its rules and reports store failures as failures** — four
-  defects in the `M18-4` code. First, `ImportPresetID` in `internal/api/publicid_resolver.go` turns
-  every error of `presets.ByPublicID` into 400 `invalid_request`, so a database failure is reported as
-  a bad request instead of 500 `internal`; only `gorm.ErrRecordNotFound` and a preset of another owner
-  mean "invalid preset selection". It also does not trim the id, while the deck create paths in
-  `internal/api/decks.go` and `internal/mcp/tools.go` apply `strings.TrimSpace` to `preset_id`.
-  Second, the mode values `new`, `reuse` and `copy` are bare string literals in
-  `ValidateImportPreset` and `selectImportPreset` in `internal/store/package_import.go`, while the
-  target kinds have named constants (`PackageTargetNewDeck`); `selectImportPreset` also handles an
-  empty mode that `ValidateImportPreset` has already turned into `new`. Third, `ValidateImportPreset`
-  rewrites its `opts` argument (an empty mode becomes `new`), but its comment says only that it
-  validates, so a caller cannot tell from the comment that the argument changes. Fourth, every other
-  field of `PackageImportOptions`, `PackageImportReport`, `importDeckIn` and `createImportUploadIn`
-  carries a comment, but `PresetMode`, `PresetID` and `PresetName` carry none, nor do
-  `ImportPresetID`, `selectImportPreset` and `fillImportPresetReport`. The fix: `ImportPresetID`
-  trims the id, returns `InvalidRequest` only for a missing row or a foreign owner and returns any
-  other error unchanged; the three modes become named constants used by every comparison;
-  `selectImportPreset` compares against the constants only; the comment of `ValidateImportPreset`
-  states that it sets an empty mode to `new`; each named field and function gains a comment that
-  states its rule and why. Behaviour is otherwise unchanged. *Acceptance:* a test in `internal/api`
-  calls `ImportPresetID` on a closed database and gets a `ServiceError` with status 500; a test calls
-  it with the caller's own public id surrounded by spaces and gets that preset's id;
-  `grep -n '"reuse"\|"copy"' internal/store/package_import.go` prints only the constant declarations.
-  Evidence is the grep output and the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-34 README states that the package's deck configuration is used only for `preset_mode`
   `new`** — line 47 of `README.md` says "An `.apkg` import carries its deck configuration into the new
   deck's preset". Since `M18-4` that holds only for `preset_mode` `new`: `reuse` points the new deck at
