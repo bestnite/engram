@@ -193,31 +193,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   *Acceptance:* the ledger table holds a row naming each of the four IDs. Evidence is the output of
   `grep -n -E 'M18-(1|2|3|9)\b' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-26 Rounding a REAL value applies to quantities, not to identifiers and codes** —
-  `roundedIntegers` in `internal/anki/sqlite.go` rounds a REAL value in every integer column that
-  `readCards` and `readReviews` select. `M18-13` asked for rounding on the numeric scheduling columns,
-  but the list also holds the reference columns `cards.nid`, `cards.did`, `cards.ord` and `revlog.cid`,
-  and the code columns `revlog.ease`, `revlog.type`, `cards.type`, `cards.queue` and `cards.flags`. A
-  REAL value in one of these columns has no meaning, and rounding it invents one. A revlog `ease` of
-  `2.5` becomes rating 3 (Good) and reaches the `reviews` table, the only input to parameter
-  optimisation, as a rating the user never gave. A `cards.ord` of `0.5` attaches the card to template 1.
-  A `cards.nid` that is not a whole number attaches the card to the nearest note id. Before `M18-13`
-  each of these failed the import. The rule below is decided. It has four parts. First, only these
-  columns are rounded: `col.crt`; the `cards` columns `mod`,
-  `usn`, `due`, `ivl`, `factor`, `reps`, `lapses`, `left` and `odue`; the `revlog` columns `usn`,
-  `ivl`, `lastIvl`, `factor` and `time`. Second, `cards.id` and `revlog.id` are `INTEGER PRIMARY KEY`
-  columns, which SQLite never stores as REAL, so they are read without the rounding expression. Third,
-  a REAL value in `cards.nid`, `cards.did` or `cards.ord` fails the import with `package_bad_format`,
-  as it did before `M18-13`, and a REAL value in `revlog.cid`, `revlog.ease` or `revlog.type` makes
-  that row unreadable, so it reaches `RevlogErr`. Fourth, `cards.type`, `cards.queue`, `cards.odid`
-  and `cards.flags` are codes, not quantities: a REAL value in one of them makes that card row
-  unreadable, nothing is rounded and the rest of the import continues, with the skipped row counted in
-  the report — failing the import for them contradicts `M18-13`, and rounding them invents a state, a
-  deck or a flag. *Acceptance:* a table test in
-  `internal/anki/scheduling_test.go` covers a REAL value in each column the decided rule names and
-  checks the rounded value or the error that the rule assigns. Evidence is the raw scoped `go test` and
-  `go vet` output.
-
 - [ ] **M18-27 `M18-13` tests reach the import, and the table drives every case** — the `M18-13`
   acceptance required that each malformed package imports its content with `include_progress` off,
   but `TestSchedulingTolerance` in `internal/anki/scheduling_test.go` calls only `ReadWithLimits`. No
