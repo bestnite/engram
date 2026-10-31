@@ -132,56 +132,6 @@ it.
   the single breaking release of M17 (HTTP API, MCP, database schema and file format). The
   remaining M17 tasks are additive and land on `main` directly.
 
-**Phase 3 follow-up — defects found in the review of the P3 merge (on `main`)**
-
-These tasks fix what the P3 merge left wrong or unfinished. They land on `main` directly.
-
-- [ ] **M17-36 Remove the transitional card-kind layer** — delete every payload field and endpoint
-  that exists only for the old SPA.
-  *Files:* `internal/api/card_types.go`; `internal/api/card_catalog.go`; `internal/api/notes.go`;
-  `internal/api/note_view.go`; `internal/api/service.go`; `internal/api/server.go`;
-  `internal/web/review.go`; `internal/store/note.go`; `frontend/src/lib/card-types.ts` and its
-  callers; `ARCHITECTURE.md`.
-  *Work:*
-  - Delete `GET /api/v1/card-types`, the description catalog, and the `kind` field of the note request
-    and response, of `DueCard` and of `ExportRow`.
-  - Delete `front_html`, `back_html`, `options_html`, `option_order`, `blanks` and the top-level
-    `media_base` from the review and preview responses. The `front` and `back` objects remain.
-  - Delete `NoteStore.EnsureStockNoteType`, `NoteStore.KindOf` and the API's kind-to-note-type
-    resolution. Migration 0012 keeps its own stock lookup.
-  - Rewrite the request-path section of `ARCHITECTURE.md` that describes these fields as transitional.
-
-  *Acceptance:*
-  - `grep -rn "card-types\|EnsureStockNoteType\|front_html" internal frontend/src` prints nothing.
-  - A handler test: a note write that carries `kind` and no `note_type` returns 400 `invalid_request`.
-  - The REST and MCP tests pass.
-
-  *Verify:* `go test ./internal/api/... ./internal/web/... ./internal/mcp/... ./internal/store/...`; `npm --prefix frontend run check && npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
-- [ ] **M17-38 Convert the `{{ruby:…}}` shortcode** — existing notes show raw ruby source since
-  migration 0012.
-  *Files:* `internal/store/migrate.go` (a new versioned migration appended at the end);
-  `internal/store/migrate_notes.go`; `internal/store/migrate_notes_test.go`.
-  *Problem:* the old renderer expanded `{{ruby:base|reading}}` to `<ruby>base<rt>reading</rt></ruby>`.
-  Migration 0012 converts `{{tts:…}}` and `{{audio:…}}` only, and the pre-flight check does not report
-  ruby, so every ruby annotation became literal text. A `{{tts:…}}` that wraps a ruby was also left
-  literal, because its parameter split stops inside the nested shortcode.
-  *Work:* the new migration rewrites every note field, soft-deleted notes included:
-  - `{{ruby:B|R}}` becomes `<ruby>B<rt>R</rt></ruby>`, with `R` HTML-escaped.
-  - The old rule for a literal ruby still applies, and a ruby that matches it stays unchanged: an
-    empty base, an empty reading, a reading containing `=`, `|` or `{{`, or a base containing another
-    shortcode.
-  - A `{{tts:…}}` whose body contains a ruby is converted with the 0012 TTS rule after the ruby inside
-    it is converted. The visible copy keeps the `<ruby>` markup. The text inside
-    `[anki:tts …]…[/anki:tts]` is the base `B` alone, because the old speech text left the reading out.
-  - `search_text` is recomputed for every changed note.
-
-  *Acceptance:*
-  - A table-driven test covers: a plain ruby, a ruby inside a TTS, each literal case, and a note
-    without ruby that is left byte-for-byte unchanged.
-  - The test runs once with `TEST_PG_DSN`.
-
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-
 **Phase 9 follow-up — defects found in the review of M17-28, M17-31, M17-39 and M17-52 to M17-59 (on `main`)**
 
 These tasks land on `main` directly.
@@ -421,3 +371,5 @@ bluemonday-sanitised `internal/render` are gone.
 | A kind alias keeps the note type (M17-37) | An update with no `note_type` keeps the note's current type when the posted `kind` is empty or names the type's own shape, so a deck holding two note types of one shape no longer moves the note into the other one on an unrelated edit; a `kind` naming a different shape still resolves to the deck's stock type of that shape. | No |
 | Streaming large `.apkg` imports (M17-53) | Three settings cap a package — `package_max_bytes` (2 GiB), `package_max_entries` (100 000) and `package_max_unpacked_bytes` (4 GiB), each resolved as environment variable, then settings row, then default. The multipart, URL and upload-ticket transports spool the body to a temporary file removed on every path; the reader opens the zip from that file, the collection entry lands in a temporary SQLite file, and media is hashed once and written to the content-addressed store as a stream, so memory no longer grows with the media. The `.edeck` reader keeps its in-memory caps. | No — three configuration keys are added; packages far larger than the single-media limit are now accepted |
 | Image occlusion editor (M17-31) | The note editor opens an image-occlusion note type on a `fabric` canvas: rectangles, ellipses, polygons and text can be drawn, moved, resized and grouped under a cloze number, both occlusion modes are selectable, and the field is written as Anki's one-deletion-per-shape `{{cN::image-occlusion:…}}` markup. An untouched deletion is written back verbatim, so an unchanged note round-trips byte for byte. | No — a frontend dependency (`fabric`) and a page behaviour |
+| Transitional card-kind layer removed (M17-36) | `GET /api/v1/card-types`, the description catalog and every `kind` alias are gone: a note write, the list filter, `DueCard`, `ExportRow`, the MCP tools and the exports speak note types only, and the flat `front_html`, `back_html`, `options_html`, `option_order`, `blanks` and top-level `media_base` fields are replaced by the `front` and `back` face objects. A note write that carries `kind` without `note_type` returns 400 `invalid_request`, the import schema requires `note_type`, and the deck list loses its kind filter and column. | Yes — the `kind` field, the card-types endpoint and the flat face fields are removed from the HTTP API, the MCP tools, the CSV/JSON export and the import schema |
+| Ruby shortcode migration (M17-38) | Migration `0017` rewrites `{{ruby:B\|R}}` in every note field as `<ruby>B<rt>R</rt></ruby>`, converting a wrapping `{{tts:…}}` afterwards with the base as its speech text; a marker the old renderer rejected stays literal, `plain_text` fields are untouched, `search_text` is recomputed for changed notes and `updated_at` stays. | No — a versioned migration is added; stored content changes |
