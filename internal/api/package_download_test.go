@@ -6,6 +6,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -56,6 +59,32 @@ func TestExportDownloadSingleUseExpiryAndOwner(t *testing.T) {
 	if r := get(ticket.URL); r.Code == http.StatusOK {
 		t.Fatal("download bypassed revoked access")
 	}
+}
+
+func TestExportAnkiCapturedCurl(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	owner := seedUser(t, env.db, "curl_owner", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead}, nil)
+	server := httptest.NewServer(env.router())
+	defer server.Close()
+	file := filepath.Join(t.TempDir(), "deck.apkg")
+	cmd := exec.Command("curl", "-fsS", "-H", "Authorization: Bearer "+key.Plaintext, "-o", file, server.URL+"/api/v1/decks/"+deck.PublicID+"/package?format=apkg&include_media=0")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("curl: %v: %s", err, output)
+	}
+	info, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listing, err := exec.Command("unzip", "-l", file).CombinedOutput()
+	if err != nil {
+		t.Fatalf("unzip: %v: %s", err, listing)
+	}
+	if !strings.Contains(string(listing), "collection.anki21") || !strings.Contains(string(listing), "meta") {
+		t.Fatalf("listing: %s", listing)
+	}
+	t.Logf("curl archive size: %d bytes\nunzip -l:\n%s", info.Size(), listing)
 }
 
 func TestExportAnkiRouteAndScope(t *testing.T) {
