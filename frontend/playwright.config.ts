@@ -14,7 +14,9 @@ import { join } from 'node:path';
  * page's. `edit-frame-media.spec.ts` proves that a stored and a freshly uploaded image both load inside that frame, because
  * only a browser applies the frame's base element and withholds the session cookie from it. `note-type-shortcut.spec.ts`
  * runs the note type page as it fetches its own types, which the client tests render from fixtures instead, to prove the
- * editor's shortcut opens the note's type and leads back. The Go server is not
+ * editor's shortcut opens the note's type and leads back. `review-face-style.spec.ts` proves that a note type's CSS
+ * outranks the review page's type scale and that card content keeps the browser defaults the frame's preflight would
+ * remove, because only a browser computes that cascade. The Go server is not
  * configured here: Playwright loads this file in its worker processes as well, so a top-level side effect would pick a
  * different port and database in every process. `e2e/global-setup.ts` runs once, starts the server on a free port with a
  * throwaway SQLite database and exports `ENGRAM_E2E_BASE_URL`, which each test file uses as its `baseURL`.

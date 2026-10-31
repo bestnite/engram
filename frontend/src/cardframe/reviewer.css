@@ -32,6 +32,32 @@ body {
   display: flow-root;
 }
 
+/* Card content is a deck's HTML, written for a browser's default styles, but the frame loads app.css and with it
+   Tailwind's preflight, which turns images into blocks (so a centred card shows its picture flush left), strips list
+   markers and heading sizes, and zeroes the margins of paragraphs, headings and rules. Inside the content root those
+   properties go back to the browser defaults. The rules sit in the base layer on purpose: a note type's CSS is not in a
+   layer and so always outranks them, and the utility classes of engram's own controls sit in a later layer and keep
+   their look. */
+@layer base {
+  #qa :where(img, video) {
+    display: revert;
+  }
+
+  #qa :where(p, blockquote, figure, dl, dd, h1, h2, h3, h4, h5, h6, ul, ol, hr) {
+    margin: revert;
+  }
+
+  #qa :where(h1, h2, h3, h4, h5, h6) {
+    font-size: revert;
+    font-weight: revert;
+  }
+
+  #qa :where(ul, ol) {
+    list-style: revert;
+    padding: revert;
+  }
+}
+
 body.nightMode,
 body.night_mode {
   background: var(--background);
