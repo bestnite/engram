@@ -226,7 +226,8 @@ func packageDeckMetaError(entries []string) error {
 
 // PackageImportOptions controls one import.
 type PackageImportOptions struct {
-	// PresetMode selects new, reuse or copy for a new deck; empty defaults to new.
+	// PresetMode selects new, reuse or copy for new_deck; empty defaults to new.
+	// For into_deck and replace_deck, only empty or new is accepted, without PresetID.
 	PresetMode string
 	// PresetID identifies the owner's preset for reuse or copy, preventing cross-owner selection.
 	PresetID uint64
@@ -599,9 +600,13 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	return report, nil
 }
 
-// ValidateImportPreset validates the selection before import or ticket issuance. For a new
-// deck it rewrites an empty mode to new in opts, so later selection uses an explicit mode.
+// ValidateImportPreset validates the selection before import or ticket issuance.
+// For new_deck, an empty mode defaults to new. For into_deck and replace_deck,
+// only an empty mode or new is accepted, and PresetID must be zero.
 func (s *DeckStore) ValidateImportPreset(ctx context.Context, owner uint64, targetKind string, opts *PackageImportOptions) error {
+	if targetKind != PackageTargetNewDeck && opts.PresetID != 0 {
+		return &PackageError{Message: "invalid preset selection"}
+	}
 	if opts.PresetMode == "" {
 		if targetKind != PackageTargetNewDeck {
 			return nil

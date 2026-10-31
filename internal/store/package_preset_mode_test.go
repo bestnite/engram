@@ -165,7 +165,13 @@ func TestImportPresetModes(t *testing.T) {
 					}
 				})
 			}
-			cases := []PackageImportOptions{{PresetMode: "new", PresetID: source.ID}, {PresetMode: "", PresetID: source.ID}, {PresetMode: "bad"}, {PresetMode: "reuse"}, {PresetMode: "copy"}, {PresetMode: "reuse", PresetID: foreign.ID}, {PresetMode: "copy", PresetID: foreign.ID}, {PresetMode: "reuse", PresetID: source.ID, ApplyWeights: true}, {PresetMode: "copy", PresetID: source.ID, ApplyWeights: true}, {PresetMode: "reuse", PresetID: source.ID, Target: "into_deck:1"}}
+			existing := importPackageOK(t, db, users[0], manifestZip(t, "Existing", ""), PackageImportOptions{})
+			intoTarget := fmt.Sprintf("into_deck:%d", existing.DeckID)
+			replaceTarget := fmt.Sprintf("replace_deck:%d", existing.DeckID)
+			cases := []PackageImportOptions{{PresetMode: "new", PresetID: source.ID}, {PresetMode: "", PresetID: source.ID}, {PresetMode: "bad"}, {PresetMode: "reuse"}, {PresetMode: "copy"}, {PresetMode: "reuse", PresetID: foreign.ID}, {PresetMode: "copy", PresetID: foreign.ID}, {PresetMode: "reuse", PresetID: source.ID, ApplyWeights: true}, {PresetMode: "copy", PresetID: source.ID, ApplyWeights: true}, {PresetMode: "reuse", PresetID: source.ID, Target: "into_deck:1"},
+				{Target: intoTarget, PresetID: source.ID}, {Target: intoTarget, PresetMode: "new", PresetID: source.ID},
+				{Target: replaceTarget, PresetID: source.ID}, {Target: replaceTarget, PresetMode: "new", PresetID: source.ID},
+			}
 			for _, opts := range cases {
 				t.Run(fmtOptions(opts), func(t *testing.T) {
 					var decks, presets, decksAfter, presetsAfter int64
@@ -179,6 +185,18 @@ func TestImportPresetModes(t *testing.T) {
 					db.Model(&Preset{}).Count(&presetsAfter)
 					if decks != decksAfter || presets != presetsAfter {
 						t.Fatal("database changed")
+					}
+				})
+			}
+			for _, mode := range []string{"", "new"} {
+				t.Run("into_deck_mode_"+mode, func(t *testing.T) {
+					report := importPackageOK(t, db, users[0], raw, PackageImportOptions{Target: intoTarget, PresetMode: mode})
+					encoded, err := json.Marshal(report)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if bytes.Contains(encoded, []byte(`"preset_mode"`)) || bytes.Contains(encoded, []byte(`"preset_name"`)) {
+						t.Fatalf("unexpected preset fields: %s", encoded)
 					}
 				})
 			}

@@ -63,6 +63,7 @@ func TestImportUploadPresetModes(t *testing.T) {
 	user := seedUser(t, env.db, "upload_preset_modes", store.RoleUser)
 	other := seedUser(t, env.db, "upload_preset_other", store.RoleUser)
 	key := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
+	deck := seedDeck(t, env.db, user.ID)
 	p := store.NewPreset(user.ID, "Chosen")
 	foreign := store.NewPreset(other.ID, "Foreign")
 	if err := env.db.Create(&p).Error; err != nil {
@@ -99,7 +100,7 @@ func TestImportUploadPresetModes(t *testing.T) {
 			}
 		})
 	}
-	for _, body := range []string{fmt.Sprintf(`{"preset_mode":"new","preset_id":%q}`, p.PublicID), fmt.Sprintf(`{"preset_id":%q}`, p.PublicID), `{"preset_mode":"bad"}`, `{"preset_mode":"reuse"}`, `{"preset_mode":"copy"}`, fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"copy","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"target":"into_deck:any"}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q}`, foreign.PublicID)} {
+	for _, body := range []string{fmt.Sprintf(`{"preset_mode":"new","preset_id":%q}`, p.PublicID), fmt.Sprintf(`{"preset_id":%q}`, p.PublicID), `{"preset_mode":"bad"}`, `{"preset_mode":"reuse"}`, `{"preset_mode":"copy"}`, fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"copy","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"target":"into_deck:any"}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q}`, foreign.PublicID), fmt.Sprintf(`{"target":%q,"preset_id":%q}`, "into_deck:"+deck.PublicID, p.PublicID)} {
 		var before, after int64
 		env.db.Model(&store.ActionToken{}).Count(&before)
 		rec := createUpload(t, env, key.Plaintext, body)
@@ -170,6 +171,7 @@ func TestImportMultipartRejectsPresetOptions(t *testing.T) {
 		{"reuse weights", map[string]string{"preset_mode": "reuse", "preset_id": owned.PublicID, "apply_weights": "1"}},
 		{"copy weights", map[string]string{"preset_mode": "copy", "preset_id": owned.PublicID, "apply_weights": "1"}},
 		{"existing target", map[string]string{"preset_mode": "reuse", "preset_id": owned.PublicID, "target": "into_deck:" + deck.PublicID}},
+		{"existing target empty mode", map[string]string{"preset_id": owned.PublicID, "target": "into_deck:" + deck.PublicID}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var beforeDecks, beforePresets, afterDecks, afterPresets int64
