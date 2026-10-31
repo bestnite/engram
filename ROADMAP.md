@@ -81,30 +81,49 @@ file.
   `cards.deck_path` (the flat deck plus real subdecks); each note type as Anki's legacy model JSON
   (field options, template formats, `req`, `sortf`, CSS, LaTeX, `originalStockKind`, `type`, `usn`,
   `mod`, and `anki_origin.notetype_id` as the note type id when present, so a re-import matches it);
-  each note with `flds` joined by `\x1f` in field order, `sfld` as the sort field's plain text,
-  Anki's field checksum in `csum` (taken from the fixture, not guessed), `guid` from an `anki:`
+  each note with `flds` joined by `\x1f` in field order, `sfld` as the sort field's plain text and a
+  `csum` value (both are recomputed on import, so approximate values are acceptable and the writer's
+  doc comment says so), `guid` from an `anki:`
   `external_ref` or derived deterministically from the note's public id, tags as Anki stores them
   and `data` as `{}`; each card with its template ordinal and a new-card position, or its real
   scheduling state when progress is exported; and one `dconf` entry with `desiredRetention`, the
-  learn and relearn delays, `rev.maxIvl` and, when weights are exported, `fsrsWeights` (21 floats).
+  learn and relearn delays, `rev.maxIvl` and, when weights are exported, the FSRS-6 weights in
+  `fsrsParams6`. `fsrsWeights` maps to `fsrs_params_4` and `fsrsParams5` to `fsrs_params_5`, so both
+  stay empty, and the entry's id must not be 1: a config with id 1 merges into the target's stock
+  `Default` and its values are lost. The note type's answer specs are written as one unknown model
+  key holding JSON (`engram`), which Anki carries through import and both exports; without it a deck
+  exported and imported back would lose machine grading.
   `store.PackageOptions` gains `IncludeDeckConfigs`, and `IncludeReviews` stops depending on
   `IncludeProgress` so the two switches are independent (this also changes the `.edeck` export until
   `M18-5` removes it). Progress and reviews are the caller's own rows only; both default off, deck
   configuration and media default on. Parameters legacy `dconf` cannot express are named in the
-  writer's doc comment and left out. *Acceptance:* a unit test asserts the archive's entries and the
-  collection's tables, columns and required rows; two exports of one deck are byte-identical; a round
-  trip through `ImportPackage` into a fresh user reproduces notes, cards, note types, media, card
-  states and reviews; a new `tools/anki-oracle/verify_package.py` opens the produced file with
-  `anki==26.9.3` and prints its note, card, note type, media and deck-config counts. Evidence is the
-  raw output of `go test ./internal/anki/... ./internal/store/... && go vet ./internal/anki/...
-  ./internal/store/...` plus that script's output. `ARCHITECTURE.md`'s `internal/anki` row is updated
-  in the same commit, because the package stops being a reader only.
+  writer's doc comment and left out. Verified against `anki==26.9.3` and therefore required:
+  `col.ver` is exactly 11 (`9` is `FileTooOld`, `12` is `FileTooNew`) and `col.conf` may be `{}`;
+  `meta` is `\x08\x02` and neither a `collection.anki2` stub nor a `collection.anki21b` is needed;
+  `req` may be omitted because the importer recomputes it; `sfld` and `csum` are recomputed on
+  import, so approximate values are allowed and the writer's doc comment must say so; `flds` holds
+  exactly one value per declared field; and note and card ids must not be later than about a day from
+  now, because Anki silently replaces later ones. The id mapping is verified with Engram's small
+  autoincrement ids, not only with timestamp-shaped ones. *Acceptance:* a unit test asserts the
+  archive's entries and the collection's tables, columns and required rows; two exports of one deck
+  are byte-identical; a round trip through `ImportPackage` into a fresh user reproduces notes, cards,
+  note types (answer specs included), media, card states and reviews; a new
+  `tools/anki-oracle/verify_package.py` opens the produced file with `anki==26.9.3` and prints its
+  note, card, note type, media, deck-config and answer-spec counts. Evidence is the raw output of
+  `go test ./internal/anki/... ./internal/store/... && go vet ./internal/anki/... ./internal/store/...`
+  plus that script's output. `ARCHITECTURE.md`'s `internal/anki` row is updated in the same commit,
+  because the package stops being a reader only.
 
 - [ ] **M18-2 `.apkg` import: deck configuration, card states and the review log** — the importer
   reads what the package says about scheduling instead of discarding it. `internal/anki/protobuf.go`
   gains a decoder for `DeckConfig.Config` (`fsrs_params_6`, `desired_retention`, `learn_steps`,
   `relearn_steps`, `maximum_review_interval`), and the legacy `col.dconf` JSON is read for the same
-  values (`fsrsWeights`, `desiredRetention`, `new.delays`, `lapse.delays`, `rev.maxIvl`).
+  values (`fsrsParams6`, `fsrsParams5`, `fsrsWeights`, `desiredRetention`, `new.delays`,
+  `lapse.delays`, `rev.maxIvl`), preferring the 21-value FSRS-6 set and falling back to the 19- and
+  17-value sets, which the scheduler already migrates. The answer specs are read back from the note
+  type's unknown `engram` model key and reattached by template name, and `notes.data`/`cards.data`
+  are not read at all: verified against `anki==26.9.3`, Anki drops both columns on import, so
+  nothing may be stored there.
   `PackageImportOptions` gains `IncludeProgress` (default false), which governs the `.apkg` path
   only; the `.edeck` path keeps `AllowOthersProgress` until `M18-5` removes it. Off writes no
   `card_states` and no `reviews` row and the report counts what was discarded; on writes the
@@ -118,8 +137,9 @@ file.
   layout stores it, verified against the oracle, not assumed. *Acceptance:* a package produced by
   `M18-1` and imported into a fresh user reproduces its card states and review rows; a second import
   of the same package adds no row; `include_progress` off writes none; the skipped review rows appear
-  in the report; the SQLite cases run by default and the PostgreSQL cases run when `TEST_PG_DSN` is
-  set. Evidence is the raw scoped `go test` and `go vet` output.
+  in the report; a package whose review rows belong to cards that stay new imports without error,
+  which Anki accepts and Engram must accept too; the SQLite cases run by default and the PostgreSQL
+  cases run when `TEST_PG_DSN` is set. Evidence is the raw scoped `go test` and `go vet` output.
 
 - [ ] **M18-3 `.apkg` export transports and the MCP download URL** — `GET /api/v1/decks/:id/package`
   takes `format=apkg` plus the four switches as query parameters, and the web deck page downloads the
@@ -155,9 +175,9 @@ file.
   `.apkg` path still uses: `PackageError` and its codes, `PackageImportOptions`,
   `PackageImportReport`, `PackageImportError`, the package limits, `MediaQuotaBytes`,
   `uniqueOwnerName`, the archive spool and the `ImportPackage` entry. `README.md` and
-  `ARCHITECTURE.md` record the single format and name what it does not carry (answer controls,
-  note `external_ref`/`extra`/`source_url`, note-type card-face extensions), and the release ledger
-  records the breaking removals. *Acceptance:* `git grep -n edeck -- '*.go' '*.ts' '*.svelte'` is
+  `ARCHITECTURE.md` record the single format and name what it does not carry (the note's
+  `external_ref`, `extra` and `source_url`, because Anki drops `notes.data` on import), and the
+  release ledger records the breaking removals. *Acceptance:* `git grep -n edeck -- '*.go' '*.ts' '*.svelte'` is
   empty; export and import both go through `.apkg` only; an archive named `.zip` whose entries hold
   an Anki collection is accepted, because the file name never decides the reader; the full-module gate
   passes. Evidence is the grep output, the test output, and a captured export-then-import round trip.
