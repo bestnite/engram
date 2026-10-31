@@ -145,17 +145,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-15 `.apkg` re-import with progress must not overwrite newer progress** — a repeated
-  import with `include_progress` on overwrites the importer's `card_states` row with the package's
-  state even when the importer has reviewed the card in engram since the package was made, and
-  appends the package's review rows after the importer's newer rows, so an undo takes an old imported
-  row as the latest grade (`Rollback` in `internal/schedule/actions.go` orders by `id`). *Do not start
-  until the maintainer decides the rule: which side wins when both have progress for one card, and
-  whether imported review rows older than the importer's latest review are written at all.*
-  *Acceptance:* table tests cover the chosen rule for a card the importer reviewed after the export
-  and for a card the importer never reviewed; an undo after such an import removes the importer's own
-  latest review. Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-17 `.apkg` deck configuration values the scheduler cannot use** — `M18-9` checks the
   package's FSRS weights, but `createAnkiPreset` in `internal/store/anki_import.go` still copies the
   learning steps, the relearning steps and the maximum interval without checking them against what
