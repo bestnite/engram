@@ -15,6 +15,7 @@ import ImportView from '../views/ImportView.svelte';
 import DeckSharingView from '../views/DeckSharingView.svelte';
 import DeckSettingsView from '../views/DeckSettingsView.svelte';
 import NoteTypesView from '../views/NoteTypesView.svelte';
+import NoteTypeHelpView from '../views/NoteTypeHelpView.svelte';
 import SecurityView from '../views/SecurityView.svelte';
 import PresetsView from '../views/PresetsView.svelte';
 import AdminIndexView from '../views/admin/AdminIndexView.svelte';
@@ -67,6 +68,13 @@ export const routes: RouteDefinition[] = [
     path: '/decks/:id/settings',
     name: 'deck-settings',
     component: DeckSettingsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // Help for the deck's note type page: concepts, template syntax and worked examples. The content is static and lives in
+    // the translation catalog; the deck id only decides where the back link leads.
+    path: '/decks/:id/note-types/help',
+    name: 'deck-note-type-help',
+    component: NoteTypeHelpView as unknown as RouteDefinition['component'],
   },
   {
     // Deck note type management. There is no dedicated server page; the server's NoRoute fallback returns the app shell.

@@ -57,30 +57,45 @@ describe('NoteTypesView', () => {
     routeStore.set(matchRoute('/decks/d1/note-types'));
   });
 
-  it('explains the page: what a note type is, the steps, and the template syntax', () => {
+  it('links to the help page instead of explaining the page inline, and keeps the syntax quick reference', () => {
     const { html } = render(NoteTypesView, {
       props: { initialLoading: false, initialNoteTypes: [noteType()], initialStocks: stocks, initialControls: controls },
     });
-    expect(html).toContain('data-testid="notetype-guide"');
-    expect(html).toContain('笔记类型决定一条笔记有哪些字段');
-    for (const step of ['create', 'fields', 'templates', 'style', 'preview', 'use', 'tools']) {
-      expect(html).toContain(`data-testid="notetype-guide-${step}"`);
-    }
-    // The syntax reference prints the template syntax literally, next to its translated description.
+    expect(html).not.toContain('data-testid="notetype-guide"');
+    expect(html).not.toContain('笔记类型决定一条笔记有哪些字段');
+    expect(html).toContain('data-testid="notetype-help-link"');
+    expect(html).toContain('href="/decks/d1/note-types/help?return=%2Fdecks%2Fd1%2Fnote-types"');
+    // The syntax reference prints the template syntax literally, next to its translated description, and links to the help.
     expect(html).toContain('data-testid="notetype-syntax"');
     expect(html).toContain('{{Front}}');
     expect(html).toContain('{{tts zh_CN:Text}}');
     expect(html).toContain('翻面后只显示背面，和 Anki 一致');
+    expect(html).toContain('data-testid="notetype-syntax-more"');
     // The styling hint names the rule behind the centred default.
     expect(html).toContain('text-align: center');
   });
 
-  it('shows the guide on an empty page too, where a first-time reader lands', () => {
+  it('offers the help link on an empty page too, where a first-time reader lands', () => {
     const { html } = render(NoteTypesView, {
       props: { initialLoading: false, initialNoteTypes: [], initialStocks: stocks, initialControls: controls },
     });
-    expect(html).toContain('data-testid="notetype-guide"');
+    expect(html).toContain('data-testid="notetype-help-link"');
     expect(html).toContain('data-testid="note-types-empty"');
+  });
+
+  it('keeps the way back to the note editor through the help page, without reopening the create dialog', () => {
+    const editor = '/decks/d1/notes/new?return=%2Fdecks%2Fd1';
+    routeStore.set(matchRoute(`/decks/d1/note-types?create=1&return=${encodeURIComponent(editor)}`));
+    const { html } = render(NoteTypesView, {
+      props: { initialLoading: false, initialNoteTypes: [noteType()], initialStocks: stocks, initialControls: controls },
+    });
+    const match = /<a href="([^"]*)"[^>]*data-testid="notetype-help-link"/.exec(html);
+    expect(match).not.toBeNull();
+    const helpHref = (match?.[1] ?? '').replaceAll('&amp;', '&');
+    const back = new URLSearchParams(helpHref.split('?')[1]).get('return') ?? '';
+    expect(back.startsWith('/decks/d1/note-types?')).toBe(true);
+    expect(new URLSearchParams(back.split('?')[1]).get('create')).toBeNull();
+    expect(new URLSearchParams(back.split('?')[1]).get('return')).toBe(editor);
   });
 
   it('renders the deck note types, their fields and templates', () => {

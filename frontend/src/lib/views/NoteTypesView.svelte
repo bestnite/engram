@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { routeStore } from '../router';
-  import { NOTE_TYPE_PARAM, RETURN_PARAM, safeReturnPath, withParam } from '../return-to';
+  import { NOTE_TYPE_PARAM, RETURN_PARAM, safeReturnPath, withParam, withReturn, withoutParam } from '../return-to';
+  import { syntaxRows } from '../note-type-syntax';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type {
@@ -29,7 +30,7 @@
   import { toast } from '../components/ui/toast';
   import { NOTE_PREVIEW_CSS, faceStyle } from '../card-frame';
   import { rewriteFieldReferences } from '../note-type-template';
-  import { ArrowDown, ArrowUp, Plus, RefreshCw, Trash2 } from '@lucide/svelte';
+  import { ArrowDown, ArrowUp, CircleHelp, Plus, RefreshCw, Trash2 } from '@lucide/svelte';
 
   interface Props {
     initialLoading?: boolean;
@@ -73,6 +74,14 @@
         }
       : { href: `/decks/${encodeURIComponent(deckId)}`, label: $t('notetype.back') },
   );
+
+  // The help page returns to this page as it is now, so a visit from the note editor keeps its way back. The create
+  // request is dropped: coming back from the help must not open the dialog a second time.
+  const helpHref = $derived.by(() => {
+    const search = $routeStore.search;
+    const here = withoutParam(`${$routeStore.path}${search ? `?${search}` : ''}`, 'create');
+    return withReturn(`/decks/${encodeURIComponent(deckId)}/note-types/help`, here);
+  });
 
   // The editor works on a clone, so leaving a type without saving never changes the list.
   interface Draft {
@@ -141,24 +150,6 @@
       null,
   );
 
-  /**
-   * The template syntax reference. The code column is Anki template syntax, written literally and never translated; the
-   * description comes from the catalog. The list covers what the renderer supports (internal/notetype).
-   */
-  const syntaxRows: Array<{ code: string; key: string }> = [
-    { code: '{{Front}}', key: 'field' },
-    { code: '{{#Extra}} … {{/Extra}}', key: 'if' },
-    { code: '{{^Extra}} … {{/Extra}}', key: 'unless' },
-    { code: '{{hint:Extra}}', key: 'hint' },
-    { code: '{{type:Back}}', key: 'type' },
-    { code: '{{cloze:Text}}', key: 'cloze' },
-    { code: '{{furigana:Expression}}', key: 'furigana' },
-    { code: '{{tts zh_CN:Text}}', key: 'tts' },
-    { code: '{{text:Front}}', key: 'text' },
-    { code: '{{Tags}} {{Deck}} {{Subdeck}} {{Type}} {{Card}}', key: 'special' },
-    { code: '{{FrontSide}}', key: 'frontside' },
-  ];
-  const guideSteps = ['create', 'fields', 'templates', 'style', 'preview', 'use', 'tools'];
 
   // Stock picker labels come from the translation catalog through the server's label_key; the
   // stock's canonical English name is only the default note type name.
@@ -1024,6 +1015,10 @@
     back={{ href: back.href, label: back.label, testId: 'notetype-back' }}
   >
     {#snippet actions()}
+      <Button variant="outline" size="lg" href={helpHref} testId="notetype-help-link">
+        <CircleHelp class="size-4" aria-hidden="true" />
+        <span>{$t('notetype_help.open')}</span>
+      </Button>
       <Button variant="outline" size="lg" onclick={() => void openEmptyCards()} testId="notetype-empty-open">
         <span>{$t('notetype.empty.cleanup.action')}</span>
       </Button>
@@ -1033,20 +1028,6 @@
       </Button>
     {/snippet}
   </PageHeader>
-
-  <!-- What a note type is and how the page is used: the page itself only lists settings, so a first-time reader needs the
-       relation between fields, templates and cards spelled out. The steps stay folded once the reader knows them. -->
-  <div class="mb-6 rounded-lg border border-border bg-surface/40 px-4 py-3 text-sm" data-testid="notetype-guide">
-    <p class="text-muted-foreground">{$t('notetype.guide.intro')}</p>
-    <details class="mt-2">
-      <summary class="cursor-pointer font-medium text-foreground">{$t('notetype.guide.howto')}</summary>
-      <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-muted-foreground">
-        {#each guideSteps as step (step)}
-          <li data-testid={`notetype-guide-${step}`}>{$t(`notetype.guide.step.${step}`)}</li>
-        {/each}
-      </ol>
-    </details>
-  </div>
 
   {#if loading}
     <Skeleton testId="note-types-loading" label={$t('common.loading')} />
@@ -1242,6 +1223,9 @@
                   {/each}
                 </tbody>
               </table>
+              <a href={helpHref} class="mt-2 inline-block text-xs font-medium text-brand hover:underline" data-testid="notetype-syntax-more">
+                {$t('notetype_help.syntax_more')}
+              </a>
             </details>
             <div class="space-y-2 border-b border-border p-3">
               {#each draft.config.templates as template, index (template.id)}
