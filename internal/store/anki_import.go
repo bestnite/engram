@@ -1494,7 +1494,60 @@ func equalAnkiState(a, b CardState) bool {
 		a.Version == b.Version && equalTime(a.SuspendedAt, b.SuspendedAt)
 }
 
-// importAnkiProgress keeps the per-user state separate from shared card content.
+// deriveAnkiMemory uses the package's state, then replays eligible history, then
+// uses SM-2 when replay is ineligible, and skips a card if the result is unusable.
+// Anki writes s and d only when FSRS is enabled, while go-fsrs refuses a non-new
+// card with stability below 0.001, so non-new cards need a usable derived state.
+// Replay DeltaT counts whole review days between consecutive kept rows, using the
+// importing user's timezone and cutoff. A negative cards.ivl counts seconds and
+// is converted to days for SM-2. The SM-2 retention of 0.9 is a fixed assumption
+// about the retention the card's SM-2 intervals aimed at. An unusable state skips
+// the card instead of failing the import: storing it would make every preview
+// and submission fail, so the card stays new for the importer.
+func deriveAnkiMemory(card anki.Card, state *CardState, engine *fsrs.FSRS, history fsrs.ReviewEntries, firstType int, keptIDs []int64, rowMemory map[int64]fsrs.MemoryState) (*int64, bool, error) {
+	var data struct {
+		Stability  *float64 `json:"s"`
+		Difficulty *float64 `json:"d"`
+		LastReview *int64   `json:"lrt"`
+	}
+	if card.Data != "" {
+		if err := json.Unmarshal([]byte(card.Data), &data); err != nil {
+			return nil, false, fmt.Errorf("import Anki card %d data: %w", card.ID, err)
+		}
+	}
+	state.Stability, state.Difficulty = data.Stability, data.Difficulty
+	if card.Type != 0 && !usableAnkiMemory(state.Stability, state.Difficulty) {
+		var memory *fsrs.MemoryState
+		var computeErr error
+		if len(history) > 0 && firstType != 1 {
+			memory, computeErr = engine.MemoryState(history, nil)
+			if computeErr == nil {
+				if historical, err := engine.HistoricalMemoryStates(history, nil); err == nil {
+					for i, id := range keptIDs {
+						rowMemory[id] = historical[i]
+					}
+				}
+			}
+		} else {
+			interval := float64(card.Interval)
+			if interval < 0 {
+				interval = -interval / 86400
+			}
+			memory, computeErr = engine.MemoryStateFromSM2(float64(card.Factor)/1000, interval, 0.9)
+		}
+		if computeErr != nil || memory == nil || !usableAnkiMemory(&memory.Stability, &memory.Difficulty) {
+			return data.LastReview, false, nil
+		}
+		state.Stability, state.Difficulty = &memory.Stability, &memory.Difficulty
+	}
+	if len(keptIDs) > 0 && state.Stability != nil && state.Difficulty != nil {
+		rowMemory[keptIDs[len(keptIDs)-1]] = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}
+	}
+	return data.LastReview, true, nil
+}
+
+// importAnkiProgress keeps per-user state separate from shared card content and
+// derives missing memory states.
 func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64, pkg *anki.Package, cardIDs map[int64]uint64, opts PackageImportOptions, report *PackageImportReport, now time.Time) error {
 	if !opts.IncludeProgress {
 		for _, card := range pkg.Cards {
@@ -1593,7 +1646,10 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 				rowDuration[r.ID] = float64(r.ID-ids[len(ids)-1]) / 86400000
 			}
 			keptIDs[r.CardID] = append(ids, r.ID)
-			day, _ := time.Parse("2006-01-02", reviewday.Day(time.UnixMilli(r.ID), loc, cutoff))
+			day, err := time.Parse("2006-01-02", reviewday.Day(time.UnixMilli(r.ID), loc, cutoff))
+			if err != nil {
+				return fmt.Errorf("import Anki progress: parse review day: %w", err)
+			}
 			var delta float64
 			if prev, ok := lastDay[r.CardID]; ok {
 				delta = day.Sub(prev).Hours() / 24
@@ -1625,49 +1681,18 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			}
 			state.DueAt = &due
 		}
-		var data struct {
-			Stability  *float64 `json:"s"`
-			Difficulty *float64 `json:"d"`
-			LastReview *int64   `json:"lrt"`
+		lastReview, usable, err := deriveAnkiMemory(card, &state, engine, histories[card.ID], firstType[card.ID], keptIDs[card.ID], rowMemory)
+		if err != nil {
+			return err
 		}
-		if card.Data != "" {
-			if err := json.Unmarshal([]byte(card.Data), &data); err != nil {
-				return fmt.Errorf("import Anki card %d data: %w", card.ID, err)
-			}
+		if !usable {
+			report.StatesSkipped++
+			continue
 		}
-		state.Stability, state.Difficulty = data.Stability, data.Difficulty
-		if card.Type != 0 && !usableAnkiMemory(state.Stability, state.Difficulty) {
-			var memory *fsrs.MemoryState
-			var computeErr error
-			if history := histories[card.ID]; len(history) > 0 && firstType[card.ID] != 1 {
-				memory, computeErr = engine.MemoryState(history, nil)
-				if computeErr == nil {
-					if historical, err := engine.HistoricalMemoryStates(history, nil); err == nil {
-						for i, id := range keptIDs[card.ID] {
-							rowMemory[id] = historical[i]
-						}
-					}
-				}
-			} else {
-				interval := float64(card.Interval)
-				if interval < 0 {
-					interval = -interval / 86400
-				}
-				memory, computeErr = engine.MemoryStateFromSM2(float64(card.Factor)/1000, interval, 0.9)
-			}
-			if computeErr != nil || memory == nil || !usableAnkiMemory(&memory.Stability, &memory.Difficulty) {
-				report.StatesSkipped++
-				continue
-			}
-			state.Stability, state.Difficulty = &memory.Stability, &memory.Difficulty
-		}
-		if ids := keptIDs[card.ID]; len(ids) > 0 && state.Stability != nil && state.Difficulty != nil {
-			rowMemory[ids[len(ids)-1]] = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}
-		}
-		if data.LastReview != nil {
+		if lastReview != nil {
 			// Anki writes lrt in seconds; also accept millisecond timestamps from packages
 			// that use the same precision as the review log.
-			stamp := *data.LastReview
+			stamp := *lastReview
 			var at time.Time
 			if stamp > -100000000000 && stamp < 100000000000 {
 				at = time.Unix(stamp, 0).UTC()
