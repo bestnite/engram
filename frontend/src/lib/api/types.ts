@@ -463,11 +463,17 @@ export interface ChangeNoteTypeRequest {
   confirm_card_removal?: boolean;
 }
 
-/** The effect of one change-note-type operation, reported by a dry run and the real change alike. */
+/**
+ * The effect of one change-note-type operation, reported by a dry run and the real change alike.
+ * cards_added counts cards that became visible because the target note type generates their template: new rows and
+ * restored soft-deleted rows. A card whose template the target still generates appears in cards_added and
+ * cards_removed alike: it is removed and then restored with the same id and progress.
+ */
 export interface ChangeNoteTypeResult {
   dry_run: boolean;
   notes_moved: number;
   cards_moved: number;
+  cards_added: number;
   cards_removed: number;
   reviews_on_removed_cards: number;
 }

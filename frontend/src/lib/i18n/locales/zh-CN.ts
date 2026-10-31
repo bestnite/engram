@@ -1616,4 +1616,5 @@ export const zhCN: LocaleCatalog = {
   'occlusion.shape': 'c{ordinal} · {kind}',
   'occlusion.empty': '还没有图形。请用上方的按钮添加。',
   'occlusion.remove': '删除此图形',
+  'notetype.change.cards_added': '新增卡片',
 };

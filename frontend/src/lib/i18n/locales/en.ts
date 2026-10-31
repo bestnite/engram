@@ -1617,4 +1617,5 @@ export const en: LocaleCatalog = {
   'occlusion.shape': 'c{ordinal} · {kind}',
   'occlusion.empty': 'No shapes yet. Add one with the buttons above.',
   'occlusion.remove': 'Remove this shape',
+  'notetype.change.cards_added': 'Cards added',
 };

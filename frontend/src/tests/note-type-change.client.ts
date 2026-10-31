@@ -50,6 +50,7 @@ function changeResult(overrides: Partial<ChangeNoteTypeResult> = {}): ChangeNote
     dry_run: true,
     notes_moved: 2,
     cards_moved: 3,
+    cards_added: 1,
     cards_removed: 0,
     reviews_on_removed_cards: 0,
     ...overrides,
@@ -160,6 +161,7 @@ describe('NoteTypesView empty-card cleanup and change note type', () => {
     ]);
     expect(text('notetype-change-notes')).toBe('2');
     expect(text('notetype-change-moved')).toBe('3');
+    expect(text('notetype-change-added')).toBe('1');
     expect(text('notetype-change-removed')).toBe('0');
 
     (document.body.querySelector('[data-testid="notetype-change-submit"]') as HTMLButtonElement).click();
@@ -182,6 +184,7 @@ describe('NoteTypesView empty-card cleanup and change note type', () => {
           details: {
             notes_moved: 2,
             cards_moved: 2,
+            cards_added: 0,
             cards_removed: 1,
             reviews_on_removed_cards: 4,
           },
@@ -197,6 +200,7 @@ describe('NoteTypesView empty-card cleanup and change note type', () => {
     await flush();
 
     expect(change).toHaveBeenCalledTimes(2);
+    expect(text('notetype-change-added')).toBe('0');
     expect(text('notetype-change-removed')).toBe('1');
     expect(text('notetype-change-reviews')).toBe('4');
     expect(document.body.querySelector('[data-testid="notetype-change-confirm-dialog"]')).not.toBeNull();

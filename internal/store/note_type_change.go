@@ -73,11 +73,16 @@ type NoteTypeChangeOptions struct {
 //
 // NotesMoved is the number of notes whose note type changed. CardsMoved counts live cards whose template was
 // changed to the mapped target template; their card ids, and therefore their progress, stay the same.
-// CardsRemoved counts live cards of unmapped source templates that the operation soft-deleted;
-// ReviewsOnRemovedCards counts the review rows attached to those cards, which stay in place.
+// CardsAdded counts cards that became visible because the target config generates their template for the note: a newly
+// inserted row and a soft-deleted row restored with the same id. CardsRemoved counts live cards of unmapped source
+// templates that the operation soft-deleted; ReviewsOnRemovedCards counts the review rows attached to those cards,
+// which stay in place. A card of an unmapped source template whose template the target config still generates appears
+// in both cards_removed and cards_added: the soft-delete happened, and the card sync then restored the same row with
+// its id and progress.
 type NoteTypeChangeImpact struct {
 	NotesMoved            int
 	CardsMoved            int
+	CardsAdded            int
 	CardsRemoved          int
 	ReviewsOnRemovedCards int
 }
@@ -264,7 +269,15 @@ func loadNoteTypesForNotes(ctx context.Context, tx *gorm.DB, notes []Note) (map[
 // mapping receives the empty string, search_text is recomputed from the target config, and the media mapping is rebuilt
 // because an unmapped field can drop references. Tags, source, external_ref and deck stay unchanged.
 //
-// Cards are moved, not regenerated: a target template with no source card produces no card for an existing note.
+// A note also gains the cards the target config generates for it and it lacks, so a target template no source card maps
+// to gets a card when its front is not empty. The insertion goes through the card sync the note write path uses: a
+// generated template a live card already holds keeps that row, and a generated template only a soft-deleted row holds
+// restores that row, so the progress the note once recorded for it survives. No card beyond the unmapped ones is
+// soft-deleted. A source template mapped to a target template a soft-deleted row still holds is refused before any
+// write, because the unique index would reject the move.
+//
+// A mapping may permute template ids among a note's live cards, because every card carries its own original template
+// into the move.
 //
 // A dry run and an unconfirmed removal both roll back, so they write nothing; the returned impact belongs to both.
 func (s *NoteStore) ChangeNoteType(ctx context.Context, deckID, sourceID, targetID uint64, opts NoteTypeChangeOptions) (NoteTypeChangeImpact, error) {
@@ -323,6 +336,20 @@ func (s *NoteStore) ChangeNoteType(ctx context.Context, deckID, sourceID, target
 			impact.CardsMoved += moved
 			impact.CardsRemoved += len(stale)
 			removedIDs = append(removedIDs, stale...)
+
+			wanted, err := notetype.GenerateCards(tgtCfg, notetype.RenderData{
+				Fields:   values,
+				Tags:     TagsOrEmpty(note.TagsJSON),
+				TypeName: target.Name,
+			})
+			if err != nil {
+				return fmt.Errorf("note %d: generate cards: %w", note.ID, err)
+			}
+			_, created, err := syncCardsWithChangeKeeping(tx, note.ID, wanted, nil, now)
+			if err != nil {
+				return err
+			}
+			impact.CardsAdded += len(created.Added)
 		}
 		impact.NotesMoved = len(notes)
 		if err := countReviewsOnCards(tx, removedIDs, &impact.ReviewsOnRemovedCards); err != nil {
@@ -464,19 +491,53 @@ func remapNoteFields(tgtCfg notetype.Config, plan map[string]string, values map[
 // moveNoteCards moves one note's live cards to their mapped target templates and soft-deletes the rest.
 //
 // It returns the number of moved cards and the ids of the cards it soft-deleted, so the caller can count the review
-// rows those cards kept. A card whose target template is already held by another row of the same note is refused:
-// both databases enforce the (note_id, template) unique index over soft-deleted rows too, so the move could not be
-// written.
+// rows those cards kept.
+//
+// A target template that another row of the same note keeps is refused with ErrNoteTypeMappingInvalid: both databases
+// enforce the (note_id, template) unique index over every row, soft-deleted ones included, so the move could not be
+// written. A target that only a card moving away from that template holds is not a conflict, because the two cards
+// exchange their templates rather than share one.
+//
+// A permutation cannot be written one card at a time: the first card would write a template the second card still
+// holds, and the index would reject that statement. Every moving card is therefore written twice inside the caller's
+// transaction: first to a temporary template value derived from its own id, then to its target. The temporary value is
+// picked so that no other row of the note holds it, which keeps the index satisfied after each single statement. The
+// temporary value is never visible outside the transaction.
 func moveNoteCards(tx *gorm.DB, noteID uint64, plan map[string]templateMove, now time.Time) (moved int, stale []uint64, err error) {
 	// Unscoped: a soft-deleted row still occupies the (note_id, template) unique key.
 	var cards []Card
 	if err := tx.Unscoped().Where("note_id = ?", noteID).Find(&cards).Error; err != nil {
 		return 0, nil, fmt.Errorf("load cards of note %d: %w", noteID, err)
 	}
-	holder := make(map[string]uint64, len(cards))
-	for _, card := range cards {
-		holder[card.Template] = card.ID
+	// vacated holds the templates the live cards of this move leave behind, so a target equal to one of them is not a
+	// conflict even though that row still holds the template when the first write runs.
+	vacated := make(map[string]bool, len(cards))
+	for i := range cards {
+		card := &cards[i]
+		if card.DeletedAt.Valid {
+			continue
+		}
+		if move, ok := plan[card.Template]; ok && move.targetID != card.Template {
+			vacated[card.Template] = true
+		}
 	}
+	// occupied holds every template that stays with its row: soft-deleted rows, unmapped live cards, and live cards
+	// whose mapping keeps their template id.
+	occupied := make(map[string]uint64, len(cards))
+	for i := range cards {
+		card := &cards[i]
+		if !card.DeletedAt.Valid && vacated[card.Template] {
+			continue
+		}
+		occupied[card.Template] = card.ID
+	}
+
+	type cardMove struct {
+		id      uint64
+		target  string
+		ordinal int
+	}
+	var moves []cardMove
 	for i := range cards {
 		card := &cards[i]
 		if card.DeletedAt.Valid {
@@ -497,19 +558,45 @@ func moveNoteCards(tx *gorm.DB, noteID uint64, plan map[string]templateMove, now
 			moved++
 			continue
 		}
-		if other, taken := holder[move.targetID]; taken && other != card.ID {
+		if other, taken := occupied[move.targetID]; taken && other != card.ID {
 			return 0, nil, fmt.Errorf("%w: template %q is already stored on note %d", ErrNoteTypeMappingInvalid, move.targetID, noteID)
 		}
-		if err := tx.Model(&Card{}).Where("id = ?", card.ID).Updates(map[string]any{
-			"template": move.targetID,
-			"ordinal":  move.ordinal,
-		}).Error; err != nil {
-			return 0, nil, fmt.Errorf("move card %d: %w", card.ID, err)
-		}
-		delete(holder, card.Template)
-		holder[move.targetID] = card.ID
-		moved++
+		occupied[move.targetID] = card.ID
+		moves = append(moves, cardMove{id: card.ID, target: move.targetID, ordinal: move.ordinal})
 	}
+
+	if len(moves) > 0 {
+		// used starts from every template any row of the note holds, including the vacated ones, so a temporary value
+		// never collides with a real template id either.
+		used := make(map[string]bool, len(cards)*2)
+		for _, card := range cards {
+			used[card.Template] = true
+		}
+		temporary := make([]string, len(moves))
+		for i, move := range moves {
+			candidate := fmt.Sprintf("__engram_move__:%d", move.id)
+			for used[candidate] {
+				candidate += "_"
+			}
+			used[candidate] = true
+			temporary[i] = candidate
+		}
+		for i, move := range moves {
+			if err := tx.Model(&Card{}).Where("id = ?", move.id).Update("template", temporary[i]).Error; err != nil {
+				return 0, nil, fmt.Errorf("stage card %d move: %w", move.id, err)
+			}
+		}
+		for _, move := range moves {
+			if err := tx.Model(&Card{}).Where("id = ?", move.id).Updates(map[string]any{
+				"template": move.target,
+				"ordinal":  move.ordinal,
+			}).Error; err != nil {
+				return 0, nil, fmt.Errorf("move card %d: %w", move.id, err)
+			}
+			moved++
+		}
+	}
+
 	const batch = 500
 	for start := 0; start < len(stale); start += batch {
 		end := start + batch

@@ -357,8 +357,8 @@ func TestChangeNoteTypeREST(t *testing.T) {
 	if err := json.Unmarshal(raw, &result); err != nil {
 		t.Fatalf("dry-run response is not JSON: %v (%s)", err, raw)
 	}
-	if !result.DryRun || result.NotesMoved != 1 || result.CardsMoved != 2 || result.CardsRemoved != 0 {
-		t.Errorf("dry run = %+v, want dry_run true, 1 note, 2 moved and 0 removed", result)
+	if !result.DryRun || result.NotesMoved != 1 || result.CardsMoved != 2 || result.CardsAdded != 0 || result.CardsRemoved != 0 {
+		t.Errorf("dry run = %+v, want dry_run true, 1 note, 2 moved, 0 added and 0 removed", result)
 	}
 	if got := storedNoteTypeID(t, env, note.ID); got != source.ID {
 		t.Fatalf("dry run moved the note to note type %q, want %q", got, source.ID)
@@ -378,8 +378,8 @@ func TestChangeNoteTypeREST(t *testing.T) {
 	if err := json.Unmarshal(raw, &result); err != nil {
 		t.Fatalf("change response is not JSON: %v (%s)", err, raw)
 	}
-	if result.DryRun || result.NotesMoved != 1 || result.CardsMoved != 2 || result.CardsRemoved != 0 {
-		t.Errorf("change = %+v, want 1 note, 2 moved and 0 removed", result)
+	if result.DryRun || result.NotesMoved != 1 || result.CardsMoved != 2 || result.CardsAdded != 0 || result.CardsRemoved != 0 {
+		t.Errorf("change = %+v, want 1 note, 2 moved, 0 added and 0 removed", result)
 	}
 	if got := storedNoteTypeID(t, env, note.ID); got != target.ID {
 		t.Errorf("note type after change = %q, want %q", got, target.ID)
@@ -429,7 +429,8 @@ func TestChangeNoteTypeREST(t *testing.T) {
 		t.Fatalf("load audit row: %v", err)
 	}
 	if audit.DetailJSON == nil || !strings.Contains(*audit.DetailJSON, `"notes_moved":1`) ||
-		!strings.Contains(*audit.DetailJSON, `"cards_moved":2`) {
+		!strings.Contains(*audit.DetailJSON, `"cards_moved":2`) ||
+		!strings.Contains(*audit.DetailJSON, `"cards_added":0`) {
 		t.Errorf("audit detail = %v, want the change counts", audit.DetailJSON)
 	}
 }
@@ -491,6 +492,7 @@ func TestChangeNoteTypeRESTRemovalRequiresConfirmation(t *testing.T) {
 		} `json:"error"`
 		NotesMoved            int `json:"notes_moved"`
 		CardsMoved            int `json:"cards_moved"`
+		CardsAdded            int `json:"cards_added"`
 		CardsRemoved          int `json:"cards_removed"`
 		ReviewsOnRemovedCards int `json:"reviews_on_removed_cards"`
 	}
@@ -500,9 +502,10 @@ func TestChangeNoteTypeRESTRemovalRequiresConfirmation(t *testing.T) {
 	if refusal.Error.Code != CodeCardRemovalUnconfirmed {
 		t.Errorf("refusal code = %q, want %q", refusal.Error.Code, CodeCardRemovalUnconfirmed)
 	}
-	if refusal.NotesMoved != 1 || refusal.CardsMoved != 1 || refusal.CardsRemoved != 1 || refusal.ReviewsOnRemovedCards != 1 {
-		t.Errorf("refusal counts = note %d moved %d removed %d reviews %d, want 1/1/1/1",
-			refusal.NotesMoved, refusal.CardsMoved, refusal.CardsRemoved, refusal.ReviewsOnRemovedCards)
+	if refusal.NotesMoved != 1 || refusal.CardsMoved != 1 || refusal.CardsAdded != 1 ||
+		refusal.CardsRemoved != 1 || refusal.ReviewsOnRemovedCards != 1 {
+		t.Errorf("refusal counts = note %d moved %d added %d removed %d reviews %d, want 1/1/1/1/1",
+			refusal.NotesMoved, refusal.CardsMoved, refusal.CardsAdded, refusal.CardsRemoved, refusal.ReviewsOnRemovedCards)
 	}
 	if got := storedNoteTypeID(t, env, note.ID); got != source.ID {
 		t.Fatalf("unconfirmed change moved the note to note type %q, want %q", got, source.ID)
@@ -525,8 +528,9 @@ func TestChangeNoteTypeRESTRemovalRequiresConfirmation(t *testing.T) {
 	if err := json.Unmarshal(raw, &result); err != nil {
 		t.Fatalf("confirmed response is not JSON: %v (%s)", err, raw)
 	}
-	if result.NotesMoved != 1 || result.CardsMoved != 1 || result.CardsRemoved != 1 || result.ReviewsOnRemovedCards != 1 {
-		t.Errorf("confirmed change = %+v, want 1 note, 1 moved, 1 removed and 1 review", result)
+	if result.NotesMoved != 1 || result.CardsMoved != 1 || result.CardsAdded != 1 ||
+		result.CardsRemoved != 1 || result.ReviewsOnRemovedCards != 1 {
+		t.Errorf("confirmed change = %+v, want 1 note, 1 moved, 1 added, 1 removed and 1 review", result)
 	}
 	if got := storedNoteTypeID(t, env, note.ID); got != target.ID {
 		t.Errorf("note type after change = %q, want %q", got, target.ID)
@@ -535,8 +539,18 @@ func TestChangeNoteTypeRESTRemovalRequiresConfirmation(t *testing.T) {
 		t.Error("the unmapped card is still visible after the confirmed change")
 	}
 	remaining := visibleCardsOfNote(t, env, note.ID)
-	if len(remaining) != 1 || remaining[0].ID != mapped.ID || remaining[0].Template != "g-card" {
-		t.Errorf("cards after change = %+v, want only the moved card %d", remaining, mapped.ID)
+	if len(remaining) != 2 {
+		t.Fatalf("cards after change = %+v, want the moved g-card and the generated g-extra", remaining)
+	}
+	afterByTemplate := map[string]store.Card{}
+	for _, card := range remaining {
+		afterByTemplate[card.Template] = card
+	}
+	if afterByTemplate["g-card"].ID != mapped.ID {
+		t.Errorf("g-card id = %d, want the moved row %d", afterByTemplate["g-card"].ID, mapped.ID)
+	}
+	if afterByTemplate["g-extra"].ID == 0 {
+		t.Error("the generated g-extra card is missing")
 	}
 	for name, cardID := range map[string]uint64{"mapped": mapped.ID, "removed": stale.ID} {
 		if states, reviews := progressRowCounts(t, env, cardID); states != 1 || reviews != 1 {

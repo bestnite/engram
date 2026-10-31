@@ -780,6 +780,7 @@
       !body ||
       typeof body.notes_moved !== 'number' ||
       typeof body.cards_moved !== 'number' ||
+      typeof body.cards_added !== 'number' ||
       typeof body.cards_removed !== 'number' ||
       typeof body.reviews_on_removed_cards !== 'number'
     ) {
@@ -789,6 +790,7 @@
       dry_run: false,
       notes_moved: body.notes_moved,
       cards_moved: body.cards_moved,
+      cards_added: body.cards_added,
       cards_removed: body.cards_removed,
       reviews_on_removed_cards: body.reviews_on_removed_cards,
     };
@@ -1522,6 +1524,10 @@
             <div class="flex items-center justify-between gap-4">
               <dt class="text-muted-foreground">{$t('notetype.change.cards_moved')}</dt>
               <dd data-testid="notetype-change-moved" class="font-semibold tabular-nums text-foreground">{changeImpact.cards_moved}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-4">
+              <dt class="text-muted-foreground">{$t('notetype.change.cards_added')}</dt>
+              <dd data-testid="notetype-change-added" class="font-semibold tabular-nums text-foreground">{changeImpact.cards_added}</dd>
             </div>
             <div class="flex items-center justify-between gap-4">
               <dt class="text-muted-foreground">{$t('notetype.change.cards_removed')}</dt>
