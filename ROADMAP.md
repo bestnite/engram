@@ -145,25 +145,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-18 `.apkg` import says why requested weights were not used** — with `apply_weights` on
-  and the target `new_deck`, `createAnkiPreset` drops weights that `fsrs.MigrateWeights` refuses and
-  throws the error away. The report then carries `weights_applied` false and `weights_discarded`
-  true, which is the same pair as with `apply_weights` off, and no log line records the refusal. A
-  user who ticked the checkbox reads "Package weights not used" and cannot tell that the package's
-  weights were faulty. The fix: `PackageImportReport` in `internal/store/package_import.go` gains
-  `WeightsInvalid` (JSON `weights_invalid`), which is true only when all four of these hold:
-  `apply_weights` is on, the target is `new_deck`, the package carries weights, and
-  `fsrs.MigrateWeights` refuses them. The importer writes one English `slog.Warn` line carrying the
-  importing user's id and the `MigrateWeights` error. `frontend/src/lib/api/types.ts` gains the
-  field, and `frontend/src/lib/views/ImportView.svelte` shows one catalog line when it is true; the
-  key `package.report.weights_invalid` is appended at the end of
-  `frontend/src/lib/i18n/locales/en.ts` and `zh-CN.ts`, and the two key sets stay identical. This
-  entry changes `frontend/src/lib/views/`, so it never runs beside `M18-6`. *Acceptance:* the weights
-  table test reports `weights_invalid` true for the refused set, and false for the option off, the
-  accepted set, the package without weights and the existing-deck target; a component test shows the
-  line when `weights_invalid` is true and hides it when it is false. Evidence is the raw scoped
-  `go test` and `go vet` output and the component test output.
-
 - [ ] **M18-19 `.edeck` import checks package weights the way `.apkg` does** —
   `createPresetFromPackage` in `internal/store/package_import.go` writes the `weights` of
   `preset.json` into the new preset whenever `apply_weights` is on and the list is not empty, and
