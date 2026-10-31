@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	fsrs "github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/anki"
@@ -1028,7 +1029,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 	// media references to the report, and no stored row points at them.
 	dropUnusedAnkiNoteTypes(pkg)
 
-	deckID, err := s.resolveAnkiTargetDeck(ctx, tx, actorUserID, pkg, plan, targetKind, targetDeckID, opts)
+	deckID, err := s.resolveAnkiTargetDeck(ctx, tx, actorUserID, pkg, plan, targetKind, targetDeckID, opts, report)
 	if err != nil {
 		return err
 	}
@@ -1588,7 +1589,11 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID uint64, pkg *an
 }
 
 // resolveAnkiTargetDeck resolves the target and creates a preset for a new deck.
-func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *anki.Package, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions) (uint64, error) {
+func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *anki.Package, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport) (uint64, error) {
+	cfg := ankiTopConfig(pkg, plan.TopName)
+	if cfg != nil && len(cfg.Weights) > 0 {
+		report.WeightsDiscarded = true
+	}
 	switch targetKind {
 	case PackageTargetNewDeck:
 		name := strings.TrimSpace(opts.NewDeckName)
@@ -1605,7 +1610,7 @@ func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, acto
 		if err != nil {
 			return 0, err
 		}
-		presetID, err := createAnkiPreset(ctx, tx, actorUserID, unique, ankiTopConfig(pkg, plan.TopName))
+		presetID, err := createAnkiPreset(ctx, tx, actorUserID, unique, cfg, opts.ApplyWeights, report)
 		if err != nil {
 			return 0, err
 		}
@@ -1634,7 +1639,7 @@ func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, acto
 // createAnkiPreset creates the imported deck's preset with the documented defaults. The name is
 // independent of the user's default preset, so deleting this deck's preset cannot remove the
 // account default and vice versa.
-func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName string, cfg *anki.DeckConfig) (uint64, error) {
+func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName string, cfg *anki.DeckConfig, applyWeights bool, report *PackageImportReport) (uint64, error) {
 	base := "Imported — " + deckName
 	name, err := uniqueOwnerName(ctx, tx, &Preset{}, owner, base)
 	if err != nil {
@@ -1650,17 +1655,23 @@ func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName s
 		if cfg.MaximumReviewInterval > 0 {
 			preset.MaximumIntervalDays = cfg.MaximumReviewInterval
 		}
-		if len(cfg.Weights) > 0 {
-			raw, err := json.Marshal(cfg.Weights)
-			if err != nil {
-				return 0, err
+		if len(cfg.Weights) > 0 && applyWeights {
+			if _, err := fsrs.MigrateWeights(cfg.Weights); err == nil {
+				raw, err := json.Marshal(cfg.Weights)
+				if err != nil {
+					return 0, err
+				}
+				text := string(raw)
+				preset.WeightsJSON = &text
 			}
-			text := string(raw)
-			preset.WeightsJSON = &text
 		}
 	}
 	if err := NewPresetStore(tx).Create(ctx, &preset); err != nil {
 		return 0, err
+	}
+	if preset.WeightsJSON != nil {
+		report.WeightsApplied = true
+		report.WeightsDiscarded = false
 	}
 	return preset.ID, nil
 }

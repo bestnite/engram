@@ -25,7 +25,7 @@ func TestRealAnkiPackage(t *testing.T) {
 		t.Run(driver, func(t *testing.T) {
 			ctx := context.Background()
 			user := seedUsers(t, db, "real_anki")[0]
-			report, err := NewDeckStore(db).ImportPackage(ctx, user, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
+			report, err := NewDeckStore(db).ImportPackage(ctx, user, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck, IncludeProgress: true, ApplyWeights: true, MediaRoot: t.TempDir()})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -113,7 +113,7 @@ func TestAnkiProgressImport(t *testing.T) {
 					if err := db.First(&preset, deck.PresetID).Error; err != nil {
 						t.Fatal(err)
 					}
-					if preset.DesiredRetention != .85 || preset.LearningSteps != "2m,12m" || preset.RelearningSteps != "3m" || preset.MaximumIntervalDays != 123 || preset.WeightsJSON == nil || *preset.WeightsJSON != "[1,2,3]" || preset.WeightsReviewCount != nil || preset.WeightsOptimizedAt != nil {
+					if preset.DesiredRetention != .85 || preset.LearningSteps != "2m,12m" || preset.RelearningSteps != "3m" || preset.MaximumIntervalDays != 123 || preset.WeightsJSON != nil || !report.WeightsDiscarded || report.WeightsApplied || preset.WeightsReviewCount != nil || preset.WeightsOptimizedAt != nil {
 						t.Fatalf("preset: %+v", preset)
 					}
 					var states []CardState
