@@ -38,17 +38,13 @@ Engram 是一个开源、自托管的渐进式间隔重复闪卡（Flashcard）�
 
 ---
 
-## 卡组库
+## 导入卡组
 
-[`decks/`](./decks/) 目录收录可直接导入的 `.edeck` 卡组包。在**导入**页上传文件或粘贴文件的公开直链即可导入，也可用 CLI（`engram import`）或 MCP 的 `import_deck` 工具。完整清单与操作步骤见 [`decks/README.zh.md`](./decks/README.zh.md)。
+在**导入**页上传文件或粘贴文件的公开直链，或用 CLI（`engram import`）、MCP 的 `import_deck` 工具，都可以导入卡组。支持两种卡组包：Engram 自己的 `.edeck`（包含卡组内容，导出时若包含导出方的学习进度也会一并带入），以及 Anki 的 `.apkg`。
 
-Anki 的 `.apkg` 卡组包走同一组入口导入；会导入什么、不会导入什么，见[从 Anki 导入卡组](#从-anki-导入卡组)。
+导入时需要选择目标：`new_deck` 新建卡组，`into_deck:<id>` 合并到你有编辑权限的卡组；CLI 与 MCP 工具还接受 `replace_deck:<id>` 整体替换现有卡组，该操作仅卡组所有者可用。
 
----
-
-## 从 Anki 导入卡组
-
-**导入**页、`engram import` 命令与 MCP 的 `import_deck` 工具都接受 Anki 的 `.apkg` 卡组包。与 `.edeck` 一样需要选择导入目标：`new_deck` 新建卡组，`into_deck:<id>` 合并到你有编辑权限的卡组；CLI 与 MCP 工具还接受 `replace_deck:<id>` 整体替换现有卡组，该操作仅卡组所有者可用。
+### Anki `.apkg` 卡组包
 
 包内以下内容会原样带来：
 

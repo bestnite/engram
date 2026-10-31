@@ -38,17 +38,13 @@ Live demo: <https://engram.nite07.com/> (registration is open; you can also sign
 
 ---
 
-## Deck Library
+## Importing Decks
 
-Ready-to-import `.edeck` packages live in [`decks/`](./decks/). Pick one, then import it from the **Import** page (upload the file, or paste the file's public direct link), the CLI (`engram import`), or the MCP `import_deck` tool. See [`decks/README.md`](./decks/README.md) for the deck list and the step-by-step instructions.
+Import a deck from the **Import** page (upload the file, or paste the file's public direct link), the CLI (`engram import`), or the MCP `import_deck` tool. Two package formats are accepted: Engram's own `.edeck`, which carries deck content and, when the export included it, the exporter's review progress; and Anki's `.apkg`.
 
-An Anki `.apkg` package imports through the same three entry points; see [Importing Anki Decks](#importing-anki-decks) for what arrives and what does not.
+Choose the target: `new_deck` creates a deck, and `into_deck:<id>` merges into a deck you can edit. The CLI and the MCP tool also take `replace_deck:<id>` to replace an existing deck, which only the deck's owner may do.
 
----
-
-## Importing Anki Decks
-
-The **Import** page, `engram import` and the MCP `import_deck` tool accept an Anki `.apkg` package. As with an `.edeck`, choose the target: `new_deck` creates a deck, and `into_deck:<id>` merges into a deck you can edit. The CLI and the MCP tool also take `replace_deck:<id>` to replace an existing deck, which only the deck's owner may do.
+### Anki `.apkg` packages
 
 The package brings these across:
 
