@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fieldText, formatBytes, formatDate, formatNumber, formatPercent } from '../lib/format';
+import { fieldText, formatBytes, formatDate, formatNumber, formatPercent, htmlToText } from '../lib/format';
 
 describe('shared formatting', () => {
   it.each([
@@ -43,5 +43,24 @@ describe('shared formatting', () => {
     [{ x: 1 }, '{\n  "x": 1\n}'],
   ])('fieldText(%j)', (value, want) => {
     expect(fieldText(value)).toBe(want);
+  });
+});
+
+describe('htmlToText', () => {
+  it.each([
+    ['paragraphs become one line', '<p>继续、延续。</p><p>第二段</p>', '继续、延续。 第二段'],
+    ['a ruby reads as its base', '<p><ruby>赓<rt>gēng</rt></ruby>续</p>', '赓续'],
+    ['ruby fallback parentheses are dropped', '<ruby>漢<rp>(</rp><rt>かん</rt><rp>)</rp></ruby>字', '漢字'],
+    ['a speech tag is dropped after its visible text', 'bonjour[anki:tts lang=fr_FR]bonjour[/anki:tts]', 'bonjour'],
+    ['a sound tag is dropped', 'listen [sound:a.mp3] now', 'listen now'],
+    ['line breaks become spaces', 'a<br>b<br/>c', 'a b c'],
+    ['inline markup is removed', '<b>bold</b> and <span style="color:red">red</span>', 'bold and red'],
+    ['scripts and styles are dropped with their content', '<style>p{}</style>x<script>alert(1)</script>', 'x'],
+    ['references are decoded', 'a &lt;b&gt; &amp; &quot;c&quot; &#39;d&#39; &#x4e2d;', 'a <b> & "c" \'d\' 中'],
+    ['an unknown reference stays as written', '&copy; &#0;', '&copy; &#0;'],
+    ['an image leaves nothing', '<img src="x.png">', ''],
+    ['text without markup is unchanged', 'plain  text', 'plain text'],
+  ])('%s', (_name, input, expected) => {
+    expect(htmlToText(input)).toBe(expected);
   });
 });

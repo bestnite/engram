@@ -53,3 +53,31 @@ export function fieldText(value: unknown): string {
   }
   return JSON.stringify(value, null, 2);
 }
+
+/** Character references a field summary decodes by name; every other named reference is kept as written. */
+const namedEntities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+/**
+ * The text of a field value's HTML on one line, for a list row that shows a summary instead of the rendered face.
+ *
+ * The rule follows what a reader sees on the card: a ruby annotation (`<rt>`, `<rp>`) is left out so the base reads as
+ * one word, a speech tag is dropped because its text is already shown in front of it, a sound tag is dropped because it
+ * is a file name, and markup is removed with block boundaries kept as spaces. The result is plain text: the caller
+ * shows it as text, so no stored markup reaches the page. A regular expression is enough, and it runs where no DOM
+ * exists (the server-rendered tests); a parser would only change how malformed markup is cut.
+ */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<(script|style|rt|rp)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/\[anki:tts\b[^\]]*\][\s\S]*?\[\/anki:tts\]/gi, '')
+    .replace(/\[sound:[^\]]*\]/gi, '')
+    .replace(/<(br|\/?(p|div|li|ul|ol|h[1-6]|tr|td|th|blockquote|pre|table))\b[^>]*>/gi, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (match, ref: string) => {
+      if (ref[0] !== '#') return namedEntities[ref.toLowerCase()] ?? match;
+      const code = ref[1] === 'x' || ref[1] === 'X' ? Number.parseInt(ref.slice(2), 16) : Number.parseInt(ref.slice(1), 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+}

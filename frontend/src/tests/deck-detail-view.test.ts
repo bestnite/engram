@@ -50,11 +50,31 @@ describe('DeckDetailView notes table', () => {
     expect(html).toContain(`href="/decks/d1/notes/${id}/edit?return=%2Fdecks%2Fd1"`);
   });
 
-  it('renders the external reference as a labelled chip and marks suspended notes', () => {
-    const html = renderView([note('n1', { external_ref: 'anki:1693042', suspended: true })]);
+  it('puts the external reference in its own column and marks suspended notes', () => {
+    const html = renderView([note('n1', { external_ref: 'anki:1693042', suspended: true }), note('n2')]);
+    expect(html).toMatch(/data-testid="note-ref-n1"[^>]*>anki:1693042</);
     expect(html).toContain('title="外部引用: anki:1693042"');
+    expect(html).toContain('data-testid="notes-resize-ref"');
     expect(html).toContain('data-testid="note-suspended-n1"');
-    expect(html).not.toContain('[anki:1693042]');
+    // The reference is no longer a chip inside the content cell.
+    const contentCell = html.slice(html.indexOf('data-testid="note-fields-n1"'), html.indexOf('data-testid="note-ref-n1"'));
+    expect(contentCell).not.toContain('>anki:1693042<');
+  });
+
+  it('leaves the external reference column out when no note on the page has one', () => {
+    const html = renderView([note('n1')]);
+    expect(html).not.toContain('data-testid="note-ref-n1"');
+    expect(html).not.toContain('data-testid="notes-resize-ref"');
+    expect(html).toContain('data-testid="notes-resize-tags"');
+    expect(html).toContain('data-testid="notes-resize-created"');
+  });
+
+  it('summarises HTML field values as their text', () => {
+    const html = renderView([note('n1', { fields: { front: '<p><ruby>赓<rt>gēng</rt></ruby>续</p>', back: '<p>继续、延续。</p>' } })]);
+    expect(html).toMatch(/data-testid="note-fields-n1"[\s\S]*?>赓续</);
+    expect(html).toContain('>继续、延续。<');
+    expect(html).not.toContain('&lt;p>');
+    expect(html).not.toContain('gēng');
   });
 
   it('keeps row actions in a menu and never renders a delete confirmation inline', () => {

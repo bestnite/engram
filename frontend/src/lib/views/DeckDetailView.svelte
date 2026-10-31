@@ -4,7 +4,7 @@
   import { navigate, replaceAddress, routeStore } from '../router';
   import { withReturn } from '../return-to';
   import { t } from '../i18n';
-  import { fieldText } from '../format';
+  import { fieldText, htmlToText } from '../format';
   import { apiClient, ApiClientError } from '../api';
   import type { Deck, DeckQueueCount, DeckTag, Note, BulkNotesResponse } from '../api';
   import DeckSharingView from './DeckSharingView.svelte';
@@ -21,9 +21,10 @@
   import { toast } from '../components/ui/toast';
   import InlineEdit from '../components/InlineEdit.svelte';
   import CardFrame from '../components/CardFrame.svelte';
+  import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
-  import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, FileText, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, SearchX, Tags, Trash2, X } from '@lucide/svelte';
+  import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, FileText, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, SearchX, Tags, Trash2, X } from '@lucide/svelte';
   import EmptyState from '../components/ui/EmptyState.svelte';
 
   interface Props {
@@ -48,6 +49,57 @@
   let total = $state(initialTotal);
   // The caller's progress through this deck; null until loaded or when the request fails, in which case the header omits it.
   let progress = $state<DeckQueueCount | null>(null);
+  // Note type id → its field ids in order, for the row summaries; empty until loaded.
+  let fieldOrder = $state<Record<string, string[]>>({});
+
+  /** The list's fixed-width columns, which the header dividers resize; the content column takes the rest. */
+  type ResizableColumn = 'ref' | 'tags' | 'created';
+  const columnLimits: Record<ResizableColumn, { default: number; min: number; max: number }> = {
+    ref: { default: 144, min: 64, max: 480 },
+    tags: { default: 144, min: 64, max: 480 },
+    created: { default: 104, min: 88, max: 240 },
+  };
+  // One width set per browser, shared by every deck: the widths follow the reader's screen, not the deck.
+  const COLUMN_STORAGE_KEY = 'engram-notes-columns';
+
+  function defaultColumnWidths(): Record<ResizableColumn, number> {
+    return { ref: columnLimits.ref.default, tags: columnLimits.tags.default, created: columnLimits.created.default };
+  }
+
+  /** The stored widths, each clamped to its limits; a missing or unreadable entry keeps the default. */
+  function readColumnWidths(): Record<ResizableColumn, number> {
+    const widths = defaultColumnWidths();
+    try {
+      const stored: unknown = JSON.parse(window.localStorage.getItem(COLUMN_STORAGE_KEY) ?? '{}');
+      if (typeof stored !== 'object' || stored === null) return widths;
+      for (const key of Object.keys(widths) as ResizableColumn[]) {
+        const value = (stored as Record<string, unknown>)[key];
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          widths[key] = Math.min(columnLimits[key].max, Math.max(columnLimits[key].min, Math.round(value)));
+        }
+      }
+    } catch {
+      // Storage unavailable or corrupt: the defaults apply.
+    }
+    return widths;
+  }
+
+  function saveColumnWidths(): void {
+    try {
+      window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(columnWidths));
+    } catch {
+      // Storage unavailable: the widths last for this page only.
+    }
+  }
+
+  function resetColumnWidth(key: ResizableColumn): void {
+    columnWidths[key] = columnLimits[key].default;
+    saveColumnWidths();
+  }
+
+  let columnWidths = $state<Record<ResizableColumn, number>>(defaultColumnWidths());
+  // The external reference column appears only when a note on this page has one; most decks never set it.
+  const showRefColumn = $derived(notes.some((note) => note.external_ref));
   let page = $state(1);
   let activeTab = $state<'cards' | 'sharing' | 'settings'>('cards');
   // Opened tabs stay mounted and only toggle visibility: switching back and forth does not refetch, so the loading placeholder does not flash every time.
@@ -460,28 +512,62 @@
 
   /**
    * The two-line summary of a list row: the first line is the note type's first non-empty field, the second the next
-   * distinct one. Newlines and consecutive whitespace are squeezed into a single space — the row only shows one line,
-   * the full content is on the edit page.
+   * distinct one. Field values are HTML, so each is reduced to its text on one line — the full content is on the edit
+   * page. Fields are taken in the note type's order; the field map itself is ordered by key, which would put "back"
+   * before "front". A note whose type is not loaded falls back to the map's order.
    */
   function noteSummary(note: Note): { primary: string; secondary: string } {
-    const flat = (value: unknown) => fieldText(value).replace(/\s+/g, ' ').trim();
-    const filled = Object.entries(note.fields)
-      .map(([key, value]) => [key, flat(value)] as const)
-      .filter(([, value]) => value !== '');
-    const primary = filled[0]?.[1] ?? '';
-    const secondary = filled.find(([, value]) => value !== primary)?.[1] ?? '';
+    const flat = (value: unknown) => htmlToText(fieldText(value));
+    const order = (note.note_type && fieldOrder[note.note_type]) || [];
+    const keys = [...order.filter((key) => key in note.fields), ...Object.keys(note.fields).filter((key) => !order.includes(key))];
+    const filled = keys.map((key) => flat(note.fields[key])).filter((value) => value !== '');
+    const primary = filled[0] ?? '';
+    const secondary = filled.find((value) => value !== primary) ?? '';
     return { primary, secondary };
+  }
+
+  /**
+   * Loads the field order of each of the deck's note types for the row summaries. The order only refines the summary,
+   * so a failure leaves the rows on the field map's order instead of failing the page.
+   */
+  async function loadFieldOrder(): Promise<void> {
+    if (!deckId) return;
+    try {
+      const res = await apiClient.listNoteTypes(deckId);
+      fieldOrder = Object.fromEntries((res.note_types ?? []).map((type) => [type.id, type.config.fields.map((field) => field.id)]));
+    } catch {
+      // Keep the map order.
+    }
   }
 
   onMount(() => {
     if (initialLoading) loadData(initialPage);
     void loadProgress();
+    void loadFieldOrder();
+    columnWidths = readColumnWidths();
   });
 
   onDestroy(() => {
     if (debounceTimer) clearTimeout(debounceTimer);
   });
 </script>
+
+{#snippet columnHeader(key: ResizableColumn, label: string)}
+  <!-- A resizable column's header: its label, and on its left edge the divider that resizes it. -->
+  <span class="relative hidden h-full min-w-0 items-center md:flex">
+    <ColumnResizeHandle
+      width={columnWidths[key]}
+      min={columnLimits[key].min}
+      max={columnLimits[key].max}
+      label={$t('notes.resize_column', { column: label })}
+      testId={`notes-resize-${key}`}
+      onresize={(width) => (columnWidths[key] = width)}
+      oncommit={saveColumnWidths}
+      onreset={() => resetColumnWidth(key)}
+    />
+    <span class="truncate">{label}</span>
+  </span>
+{/snippet}
 
 {#snippet descriptionFrame(startEdit: () => void)}
   <!-- The description is stored HTML: the frame renders it in its own sandboxed document, never in this page.
@@ -695,10 +781,16 @@
         text={hasFilter ? $t('notes.empty_filter') : $t('notes.empty')}
       />
     {:else}
-      {@const cols = canEditContent
-        ? 'grid-cols-[1.25rem_minmax(0,1fr)_4.5rem] md:grid-cols-[1.25rem_minmax(0,1fr)_7rem_10rem_6rem_4.5rem]'
-        : 'grid-cols-[minmax(0,1fr)_4.5rem] md:grid-cols-[minmax(0,1fr)_7rem_10rem_6rem_4.5rem]'}
-      <div data-testid="notes-list" class={listClasses.root}>
+      <!-- The column template lives in two custom properties, one per breakpoint, because the fixed columns' widths are
+           user state: below md only content and actions show; from md on, the resizable columns sit between them. -->
+      {@const lead = canEditContent ? '1.25rem ' : ''}
+      {@const cols = 'grid-cols-[var(--notes-cols-sm)] md:grid-cols-[var(--notes-cols)]'}
+      <div
+        data-testid="notes-list"
+        class={listClasses.root}
+        style:--notes-cols-sm={`${lead}minmax(0,1fr) 4.5rem`}
+        style:--notes-cols={`${lead}minmax(0,1fr) ${showRefColumn ? `${columnWidths.ref}px ` : ''}${columnWidths.tags}px ${columnWidths.created}px 4.5rem`}
+      >
         <div class="grid {cols} h-9 items-center gap-x-3 border-b border-border bg-surface px-4 text-xs font-medium text-muted-foreground">
           {#if canEditContent}
             <Checkbox
@@ -710,8 +802,11 @@
             />
           {/if}
           <span>{$t('notes.col_content')}</span>
-          <span class="hidden md:block">{$t('notes.col_tags')}</span>
-          <span class="hidden md:block">{$t('notes.col_created')}</span>
+          {#if showRefColumn}
+            {@render columnHeader('ref', $t('notes.external_ref'))}
+          {/if}
+          {@render columnHeader('tags', $t('notes.col_tags'))}
+          {@render columnHeader('created', $t('notes.col_created'))}
           <span></span>
         </div>
         {#each notes as note (note.id)}
@@ -744,20 +839,18 @@
                     <Pause class="size-3" aria-hidden="true" />{$t('notes.suspended')}
                   </Badge>
                 {/if}
-                {#if note.external_ref}
-                  <span
-                    class="inline-flex h-5 max-w-40 shrink-0 items-center gap-1 rounded bg-muted px-1.5 font-mono text-[11px] text-muted-foreground"
-                    title="{$t('notes.external_ref')}: {note.external_ref}"
-                  >
-                    <Link2 class="size-3 shrink-0" aria-hidden="true" />
-                    <span class="truncate">{note.external_ref}</span>
-                  </span>
-                {/if}
               </div>
               {#if summary.secondary}
                 <p class="truncate text-[13px] text-muted-foreground">{summary.secondary}</p>
               {/if}
             </div>
+            {#if showRefColumn}
+              <span
+                class="hidden min-w-0 truncate font-mono text-xs text-muted-foreground md:block"
+                title={note.external_ref ? `${$t('notes.external_ref')}: ${note.external_ref}` : undefined}
+                data-testid={`note-ref-${note.id}`}
+              >{note.external_ref ?? ''}</span>
+            {/if}
             <div class="hidden min-w-0 flex-wrap gap-1 md:flex" data-testid={`note-tags-${note.id}`}>
               {#each (note.tags ?? []).slice(0, 3) as tag (tag)}
                 <span class="inline-flex h-5 max-w-full items-center truncate rounded-full border border-border px-2 text-xs text-muted-foreground">{tag}</span>

@@ -1619,4 +1619,6 @@ export const zhCN: LocaleCatalog = {
   'notetype.change.cards_added': '新增卡片',
   // ---- 卡组导入：所有导入名额都被占用 ----
   'import.busy.refused': '服务器上已有另一个卡组导入正在进行。请等它结束后再试。',
+  // ---- 卡片列表：列宽调整 ----
+  'notes.resize_column': '调整「{column}」列宽（双击恢复默认）',
 };
