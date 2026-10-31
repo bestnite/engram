@@ -523,20 +523,8 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	if err != nil {
 		return nil, err
 	}
-	if opts.PresetMode == "" {
-		opts.PresetMode = "new"
-	}
-	if opts.PresetMode != "new" && opts.PresetMode != "reuse" && opts.PresetMode != "copy" || opts.PresetMode != "new" && (opts.PresetID == 0 || opts.ApplyWeights || targetKind != PackageTargetNewDeck) {
-		return nil, &PackageError{Message: "invalid preset selection"}
-	}
-	if opts.PresetMode != "new" {
-		var count int64
-		if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ? AND owner_user_id = ?", opts.PresetID, actorUserID).Count(&count).Error; err != nil {
-			return nil, err
-		}
-		if count != 1 {
-			return nil, &PackageError{Message: "invalid preset selection"}
-		}
+	if err := s.ValidateImportPreset(ctx, actorUserID, targetKind, &opts); err != nil {
+		return nil, err
 	}
 
 	importLimits := opts.Limits.effective()
@@ -596,6 +584,26 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		return nil, ErrPackageDryRun
 	}
 	return report, nil
+}
+
+// ValidateImportPreset validates the selection before import or ticket issuance.
+func (s *DeckStore) ValidateImportPreset(ctx context.Context, owner uint64, targetKind string, opts *PackageImportOptions) error {
+	if opts.PresetMode == "" {
+		opts.PresetMode = "new"
+	}
+	if opts.PresetMode != "new" && opts.PresetMode != "reuse" && opts.PresetMode != "copy" || opts.PresetMode != "new" && (opts.PresetID == 0 || opts.ApplyWeights || targetKind != PackageTargetNewDeck) {
+		return &PackageError{Message: "invalid preset selection"}
+	}
+	if opts.PresetMode != "new" {
+		var count int64
+		if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ? AND owner_user_id = ?", opts.PresetID, owner).Count(&count).Error; err != nil {
+			return err
+		}
+		if count != 1 {
+			return &PackageError{Message: "invalid preset selection"}
+		}
+	}
+	return nil
 }
 
 // mediaWrite is one media file newly written by this import (sha + absolute path).
@@ -1299,6 +1307,8 @@ func selectImportPreset(ctx context.Context, tx *gorm.DB, owner uint64, opts Pac
 		return 0, err
 	}
 	p.ID, p.PublicID, p.Name = 0, "", name
+	p.CreatedAt = opts.Now().UTC()
+	p.UpdatedAt = p.CreatedAt
 	if err := tx.WithContext(ctx).Create(&p).Error; err != nil {
 		return 0, err
 	}

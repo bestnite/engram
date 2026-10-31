@@ -85,6 +85,13 @@ type importUploadRequest struct {
 // Permission on the target deck is decided at issuance: a caller without rights gets no ticket. It is checked again at upload (the import goes through
 // ImportDeckPackage), because a role may be revoked between issuance and upload.
 func (a *API) CreateImportUpload(ctx context.Context, u *store.User, apiKeyID *uint64, opts store.PackageImportOptions) (*ImportUpload, error) {
+	kind, _, err := store.ParsePackageTargetRef(opts.Target)
+	if err != nil {
+		return nil, mapPackageError(err)
+	}
+	if err := a.decks.ValidateImportPreset(ctx, u.ID, kind, &opts); err != nil {
+		return nil, mapPackageError(err)
+	}
 	if _, err := a.authorizeImportTarget(ctx, u.ID, opts.Target); err != nil {
 		return nil, err
 	}

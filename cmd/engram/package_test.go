@@ -122,6 +122,34 @@ func TestCLIPackageRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCLIImportReusePreset(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "cli.db")
+	cfgEnv(t, dbPath)
+	db, err := store.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AutoMigrate(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	userID, deckID := seedCLIDeck(t, db)
+	uid, did := strconv.FormatUint(userID, 10), strconv.FormatUint(deckID, 10)
+	var p store.Preset
+	if err := db.Where("owner_user_id = ?", userID).First(&p).Error; err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "deck.edeck")
+	captureCLI(t, func() error { return runExport([]string{"--deck", did, "--package", file, "--user", uid}) })
+	report := captureImportReport(t, []string{"--package", file, "--user", uid, "--preset-mode", "reuse", "--preset-id", p.PublicID})
+	if report["preset_mode"] != "reuse" || report["preset_name"] != p.Name {
+		t.Fatalf("report %v", report)
+	}
+	deck, err := store.NewDeckStore(db).ByPublicID(t.Context(), report["deck_id"].(string))
+	if err != nil || deck.PresetID != p.ID {
+		t.Fatalf("deck %v err %v", deck, err)
+	}
+}
+
 // captureCLI temporarily redirects the CLI diagnostic output into a buffer and returns the text.
 func captureCLI(t *testing.T, fn func() error) string {
 	t.Helper()

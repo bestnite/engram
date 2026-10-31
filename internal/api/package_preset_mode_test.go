@@ -2,12 +2,63 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
+
+func TestImportUploadPresetModes(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "upload_preset_modes", store.RoleUser)
+	other := seedUser(t, env.db, "upload_preset_other", store.RoleUser)
+	key := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
+	p := store.NewPreset(user.ID, "Chosen")
+	foreign := store.NewPreset(other.ID, "Foreign")
+	if err := env.db.Create(&p).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := env.db.Create(&foreign).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"new", "reuse", "copy"} {
+		t.Run(mode, func(t *testing.T) {
+			body := fmt.Sprintf(`{"preset_mode":%q,"preset_id":%q}`, mode, p.PublicID)
+			up := issueUpload(t, env, key.Plaintext, body)
+			rec := putUpload(t, env, up.UploadURL, minimalPackageZip(t))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("upload %d %s", rec.Code, rec.Body.String())
+			}
+			var report store.PackageImportReport
+			if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil {
+				t.Fatal(err)
+			}
+			deck, err := store.NewDeckStore(env.db).ByPublicID(t.Context(), report.DeckPublicID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got store.Preset
+			if err := env.db.First(&got, deck.PresetID).Error; err != nil {
+				t.Fatal(err)
+			}
+			if report.PresetMode != mode || report.PresetName != got.Name || (mode == "reuse") != (got.ID == p.ID) {
+				t.Fatalf("report %+v preset %+v", report, got)
+			}
+		})
+	}
+	for _, body := range []string{`{"preset_mode":"bad"}`, `{"preset_mode":"reuse"}`, `{"preset_mode":"copy"}`, fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"copy","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"target":"into_deck:any"}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q}`, foreign.PublicID)} {
+		var before, after int64
+		env.db.Model(&store.ActionToken{}).Count(&before)
+		rec := createUpload(t, env, key.Plaintext, body)
+		env.db.Model(&store.ActionToken{}).Count(&after)
+		if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != CodeInvalidRequest || before != after {
+			t.Fatalf("request %s response %d %s tokens %d -> %d", body, rec.Code, rec.Body.String(), before, after)
+		}
+	}
+}
 
 func TestImportPresetReuseResponse(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
