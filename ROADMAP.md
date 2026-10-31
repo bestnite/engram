@@ -220,39 +220,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   naming `M18-4`; the sentence in `AGENTS.md` section 2.7 names `reuse` and `copy`. Evidence is the
   output of `grep -n 'M18-4\b' ROADMAP.md` limited to the ledger section and the `AGENTS.md` diff.
 
-- [ ] **M18-42 `preset_id` is refused for `into_deck` and `replace_deck` too** — `M18-30` made a
-  `preset_id` without `reuse` or `copy` a refusal, but only for `new_deck`. `e229080` (`M18-29`) added
-  an early return to `ValidateImportPreset` in `internal/store/package_import.go`: when `PresetMode` is
-  empty and the target is not `new_deck`, the function returns nil before any check, so the
-  `PresetID != 0` check that `51697a1` added for mode `new` never runs for that request. Reproduced on
-  `main` with `ImportPackage` on SQLite: target `into_deck:<id>` and target `replace_deck:<id>`, each
-  with the caller's own `PresetID` and no `PresetMode`, succeeded, wrote no preset and returned neither
-  `preset_mode` nor `preset_name`; the same two targets with `PresetMode` `new` and the same `PresetID`
-  were refused with `invalid preset selection`. The outcome therefore depends on the transport. The
-  CLI's `--preset-mode` defaults to `new` (`cmd/engram/package.go`), so
-  `engram import --target into_deck:<id> --preset-id <own>` is refused. The multipart route, the URL
-  import, the upload ticket and both MCP tools pass an empty mode when the caller omits it, so the same
-  request through them succeeds and drops the `preset_id`. The outcome also depends on whose preset the
-  dropped id names: `ImportPresetID` in `internal/api/publicid_resolver.go` refuses another user's id
-  with 400 before the store is reached, so only an id of the caller's own preset is silently dropped.
-  The fix: in `ValidateImportPreset`, a non-zero `PresetID` with a target other than `new_deck` returns
-  the same `PackageError` (`invalid_request`, 400) whatever the mode is. For those targets an empty mode
-  without a `PresetID` stays accepted, and so does mode `new` without a `PresetID`, because the CLI
-  sends `new` by default. The comment of `ValidateImportPreset` and the comment on
-  `PackageImportOptions.PresetMode` state the rule for `new_deck` and the rule for the other two
-  targets separately; the phrase "empty defaults to new" applies only to `new_deck`. *Acceptance:* the
-  refusal table of `TestImportPresetModes` in `internal/store/package_preset_mode_test.go` gains
-  `{PresetID: <own>}` and `{PresetMode: "new", PresetID: <own>}`, each once with target
-  `into_deck:<id>` and once with target `replace_deck:<id>` of an existing deck the caller owns; each of
-  the four is refused with no deck and no preset written. A positive case imports with target
-  `into_deck:<id>`, once with no `PresetMode` and once with `PresetMode` `new`, both without a
-  `PresetID`; both succeed and the report carries neither `preset_mode` nor `preset_name`. The refusal
-  table of `TestImportMultipartRejectsPresetOptions` in `internal/api/package_preset_mode_test.go` gains
-  `target=into_deck:<id>` with the caller's own `preset_id` and no `preset_mode`, answered with 400
-  `invalid_request`. The refusal list of `TestImportUploadPresetModes` in the same file gains
-  `{"target":"into_deck:<id>","preset_id":<own>}`, answered with 400 `invalid_request` and no new
-  `action_tokens` row. Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-44 Preset-choice comments state what the code does** — the `M18-33` fix asked for a comment
   on every preset field and function that states its rule and why. The landed code leaves five comment
   gaps and one unwrapped error. First, the comment on `PackageImportOptions.PresetID` in
