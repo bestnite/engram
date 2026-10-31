@@ -220,29 +220,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   naming `M18-4`; the sentence in `AGENTS.md` section 2.7 names `reuse` and `copy`. Evidence is the
   output of `grep -n 'M18-4\b' ROADMAP.md` limited to the ledger section and the `AGENTS.md` diff.
 
-- [ ] **M18-41 `M18-7` tests cover the study preset, the remaining card shapes and PostgreSQL** — four
-  gaps in the `M18-7` tests. First, `TestAnkiProgressReplayUsesStudyWeightsAndReviewDays` imports into
-  a new deck, where the importer is the owner and `StudySettings` returns `decks.preset_id`, so the
-  test passes just as well if the importer reads the deck's preset instead of the importer's own study
-  preset; the only case that tells the two apart, an editor of a shared deck whose
-  `deck_member_settings.preset_id` holds other weights than the owner's preset, is not tested. Second,
-  no case covers a relearning card (type 3) or a `cards.data` that carries only one of `s` and `d`.
-  Third, `TestAnkiImportedMemoryPreview` lives in `internal/api` although it calls no handler; `M18-20`
-  moves its sibling `TestAnkiImportWeightsSchedule` to `internal/schedule` for the same reason. Fourth,
-  the commit that closed `M18-7` (`d11b9c0`) records that the PostgreSQL cases were not run, and the
-  replay test compares stability and difficulty with exact float equality, so its result on the
-  PostgreSQL column type is unknown. The fix adds and moves tests only. *Acceptance:* a test in
-  `internal/store` imports with target `into_deck` as an editor of a shared deck whose member preset
-  holds weights other than the owner's preset, and the stored state equals the replay with the
-  member's weights and differs from the replay with the owner's; table cases cover a relearning card
-  with two kept revlog rows, a relearning card with no revlog row and factor 2500, and a review card
-  with two kept revlog rows whose `data` is `{"s":5}`, and one whose `data` is `{"d":5}`; each of the
-  four gets a stability of at least 0.001 and a difficulty from 1 to 10; `TestAnkiImportedMemoryPreview`
-  lives in `internal/schedule` and `internal/api/anki_memory_import_test.go` no longer exists;
-  `TestAnkiProgressMissingMemory` and `TestAnkiProgressReplayUsesStudyWeightsAndReviewDays` pass with
-  `TEST_PG_DSN` set. Evidence is the raw scoped `go test` and `go vet` output, including the run with
-  `TEST_PG_DSN` set.
-
 - [ ] **M18-42 `preset_id` is refused for `into_deck` and `replace_deck` too** — `M18-30` made a
   `preset_id` without `reuse` or `copy` a refusal, but only for `new_deck`. `e229080` (`M18-29`) added
   an early return to `ValidateImportPreset` in `internal/store/package_import.go`: when `PresetMode` is
