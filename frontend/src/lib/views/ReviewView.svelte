@@ -11,11 +11,12 @@
   import { reviewShortcut, reviewSwipe, type ReviewShortcut } from '../review-shortcuts';
   import CardFrame, { type CardFrameKey } from '../components/CardFrame.svelte';
   import { REVIEW_FRONT_CSS, REVIEW_BACK_CSS, REVIEW_ANSWER_CSS, faceStyle } from '../card-frame';
-  import { answerScrollTop } from '../review-scroll';
+  import { answerScrollTop, setAnswerScroll, storedAnswerScroll } from '../review-scroll';
 
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
   import Badge from '../components/ui/Badge.svelte';
+  import Checkbox from '../components/ui/Checkbox.svelte';
   import HelpTip from '../components/ui/HelpTip.svelte';
   import { ArrowLeft, Check, CircleAlert, CircleCheckBig, CircleX, Eye, EyeOff, PartyPopper, Pause, Pencil, Plus, RefreshCw, Undo2, X } from '@lucide/svelte';
   import { withReturn } from '../return-to';
@@ -111,6 +112,9 @@
   // svelte-ignore state_referenced_locally
   let gradedRevealed = $state(initialRevealedAnswerHTML !== '');
   let needAnswer = $state(false);
+  // The learner's own choice about the page jumping to the answer. It is read once at load: the toggle lives on the card
+  // header, so this instance is the only writer while the page is open.
+  let answerScrollEnabled = $state(storedAnswerScroll());
 
   // The render endpoint's card faces, one of the review page's HTML sinks. A null face means it has not been fetched yet,
   // in which case it falls back to plain text; the raw fields are never sent into the HTML sink as Markdown.
@@ -315,9 +319,13 @@
   /**
    * Brings a newly shown answer into view (see review-scroll.ts for the rule). `start` is the top of the answer area;
    * `anchorTop` is the viewport y of the face's `#answer` element, or null when the flow has no anchor to jump to.
+   *
+   * The learner can turn this off, in which case revealing the answer must leave the page where it is: a long question
+   * scrolled away makes the answer unreadable next to the question it belongs to. Starting a new card at the page top is
+   * a separate move and is never affected by this choice.
    */
   function scrollToAnswer(start: HTMLElement | null, anchorTop: number | null): void {
-    if (!start) return;
+    if (!answerScrollEnabled || !start) return;
     const top = answerScrollTop({
       anchorTop,
       startTop: start.getBoundingClientRect().top,
@@ -1022,7 +1030,16 @@
       </div>
     {:else}
       <article data-testid="review-card" data-card-id={current.card_id} class="space-y-6">
-        <div class="flex items-center justify-end pb-3 border-b border-border">
+        <div class="flex items-center justify-between gap-3 pb-3 border-b border-border">
+          <label class="flex items-center gap-2 -my-1 py-1 cursor-pointer">
+            <Checkbox
+              bind:checked={answerScrollEnabled}
+              testId="review-scroll-toggle"
+              label={$t('review.scroll_to_answer')}
+              onCheckedChange={(next) => setAnswerScroll(next)}
+            />
+            <span class="text-xs text-muted-foreground">{$t('review.scroll_to_answer')}</span>
+          </label>
           <button
             type="button"
             onclick={gotoEdit}

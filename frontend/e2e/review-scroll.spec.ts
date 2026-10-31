@@ -80,3 +80,24 @@ test('a long card keeps its buttons on screen, reveals at #answer and the next c
   await expect(page.getByTestId('review-reveal')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 });
+
+test('the learner can turn the answer scroll off and the choice survives a reload', async ({ page }) => {
+  await signIn(page);
+  await reviewLongCards(page);
+
+  const toggle = page.getByTestId('review-scroll-toggle');
+  await expect(toggle).toHaveAttribute('aria-checked', 'true');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+  await page.getByTestId('review-reveal').click();
+  const answer = page.frameLocator('iframe[data-side="answer"]').locator('#answer');
+  await expect(answer).toBeAttached();
+  // The frame reports its new height asynchronously, and only that report moves the page; waiting past it is what makes
+  // "the page stayed still" a real assertion rather than a race the click simply won.
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  await page.reload();
+  await expect(page.getByTestId('review-scroll-toggle')).toHaveAttribute('aria-checked', 'false');
+});

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { answerScrollTop, ANSWER_SCROLL_MARGIN, ANSWER_VISIBLE_MIN, type AnswerScrollInput } from '../lib/review-scroll';
+import {
+  answerScrollTop,
+  ANSWER_SCROLL_MARGIN,
+  ANSWER_VISIBLE_MIN,
+  setAnswerScroll,
+  storedAnswerScroll,
+  type AnswerScrollInput,
+} from '../lib/review-scroll';
 
 /**
  * Where the review page scrolls when an answer appears. A face's `#answer` always decides, as in Anki's reviewer; an answer
@@ -36,4 +43,19 @@ describe('answerScrollTop', () => {
       expect(answerScrollTop(input(over))).toBe(want);
     });
   }
+});
+
+/**
+ * The learner's toggle. This suite has no `window`, which is exactly how the page is rendered on the server: the answer
+ * must still be brought into view there, and toggling a control that has nowhere to write must not raise.
+ */
+describe('answer scroll preference', () => {
+  it('is on when no browser storage exists', () => {
+    expect(storedAnswerScroll()).toBe(true);
+  });
+
+  it('accepts a write without a store and keeps the default', () => {
+    expect(() => setAnswerScroll(false)).not.toThrow();
+    expect(storedAnswerScroll()).toBe(true);
+  });
 });

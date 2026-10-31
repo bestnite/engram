@@ -67,7 +67,10 @@ describe('ReviewView graded answering', () => {
 
     const multi = gradedCard('choice_multi', { question: '偶数？', options: ['1', '2', '3', '4'], answers: [1, 3] });
     const multiHtml = render(ReviewView, { props: { initialLoading: false, initialCards: [multi] } }).html;
-    expect(multiHtml).not.toContain('role="checkbox"');
+    // The parent page has exactly one checkbox of its own: the scroll-to-answer toggle in the card header. A graded
+    // multiple-choice option is a checkbox as well, so a second one here would be an answer option that escaped the frame.
+    expect(multiHtml.match(/role="checkbox"/g) ?? []).toHaveLength(1);
+    expect(multiHtml).toContain('data-testid="review-scroll-toggle"');
     expect(multiHtml).not.toContain('data-testid="review-graded-option-row"');
 
     const bool = gradedCard('true_false', { statement: '地球是圆的', answer: true });

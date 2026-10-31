@@ -179,6 +179,7 @@ export const en: LocaleCatalog = {
   'review.shortcuts_give_up': 'Enter / Space: mark as Again and continue',
   'review.shortcuts_result': 'Enter / Space: continue',
   'review.edit': 'Edit',
+  'review.scroll_to_answer': 'Scroll to answer',
   'review.bury': 'Bury',
   'review.bury_hint': "Bury skips this card until tomorrow. Suspend hides it until you unsuspend it in the deck's card list.",
   'decks.create.heading': 'Create a deck',

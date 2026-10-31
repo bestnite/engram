@@ -179,6 +179,7 @@ export const zhCN: LocaleCatalog = {
   'review.shortcuts_give_up': '回车 / 空格：记为重来并继续',
   'review.shortcuts_result': '回车 / 空格：继续',
   'review.edit': '编辑',
+  'review.scroll_to_answer': '自动滚动到答案',
   'review.bury': '埋藏',
   'review.bury_hint': '埋藏：今天跳过，明天再出现。暂停：不再出现，直到在卡组的卡片列表中取消暂停。',
   'decks.create.heading': '新建卡组',
