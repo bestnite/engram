@@ -31,6 +31,8 @@ func (s *Server) registerNoteRoutes(router *gin.Engine) {
 	router.POST("/api/v1/decks/:id/notes/preview", s.sessions.CSRFMiddleware(), s.notePreview)
 	// The note type editor previews an unsaved config through the same renderer the server uses for stored types.
 	router.POST("/api/v1/decks/:id/note-types/preview", s.sessions.CSRFMiddleware(), s.noteTypePreview)
+	// The rich-text editor's frame resolves media names against this base, the way a card face does.
+	router.GET("/api/v1/decks/:id/frame-media-base", s.frameMediaBaseForEditor)
 }
 
 // requireUser takes the current signed-in user; when not signed in it redirects to the login page and returns false.

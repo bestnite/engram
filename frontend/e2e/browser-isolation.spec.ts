@@ -214,7 +214,7 @@ const EDIT_HARNESS_HTML = `<!doctype html>
       window.__frameReady = false;
       window.__loadField = function (html) {
         document.getElementById('frame').contentWindow.postMessage(
-          { type: 'load', html: html, plainText: false, rtl: false, font: '', size: 0, description: '', dark: false, source: false },
+          { type: 'load', html: html, plainText: false, rtl: false, font: '', size: 0, description: '', dark: false, source: false, mediaBase: '' },
           '*',
         );
       };

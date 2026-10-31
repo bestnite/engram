@@ -23,6 +23,7 @@ import {
   type NotePreviewResponse,
   type MediaListResponse,
   type MediaUploadResult,
+  type FrameMediaBaseResponse,
   type StatsSummary,
   type StatsDetail,
   type DueCardsResponse,
@@ -829,10 +830,28 @@ export class ApiClient {
       method: 'POST',
       body: form,
     });
-    if (!/^[0-9a-f]{64}$/.test(result.sha256) || result.url !== `/media/${result.sha256}`) {
+    // The name is what the editor inserts, so it must be the deck name of exactly these bytes: <sha256>.<ext>.
+    const name = result.name;
+    if (
+      !/^[0-9a-f]{64}$/.test(result.sha256) ||
+      result.url !== `/media/${result.sha256}` ||
+      typeof name !== 'string' ||
+      !name.startsWith(`${result.sha256}.`) ||
+      !/^[0-9a-f]{64}\.[a-z0-9]+$/.test(name)
+    ) {
       throw new ApiClientError('Invalid media upload response', { status: 201, code: 'invalid_response' });
     }
     return result;
+  }
+
+  /**
+   * The deck's frame media base for the note editor's rich-text frame (GET /api/v1/decks/:id/frame-media-base). The
+   * frame has no session cookie, so it loads a field's media by name through this token-scoped base.
+   */
+  async frameMediaBase(deckId: string): Promise<string> {
+    const encodedId = encodeURIComponent(String(deckId));
+    const result = await this.request<FrameMediaBaseResponse>(`/api/v1/decks/${encodedId}/frame-media-base`);
+    return typeof result.media_base === 'string' ? result.media_base : '';
   }
 
   /**

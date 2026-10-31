@@ -129,7 +129,7 @@ describe('Centralized typed same-origin REST API client', () => {
     it('posts multipart to the deck upload route with session CSRF and no JSON content type', async () => {
       client.setCsrfToken('upload-csrf');
       const sha = 'b'.repeat(64);
-      const result = { sha256: sha, mime: 'image/png', bytes: 12, url: `/media/${sha}` };
+      const result = { sha256: sha, mime: 'image/png', bytes: 12, url: `/media/${sha}`, name: `${sha}.png` };
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(result), { status: 201 }));
       const file = new File(['png-bytes'], 'pic.png', { type: 'image/png' });
       await expect(client.uploadDeckMedia('deck /1', file)).resolves.toEqual(result);
@@ -158,6 +158,34 @@ describe('Centralized typed same-origin REST API client', () => {
       client.setCsrfToken('upload-csrf');
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ sha256: 'not-a-hash', mime: 'image/png', bytes: 1, url: 'javascript:alert(1)' }), { status: 201 }));
       await expect(client.uploadDeckMedia('3', new File(['x'], 'a.png'))).rejects.toMatchObject({ code: 'invalid_response' });
+    });
+
+    it.each([
+      ['a missing name', undefined],
+      ['the name of other bytes', `${'c'.repeat(64)}.png`],
+      ['a path instead of a name', `../${'b'.repeat(64)}.png`],
+      ['a name without an extension', 'b'.repeat(64)],
+      ['a markup-breaking extension', `${'b'.repeat(64)}.png" onerror="x`],
+    ])('rejects an upload response with %s', async (_label, name) => {
+      client.setCsrfToken('upload-csrf');
+      const sha = 'b'.repeat(64);
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ sha256: sha, mime: 'image/png', bytes: 1, url: `/media/${sha}`, name }), { status: 201 }),
+      );
+      await expect(client.uploadDeckMedia('3', new File(['x'], 'a.png'))).rejects.toMatchObject({ code: 'invalid_response' });
+    });
+  });
+
+  describe('frame media base', () => {
+    it('reads the deck media base for the editor', async () => {
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ media_base: '/fm/token/' }), { status: 200 }));
+      await expect(client.frameMediaBase('deck /1')).resolves.toBe('/fm/token/');
+      expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/decks/deck%20%2F1/frame-media-base');
+    });
+
+    it('keeps the stable error of a refused request', async () => {
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'forbidden', message: 'no' } }), { status: 403 }));
+      await expect(client.frameMediaBase('3')).rejects.toMatchObject({ status: 403, code: 'forbidden' });
     });
   });
 

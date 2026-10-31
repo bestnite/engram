@@ -11,7 +11,8 @@ import { join } from 'node:path';
  * postMessage refuse one), which the DOM implementation of the client tests does not reproduce; they sign in through
  * `e2e/session.ts`. `edit-frame-theme.spec.ts` proves that the rich-text frame on a dark page stays hidden until its
  * document is dark, because only a browser paints the opaque canvas of a frame whose color-scheme differs from the
- * page's. The Go server is not
+ * page's. `edit-frame-media.spec.ts` proves that a stored and a freshly uploaded image both load inside that frame, because
+ * only a browser applies the frame's base element and withholds the session cookie from it. The Go server is not
  * configured here: Playwright loads this file in its worker processes as well, so a top-level side effect would pick a
  * different port and database in every process. `e2e/global-setup.ts` runs once, starts the server on a free port with a
  * throwaway SQLite database and exports `ENGRAM_E2E_BASE_URL`, which each test file uses as its `baseURL`.

@@ -74,6 +74,8 @@
   // Preview drawer below the desktop breakpoint. At lg and wider the same panel is the sticky second
   // column, so this state only decides whether it is on screen; it never adds a second HTML sink.
   let previewOpen = $state(false);
+  // The deck's frame media base for the rich-text fields; empty until it is fetched, or when frame media is unavailable.
+  let fieldMediaBase = $state('');
   let previewTrigger = $state<HTMLButtonElement | null>(null);
 
   // Preview state machine: empty nothing entered yet / loading generating (the previous result may still be attached) / ready has a result /
@@ -245,7 +247,22 @@
     sourceURL = loaded.source_url ?? '';
   }
 
+  /**
+   * Fetches the deck's frame media base for the rich-text fields. The fields' frames have no session cookie, so a stored
+   * image shows there only through this base. A failure leaves the base empty: the fields stay editable and only their
+   * images do not load.
+   */
+  async function loadMediaBase(): Promise<void> {
+    try {
+      const base = await apiClient.frameMediaBase(deckId);
+      if (!disposed) fieldMediaBase = base;
+    } catch {
+      if (!disposed) fieldMediaBase = '';
+    }
+  }
+
   async function load(): Promise<void> {
+    void loadMediaBase();
     loading = true;
     loadError = false;
     metaError = false;
@@ -322,7 +339,10 @@
    */
   async function uploadFieldMedia(file: File): Promise<MediaReference> {
     const uploaded = await apiClient.uploadDeckMedia(deckId, file);
-    return { url: uploaded.url, name: uploaded.sha256, mime: uploaded.mime };
+    // The deck name is both the URL and the name: the editor's frame resolves it against the media base, and it is the
+    // form a save stores, so the inserted reference shows at once and is not rewritten later.
+    const name = uploaded.name ?? uploaded.sha256;
+    return { url: name, name, mime: uploaded.mime };
   }
 
   /** Opens the preview drawer below the desktop breakpoint, leaving focus where the author was typing. */
@@ -615,6 +635,7 @@
               labels={fieldLabels}
               testIdPrefix="note-field"
               upload={uploadFieldMedia}
+              mediaBase={fieldMediaBase}
             />
 
             {#if occlusionField}

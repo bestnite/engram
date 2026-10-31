@@ -58,6 +58,11 @@ export interface LoadMessage {
   description: string;
   dark: boolean;
   source: boolean;
+  /**
+   * The deck's frame media base (`/fm/<token>/`), or empty when there is none. A field refers to media by deck-scoped
+   * name, and this document has no session cookie, so a name loads only when it resolves against this base.
+   */
+  mediaBase: string;
 }
 
 export interface CommandMessage {
@@ -124,7 +129,7 @@ function isString(value: unknown): value is string {
 }
 
 function parseLoad(data: Record<string, unknown>): LoadMessage | null {
-  const { html, plainText, rtl, font, size, description, dark, source } = data;
+  const { html, plainText, rtl, font, size, description, dark, source, mediaBase } = data;
   if (
     !isString(html) ||
     typeof plainText !== 'boolean' ||
@@ -134,11 +139,12 @@ function parseLoad(data: Record<string, unknown>): LoadMessage | null {
     !Number.isFinite(size) ||
     !isString(description) ||
     typeof dark !== 'boolean' ||
-    typeof source !== 'boolean'
+    typeof source !== 'boolean' ||
+    !isString(mediaBase)
   ) {
     return null;
   }
-  return { type: 'load', html, plainText, rtl, font, size, description, dark, source };
+  return { type: 'load', html, plainText, rtl, font, size, description, dark, source, mediaBase };
 }
 
 function parseCommand(data: Record<string, unknown>): CommandMessage | null {
@@ -328,9 +334,24 @@ export function createRuntime(options: EditFrameOptions = {}): EditFrameRuntime 
     post({ type: 'themed' });
   }
 
+  /** Points relative media names at the deck's frame media route; an empty base removes the element. */
+  function applyMediaBase(mediaBase: string): void {
+    let base = doc.head.querySelector('base');
+    if (!mediaBase) {
+      base?.remove();
+      return;
+    }
+    if (!base) {
+      base = doc.createElement('base');
+      doc.head.insertBefore(base, doc.head.firstChild);
+    }
+    base.setAttribute('href', mediaBase);
+  }
+
   /** Applies the loaded presentation options to the document. */
   function applyPresentation(message: LoadMessage): void {
     applyTheme(message.dark);
+    applyMediaBase(message.mediaBase);
     root.dir = message.rtl ? 'rtl' : 'ltr';
     root.style.fontFamily = message.font;
     root.style.fontSize = message.size > 0 ? `${message.size}px` : '';

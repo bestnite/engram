@@ -122,7 +122,12 @@ change.
   every CSP directive except `script-src`, which names only the origin: the runtime is a same-origin
   module, and the field value is written with `innerHTML`, so an inline event handler attribute in a
   shared deck's field must stay inert. The parent page sends the field HTML and the toolbar commands
-  with `postMessage` and receives `change`, `height` and upload requests.
+  with `postMessage` and receives `change`, `height` and upload requests. Every field load also
+  carries the deck's frame media base, which the frame writes as its `<base href>` so stored media
+  names load through `/fm/` like a card face; the note editor reads it from
+  `GET /api/v1/decks/:id/frame-media-base` (editor role). An upload through `/decks/:id/media`
+  registers the file's deck name `<sha256>.<ext>` and returns it as `name`, and the editor inserts
+  that name, so an uploaded image shows in the frame before the note is saved.
 - **Frame media.** `GET /fm/<token>/<name>` (`internal/web/frame_media.go`) serves media to the
   sandboxed frame, which has no session cookie. The token is an HMAC over `(user_id, deck_id,
   expiry)`; its key lives in the encrypted settings channel under `frame_media_key` and is

@@ -44,7 +44,7 @@ func (s *Server) registerMediaRoutes(router *gin.Engine) {
 }
 
 // deckMediaUpload is the upload entry the editor uses: first confirm the current user has at least the editor role on the deck,
-// then go through the same storage and validation logic as /media.
+// then go through the same storage and validation logic as /media. The response also names the file inside the deck.
 func (s *Server) deckMediaUpload(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -57,7 +57,7 @@ func (s *Server) deckMediaUpload(c *gin.Context) {
 	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
 		return
 	}
-	s.storeUpload(c, user)
+	s.storeUpload(c, user, deckID)
 }
 
 // userMediaQuota resolves the media quota (bytes) of one user: the administrator's setting for that user, otherwise
@@ -77,12 +77,15 @@ func (s *Server) mediaUpload(c *gin.Context) {
 	if !ok {
 		return
 	}
-	s.storeUpload(c, user)
+	s.storeUpload(c, user, 0)
 }
 
 // storeUpload reads the file field from the multipart, writes it to disk and returns metadata JSON; errors map to stable codes.
 // Both the /media and /decks/:id/media entries share this function, so the validation logic exists only once.
-func (s *Server) storeUpload(c *gin.Context, user *store.User) {
+//
+// A non-zero deckID also registers the file's deck-scoped name and returns it as "name": the editor inserts that name, so
+// the sandboxed editing frame can show the file through the frame media route before the note is saved.
+func (s *Server) storeUpload(c *gin.Context, user *store.User, deckID uint64) {
 	ctx := c.Request.Context()
 	fileLimit := media.ResolveMaxBytes(ctx, s.db)
 	// Cap the whole request body before parsing the multipart: multipart parsing spills parts over the in-memory threshold to a temp file,
@@ -146,12 +149,22 @@ func (s *Server) storeUpload(c *gin.Context, user *store.User) {
 		Detail:     map[string]any{"sha256": saved.Sha256, "mime": saved.Mime, "bytes": saved.Bytes},
 	})
 	// The external identifier is the sha256: responses no longer carry an auto-increment id, and the url is built straight from the hash.
-	c.JSON(http.StatusCreated, gin.H{
+	body := gin.H{
 		"sha256": saved.Sha256,
 		"mime":   saved.Mime,
 		"bytes":  saved.Bytes,
 		"url":    "/media/" + saved.Sha256,
-	})
+	}
+	if deckID != 0 {
+		name, err := store.RegisterUploadedMediaName(ctx, s.db, deckID, saved.Sha256, saved.Mime)
+		if err != nil {
+			s.logger.Error("media upload name registration failed", "user_id", user.ID, "deck_id", deckID, "error", err)
+			writeMediaError(c, http.StatusInternalServerError, "media_internal_error", "could not store the file")
+			return
+		}
+		body["name"] = name
+	}
+	c.JSON(http.StatusCreated, body)
 }
 
 // checkMediaQuota checks the per-user total quota before writing to disk: used + this addition > limit means refusal,

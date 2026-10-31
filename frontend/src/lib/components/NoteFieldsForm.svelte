@@ -39,6 +39,8 @@
     labels?: Record<string, string>;
     /** Uploads one media file for the editor; without it the field inserts nothing by upload. */
     upload?: (file: File) => Promise<MediaReference>;
+    /** The deck's frame media base, which the rich-text fields resolve stored media names against. */
+    mediaBase?: string;
   }
 
   let {
@@ -49,6 +51,7 @@
     fieldOptions = {},
     labels = {},
     upload,
+    mediaBase = '',
   }: Props = $props();
 
   /**
@@ -141,6 +144,7 @@
             testId="{testIdPrefix}-{spec.key}"
             options={fieldOptions[spec.key]}
             {upload}
+            {mediaBase}
             onvalue={(value) => setString(spec.key, value)}
           />
         </div>

@@ -38,6 +38,7 @@ function load(html: string, extra: Record<string, unknown> = {}): void {
       description: '',
       dark: false,
       source: false,
+      mediaBase: '',
       ...extra,
     })
   );
@@ -90,6 +91,36 @@ afterEach(() => {
   runtime?.destroy();
   runtime = null;
   vi.restoreAllMocks();
+});
+
+describe('edit frame media base', () => {
+  afterEach(() => {
+    document.head.querySelector('base')?.remove();
+  });
+
+  it('resolves stored media names against the base the load carries', () => {
+    load('<img src="ug-map-jeju.png">', { mediaBase: '/fm/token/' });
+    expect(document.head.querySelector('base')?.getAttribute('href')).toBe('/fm/token/');
+    // The field value keeps the stored name; the base only changes where the frame loads it from. The resolved URL is
+    // checked in the real-browser suite, because this DOM implementation does not apply a base element to img.src.
+    const img = document.querySelector('#editor img') as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe('ug-map-jeju.png');
+  });
+
+  it('keeps one base element and drops it when a load carries none', () => {
+    load('<p>x</p>', { mediaBase: '/fm/one/' });
+    load('<p>x</p>', { mediaBase: '/fm/two/' });
+    expect(document.head.querySelectorAll('base')).toHaveLength(1);
+    expect(document.head.querySelector('base')?.getAttribute('href')).toBe('/fm/two/');
+    load('<p>x</p>', { mediaBase: '' });
+    expect(document.head.querySelector('base')).toBeNull();
+  });
+
+  it('ignores a load whose media base is not a string', () => {
+    load('<p>kept</p>');
+    load('<p>replaced</p>', { mediaBase: 42 });
+    expect(editorHtml()).toBe('<p>kept</p>');
+  });
 });
 
 describe('edit frame theme', () => {

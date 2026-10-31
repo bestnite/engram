@@ -500,6 +500,13 @@ export interface MediaUploadResult {
   mime: string;
   bytes: number;
   url: string;
+  /** The deck-scoped name, `<sha256>.<ext>`; only the in-deck upload entry returns it. */
+  name?: string;
+}
+
+/** GET /api/v1/decks/:id/frame-media-base response; an empty base means frame media is unavailable. */
+export interface FrameMediaBaseResponse {
+  media_base: string;
 }
 
 /**

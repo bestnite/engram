@@ -76,9 +76,14 @@
     options?: RichFieldOptions;
     /** Uploads one file and returns its URL, deck media name and detected mime type. */
     upload?: (file: File) => Promise<MediaReference>;
+    /**
+     * The deck's frame media base (`/fm/<token>/`). A field refers to media by deck-scoped name and the sandboxed frame has
+     * no session cookie, so without the base the frame shows every stored image as broken.
+     */
+    mediaBase?: string;
   }
 
-  let { value, label, testId, onvalue, options = {}, upload }: Props = $props();
+  let { value, label, testId, onvalue, options = {}, upload, mediaBase = '' }: Props = $props();
 
   // The version segment only busts the iframe cache; a build without an injected version uses a fixed placeholder.
   const src = $derived(`/edit-frame/${encodeURIComponent(appVersion() || 'dev')}`);
@@ -124,6 +129,8 @@
   // anything yet, so the first load always happens even for an empty field.
   let lastEcho: string | null = null;
   let loadedSignature = '';
+  /** The media base the frame last received; a different one forces a reload. */
+  let loadedMediaBase = '';
 
   const plainText = $derived(options.plainText ?? false);
   const rtl = $derived(options.rtl ?? false);
@@ -202,8 +209,10 @@
       description,
       dark: document.documentElement.classList.contains('dark'),
       source: sourceOpen,
+      mediaBase,
     });
     loadedSignature = signature(html);
+    loadedMediaBase = mediaBase;
   }
 
   function signature(html: string): string {
@@ -470,8 +479,14 @@
   // One load per value/presentation change. The echo of a `change` the frame itself reported is
   // skipped, so typing never reloads the document and never moves the caret.
   $effect(() => {
-    void [value, plainText, rtl, font, size, description, ready];
+    void [value, plainText, rtl, font, size, description, ready, mediaBase];
     if (!ready) return;
+    // The base usually arrives after the first load. The frame resolves names only while it parses the field, so a new
+    // base always reloads, even when the value is the frame's own echo.
+    if (mediaBase !== loadedMediaBase) {
+      sendLoad(value);
+      return;
+    }
     if (lastEcho !== null && value === lastEcho) {
       loadedSignature = signature(value);
       return;

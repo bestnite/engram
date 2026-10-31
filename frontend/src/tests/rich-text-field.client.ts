@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import RichTextField from '../lib/components/RichTextField.svelte';
+import Harness from './rich-text-field-harness.svelte';
 
 /**
  * The parent side of the rich-text field: the toolbar sends commands, the frame's `change` updates
@@ -138,6 +139,20 @@ describe('RichTextField message protocol', () => {
     document.documentElement.classList.add('dark');
     await flushAsync();
     expect(posted(fake).some((entry) => entry.type === 'theme' && entry.dark === true)).toBe(true);
+  });
+
+  it('sends the media base with the field and reloads when it arrives later, even after typing', () => {
+    target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(Harness, { target });
+    flush();
+    const fake = frame()!;
+    message(fake, { type: 'ready' });
+    expect(lastLoad(fake)).toMatchObject({ html: '<p>start</p>', mediaBase: '' });
+    message(fake, { type: 'change', html: '<p>typed</p>' });
+    (target.querySelector('[data-testid="harness-base"]') as HTMLButtonElement).click();
+    flush();
+    expect(lastLoad(fake)).toMatchObject({ html: '<p>typed</p>', mediaBase: '/fm/token/' });
   });
 
   it('keeps the frame hidden until its own frame confirms the theme', () => {

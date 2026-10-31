@@ -22,6 +22,21 @@ func mediaDeckName(sha, mime string) string {
 	return sha + "." + mediatype.Ext(mime)
 }
 
+// RegisterUploadedMediaName registers the deck-scoped name of one uploaded medium and returns it.
+//
+// The name is the content form <sha256>.<ext> that the note write path gives an editor reference, so registering it at
+// upload time writes the same row a later save would. The editor inserts this name instead of the session-bound
+// /media/<sha256> path: the sandboxed editing frame carries no session cookie and can load media only through the frame
+// media route, which resolves a name through this row. A row whose note is never saved keeps nothing alive, because
+// media collection counts references from notes and note types, not names.
+func RegisterUploadedMediaName(ctx context.Context, db *gorm.DB, deckID uint64, sha, mime string) (string, error) {
+	name := mediaDeckName(sha, mime)
+	if err := NewMediaNameStore(db).Upsert(ctx, deckID, name, sha); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
 // normaliseMediaName is the single normalisation rule for a deck-scoped media file name.
 //
 // Unicode equivalence: the composed and the decomposed spelling of the same name must resolve to one row, so every writer

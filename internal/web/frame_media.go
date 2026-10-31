@@ -17,6 +17,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -138,6 +140,30 @@ func (s *Server) frameMediaBase(ctx context.Context, userID, deckID uint64) stri
 		return ""
 	}
 	return "/fm/" + token + "/"
+}
+
+// frameMediaBaseForEditor returns the media base of one deck for the note editor.
+//
+// A field stores media by deck-scoped name, and the rich-text editing frame has no session cookie, so it shows a field's
+// images only through the frame media route, exactly like a card face. The editor needs the base before any preview has
+// been rendered, which is why it has its own endpoint instead of reading a preview face. Editing a note needs the editor
+// role, so that is the role this endpoint requires. An empty base means the feature is unavailable; the editor then shows
+// the field without one.
+func (s *Server) frameMediaBaseForEditor(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok || user.Status != store.StatusActive {
+		writeRenderError(c, http.StatusUnauthorized, api.CodeUnauthorized)
+		return
+	}
+	deck, err := s.decks.ByPublicID(c.Request.Context(), strings.TrimSpace(c.Param("id")))
+	if err != nil {
+		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
+		return
+	}
+	if _, ok := s.loadDeckForRole(c, user, deck.ID, store.RoleEditor); !ok {
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"media_base": s.frameMediaBase(c.Request.Context(), user.ID, deck.ID)})
 }
 
 // frameMediaToken signs a claim set. The token is
