@@ -9,7 +9,6 @@
 package schedule
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -151,7 +150,7 @@ func Parameters(preset *store.Preset) (fsrs.Parameters, error) {
 	if preset == nil {
 		return fsrs.Parameters{}, fmt.Errorf("schedule: preset is required")
 	}
-	weights, err := presetWeights(preset.WeightsJSON)
+	weights, err := store.PresetWeights(preset.WeightsJSON)
 	if err != nil {
 		return fsrs.Parameters{}, err
 	}
@@ -188,26 +187,6 @@ func parametersWithWeights(preset *store.Preset, weights fsrs.Weights) (fsrs.Par
 	// DefaultParam keeps EnableShortTerm=true, i.e. the "learning steps + short-term memory" behaviour.
 
 	return p, nil
-}
-
-// presetWeights parses preset.WeightsJSON. NULL / empty / "null" are all treated as using the default weights.
-func presetWeights(raw *string) (fsrs.Weights, error) {
-	if raw == nil || strings.TrimSpace(*raw) == "" {
-		return fsrs.DefaultWeights(), nil
-	}
-	trimmed := strings.TrimSpace(*raw)
-	if trimmed == "null" {
-		return fsrs.DefaultWeights(), nil
-	}
-	var arr []float64
-	if err := json.Unmarshal([]byte(trimmed), &arr); err != nil {
-		return fsrs.Weights{}, fmt.Errorf("schedule: decode preset weights: %w", err)
-	}
-	w, err := fsrs.MigrateWeights(arr)
-	if err != nil {
-		return fsrs.Weights{}, fmt.Errorf("schedule: migrate preset weights: %w", err)
-	}
-	return w, nil
 }
 
 // parseSteps parses learning steps such as "1m,10m"; an empty string means learning steps are disabled (returns nil).

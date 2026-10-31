@@ -1524,15 +1524,9 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		return fmt.Errorf("import Anki progress: load preset: %w", err)
 	}
 	params := fsrs.DefaultParam()
-	if preset.WeightsJSON != nil && strings.TrimSpace(*preset.WeightsJSON) != "" && strings.TrimSpace(*preset.WeightsJSON) != "null" {
-		var weights []float64
-		if err := json.Unmarshal([]byte(*preset.WeightsJSON), &weights); err != nil {
-			return fmt.Errorf("import Anki progress: decode preset weights: %w", err)
-		}
-		params.W, err = fsrs.MigrateWeights(weights)
-		if err != nil {
-			return fmt.Errorf("import Anki progress: migrate preset weights: %w", err)
-		}
+	params.W, err = PresetWeights(preset.WeightsJSON)
+	if err != nil {
+		return fmt.Errorf("import Anki progress: %w", err)
 	}
 	engine := fsrs.NewFSRS(params)
 	ids := make([]uint64, 0, len(cardIDs))
