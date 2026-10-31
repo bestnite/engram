@@ -216,6 +216,14 @@ describe('RichTextField toolbar commands', () => {
     expect(target.querySelector('[data-testid="field-source-hint"]')).toBeNull();
   });
 
+  it('lays the toolbar out as one wrapping row without separator elements', () => {
+    mountField();
+    const toolbar = target.querySelector('[data-testid="field-toolbar"]') as HTMLElement;
+    const tags = Array.from(toolbar.children).map((child) => child.tagName);
+    expect(tags.length).toBeGreaterThan(20);
+    expect(tags.every((tag) => tag === 'BUTTON' || tag === 'LABEL')).toBe(true);
+  });
+
   it('toggles line wrapping and tells the frame', () => {
     const fake = mountField();
     const toggle = target.querySelector('[data-testid="field-wrap-toggle"]') as HTMLButtonElement;

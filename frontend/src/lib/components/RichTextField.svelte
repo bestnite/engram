@@ -128,7 +128,9 @@
   const toolbarButton =
     'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40';
 
-  const separator = 'h-4 w-px shrink-0 bg-input @max-sm:hidden';
+  // Groups read as groups through the extra leading space of their first control. A separator
+  // element cannot stay inside a wrapping row: it ends a row as a stranded vertical bar.
+  const groupStart = 'ms-1 @max-sm:ms-0';
 
   /** One toolbar action: the command name the frame understands and its accessible label key. */
   interface Action {
@@ -504,184 +506,173 @@
 <div class="field-frame @container" data-testid="{testId}-frame">
   {#if !plainText}
     <div
-      class="field-frame-header flex flex-wrap items-center gap-x-1 gap-y-1 px-1.5 py-1 @max-sm:gap-x-3"
+      class="field-frame-header flex flex-wrap items-center gap-x-0.5 gap-y-1 px-1.5 py-1 @max-sm:gap-x-1"
       role="group"
       aria-label={$t('editor.toolbar', { field: label })}
       data-testid="{testId}-toolbar"
     >
-      <div class="flex items-center gap-0.5">
-        {#each inlineActions as action (action.id)}
-          <button
-            type="button"
-            class={toolbarButton}
-            data-testid="{testId}-format-{action.id}"
-            aria-label={$t(action.label, { field: label })}
-            title={$t(action.label, { field: label })}
-            aria-keyshortcuts={action.shortcut}
-            disabled={sourceOpen}
-            onmousedown={(event) => event.preventDefault()}
-            onclick={() => command(action.name, action.extra)}
-          >
-            <action.Icon class="size-4" aria-hidden="true" />
-          </button>
-        {/each}
-        <label
-          class="{toolbarButton} relative {sourceOpen ? 'pointer-events-none opacity-40' : ''}"
-          title={$t('editor.text_color', { field: label })}
-        >
-          <Palette class="size-4" aria-hidden="true" />
-          <input
-            type="color"
-            class="absolute inset-0 cursor-pointer opacity-0"
-            data-testid="{testId}-text-color"
-            aria-label={$t('editor.text_color', { field: label })}
-            disabled={sourceOpen}
-            oninput={(event) => applyColor('textColor', event)}
-          />
-        </label>
-        <label
-          class="{toolbarButton} relative {sourceOpen ? 'pointer-events-none opacity-40' : ''}"
-          title={$t('editor.highlight', { field: label })}
-        >
-          <Highlighter class="size-4" aria-hidden="true" />
-          <input
-            type="color"
-            class="absolute inset-0 cursor-pointer opacity-0"
-            data-testid="{testId}-highlight"
-            aria-label={$t('editor.highlight', { field: label })}
-            value="#fff59d"
-            disabled={sourceOpen}
-            oninput={(event) => applyColor('highlight', event)}
-          />
-        </label>
-      </div>
-      <span class={separator} aria-hidden="true"></span>
-      <div class="flex items-center gap-0.5">
-        {#each listActions as action (action.id)}
-          <button
-            type="button"
-            class={toolbarButton}
-            data-testid="{testId}-format-{action.id}"
-            aria-label={$t(action.label, { field: label })}
-            title={$t(action.label, { field: label })}
-            disabled={sourceOpen}
-            onmousedown={(event) => event.preventDefault()}
-            onclick={() => command(action.name, action.extra)}
-          >
-            <action.Icon class="size-4" aria-hidden="true" />
-          </button>
-        {/each}
-      </div>
-      <span class={separator} aria-hidden="true"></span>
-      <div class="flex items-center gap-0.5">
-        {#each alignActions as action (action.id)}
-          <button
-            type="button"
-            class={toolbarButton}
-            data-testid="{testId}-format-{action.id}"
-            aria-label={$t(action.label, { field: label })}
-            title={$t(action.label, { field: label })}
-            disabled={sourceOpen}
-            onmousedown={(event) => event.preventDefault()}
-            onclick={() => command(action.name, action.extra)}
-          >
-            <action.Icon class="size-4" aria-hidden="true" />
-          </button>
-        {/each}
-        {#each indentActions as action (action.id)}
-          <button
-            type="button"
-            class={toolbarButton}
-            data-testid="{testId}-format-{action.id}"
-            aria-label={$t(action.label, { field: label })}
-            title={$t(action.label, { field: label })}
-            disabled={sourceOpen}
-            onmousedown={(event) => event.preventDefault()}
-            onclick={() => command(action.name, action.extra)}
-          >
-            <action.Icon class="size-4" aria-hidden="true" />
-          </button>
-        {/each}
-      </div>
-      <span class={separator} aria-hidden="true"></span>
-      <div class="flex items-center gap-0.5">
+      {#each inlineActions as action (action.id)}
         <button
           type="button"
           class={toolbarButton}
-          data-testid="{testId}-insert-image"
-          aria-label={$t('editor.insert_image', { field: label })}
-          title={$t('editor.insert_image', { field: label })}
+          data-testid="{testId}-format-{action.id}"
+          aria-label={$t(action.label, { field: label })}
+          title={$t(action.label, { field: label })}
+          aria-keyshortcuts={action.shortcut}
           disabled={sourceOpen}
           onmousedown={(event) => event.preventDefault()}
-          onclick={pickFile}
+          onclick={() => command(action.name, action.extra)}
         >
-          <ImagePlus class="size-4" aria-hidden="true" />
+          <action.Icon class="size-4" aria-hidden="true" />
         </button>
+      {/each}
+      <label
+        class="{toolbarButton} relative {sourceOpen ? 'pointer-events-none opacity-40' : ''}"
+        title={$t('editor.text_color', { field: label })}
+      >
+        <Palette class="size-4" aria-hidden="true" />
+        <input
+          type="color"
+          class="absolute inset-0 cursor-pointer opacity-0"
+          data-testid="{testId}-text-color"
+          aria-label={$t('editor.text_color', { field: label })}
+          disabled={sourceOpen}
+          oninput={(event) => applyColor('textColor', event)}
+        />
+      </label>
+      <label
+        class="{toolbarButton} relative {sourceOpen ? 'pointer-events-none opacity-40' : ''}"
+        title={$t('editor.highlight', { field: label })}
+      >
+        <Highlighter class="size-4" aria-hidden="true" />
+        <input
+          type="color"
+          class="absolute inset-0 cursor-pointer opacity-0"
+          data-testid="{testId}-highlight"
+          aria-label={$t('editor.highlight', { field: label })}
+          value="#fff59d"
+          disabled={sourceOpen}
+          oninput={(event) => applyColor('highlight', event)}
+        />
+      </label>
+      {#each listActions as action, index (action.id)}
         <button
           type="button"
-          class={toolbarButton}
-          data-testid="{testId}-insert-audio"
-          aria-label={$t('editor.audio.open', { field: label })}
-          title={$t('editor.audio.open', { field: label })}
+          class="{toolbarButton} {index === 0 ? groupStart : ''}"
+          data-testid="{testId}-format-{action.id}"
+          aria-label={$t(action.label, { field: label })}
+          title={$t(action.label, { field: label })}
           disabled={sourceOpen}
           onmousedown={(event) => event.preventDefault()}
-          onclick={openAudio}
+          onclick={() => command(action.name, action.extra)}
         >
-          <Music class="size-4" aria-hidden="true" />
+          <action.Icon class="size-4" aria-hidden="true" />
         </button>
+      {/each}
+      {#each alignActions as action, index (action.id)}
         <button
           type="button"
-          class={toolbarButton}
-          data-testid="{testId}-insert-ruby"
-          aria-label={$t('editor.ruby.open', { field: label })}
-          title={$t('editor.ruby.open', { field: label })}
+          class="{toolbarButton} {index === 0 ? groupStart : ''}"
+          data-testid="{testId}-format-{action.id}"
+          aria-label={$t(action.label, { field: label })}
+          title={$t(action.label, { field: label })}
           disabled={sourceOpen}
           onmousedown={(event) => event.preventDefault()}
-          onclick={() => openWithSelection('ruby')}
+          onclick={() => command(action.name, action.extra)}
         >
-          <Languages class="size-4" aria-hidden="true" />
+          <action.Icon class="size-4" aria-hidden="true" />
         </button>
+      {/each}
+      {#each indentActions as action (action.id)}
         <button
           type="button"
           class={toolbarButton}
-          data-testid="{testId}-insert-tts"
-          aria-label={$t('editor.tts.open', { field: label })}
-          title={$t('editor.tts.open', { field: label })}
+          data-testid="{testId}-format-{action.id}"
+          aria-label={$t(action.label, { field: label })}
+          title={$t(action.label, { field: label })}
           disabled={sourceOpen}
           onmousedown={(event) => event.preventDefault()}
-          onclick={() => openWithSelection('tts')}
+          onclick={() => command(action.name, action.extra)}
         >
-          <Speech class="size-4" aria-hidden="true" />
+          <action.Icon class="size-4" aria-hidden="true" />
         </button>
-        {#each insertActions as action (action.id)}
-          <button
-            type="button"
-            class={toolbarButton}
-            data-testid="{testId}-format-{action.id}"
-            aria-label={$t(action.label, { field: label })}
-            title={$t(action.label, { field: label })}
-            aria-keyshortcuts={action.shortcut}
-            disabled={sourceOpen}
-            onmousedown={(event) => event.preventDefault()}
-            onclick={() => command(action.name, action.extra)}
-          >
-            <action.Icon class="size-4" aria-hidden="true" />
-          </button>
-        {/each}
+      {/each}
+      <button
+        type="button"
+        class="{toolbarButton} {groupStart}"
+        data-testid="{testId}-insert-image"
+        aria-label={$t('editor.insert_image', { field: label })}
+        title={$t('editor.insert_image', { field: label })}
+        disabled={sourceOpen}
+        onmousedown={(event) => event.preventDefault()}
+        onclick={pickFile}
+      >
+        <ImagePlus class="size-4" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class={toolbarButton}
+        data-testid="{testId}-insert-audio"
+        aria-label={$t('editor.audio.open', { field: label })}
+        title={$t('editor.audio.open', { field: label })}
+        disabled={sourceOpen}
+        onmousedown={(event) => event.preventDefault()}
+        onclick={openAudio}
+      >
+        <Music class="size-4" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class={toolbarButton}
+        data-testid="{testId}-insert-ruby"
+        aria-label={$t('editor.ruby.open', { field: label })}
+        title={$t('editor.ruby.open', { field: label })}
+        disabled={sourceOpen}
+        onmousedown={(event) => event.preventDefault()}
+        onclick={() => openWithSelection('ruby')}
+      >
+        <Languages class="size-4" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class={toolbarButton}
+        data-testid="{testId}-insert-tts"
+        aria-label={$t('editor.tts.open', { field: label })}
+        title={$t('editor.tts.open', { field: label })}
+        disabled={sourceOpen}
+        onmousedown={(event) => event.preventDefault()}
+        onclick={() => openWithSelection('tts')}
+      >
+        <Speech class="size-4" aria-hidden="true" />
+      </button>
+      {#each insertActions as action (action.id)}
         <button
           type="button"
           class={toolbarButton}
-          data-testid="{testId}-source-toggle"
-          aria-label={$t('editor.source.toggle', { field: label })}
-          title={$t('editor.source.toggle', { field: label })}
-          aria-pressed={sourceOpen}
+          data-testid="{testId}-format-{action.id}"
+          aria-label={$t(action.label, { field: label })}
+          title={$t(action.label, { field: label })}
+          aria-keyshortcuts={action.shortcut}
+          disabled={sourceOpen}
           onmousedown={(event) => event.preventDefault()}
-          onclick={toggleSource}
+          onclick={() => command(action.name, action.extra)}
         >
-          <CodeXml class="size-4" aria-hidden="true" />
+          <action.Icon class="size-4" aria-hidden="true" />
         </button>
-        {@render wrapButton()}
-      </div>
+      {/each}
+      <button
+        type="button"
+        class="{toolbarButton} {groupStart}"
+        data-testid="{testId}-source-toggle"
+        aria-label={$t('editor.source.toggle', { field: label })}
+        title={$t('editor.source.toggle', { field: label })}
+        aria-pressed={sourceOpen}
+        onmousedown={(event) => event.preventDefault()}
+        onclick={toggleSource}
+      >
+        <CodeXml class="size-4" aria-hidden="true" />
+      </button>
+      {@render wrapButton()}
     </div>
     {#if sourceOpen}
       <p class="px-1.5 pb-1 text-xs text-muted-foreground" data-testid="{testId}-source-hint">
