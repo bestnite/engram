@@ -92,6 +92,35 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('edit frame theme', () => {
+  afterEach(() => {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.style.colorScheme = '';
+  });
+
+  it('applies the theme before confirming it to the parent', () => {
+    // The scheme seen at the moment `themed` is posted: the parent reveals the frame on that message.
+    const seen: string[] = [];
+    parent.postMessage.mockImplementation((message: Record<string, unknown>) => {
+      if (message.type === 'themed') seen.push(document.documentElement.style.colorScheme);
+    });
+    runtime?.handleMessage(fromParent({ type: 'theme', dark: true }));
+    expect(seen).toEqual(['dark']);
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+
+  it('confirms the theme a load carries', () => {
+    load('<p>x</p>', { dark: false });
+    expect(document.documentElement.style.colorScheme).toBe('light');
+    expect(posted().some((message) => message.type === 'themed')).toBe(true);
+  });
+
+  it('ignores a theme message without a boolean and confirms nothing', () => {
+    runtime?.handleMessage(fromParent({ type: 'theme', dark: 'yes' }));
+    expect(posted().some((message) => message.type === 'themed')).toBe(false);
+  });
+});
+
 describe('edit frame inline commands', () => {
   it.each([
     ['bold', '<b>Hello</b> world'],

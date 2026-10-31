@@ -85,6 +85,12 @@
 
   let iframe = $state<HTMLIFrameElement | null>(null);
   let ready = $state(false);
+  // The frame that confirmed the page theme. Until the current frame has, it stays hidden: its document
+  // starts with a light color-scheme, and a frame whose color-scheme differs from the page's is painted
+  // with an opaque canvas, so a dark page would show a white box until the theme arrives. Keying it on
+  // the element means a frame created again by expanding the field starts hidden too.
+  let themedFrame = $state<HTMLIFrameElement | null>(null);
+  const frameShown = $derived(iframe !== null && themedFrame === iframe);
   let height = $state(0);
   let sourceOpen = $state(false);
   /** Line wrapping of the editing surface; applies to the rich surface and both textareas. */
@@ -421,6 +427,9 @@
         lastEcho = data.html;
         onvalue(data.html);
         return;
+      case 'themed':
+        themedFrame = frame;
+        return;
       case 'height':
         if (typeof data.px === 'number' && Number.isFinite(data.px) && data.px >= 0 && data.px <= 100000) {
           height = Math.round(data.px);
@@ -708,7 +717,7 @@
   {#if expanded}
     <iframe
       bind:this={iframe}
-      class="block w-full border-0 bg-transparent"
+      class="block w-full border-0 bg-transparent {frameShown ? '' : 'invisible'}"
       sandbox="allow-scripts"
       allow="autoplay"
       title={label}

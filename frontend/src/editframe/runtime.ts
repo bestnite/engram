@@ -25,7 +25,9 @@ import {
  *
  * The frame document is deliberately tiny: the parent page sends the field's HTML with `load`,
  * the toolbar's commands with `command`, and the theme with `theme`; the runtime edits its own
- * document and posts the resulting HTML back with `change`. It renders no Svelte component and
+ * document and posts the resulting HTML back with `change`. Every applied theme is answered with
+ * `themed`, because the parent keeps the frame hidden until then: a frame whose color-scheme differs
+ * from the page's is painted with an opaque canvas, so a dark page would first show a white box. It renders no Svelte component and
  * reads no cookie, exactly like the card frame. Untrusted field HTML is only ever parsed inside
  * this sandboxed, opaque-origin document.
  *
@@ -319,10 +321,16 @@ export function createRuntime(options: EditFrameOptions = {}): EditFrameRuntime 
     post({ type: 'change', html });
   }
 
+  /** Applies the page theme and confirms it, so the parent can show the frame without a light flash. */
+  function applyTheme(dark: boolean): void {
+    doc.documentElement.classList.toggle('dark', dark);
+    doc.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    post({ type: 'themed' });
+  }
+
   /** Applies the loaded presentation options to the document. */
   function applyPresentation(message: LoadMessage): void {
-    doc.documentElement.classList.toggle('dark', message.dark);
-    doc.documentElement.style.colorScheme = message.dark ? 'dark' : 'light';
+    applyTheme(message.dark);
     root.dir = message.rtl ? 'rtl' : 'ltr';
     root.style.fontFamily = message.font;
     root.style.fontSize = message.size > 0 ? `${message.size}px` : '';
@@ -598,10 +606,7 @@ export function createRuntime(options: EditFrameOptions = {}): EditFrameRuntime 
         post({ type: 'selection', text: isRich() ? currentRange(ctx, savedRange).toString() : '' });
         return;
       case 'theme':
-        if (typeof data.dark === 'boolean') {
-          doc.documentElement.classList.toggle('dark', data.dark);
-          doc.documentElement.style.colorScheme = data.dark ? 'dark' : 'light';
-        }
+        if (typeof data.dark === 'boolean') applyTheme(data.dark);
         return;
       case 'uploaded': {
         const message = parseUploaded(data);

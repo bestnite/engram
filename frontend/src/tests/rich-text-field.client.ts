@@ -139,6 +139,36 @@ describe('RichTextField message protocol', () => {
     await flushAsync();
     expect(posted(fake).some((entry) => entry.type === 'theme' && entry.dark === true)).toBe(true);
   });
+
+  it('keeps the frame hidden until its own frame confirms the theme', () => {
+    const fake = mountField();
+    const iframe = target.querySelector('[data-testid="field"]') as HTMLIFrameElement;
+    expect(iframe.classList.contains('invisible')).toBe(true);
+    message({ postMessage: vi.fn() }, { type: 'themed' });
+    expect(iframe.classList.contains('invisible')).toBe(true);
+    message(fake, { type: 'themed' });
+    expect(iframe.classList.contains('invisible')).toBe(false);
+  });
+
+  it('hides a frame created again by expanding the field until it confirms the theme', () => {
+    mountField({ options: { collapsed: true } });
+    const toggle = target.querySelector('[data-testid="field-collapse-toggle"]') as HTMLButtonElement;
+    const expand = (): FakeFrame => {
+      toggle.click();
+      flushSync();
+      const fake = frame()!;
+      message(fake, { type: 'ready' });
+      return fake;
+    };
+    message(expand(), { type: 'themed' });
+    toggle.click();
+    flushSync();
+    const next = expand();
+    const iframe = target.querySelector('[data-testid="field"]') as HTMLIFrameElement;
+    expect(iframe.classList.contains('invisible')).toBe(true);
+    message(next, { type: 'themed' });
+    expect(iframe.classList.contains('invisible')).toBe(false);
+  });
 });
 
 describe('RichTextField toolbar commands', () => {
