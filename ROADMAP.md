@@ -156,18 +156,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   and for a card the importer never reviewed; an undo after such an import removes the importer's own
   latest review. Evidence is the raw scoped `go test` and `go vet` output.
 
-- [ ] **M18-16 `.apkg` progress import without a query per row** — `importAnkiProgress` loads each
-  existing card state with its own query and checks each review row for a duplicate with its own
-  `COUNT` query, all inside the import transaction, and the card loop looks up each skipped note's
-  card with its own query; a package with 100 000 revlog rows therefore runs more than 100 000
-  queries in one transaction. The fix loads the existing states, the existing
-  `(card_id, reviewed_at, rating)` keys and the skipped notes' cards with one query per batch of at
-  most 500 ids, and inserts review rows in batches. The results and the report counts stay the same.
-  *Acceptance:* the existing progress tests pass unchanged on SQLite and with `TEST_PG_DSN` set; a test
-  imports a package with 5 000 revlog rows and asserts, through a GORM callback that counts statements,
-  that the progress step runs fewer than 100 statements. Evidence is the raw `go test` output of both
-  runs.
-
 - [ ] **M18-17 `.apkg` deck configuration values the scheduler cannot use** — `M18-9` checks the
   package's FSRS weights, but `createAnkiPreset` in `internal/store/anki_import.go` still copies the
   learning steps, the relearning steps and the maximum interval without checking them against what
