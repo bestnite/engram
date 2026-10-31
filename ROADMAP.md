@@ -465,29 +465,6 @@ adds a test in `internal/schedule` beside the one `M18-41` moves there.
   names `M18-2` also names `M18-13`. Evidence is the output of `grep -n 'M18-13' ROADMAP.md` limited to
   the ledger section.
 
-- [ ] **M18-29 The import report names a preset only when the import chose one** — `M18-4` fills
-  `preset_mode` and `preset_name` for every target. `ValidateImportPreset` in
-  `internal/store/package_import.go` sets an empty mode to `new` for every target, and
-  `fillImportPresetReport` (called from `importInTx` and from `importAnkiInTx` in
-  `internal/store/anki_import.go`) reads the target deck's `decks.preset_id`, which is the deck
-  owner's own preset. Two failures follow for `into_deck` and `replace_deck`. First, the report says
-  `"preset_mode":"new"` although the import neither chose nor created a preset. Second, an editor who
-  imports into a shared deck receives the name of the owner's private preset; every other response
-  gives a member only their own study settings (`deck_member_settings`), never the owner's preset.
-  Reproduced on `main`: an editor's multipart import with `target=into_deck:<id>` returned
-  `"preset_mode":"new","preset_name":"Owner private preset"`. The fix: `PackageImportReport` tags
-  `preset_mode` and `preset_name` with `omitempty`; both stay empty for `into_deck` and
-  `replace_deck`; for `new_deck` the report takes the mode from the validated options and the name
-  from the preset that `selectImportPreset` returned, so `fillImportPresetReport` and its two queries
-  go away. The maintainer has decided this form rather than the alternative of reporting the caller's
-  own preset for the deck: with no choice made there is nothing to name, and the alternative would
-  need a new query for a value the import never used. *Acceptance:* a table test in `internal/store` imports an `.edeck` and an `.apkg` with each
-  of `new_deck`, `into_deck` and `replace_deck` and checks that the two fields are set only for
-  `new_deck`; a handler test in `internal/api` imports into a shared deck as an editor and shows that
-  the response body contains neither `preset_mode` nor `preset_name` and does not contain the owner's
-  preset name. Evidence is the raw scoped `go test` and `go vet` output and the captured editor
-  response.
-
 - [ ] **M18-30 `preset_id` without `reuse` or `copy` is refused** — `M18-4` refuses `apply_weights`
   with `reuse` or `copy` "instead of silently ignored", but the reverse case is still ignored silently:
   `ValidateImportPreset` in `internal/store/package_import.go` returns early for `new` without looking
