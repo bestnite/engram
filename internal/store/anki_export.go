@@ -608,8 +608,11 @@ func ankiDeckConfig(preset *Preset, includeWeights bool) (anki.WriteDeckConfig, 
 }
 
 // ankiWeights parses a preset's weights JSON and migrates older 17/19-value sets to the
-// 21 FSRS-6 parameters. A null, empty or undecodable value means "use the defaults", so
-// no weights are written and Anki falls back to its own defaults.
+// 21 FSRS-6 parameters. A NULL value (the caller returns before this function), an empty
+// string, "null" and an empty array write no weights, so the exported deck falls back to
+// Anki's defaults. A value that does not decode, or a set fsrs.MigrateWeights refuses,
+// fails the export: the scheduler refuses the same value, so the deck could not be
+// studied either, and writing no weights would hide that fault from the user.
 func ankiWeights(raw string) ([]float64, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "null" {
