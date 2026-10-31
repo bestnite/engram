@@ -56,6 +56,32 @@ describe('NoteTypesView', () => {
     routeStore.set(matchRoute('/decks/d1/note-types'));
   });
 
+  it('explains the page: what a note type is, the steps, and the template syntax', () => {
+    const { html } = render(NoteTypesView, {
+      props: { initialLoading: false, initialNoteTypes: [noteType()], initialStocks: stocks, initialControls: controls },
+    });
+    expect(html).toContain('data-testid="notetype-guide"');
+    expect(html).toContain('笔记类型决定一条笔记有哪些字段');
+    for (const step of ['create', 'fields', 'templates', 'style', 'preview', 'use', 'tools']) {
+      expect(html).toContain(`data-testid="notetype-guide-${step}"`);
+    }
+    // The syntax reference prints the template syntax literally, next to its translated description.
+    expect(html).toContain('data-testid="notetype-syntax"');
+    expect(html).toContain('{{Front}}');
+    expect(html).toContain('{{tts zh_CN:Text}}');
+    expect(html).toContain('写了问题会显示两遍');
+    // The styling hint names the rule behind the centred default.
+    expect(html).toContain('text-align: center');
+  });
+
+  it('shows the guide on an empty page too, where a first-time reader lands', () => {
+    const { html } = render(NoteTypesView, {
+      props: { initialLoading: false, initialNoteTypes: [], initialStocks: stocks, initialControls: controls },
+    });
+    expect(html).toContain('data-testid="notetype-guide"');
+    expect(html).toContain('data-testid="note-types-empty"');
+  });
+
   it('renders the deck note types, their fields and templates', () => {
     const { html } = render(NoteTypesView, {
       props: {

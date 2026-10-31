@@ -126,6 +126,25 @@
       null,
   );
 
+  /**
+   * The template syntax reference. The code column is Anki template syntax, written literally and never translated; the
+   * description comes from the catalog. The list covers what the renderer supports (internal/notetype).
+   */
+  const syntaxRows: Array<{ code: string; key: string }> = [
+    { code: '{{Front}}', key: 'field' },
+    { code: '{{#Extra}} … {{/Extra}}', key: 'if' },
+    { code: '{{^Extra}} … {{/Extra}}', key: 'unless' },
+    { code: '{{hint:Extra}}', key: 'hint' },
+    { code: '{{type:Back}}', key: 'type' },
+    { code: '{{cloze:Text}}', key: 'cloze' },
+    { code: '{{furigana:Expression}}', key: 'furigana' },
+    { code: '{{tts zh_CN:Text}}', key: 'tts' },
+    { code: '{{text:Front}}', key: 'text' },
+    { code: '{{Tags}} {{Deck}} {{Subdeck}} {{Type}} {{Card}}', key: 'special' },
+    { code: '{{FrontSide}}', key: 'frontside' },
+  ];
+  const guideSteps = ['create', 'fields', 'templates', 'style', 'preview', 'use', 'tools'];
+
   // Stock picker labels come from the translation catalog through the server's label_key; the
   // stock's canonical English name is only the default note type name. Each label names its source,
   // because Anki's types and engram's question types share names such as Basic and Cloze.
@@ -981,6 +1000,20 @@
     {/snippet}
   </PageHeader>
 
+  <!-- What a note type is and how the page is used: the page itself only lists settings, so a first-time reader needs the
+       relation between fields, templates and cards spelled out. The steps stay folded once the reader knows them. -->
+  <div class="mb-6 rounded-lg border border-border bg-surface/40 px-4 py-3 text-sm" data-testid="notetype-guide">
+    <p class="text-muted-foreground">{$t('notetype.guide.intro')}</p>
+    <details class="mt-2">
+      <summary class="cursor-pointer font-medium text-foreground">{$t('notetype.guide.howto')}</summary>
+      <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-muted-foreground">
+        {#each guideSteps as step (step)}
+          <li data-testid={`notetype-guide-${step}`}>{$t(`notetype.guide.step.${step}`)}</li>
+        {/each}
+      </ol>
+    </details>
+  </div>
+
   {#if loading}
     <Skeleton testId="note-types-loading" label={$t('common.loading')} />
   {:else if loadError}
@@ -1163,6 +1196,19 @@
                 <span>{$t('notetype.templates.add')}</span>
               </Button>
             </header>
+            <details class="border-b border-border px-4 py-2.5" data-testid="notetype-syntax">
+              <summary class="cursor-pointer text-xs font-medium text-foreground">{$t('notetype.syntax.title')}</summary>
+              <table class="mt-2 w-full text-xs">
+                <tbody>
+                  {#each syntaxRows as row (row.key)}
+                    <tr class="border-t border-border first:border-t-0">
+                      <td class="py-1.5 pr-4 align-top font-mono whitespace-nowrap text-foreground">{row.code}</td>
+                      <td class="py-1.5 align-top text-muted-foreground">{$t(`notetype.syntax.${row.key}`)}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </details>
             <div class="space-y-2 border-b border-border p-3">
               {#each draft.config.templates as template, index (template.id)}
                 <div class="flex flex-wrap items-center gap-2 rounded-md px-2 py-1.5 {template.id === selectedTemplateId ? 'bg-muted' : ''}" data-testid={`notetype-template-row-${template.id}`}>
