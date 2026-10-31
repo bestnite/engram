@@ -145,20 +145,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-14 `.apkg` progress report counts and transport tests** — with `include_progress` off,
-  `importAnkiProgress` sets `states_discarded` to the number of all package cards and
-  `progress_discarded` to true for every package that has a card, including a package whose cards are
-  all new and carry no progress. The fix: `states_discarded` counts only the cards whose type or queue
-  is not 0, and `progress_discarded` is true only when `states_discarded` or `reviews_discarded` is
-  greater than 0. `M18-2` added `include_progress` to the multipart route, the URL import, the upload
-  ticket, the MCP `import_deck` and `create_import_upload` tools and the CLI without a test for any of
-  them. *Acceptance:* a table test shows an all-new package reporting no discarded progress and a
-  package with one review card reporting one discarded state; a handler test for each HTTP transport
-  and each MCP tool shows that `include_progress` reaches the import and that leaving it out writes no
-  `card_states` row; a negative test shows that a user with the reader role on the target deck gets
-  403 on `into_deck` with `include_progress` on. Evidence is the raw scoped `go test` and `go vet`
-  output.
-
 - [ ] **M18-15 `.apkg` re-import with progress must not overwrite newer progress** — a repeated
   import with `include_progress` on overwrites the importer's `card_states` row with the package's
   state even when the importer has reviewed the card in engram since the package was made, and
