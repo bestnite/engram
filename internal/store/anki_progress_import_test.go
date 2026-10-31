@@ -69,6 +69,89 @@ func TestAnkiReviewColumns(t *testing.T) {
 	}
 }
 
+func TestAnkiImportDueDates(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		for _, tc := range []struct {
+			name                                 string
+			kind, queue                          int
+			due, originalDue, originalDeck, want int64
+		}{
+			{"learning_queue1", 1, 1, 1700000000, 0, 0, 1700000000},
+			{"relearning_queue1", 3, 1, 1700000000, 0, 0, 1700000000},
+			{"learning_queue3", 1, 3, 3, 0, 0, 1500259200},
+			{"relearning_queue3", 3, 3, 3, 0, 0, 1500259200},
+			{"filtered_learning_queue1", 1, 1, -100, 1700000000, 1, 1700000000},
+			{"filtered_relearning_queue1", 3, 1, -100, 1700000000, 1, 1700000000},
+			{"filtered_learning_queue3", 1, 3, -100, 3, 1, 1500259200},
+			{"filtered_review", 2, 2, -100, 3, 1, 1500259200},
+			{"filtered_relearning_queue3", 3, 3, -100, 3, 1, 1500259200},
+			{"unfiltered_ignores_odue", 2, 2, 3, 99, 0, 1500259200},
+		} {
+			t.Run(driver+"/"+tc.name, func(t *testing.T) {
+				pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				pkg.Notes, pkg.Cards = pkg.Notes[:1], pkg.Cards[:1]
+				pkg.CreatedAt = 1500000000
+				c := &pkg.Cards[0]
+				c.Type, c.Queue, c.Due, c.OriginalDue, c.OriginalDeckID = tc.kind, tc.queue, tc.due, tc.originalDue, tc.originalDeck
+				c.Data = `{"s":4.5,"d":6.2}`
+				user := seedUsers(t, db, "due_"+driver+"_"+tc.name)[0]
+				plan, report := planAnkiDecks(pkg), &PackageImportReport{}
+				if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: true, Now: time.Now}, report); err != nil {
+					t.Fatal(err)
+				}
+				var state CardState
+				if err := db.Where("user_id = ?", user).First(&state).Error; err != nil {
+					t.Fatal(err)
+				}
+				if state.DueAt == nil || state.DueAt.Unix() != tc.want {
+					t.Fatalf("due=%v want=%d", state.DueAt, tc.want)
+				}
+			})
+		}
+	}
+}
+
+func TestAnkiFilteredOraclePackage(t *testing.T) {
+	name := os.Getenv("TEST_ANKI_FILTERED_PACKAGE")
+	if name == "" {
+		t.Skip("TEST_ANKI_FILTERED_PACKAGE not set")
+	}
+	pkg, err := anki.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			user := seedUsers(t, db, "filtered_oracle_"+driver)[0]
+			raw, err := os.ReadFile(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			report, err := NewDeckStore(db).ImportPackage(context.Background(), user, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var states []CardState
+			if err := db.Where("user_id = ?", user).Order("state").Find(&states).Error; err != nil {
+				t.Fatal(err)
+			}
+			if len(states) != 3 {
+				t.Fatalf("states=%+v report=%+v", states, report)
+			}
+			for _, state := range states {
+				want := pkg.CreatedAt + 3*86400
+				if state.DueAt == nil || state.DueAt.Unix() != want {
+					t.Fatalf("state=%s due=%v want=%d", state.State, state.DueAt, want)
+				}
+				t.Logf("state=%s due=%s unix=%d", state.State, state.DueAt.UTC().Format(time.RFC3339), state.DueAt.Unix())
+			}
+		})
+	}
+}
+
 func TestAnkiProgressReplayStart(t *testing.T) {
 	var golden struct {
 		Cards map[string]struct {
@@ -296,6 +379,9 @@ func TestAnkiProgressLastReview(t *testing.T) {
 				pkg.Notes, pkg.Cards = pkg.Notes[:1], pkg.Cards[:1]
 				card := &pkg.Cards[0]
 				card.Type, card.Queue, card.Interval, card.Data = tc.kind, tc.kind, tc.interval, tc.data
+				if tc.kind == 3 {
+					card.Queue = 1
+				}
 				card.Due = 1700000000
 				if tc.kind == 2 {
 					card.Due = 10

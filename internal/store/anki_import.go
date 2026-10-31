@@ -1540,12 +1540,15 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		if state.ScheduledDays < 0 {
 			state.ScheduledDays = 0
 		}
-		if card.Type == 1 || card.Type == 3 {
-			due := time.Unix(card.Due, 0).UTC()
-			state.DueAt = &due
+		dueValue := card.Due
+		if card.OriginalDeckID != 0 {
+			dueValue = card.OriginalDue
 		}
-		if card.Type == 2 {
-			due := time.Unix(pkg.CreatedAt, 0).UTC().Add(time.Duration(card.Due) * 24 * time.Hour)
+		if card.Type != 0 {
+			due := time.Unix(dueValue, 0).UTC()
+			if card.Type == 2 || card.Queue == 3 {
+				due = time.Unix(pkg.CreatedAt, 0).UTC().Add(time.Duration(dueValue) * 24 * time.Hour)
+			}
 			state.DueAt = &due
 		}
 		var data struct {
