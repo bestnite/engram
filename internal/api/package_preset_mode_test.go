@@ -26,7 +26,10 @@ func TestImportUploadPresetModes(t *testing.T) {
 	}
 	for _, mode := range []string{"new", "reuse", "copy"} {
 		t.Run(mode, func(t *testing.T) {
-			body := fmt.Sprintf(`{"preset_mode":%q,"preset_id":%q}`, mode, p.PublicID)
+			body := fmt.Sprintf(`{"preset_mode":%q}`, mode)
+			if mode != "new" {
+				body = fmt.Sprintf(`{"preset_mode":%q,"preset_id":%q}`, mode, p.PublicID)
+			}
 			up := issueUpload(t, env, key.Plaintext, body)
 			rec := putUpload(t, env, up.UploadURL, minimalPackageZip(t))
 			if rec.Code != http.StatusOK {
@@ -49,7 +52,7 @@ func TestImportUploadPresetModes(t *testing.T) {
 			}
 		})
 	}
-	for _, body := range []string{`{"preset_mode":"bad"}`, `{"preset_mode":"reuse"}`, `{"preset_mode":"copy"}`, fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"copy","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"target":"into_deck:any"}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q}`, foreign.PublicID)} {
+	for _, body := range []string{fmt.Sprintf(`{"preset_mode":"new","preset_id":%q}`, p.PublicID), fmt.Sprintf(`{"preset_id":%q}`, p.PublicID), `{"preset_mode":"bad"}`, `{"preset_mode":"reuse"}`, `{"preset_mode":"copy"}`, fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"copy","preset_id":%q,"apply_weights":true}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q,"target":"into_deck:any"}`, p.PublicID), fmt.Sprintf(`{"preset_mode":"reuse","preset_id":%q}`, foreign.PublicID)} {
 		var before, after int64
 		env.db.Model(&store.ActionToken{}).Count(&before)
 		rec := createUpload(t, env, key.Plaintext, body)

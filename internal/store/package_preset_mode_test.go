@@ -45,7 +45,11 @@ func TestAnkiImportPresetModes(t *testing.T) {
 			now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 			for _, mode := range []string{"new", "reuse", "copy"} {
 				t.Run(mode, func(t *testing.T) {
-					report, err := NewDeckStore(db).ImportPackage(context.Background(), owner, bytes.NewReader(raw), PackageImportOptions{PresetMode: mode, PresetID: source.ID, MediaRoot: t.TempDir(), Now: func() time.Time { return now }})
+					opts := PackageImportOptions{PresetMode: mode, MediaRoot: t.TempDir(), Now: func() time.Time { return now }}
+					if mode != "new" {
+						opts.PresetID = source.ID
+					}
+					report, err := NewDeckStore(db).ImportPackage(context.Background(), owner, bytes.NewReader(raw), opts)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -111,7 +115,11 @@ func TestImportPresetModes(t *testing.T) {
 						t.Fatal(err)
 					}
 					beforeJSON, _ := json.Marshal(before)
-					report := importPackageOK(t, db, users[0], raw, PackageImportOptions{PresetMode: mode, PresetID: source.ID})
+					opts := PackageImportOptions{PresetMode: mode}
+					if mode != "new" {
+						opts.PresetID = source.ID
+					}
+					report := importPackageOK(t, db, users[0], raw, opts)
 					var deck Deck
 					if err := db.First(&deck, report.DeckID).Error; err != nil {
 						t.Fatal(err)
@@ -157,7 +165,7 @@ func TestImportPresetModes(t *testing.T) {
 					}
 				})
 			}
-			cases := []PackageImportOptions{{PresetMode: "bad"}, {PresetMode: "reuse"}, {PresetMode: "copy"}, {PresetMode: "reuse", PresetID: foreign.ID}, {PresetMode: "copy", PresetID: foreign.ID}, {PresetMode: "reuse", PresetID: source.ID, ApplyWeights: true}, {PresetMode: "copy", PresetID: source.ID, ApplyWeights: true}, {PresetMode: "reuse", PresetID: source.ID, Target: "into_deck:1"}}
+			cases := []PackageImportOptions{{PresetMode: "new", PresetID: source.ID}, {PresetMode: "", PresetID: source.ID}, {PresetMode: "bad"}, {PresetMode: "reuse"}, {PresetMode: "copy"}, {PresetMode: "reuse", PresetID: foreign.ID}, {PresetMode: "copy", PresetID: foreign.ID}, {PresetMode: "reuse", PresetID: source.ID, ApplyWeights: true}, {PresetMode: "copy", PresetID: source.ID, ApplyWeights: true}, {PresetMode: "reuse", PresetID: source.ID, Target: "into_deck:1"}}
 			for _, opts := range cases {
 				t.Run(fmtOptions(opts), func(t *testing.T) {
 					var decks, presets, decksAfter, presetsAfter int64

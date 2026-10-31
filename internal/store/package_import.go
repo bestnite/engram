@@ -596,6 +596,9 @@ func (s *DeckStore) ValidateImportPreset(ctx context.Context, owner uint64, targ
 	}
 	switch opts.PresetMode {
 	case "new":
+		if opts.PresetID != 0 {
+			return &PackageError{Message: "invalid preset selection"}
+		}
 		return nil
 	case "reuse", "copy":
 	default:
