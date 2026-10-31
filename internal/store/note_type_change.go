@@ -60,8 +60,9 @@ type EmptyCardCleanupImpact struct {
 // NoteTypeChangeOptions carries the mappings and the safety switches of a change-note-type operation.
 //
 // FieldMapping maps a source field id to a target field id. TemplateMapping maps a source template id to a target
-// template id. A target field with no source mapping receives the empty string; a source template with no mapping
-// has its cards soft-deleted, which requires Confirm.
+// template id. A target field with no source mapping receives the empty string. A source template with no mapping
+// keeps its card only when the target config declares the same template id; every other unmapped source template has
+// its cards soft-deleted, which requires Confirm.
 type NoteTypeChangeOptions struct {
 	FieldMapping       map[string]string
 	TemplateMapping    map[string]string
@@ -71,14 +72,13 @@ type NoteTypeChangeOptions struct {
 
 // NoteTypeChangeImpact is what one change-note-type operation did.
 //
-// NotesMoved is the number of notes whose note type changed. CardsMoved counts live cards whose template was
-// changed to the mapped target template; their card ids, and therefore their progress, stay the same.
-// CardsAdded counts cards that became visible because the target config generates their template for the note: a newly
-// inserted row and a soft-deleted row restored with the same id. CardsRemoved counts live cards of unmapped source
-// templates that the operation soft-deleted; ReviewsOnRemovedCards counts the review rows attached to those cards,
-// which stay in place. A card of an unmapped source template whose template the target config still generates appears
-// in both cards_removed and cards_added: the soft-delete happened, and the card sync then restored the same row with
-// its id and progress.
+// NotesMoved is the number of notes whose note type changed. CardsMoved counts live cards that kept their row: a card
+// whose source template is mapped, and a card whose source template is unmapped but whose id the target config
+// declares. Their card ids, and therefore their progress, stay the same. CardsAdded counts cards that became visible
+// because the target config generates their template for the note and no live card held it: a newly inserted row and a
+// soft-deleted row restored with the same id. CardsRemoved counts live cards of unmapped source templates that the
+// target config does not declare and that the operation soft-deleted; ReviewsOnRemovedCards counts the review rows
+// attached to those cards, which stay in place. A card never counts in both CardsRemoved and CardsAdded.
 type NoteTypeChangeImpact struct {
 	NotesMoved            int
 	CardsMoved            int
@@ -265,9 +265,11 @@ func loadNoteTypesForNotes(ctx context.Context, tx *gorm.DB, notes []Note) (map[
 //
 // Notes keep their card rows: a live card whose source template is mapped keeps its id and its progress, and only its
 // template and ordinal move to the target template. A live card whose template is unmapped is soft-deleted, which
-// needs ConfirmCardRemoval; its card_states and reviews stay. Content moves by field id: a target field with no source
-// mapping receives the empty string, search_text is recomputed from the target config, and the media mapping is rebuilt
-// because an unmapped field can drop references. Tags, source, external_ref and deck stay unchanged.
+// needs ConfirmCardRemoval; its card_states and reviews stay. An unmapped source template whose id the target config
+// declares is not removed at all: it is treated as mapped to that same id, so its cards keep their ids and progress.
+// Content moves by field id: a target field with no source mapping receives the empty string, search_text is recomputed
+// from the target config, and the media mapping is rebuilt because an unmapped field can drop references. Tags, source,
+// external_ref and deck stay unchanged.
 //
 // A note also gains the cards the target config generates for it and it lacks, so a target template no source card maps
 // to gets a card when its front is not empty. The insertion goes through the card sync the note write path uses: a
@@ -437,6 +439,12 @@ type templateMove struct {
 
 // buildTemplatePlan validates a template mapping and turns it into "source template id -> target template move".
 //
+// A source template the mapping leaves out keeps its card when the target config declares the same id: it is planned
+// as a move to itself, at the ordinal the target config gives that id. Two note types created from one stock definition
+// share template ids such as "forward" and "reverse", and a mapping that names only one of them must not remove the
+// other. An unmapped source template whose id the target config does not declare is absent from the plan, so its
+// cards are soft-deleted. An id the mapping already claims as a target is not claimed a second time by this rule.
+//
 // A cloze note type has no template mapping: its cards are named by cloze number, not by template id, and the
 // numbers stay with the field content. A non-empty mapping for a cloze type is rejected.
 func buildTemplatePlan(srcCfg, tgtCfg notetype.Config, mapping map[string]string) (map[string]templateMove, error) {
@@ -469,6 +477,17 @@ func buildTemplatePlan(srcCfg, tgtCfg notetype.Config, mapping map[string]string
 		}
 		usedTargets[targetID] = true
 		plan[sourceID] = move
+	}
+	for _, template := range srcCfg.Templates {
+		if _, mapped := plan[template.ID]; mapped {
+			continue
+		}
+		move, declared := targetByID[template.ID]
+		if !declared || usedTargets[template.ID] {
+			continue
+		}
+		usedTargets[template.ID] = true
+		plan[template.ID] = move
 	}
 	return plan, nil
 }

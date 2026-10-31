@@ -517,18 +517,19 @@ func TestChangeNoteTypeSwapsTemplateIds(t *testing.T) {
 	}
 }
 
-// TestChangeNoteTypeRestoresUnmappedCardAtGeneratedTemplate proves the two counts agree with the table when a source
-// template is left unmapped but the target config still generates its template id: the card is soft-deleted and then
-// restored with the same id and progress.
-func TestChangeNoteTypeRestoresUnmappedCardAtGeneratedTemplate(t *testing.T) {
+// TestChangeNoteTypeKeepsDeclaredUnmappedTemplate proves an unmapped source template the target config declares keeps
+// its card: the change needs no confirmation, both cards keep their ids and progress, and neither counts as removed or
+// added.
+func TestChangeNoteTypeKeepsDeclaredUnmappedTemplate(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			if err := db.AutoMigrate(AllModels()...); err != nil {
 				t.Fatalf("AutoMigrate() error = %v", err)
 			}
 			ctx := context.Background()
-			owner := seedUsers(t, db, "note_type_change_restore_owner")[0]
+			owner := seedUsers(t, db, "note_type_change_declared_owner")[0]
 			deckID := seedDeck(t, db, owner)
+			// Two types built from one stock definition declare the same template ids, forward and reverse.
 			source := createType(t, db, deckID, "Basic (and reversed card)", reversedConfig())
 			target := createType(t, db, deckID, "Basic (and reversed card) copy", reversedConfig())
 			notes := NewNoteStore(db)
@@ -539,35 +540,39 @@ func TestChangeNoteTypeRestoresUnmappedCardAtGeneratedTemplate(t *testing.T) {
 				t.Fatalf("create note: %v", err)
 			}
 			before := cardTemplates(cards)
+			if len(before) != 2 {
+				t.Fatalf("created note has cards %v, want forward and reverse", before)
+			}
 			for _, cardID := range before {
 				seedProgress(t, db, owner, cardID)
 			}
 
-			// Only forward is mapped; reverse keeps its template id, which the target config generates as well.
-			// The removal is confirmed because the operation still soft-deletes the unmapped card first.
+			// Only forward is named; the target config declares reverse as well, so the reverse card must stay.
 			impact, err := notes.ChangeNoteType(ctx, deckID, source.ID, target.ID, NoteTypeChangeOptions{
-				FieldMapping:       map[string]string{"r-front": "r-front", "r-back": "r-back"},
-				TemplateMapping:    map[string]string{"forward": "forward"},
-				ConfirmCardRemoval: true,
+				FieldMapping:    map[string]string{"r-front": "r-front", "r-back": "r-back"},
+				TemplateMapping: map[string]string{"forward": "forward"},
 			})
 			if err != nil {
 				t.Fatalf("ChangeNoteType() error = %v", err)
 			}
-			if impact.NotesMoved != 1 || impact.CardsMoved != 1 || impact.CardsAdded != 1 ||
-				impact.CardsRemoved != 1 || impact.ReviewsOnRemovedCards != 1 {
-				t.Errorf("impact = %+v, want 1 note, 1 moved, 1 added, 1 removed and 1 review", impact)
+			if impact.NotesMoved != 1 || impact.CardsMoved != 2 || impact.CardsAdded != 0 ||
+				impact.CardsRemoved != 0 || impact.ReviewsOnRemovedCards != 0 {
+				t.Errorf("impact = %+v, want 1 note and 2 moved cards", impact)
+			}
+			if got := currentNoteTypeID(t, db, note.ID); got != target.ID {
+				t.Errorf("note type after change = %d, want %d", got, target.ID)
 			}
 
-			live := map[string]Card{}
 			var stored []Card
 			if err := db.Where("note_id = ?", note.ID).Find(&stored).Error; err != nil {
 				t.Fatalf("load cards: %v", err)
 			}
+			if len(stored) != 2 {
+				t.Fatalf("cards after change = %+v, want forward and reverse", stored)
+			}
+			live := map[string]Card{}
 			for _, card := range stored {
 				live[card.Template] = card
-			}
-			if len(live) != 2 {
-				t.Fatalf("cards after change = %+v, want forward and reverse", stored)
 			}
 			for _, template := range []string{"forward", "reverse"} {
 				if live[template].ID != before[template] {

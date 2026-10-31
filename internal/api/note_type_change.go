@@ -69,12 +69,12 @@ type ChangeNoteTypeInput struct {
 
 // ChangeNoteTypeResult is what a change-note-type operation did or, for a dry run, would do.
 //
-// notes_moved is the number of notes whose note type changed; cards_moved counts cards that kept their id and
-// progress and moved to the mapped template; cards_added counts cards that became visible because the target note
-// type generates their template for the note, either newly inserted or restored from a soft-deleted row;
-// cards_removed counts unmapped-template cards that were soft-deleted, together with the review rows they keep. A
-// card whose template the target still generates appears in both cards_added and cards_removed: it is soft-deleted
-// and then restored with the same id and progress.
+// notes_moved is the number of notes whose note type changed; cards_moved counts cards that kept their id and progress,
+// whether their template was mapped or their unmapped template id is declared by the target type; cards_added counts
+// cards that became visible because the target note type generates their template for the note, either newly inserted
+// or restored from a soft-deleted row; cards_removed counts cards of unmapped templates the target type does not
+// declare, which were soft-deleted, together with the review rows they keep. A card is never counted in both
+// cards_added and cards_removed.
 type ChangeNoteTypeResult struct {
 	DryRun                bool `json:"dry_run"`
 	NotesMoved            int  `json:"notes_moved"`
