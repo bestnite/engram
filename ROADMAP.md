@@ -156,19 +156,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   leaves `version` unchanged on both drivers. Evidence is the raw `go test` output of both runs, the
   PostgreSQL one with `TEST_PG_DSN` set.
 
-- [ ] **M18-11 Last review time survives an `.apkg` round trip** — the importer sets
-  `last_review_at` only from the `lrt` key of `cards.data`, and the exporter (`internal/anki/write.go`,
-  `internal/store/anki_export.go`) never writes `lrt`, so an engram export imported back has no last
-  review time; `TestExportAnkiPackageRoundTrip` does not compare it. go-fsrs counts zero elapsed days
-  when the last review time is unset, so the first review after the import is scheduled as a same-day
-  repeat and the interval barely grows. The fix: the exporter writes `lrt` in seconds next to `s` and
-  `d` for every card with a last review time; when a package carries no `lrt`, the importer uses the
-  card's last kept revlog row; when it has neither, a review or relearning card uses its due date
-  minus `ivl` days, and a learning card keeps NULL. *Acceptance:* the round trip compares
-  `last_review_at`; table tests cover a card with `lrt`, a card with only revlog rows, and a review
-  card with neither; `tools/anki-oracle/verify_package.py` still opens the produced package with
-  `anki==26.9.3`. Evidence is the raw scoped `go test` and `go vet` output and the script's output.
-
 - [ ] **M18-12 `.apkg` due dates for interday learning and filtered decks** — the importer reads the
   `due` of every learning (type 1) and relearning (type 3) card as Unix seconds. For queue 3, Anki's
   interday learning queue, `due` counts days from collection creation instead: a card reviewed with
