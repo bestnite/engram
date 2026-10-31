@@ -220,24 +220,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   naming `M18-4`; the sentence in `AGENTS.md` section 2.7 names `reuse` and `copy`. Evidence is the
   output of `grep -n 'M18-4\b' ROADMAP.md` limited to the ledger section and the `AGENTS.md` diff.
 
-- [ ] **M18-40 The memory-state derivation states its rules** — the `M18-7` block in
-  `importAnkiProgress` (`internal/store/anki_import.go`) carries no comment, although each of its
-  rules is not obvious from the code: why a non-new card needs a derived state (Anki writes `s` and `d`
-  only when FSRS is enabled, and go-fsrs refuses a non-new card whose stability is below 0.001); that
-  `DeltaT` counts whole review days between consecutive kept rows with the importing user's timezone
-  and cutoff; that a negative `cards.ivl` counts seconds and is converted to days for SM-2; that the
-  SM-2 retention 0.9 is a fixed assumption about the retention the card's SM-2 intervals aimed at; and
-  why an unusable state skips the card instead of failing the import (a stored unusable state would
-  make every preview and submission of the card fail, so the card stays new for the importer). The
-  derivation also discards the error of `time.Parse` (`day, _ :=`), and the comment on
-  `importAnkiProgress` still describes only the separation of progress from content. The fix: the
-  derivation moves into one unexported function with a comment that begins with its name and states
-  the order (the package's state, then the replay, then SM-2, then skip) and each rule above with its
-  reason; the `time.Parse` error is returned wrapped with `%w`; the comment on `importAnkiProgress`
-  also states that it derives a missing memory state. Behaviour is unchanged. *Acceptance:*
-  `grep -n 'day, _ :=' internal/store/anki_import.go` prints nothing; the existing progress tests pass
-  unchanged. Evidence is the grep output and the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-41 `M18-7` tests cover the study preset, the remaining card shapes and PostgreSQL** — four
   gaps in the `M18-7` tests. First, `TestAnkiProgressReplayUsesStudyWeightsAndReviewDays` imports into
   a new deck, where the importer is the owner and `StudySettings` returns `decks.preset_id`, so the
