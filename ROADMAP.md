@@ -84,6 +84,12 @@ so they never run at the same time. `M18-20` changes only tests and the oracle f
 after `M18-17`. `M18-21` changes only `README.md` and may run beside any other task. `M18-22` edits
 this file, so only the parent does it, with the maintainer present.
 
+`M18-23` to `M18-28` fix defects that a review of the landed `M18-13` (commit `2b1f2e8`) found. They
+also land before `M18-5`. `M18-23` and `M18-24` change `internal/store/anki_import.go`, so each runs
+alone like the entries above. `M18-24`, `M18-25`, `M18-26` and `M18-27` all change `internal/anki`,
+so no two of them run at the same time. `M18-26` waits for a maintainer decision. `M18-28` edits this
+file, so only the parent does it, with the maintainer present.
+
 - [ ] **M18-4 Preset choice on import: new, reuse or copy** — the import request takes
   `preset_mode` (`new`, `reuse`, `copy`) plus `preset_id` for the last two. `new` builds a preset
   from the package's deck configuration, taking its FSRS weights only when `apply_weights` is on;
@@ -355,6 +361,128 @@ this file, so only the parent does it, with the maintainer present.
   of `AGENTS.md` requires. Only the parent edits this file, with the maintainer present.
   *Acceptance:* the ledger table holds a row naming each of the four IDs. Evidence is the output of
   `grep -n -E 'M18-(1|2|3|9)\b' ROADMAP.md` limited to the ledger section.
+
+- [ ] **M18-23 An unreadable revlog fails an `.apkg` import that has `include_progress` on** —
+  `M18-13` required that an unreadable revlog fails the import only when `include_progress` is on.
+  Commit `2b1f2e8` did the reader half: `readReviews` in `internal/anki/scheduling.go` skips every
+  revlog row it cannot scan, keeps the readable rows in `Package.Reviews` and stores the first error in
+  `Package.RevlogErr`. The store half is missing: no code outside `internal/anki` reads `RevlogErr`.
+  The commit that closed `M18-13` (`83c0189`) says this half moved into `M18-7`, but the `M18-7` entry
+  does not contain it. With `include_progress` on, a package whose revlog holds one unreadable row
+  therefore imports without an error, writes the readable rows to `reviews` and drops the unreadable
+  row without a trace. The dropped row cannot be recovered later, because the review log is the only
+  input to parameter optimisation. The fix: `prepareAnkiImport` in `internal/store/anki_import.go`,
+  right after `anki.ReadWithLimits` returns, returns `mapAnkiPackageError(pkg.RevlogErr)` (code
+  `package_bad_format`) when `include_progress` is on and `pkg.RevlogErr` is not nil. That point is
+  before the media placement and before the transaction, so the failed import writes no file and no
+  row. With `include_progress` off the import ignores `RevlogErr`. *Acceptance:* a table test in
+  `internal/store/anki_progress_import_test.go` imports, through `ImportPackage`, a schema-11 package
+  whose revlog holds one readable row and one row with `ivl` = `'invalid'`. With `include_progress`
+  on, the import returns a `PackageError` with code `package_bad_format`, and the database holds no
+  new deck, note, card, `card_states` row or `reviews` row. With `include_progress` off, every note and
+  card of the package is created and no `card_states` or `reviews` row is written. Evidence is the raw
+  scoped `go test` and `go vet` output.
+
+- [ ] **M18-24 An undecodable deck configuration falls back to the preset defaults, not to another
+  deck's configuration** — since `M18-13`, `readModernDeckConfigs` in `internal/anki/scheduling.go`
+  skips a `deck_config` row whose `config` does not decode, and `readLegacyDeckConfigs` keeps no
+  configuration when `col.dconf` does not decode. `ankiTopConfig` in `internal/store/anki_import.go`
+  first looks for the configuration whose id equals the top deck's `ConfigID`; when none matches and the
+  package holds exactly one configuration, it returns that one. Take a schema-18 package with two
+  `deck_config` rows, where the row the top deck uses does not decode and the other row does: the new
+  deck's preset is built from the other deck's configuration, with its steps, retention, maximum
+  interval and, with `apply_weights` on, its FSRS weights. `M18-13` required the preset defaults in that
+  case; before `M18-13` the same package failed the import. The fix: `Package` in
+  `internal/anki/model.go` gains `DeckConfigsSkipped bool`, which the reader sets to true when it skips
+  at least one deck configuration (an undecodable `deck_config` row, or a `col.dconf` that does not
+  decode). `ankiTopConfig` returns the single remaining configuration only when `DeckConfigsSkipped` is
+  false, and returns nil when it is true, so `createAnkiPreset` keeps the values of `NewPreset`.
+  *Acceptance:* a table test in `internal/anki/scheduling_test.go` shows `DeckConfigsSkipped` true for
+  an undecodable `deck_config` row and for an undecodable `col.dconf`, and false for a package whose
+  configurations all decode. A table test in `internal/store` imports, through `ImportPackage` with
+  `apply_weights` on: (a) the two-row package above, whose new preset holds the values of `NewPreset`
+  and no weights; (b) the same package with only the other row undecodable, whose preset holds the top
+  deck's configuration; (c) the same package with both rows decodable, whose preset holds the top deck's
+  configuration; (d) a package with one decodable configuration whose id differs from the top deck's
+  `ConfigID`, whose preset still holds that configuration. Evidence is the raw scoped `go test` and
+  `go vet` output.
+
+- [ ] **M18-25 One malformed `col.dconf` entry no longer drops every deck configuration** —
+  `readLegacyDeckConfigs` in `internal/anki/scheduling.go` decodes the whole of `col.dconf` with one
+  `json.Unmarshal` into a map of structs, and since `M18-13` it keeps no configuration when that call
+  fails. `encoding/json` reports an error for the whole call when one entry holds a value of the wrong
+  type, for example a `maxIvl` written as `36500.0`, which Go refuses for an `int` field. One malformed
+  entry therefore drops every deck configuration of a schema-11 package, including the one the top deck
+  uses, and the new deck gets the preset defaults instead of the package's steps, retention, maximum
+  interval and FSRS weights. A schema-18 package loses only the malformed row
+  (`readModernDeckConfigs`), so the two layouts disagree. The two skip points also carry no comment
+  that says why skipping is safe. The fix: decode `col.dconf` into `map[string]json.RawMessage` first;
+  a `col.dconf` that is not a JSON object keeps no configuration, as today; then decode each entry on
+  its own and skip an entry that does not decode. Once `M18-24` has landed, a skipped entry sets
+  `DeckConfigsSkipped`. The skip point in `readLegacyDeckConfigs` and the one in
+  `readModernDeckConfigs` each gain a comment stating why skipping is safe: the deck then gets the
+  preset defaults, and the content still imports. *Acceptance:* a table test in
+  `internal/anki/scheduling_test.go` reads a schema-11 package whose `col.dconf` holds two entries, one
+  with `"maxIvl": 36500.0` and one valid, and gets exactly the valid configuration; a `col.dconf` that
+  is not valid JSON still yields no configuration. Evidence is the raw scoped `go test` and `go vet`
+  output.
+
+- [ ] **M18-26 Rounding a REAL value applies to quantities, not to identifiers and codes** —
+  `roundedIntegers` in `internal/anki/sqlite.go` rounds a REAL value in every integer column that
+  `readCards` and `readReviews` select. `M18-13` asked for rounding on the numeric scheduling columns,
+  but the list also holds the reference columns `cards.nid`, `cards.did`, `cards.ord` and `revlog.cid`,
+  and the code columns `revlog.ease`, `revlog.type`, `cards.type`, `cards.queue` and `cards.flags`. A
+  REAL value in one of these columns has no meaning, and rounding it invents one. A revlog `ease` of
+  `2.5` becomes rating 3 (Good) and reaches the `reviews` table, the only input to parameter
+  optimisation, as a rating the user never gave. A `cards.ord` of `0.5` attaches the card to template 1.
+  A `cards.nid` that is not a whole number attaches the card to the nearest note id. Before `M18-13`
+  each of these failed the import. The rule below is decided. It has four parts. First, only these
+  columns are rounded: `col.crt`; the `cards` columns `mod`,
+  `usn`, `due`, `ivl`, `factor`, `reps`, `lapses`, `left` and `odue`; the `revlog` columns `usn`,
+  `ivl`, `lastIvl`, `factor` and `time`. Second, `cards.id` and `revlog.id` are `INTEGER PRIMARY KEY`
+  columns, which SQLite never stores as REAL, so they are read without the rounding expression. Third,
+  a REAL value in `cards.nid`, `cards.did` or `cards.ord` fails the import with `package_bad_format`,
+  as it did before `M18-13`, and a REAL value in `revlog.cid`, `revlog.ease` or `revlog.type` makes
+  that row unreadable, so it reaches `RevlogErr`. Fourth, `cards.type`, `cards.queue`, `cards.odid`
+  and `cards.flags` are codes, not quantities: a REAL value in one of them makes that card row
+  unreadable, nothing is rounded and the rest of the import continues, with the skipped row counted in
+  the report — failing the import for them contradicts `M18-13`, and rounding them invents a state, a
+  deck or a flag. *Acceptance:* a table test in
+  `internal/anki/scheduling_test.go` covers a REAL value in each column the decided rule names and
+  checks the rounded value or the error that the rule assigns. Evidence is the raw scoped `go test` and
+  `go vet` output.
+
+- [ ] **M18-27 `M18-13` tests reach the import, and the table drives every case** — the `M18-13`
+  acceptance required that each malformed package imports its content with `include_progress` off,
+  but `TestSchedulingTolerance` in `internal/anki/scheduling_test.go` calls only `ReadWithLimits`. No
+  test sends such a package through `ImportPackage`, and that path is where `M18-24` found its defect.
+  The test also compares `tc.name` with `"unreadable revlog"` in three places, to insert an extra
+  revlog row and to switch its expectations, so renaming the case silently changes what it checks; and
+  it checks `RevlogErr` only against nil, not with `errors.Is(err, ErrCorruptCollection)`. The comment
+  on `roundedIntegers` in `internal/anki/sqlite.go` does not begin with the function name and says only
+  what the function does. The fix: the table gains fields for extra setup statements, for whether
+  `RevlogErr` is expected and for the expected readable review count, so no line reads `tc.name`; the
+  `RevlogErr` case uses `errors.Is`; the comment begins with `roundedIntegers` and states why it rounds:
+  an Anki collection can hold a REAL value in an integer column, and before `M18-13` one such value
+  rejected the whole package. A table test in `internal/store` imports each `M18-13` package (a REAL
+  `revlog.ivl`, a REAL `cards.due`, a REAL `cards.factor`, a `col.dconf` that is not JSON, and an
+  undecodable `deck_config.config`) through `ImportPackage` with `include_progress` off, and checks
+  that every note and card of the package was created. This entry changes tests and one comment only,
+  and lands after `M18-24` and `M18-25` so that it tests their final behaviour. *Acceptance:*
+  `grep -n 'tc.name [!=]=' internal/anki/scheduling_test.go` prints nothing; the `internal/store` table
+  test passes. Evidence is the grep output and the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-28 The release ledger row for `M18-2` records what `M18-13` changed** — `M18-22` writes
+  each ledger row from the commits whose messages name that row's ID, and the `M18-13` commit
+  (`2b1f2e8`) names only `M18-13`. The `M18-2` row would therefore leave out a change visible through
+  the HTTP API, the MCP tools and the CLI: since `M18-13`, an `.apkg` import accepts packages it
+  rejected with `package_bad_format` before. A REAL value in a scheduling column is rounded, an
+  undecodable deck configuration leaves the preset defaults, and an unreadable revlog no longer rejects
+  a package imported with `include_progress` off. The fix: when `M18-22` writes the `M18-2` row, that
+  row also states these three points, names `M18-13`, and names each of `M18-23` to `M18-26` that has
+  landed by then. Only the parent edits this file, with the maintainer present. *Acceptance:* the ledger row that
+  names `M18-2` also names `M18-13`. Evidence is the output of `grep -n 'M18-13' ROADMAP.md` limited to
+  the ledger section.
 
 ---
 
