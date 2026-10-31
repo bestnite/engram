@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { createRuntime, type EditFrameRuntime } from '../editframe/runtime';
+import { createRuntime, rubyMarkup, ttsMarkup, type EditFrameRuntime } from '../editframe/runtime';
 
 /**
  * The editing frame runtime, driven the way the parent page drives it: a fake parent window posts
@@ -325,5 +325,54 @@ describe('edit frame paste and source view', () => {
       fromParent({ type: 'uploaded', id: upload?.id, url: '/media/a', name: 'sound.mp3', mime: 'audio/mpeg' })
     );
     expect(editorHtml()).toBe('start[sound:sound.mp3]');
+  });
+});
+
+describe('edit frame ruby and speech', () => {
+  it('reports the selected text when the parent asks', () => {
+    load('漢字です');
+    select(0, 2);
+    runtime?.handleMessage(fromParent({ type: 'selection' }));
+    expect(posted()).toContainEqual({ type: 'selection', text: '漢字' });
+  });
+
+  it('replaces the selection with a ruby annotation', () => {
+    load('漢字です');
+    select(0, 2);
+    command('insertRuby', { base: '漢字', reading: 'かんじ' });
+    expect(editorHtml()).toBe('<ruby>漢字<rt>かんじ</rt></ruby>です');
+    expect(lastChange()).toBe('<ruby>漢字<rt>かんじ</rt></ruby>です');
+  });
+
+  it('ignores a ruby insert without a reading', () => {
+    load('x');
+    select(0, 1);
+    command('insertRuby', { base: 'x', reading: '' });
+    expect(editorHtml()).toBe('x');
+  });
+
+  it('replaces the selection with a visible speech directive', () => {
+    load('bonjour');
+    select(0, 7);
+    command('insertTts', { text: 'bonjour', lang: 'fr_FR', speed: '0.9', visible: true });
+    expect(editorHtml()).toBe('bonjour[anki:tts lang=fr_FR speed=0.9]bonjour[/anki:tts]');
+  });
+
+  it('ignores a speech insert with a malformed language', () => {
+    load('x');
+    select(0, 1);
+    command('insertTts', { text: 'x', lang: 'fr FR', visible: true });
+    expect(editorHtml()).toBe('x');
+  });
+
+  it.each([
+    ['escapes the parts', () => rubyMarkup('<b>', '&'), '<ruby>&lt;b&gt;<rt>&amp;</rt></ruby>'],
+    ['writes a hidden directive without the visible copy', () => ttsMarkup('hi', 'en_US', undefined, false), '[anki:tts lang=en_US]hi[/anki:tts]'],
+    ['writes a hyphenated language with an underscore', () => ttsMarkup('hi', 'ja-JP', undefined, true), 'hi[anki:tts lang=ja_JP]hi[/anki:tts]'],
+    ['refuses an option injected through the language', () => ttsMarkup('hi', 'en_US voices=x', undefined, true), null],
+    ['refuses a malformed speed', () => ttsMarkup('hi', 'en_US', 'fast', true), null],
+    ['refuses empty text', () => ttsMarkup('', 'en_US', undefined, true), null],
+  ])('markup %s', (_name, build, expected) => {
+    expect(build()).toBe(expected);
   });
 });

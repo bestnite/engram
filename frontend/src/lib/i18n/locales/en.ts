@@ -1622,4 +1622,17 @@ export const en: LocaleCatalog = {
   'import.busy.refused': 'Another package import is already running on this server. Wait for it to finish, then try again.',
   // ---- Notes list: column widths ----
   'notes.resize_column': 'Resize the {column} column (double-click to reset)',
+  // ---- Rich-text editor: ruby and speech ----
+  'editor.ruby.open': 'Insert a ruby annotation into {field}',
+  'editor.ruby.hint': 'Shows a reading above the text, such as pinyin or kana. Inserting replaces the selected text.',
+  'editor.ruby.base': 'Text',
+  'editor.ruby.reading': 'Reading',
+  'editor.tts.open': 'Insert speech into {field}',
+  'editor.tts.hint': 'The browser reads this text aloud during review. Inserting replaces the selected text.',
+  'editor.tts.text': 'Text to speak',
+  'editor.tts.lang': 'Language',
+  'editor.tts.speed': 'Speed (optional)',
+  'editor.tts.visible': 'Also show the text on the card',
+  'editor.tts.bad_lang': 'Enter a language code such as ja_JP, en_US or zh_CN.',
+  'editor.tts.bad_speed': 'Enter a speed greater than 0, or leave it empty.',
 };

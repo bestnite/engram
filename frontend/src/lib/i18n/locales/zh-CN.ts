@@ -1621,4 +1621,17 @@ export const zhCN: LocaleCatalog = {
   'import.busy.refused': '服务器上已有另一个卡组导入正在进行。请等它结束后再试。',
   // ---- 卡片列表：列宽调整 ----
   'notes.resize_column': '调整「{column}」列宽（双击恢复默认）',
+  // ---- 富文本编辑器：注音与朗读 ----
+  'editor.ruby.open': '向「{field}」插入注音',
+  'editor.ruby.hint': '在文字上方标注读音，例如汉字的拼音或假名。插入会替换选中的文字。',
+  'editor.ruby.base': '文字',
+  'editor.ruby.reading': '读音',
+  'editor.tts.open': '向「{field}」插入朗读',
+  'editor.tts.hint': '复习时由浏览器朗读这段文字。插入会替换选中的文字。',
+  'editor.tts.text': '朗读的文字',
+  'editor.tts.lang': '语言',
+  'editor.tts.speed': '语速（可选）',
+  'editor.tts.visible': '同时在卡片上显示文字',
+  'editor.tts.bad_lang': '请填写语言代码，例如 ja_JP、en_US、zh_CN。',
+  'editor.tts.bad_speed': '语速请填入大于 0 的数字，或留空。',
 };

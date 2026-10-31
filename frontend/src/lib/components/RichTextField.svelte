@@ -31,6 +31,7 @@
     Highlighter,
     ImagePlus,
     Italic,
+    Languages,
     List,
     ListIndentDecrease,
     ListIndentIncrease,
@@ -39,6 +40,7 @@
     Palette,
     RemoveFormatting,
     Sigma,
+    Speech,
     SquareSigma,
     Subscript,
     Superscript,
@@ -95,6 +97,17 @@
   let audioRate = $state('');
   let audioLoop = $state(false);
   let audioBusy = $state(false);
+  // The ruby and speech dialogs. The text inputs start from the frame's selection, which the frame reports on request.
+  let rubyOpen = $state(false);
+  let rubyBase = $state('');
+  let rubyReading = $state('');
+  let ttsOpen = $state(false);
+  let ttsText = $state('');
+  let ttsLang = $state('');
+  let ttsSpeed = $state('');
+  let ttsVisible = $state(true);
+  /** The dialog waiting for the frame's `selection` reply. */
+  let awaitingSelection: 'ruby' | 'tts' | null = null;
   let disposed = false;
 
   // The value the frame last reported. A `value` prop equal to it came from this field, so echoing it
@@ -258,6 +271,65 @@
     input.value = '';
   }
 
+  // The language a speech insert used last, offered again for the next one: a deck is usually in one language.
+  const TTS_LANG_STORAGE_KEY = 'engram-editor-tts-lang';
+  const TTS_LANGS = ['zh_CN', 'zh_TW', 'ja_JP', 'ko_KR', 'en_US', 'en_GB', 'fr_FR', 'de_DE', 'es_ES', 'it_IT', 'ru_RU'];
+
+  const ttsLangInvalid = $derived(ttsLang.trim() !== '' && !/^[A-Za-z]{2,3}(?:[_-][A-Za-z0-9]{2,8})*$/.test(ttsLang.trim()));
+  const ttsSpeedInvalid = $derived(!segmentNumber(ttsSpeed) || (ttsSpeed.trim() !== '' && Number(ttsSpeed) <= 0));
+  const ttsCanInsert = $derived(ttsText.trim() !== '' && ttsLang.trim() !== '' && !ttsLangInvalid && !ttsSpeedInvalid);
+  const rubyCanInsert = $derived(rubyBase.trim() !== '' && rubyReading.trim() !== '');
+
+  /**
+   * Opens the ruby or speech dialog once the frame has said what is selected, so the text input starts from the
+   * selection the insert will replace. Without a ready frame there is no selection to ask about.
+   */
+  function openWithSelection(dialog: 'ruby' | 'tts'): void {
+    if (!ready) {
+      showDialog(dialog, '');
+      return;
+    }
+    awaitingSelection = dialog;
+    send({ type: 'selection' });
+  }
+
+  function showDialog(dialog: 'ruby' | 'tts', selected: string): void {
+    const text = selected.trim();
+    if (dialog === 'ruby') {
+      rubyBase = text;
+      rubyReading = '';
+      rubyOpen = true;
+      return;
+    }
+    ttsText = text;
+    ttsSpeed = '';
+    ttsVisible = true;
+    try {
+      ttsLang = window.localStorage.getItem(TTS_LANG_STORAGE_KEY) ?? '';
+    } catch {
+      ttsLang = '';
+    }
+    ttsOpen = true;
+  }
+
+  function insertRuby(): void {
+    if (!rubyCanInsert) return;
+    command('insertRuby', { base: rubyBase.trim(), reading: rubyReading.trim() });
+    rubyOpen = false;
+  }
+
+  function insertTts(): void {
+    if (!ttsCanInsert) return;
+    const lang = ttsLang.trim().replaceAll('-', '_');
+    command('insertTts', { text: ttsText.trim(), lang, speed: ttsSpeed.trim(), visible: ttsVisible });
+    try {
+      window.localStorage.setItem(TTS_LANG_STORAGE_KEY, lang);
+    } catch {
+      // Storage unavailable: the next dialog starts empty.
+    }
+    ttsOpen = false;
+  }
+
   /**
    * Uploads the chosen sound and inserts Anki's [sound:] tag with the segment attributes the dialog collected.
    * The upload has to finish inside the frame's saved caret, so the command carries the finished media reference.
@@ -337,6 +409,12 @@
           height = Math.round(data.px);
         }
         return;
+      case 'selection': {
+        const dialog = awaitingSelection;
+        awaitingSelection = null;
+        if (dialog) showDialog(dialog, typeof data.text === 'string' ? data.text : '');
+        return;
+      }
       case 'upload': {
         if (typeof data.id !== 'string' || !(data.file instanceof File) || typeof data.kind !== 'string') return;
         void handleUpload(data.id, data.file);
@@ -507,6 +585,28 @@
         >
           <Music class="size-4" aria-hidden="true" />
         </button>
+        <button
+          type="button"
+          class={toolbarButton}
+          data-testid="{testId}-insert-ruby"
+          aria-label={$t('editor.ruby.open', { field: label })}
+          title={$t('editor.ruby.open', { field: label })}
+          onmousedown={(event) => event.preventDefault()}
+          onclick={() => openWithSelection('ruby')}
+        >
+          <Languages class="size-4" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          class={toolbarButton}
+          data-testid="{testId}-insert-tts"
+          aria-label={$t('editor.tts.open', { field: label })}
+          title={$t('editor.tts.open', { field: label })}
+          onmousedown={(event) => event.preventDefault()}
+          onclick={() => openWithSelection('tts')}
+        >
+          <Speech class="size-4" aria-hidden="true" />
+        </button>
         {#each insertActions as action (action.id)}
           <button
             type="button"
@@ -668,6 +768,106 @@
         {$t('editor.audio.cancel')}
       </Button>
       <Button type="submit" variant="primary" size="sm" testId="{testId}-audio-submit" disabled={!audioCanInsert} loading={audioBusy}>
+        {$t('editor.audio.insert')}
+      </Button>
+    </div>
+  </form>
+</Dialog>
+
+<Dialog
+  bind:open={rubyOpen}
+  title={$t('editor.ruby.open', { field: label })}
+  description={$t('editor.ruby.hint')}
+  testId="{testId}-ruby-dialog"
+>
+  <form class="space-y-4" onsubmit={(event) => { event.preventDefault(); insertRuby(); }}>
+    <div class="grid grid-cols-2 gap-3">
+      <label class="block text-sm font-medium text-foreground">
+        <span>{$t('editor.ruby.base')}</span>
+        <input class="field-input mt-1.5 block w-full text-sm" data-testid="{testId}-ruby-base" bind:value={rubyBase} />
+      </label>
+      <label class="block text-sm font-medium text-foreground">
+        <span>{$t('editor.ruby.reading')}</span>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          class="field-input mt-1.5 block w-full text-sm"
+          data-testid="{testId}-ruby-reading"
+          spellcheck="false"
+          autofocus
+          bind:value={rubyReading}
+        />
+      </label>
+    </div>
+    <div class="flex items-center justify-end gap-2">
+      <Button type="button" variant="ghost" size="sm" testId="{testId}-ruby-cancel" onclick={() => (rubyOpen = false)}>
+        {$t('editor.audio.cancel')}
+      </Button>
+      <Button type="submit" variant="primary" size="sm" testId="{testId}-ruby-submit" disabled={!rubyCanInsert}>
+        {$t('editor.audio.insert')}
+      </Button>
+    </div>
+  </form>
+</Dialog>
+
+<Dialog
+  bind:open={ttsOpen}
+  title={$t('editor.tts.open', { field: label })}
+  description={$t('editor.tts.hint')}
+  testId="{testId}-tts-dialog"
+>
+  <form class="space-y-4" onsubmit={(event) => { event.preventDefault(); insertTts(); }}>
+    <label class="block text-sm font-medium text-foreground">
+      <span>{$t('editor.tts.text')}</span>
+      <input class="field-input mt-1.5 block w-full text-sm" data-testid="{testId}-tts-text" bind:value={ttsText} />
+    </label>
+    <div class="grid grid-cols-2 gap-3">
+      <label class="block text-sm font-medium text-foreground">
+        <span>{$t('editor.tts.lang')}</span>
+        <input
+          class="field-input mt-1.5 block w-full text-sm"
+          data-testid="{testId}-tts-lang"
+          list="{testId}-tts-langs"
+          placeholder="ja_JP"
+          spellcheck="false"
+          aria-invalid={ttsLangInvalid}
+          bind:value={ttsLang}
+        />
+        <datalist id="{testId}-tts-langs">
+          {#each TTS_LANGS as code (code)}<option value={code}></option>{/each}
+        </datalist>
+      </label>
+      <label class="block text-sm font-medium text-foreground">
+        <span>{$t('editor.tts.speed')}</span>
+        <input
+          class="field-input mt-1.5 block w-full text-sm"
+          data-testid="{testId}-tts-speed"
+          inputmode="decimal"
+          placeholder="1.0"
+          spellcheck="false"
+          aria-invalid={ttsSpeedInvalid}
+          bind:value={ttsSpeed}
+        />
+      </label>
+    </div>
+    {#if ttsLangInvalid}
+      <p role="alert" class="text-sm text-destructive-foreground" data-testid="{testId}-tts-lang-error">{$t('editor.tts.bad_lang')}</p>
+    {:else if ttsSpeedInvalid}
+      <p role="alert" class="text-sm text-destructive-foreground" data-testid="{testId}-tts-speed-error">{$t('editor.tts.bad_speed')}</p>
+    {/if}
+    <div class="flex items-center gap-2">
+      <Checkbox
+        testId="{testId}-tts-visible"
+        checked={ttsVisible}
+        onCheckedChange={(checked) => (ttsVisible = checked)}
+        label={$t('editor.tts.visible')}
+      />
+      <span class="text-sm text-foreground/80">{$t('editor.tts.visible')}</span>
+    </div>
+    <div class="flex items-center justify-end gap-2">
+      <Button type="button" variant="ghost" size="sm" testId="{testId}-tts-cancel" onclick={() => (ttsOpen = false)}>
+        {$t('editor.audio.cancel')}
+      </Button>
+      <Button type="submit" variant="primary" size="sm" testId="{testId}-tts-submit" disabled={!ttsCanInsert}>
         {$t('editor.audio.insert')}
       </Button>
     </div>

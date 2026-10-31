@@ -70,6 +70,14 @@ export interface CommandMessage {
   end?: string;
   rate?: string;
   loop?: boolean;
+  /** insertRuby: the base text and its reading. */
+  base?: string;
+  reading?: string;
+  /** insertTts: the spoken text, Anki's language code, the optional speed, and whether the text also shows. */
+  text?: string;
+  lang?: string;
+  speed?: string;
+  visible?: boolean;
 }
 
 /** The media a command inserts: a same-origin URL, the deck media name and the detected mime type. */
@@ -148,7 +156,40 @@ function parseCommand(data: Record<string, unknown>): CommandMessage | null {
     end: isString(data.end) && data.end !== '' ? data.end : undefined,
     rate: isString(data.rate) && data.rate !== '' ? data.rate : undefined,
     loop: data.loop === true,
+    base: isString(data.base) ? data.base : undefined,
+    reading: isString(data.reading) ? data.reading : undefined,
+    text: isString(data.text) ? data.text : undefined,
+    lang: isString(data.lang) ? data.lang : undefined,
+    speed: isString(data.speed) && data.speed !== '' ? data.speed : undefined,
+    visible: data.visible === true,
   };
+}
+
+/** Anki's TTS language code: a language, then optional region or script parts, joined by underscores (ja_JP, zh_Hant_TW). */
+const TTS_LANG = /^[A-Za-z]{2,3}(?:_[A-Za-z0-9]{2,8})*$/;
+/** A TTS speed: a positive decimal. */
+const TTS_SPEED = /^\d+(?:\.\d+)?$/;
+
+/**
+ * The markup for one ruby annotation. Both parts are text: the dialog collects them as plain strings, so they are escaped
+ * rather than inserted as markup. This is the element migration 0017 writes for the old ruby shortcode.
+ */
+export function rubyMarkup(base: string, reading: string): string {
+  return `<ruby>${escapeHtml(base)}<rt>${escapeHtml(reading)}</rt></ruby>`;
+}
+
+/**
+ * The markup for one speech directive, or null when the language or speed is malformed. The text is spoken by Anki's
+ * `[anki:tts]` tag; with `visible` it is also written in front of the tag, the form migration 0012 gives the old speech
+ * shortcode, because the tag itself shows nothing on the card. A hyphenated language (ja-JP) is written Anki's way.
+ */
+export function ttsMarkup(text: string, lang: string, speed: string | undefined, visible: boolean): string | null {
+  const code = lang.trim().replaceAll('-', '_');
+  if (text === '' || !TTS_LANG.test(code)) return null;
+  if (speed !== undefined && !TTS_SPEED.test(speed)) return null;
+  const options = speed !== undefined ? `lang=${code} speed=${speed}` : `lang=${code}`;
+  const spoken = escapeHtml(text);
+  return `${visible ? spoken : ''}[anki:tts ${options}]${spoken}[/anki:tts]`;
 }
 
 function parseUploaded(data: Record<string, unknown>): UploadedMessage | null {
@@ -409,6 +450,14 @@ export function createRuntime(options: EditFrameOptions = {}): EditFrameRuntime 
       case 'insertMedia':
         if (message.media) insertMedia(message.media.url, message.media.name, message.media.mime);
         break;
+      case 'insertRuby':
+        if (message.base && message.reading) insertHtml(ctx, rubyMarkup(message.base, message.reading), savedRange);
+        break;
+      case 'insertTts': {
+        const markup = ttsMarkup(message.text ?? '', message.lang ?? '', message.speed, message.visible ?? false);
+        if (markup) insertHtml(ctx, markup, savedRange);
+        break;
+      }
       case 'insertAudio':
         if (message.media) {
           insertHtml(
@@ -521,6 +570,11 @@ export function createRuntime(options: EditFrameOptions = {}): EditFrameRuntime 
       }
       case 'source':
         if (typeof data.open === 'boolean' && !plainText) setMode(data.open ? 'source' : 'rich');
+        return;
+      case 'selection':
+        // The parent asks for the selected text to prefill an insert dialog. The range is the one a command would act
+        // on, so the text it reports is the text the insert replaces.
+        post({ type: 'selection', text: isRich() ? currentRange(ctx, savedRange).toString() : '' });
         return;
       case 'theme':
         if (typeof data.dark === 'boolean') {

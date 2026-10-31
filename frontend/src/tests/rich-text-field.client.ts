@@ -219,6 +219,103 @@ describe('RichTextField toolbar commands', () => {
   });
 });
 
+describe('RichTextField ruby and speech dialogs', () => {
+  function input(testid: string): HTMLInputElement {
+    return document.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement;
+  }
+
+  function setValue(testid: string, next: string): void {
+    const element = input(testid);
+    element.value = next;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+  }
+
+  function submit(testid: string): void {
+    (document.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement).closest('form')!.requestSubmit();
+    flushSync();
+  }
+
+  let stored: Map<string, string>;
+  beforeEach(() => {
+    // happy-dom leaves window.localStorage undefined under this configuration.
+    stored = new Map();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => stored.get(key) ?? null,
+        setItem: (key: string, next: string) => void stored.set(key, String(next)),
+      },
+    });
+  });
+
+  it('asks the frame for the selection and prefills the ruby dialog with it', async () => {
+    const fake = mountField();
+    (target.querySelector('[data-testid="field-insert-ruby"]') as HTMLButtonElement).click();
+    expect(lastPosted(fake)).toEqual({ type: 'selection' });
+    expect(input('field-ruby-base')).toBeNull();
+
+    message(fake, { type: 'selection', text: ' 漢字 ' });
+    await flushAsync();
+    expect(input('field-ruby-base').value).toBe('漢字');
+
+    setValue('field-ruby-reading', 'かんじ');
+    submit('field-ruby-submit');
+    expect(lastPosted(fake)).toMatchObject({ type: 'command', name: 'insertRuby', base: '漢字', reading: 'かんじ' });
+  });
+
+  it('keeps the ruby insert disabled until both parts are filled', async () => {
+    const fake = mountField();
+    (target.querySelector('[data-testid="field-insert-ruby"]') as HTMLButtonElement).click();
+    message(fake, { type: 'selection', text: '' });
+    await flushAsync();
+    const button = document.querySelector('[data-testid="field-ruby-submit"]') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    setValue('field-ruby-base', '字');
+    expect(button.disabled).toBe(true);
+    setValue('field-ruby-reading', 'じ');
+    expect(button.disabled).toBe(false);
+  });
+
+  it('inserts speech with the language, speed and visibility, and remembers the language', async () => {
+    const fake = mountField();
+    (target.querySelector('[data-testid="field-insert-tts"]') as HTMLButtonElement).click();
+    message(fake, { type: 'selection', text: 'bonjour' });
+    await flushAsync();
+    expect(input('field-tts-text').value).toBe('bonjour');
+
+    setValue('field-tts-lang', 'fr-FR');
+    setValue('field-tts-speed', '0.9');
+    submit('field-tts-submit');
+    expect(lastPosted(fake)).toMatchObject({
+      type: 'command',
+      name: 'insertTts',
+      text: 'bonjour',
+      lang: 'fr_FR',
+      speed: '0.9',
+      visible: true,
+    });
+    expect(stored.get('engram-editor-tts-lang')).toBe('fr_FR');
+  });
+
+  it('refuses a malformed language or speed with a message', async () => {
+    const fake = mountField();
+    (target.querySelector('[data-testid="field-insert-tts"]') as HTMLButtonElement).click();
+    message(fake, { type: 'selection', text: 'hi' });
+    await flushAsync();
+    const button = document.querySelector('[data-testid="field-tts-submit"]') as HTMLButtonElement;
+
+    setValue('field-tts-lang', 'en US');
+    expect(document.querySelector('[data-testid="field-tts-lang-error"]')).not.toBeNull();
+    expect(button.disabled).toBe(true);
+
+    setValue('field-tts-lang', 'en_US');
+    setValue('field-tts-speed', '0');
+    expect(document.querySelector('[data-testid="field-tts-speed-error"]')).not.toBeNull();
+    expect(button.disabled).toBe(true);
+  });
+});
+
 describe('RichTextField field options', () => {
   it('keeps the value after a reset only when the field is sticky', () => {
     const sticky = mountField({ value: '<p>kept</p>', options: { sticky: true } });
