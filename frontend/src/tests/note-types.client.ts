@@ -288,7 +288,7 @@ describe('NoteTypesView opened from the note editor', () => {
     flushSync();
   }
 
-  async function open(address: string): Promise<void> {
+  async function open(address: string, types: NoteType[] = [noteType()]): Promise<void> {
     setLocale('zh-CN');
     routeStore.set(matchRoute(address));
     const target = document.createElement('div');
@@ -297,7 +297,7 @@ describe('NoteTypesView opened from the note editor', () => {
       target,
       props: {
         initialLoading: false,
-        initialNoteTypes: [noteType()],
+        initialNoteTypes: types,
         initialStocks: [{ id: 'anki:basic', source: 'anki', name: 'Basic', label_key: 'notetype.stock.anki.basic' }],
         initialControls: [],
       },
@@ -348,5 +348,25 @@ describe('NoteTypesView opened from the note editor', () => {
   it('ignores a return address that leaves the app', async () => {
     await open(`/decks/d1/note-types?return=${encodeURIComponent('//example.com/x')}`);
     expect(backLink().getAttribute('href')).toBe('/decks/d1');
+  });
+
+  /** Two stored types: the editor's shortcut names the second, so the page must not just open the first. */
+  function twoTypes(): NoteType[] {
+    return [noteType(), { ...noteType(), id: 'nt-2', name: 'Geography' }];
+  }
+
+  function draftName(): string {
+    return (document.body.querySelector('[data-testid="notetype-name"]') as HTMLInputElement).value;
+  }
+
+  it('opens on the note type the note editor names and returns to the note', async () => {
+    await open(`/decks/d1/note-types?note_type=nt-2&return=${encodeURIComponent('/decks/d1/notes/n9/edit')}`, twoTypes());
+    expect(draftName()).toBe('Geography');
+    expect(backLink().getAttribute('href')).toBe('/decks/d1/notes/n9/edit');
+  });
+
+  it('opens on the first type when the named type is not in the deck', async () => {
+    await open('/decks/d1/note-types?note_type=nt-gone', twoTypes());
+    expect(draftName()).toBe('Basic');
   });
 });

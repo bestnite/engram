@@ -2,7 +2,7 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import { onMount, tick, untrack } from 'svelte';
   import { routeStore, navigate, matchRoute } from '../router';
-  import { NOTE_TYPE_PARAM, RETURN_PARAM, safeReturnPath, withReturn, withoutParam } from '../return-to';
+  import { NOTE_TYPE_PARAM, RETURN_PARAM, safeReturnPath, withParam, withReturn, withoutParam } from '../return-to';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import type { Note, NotePreviewCard, NoteType, NoteTypeField } from '../api';
@@ -20,7 +20,7 @@
   import { emptyFields, type FieldSpec } from '../card-fields';
   import type { RichFieldOptions } from '../components/RichTextField.svelte';
   import type { MediaReference } from '../../editframe/runtime';
-  import { Check, Eye, Plus, Trash2, X } from '@lucide/svelte';
+  import { Check, Eye, Pencil, Plus, Trash2, X } from '@lucide/svelte';
 
   // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
   // (note type, fields with their own insertion tools, tags and live preview). A successful create always leaves the editor, leaving no second "create another" path.
@@ -41,11 +41,11 @@
   // The shortcut to the note type page opens its create dialog and carries this editor's address, so the
   // note type page can send the author back here. The address drops a type handed back by an earlier
   // detour: the note type page adds the one it creates this time.
-  const newTypeHref = $derived.by(() => {
+  const returnHere = $derived.by(() => {
     const search = $routeStore.search;
-    const here = withoutParam(`${$routeStore.path}${search ? `?${search}` : ''}`, NOTE_TYPE_PARAM);
-    return withReturn(`/decks/${encodeURIComponent(deckId)}/note-types?create=1`, here);
+    return withoutParam(`${$routeStore.path}${search ? `?${search}` : ''}`, NOTE_TYPE_PARAM);
   });
+  const newTypeHref = $derived(withReturn(`/decks/${encodeURIComponent(deckId)}/note-types?create=1`, returnHere));
 
   // Debounce window of the live preview: the request fires about half a second after typing in the fields stops, avoiding a request per character.
   const PREVIEW_DEBOUNCE_MS = 500;
@@ -54,6 +54,10 @@
   // The deck's note types, in the order the server returns them; the selected one supplies the fields.
   let noteTypes = $state<NoteType[]>([]);
   let noteTypeId = $state('');
+  // The shortcut to edit the selected type opens the note type page on that type, with the same way back.
+  const editTypeHref = $derived(
+    withReturn(withParam(`/decks/${encodeURIComponent(deckId)}/note-types`, NOTE_TYPE_PARAM, noteTypeId), returnHere),
+  );
   let fields = $state<Record<string, unknown>>({});
   let tagsText = $state('');
   // The note's origin link. It is not a field of the note type: the server keeps it in its own column.
@@ -74,6 +78,11 @@
   // Preview drawer below the desktop breakpoint. At lg and wider the same panel is the sticky second
   // column, so this state only decides whether it is on screen; it never adds a second HTML sink.
   let previewOpen = $state(false);
+  // The draft as it was loaded; null until the form is built. The note type shortcuts compare against it, because leaving
+  // for the note type page discards whatever the author changed since.
+  let baselineDraft = $state<string | null>(null);
+  // The note type page address waiting for the author to confirm discarding unsaved changes; null when no confirmation is open.
+  let leaveTarget = $state<string | null>(null);
   // The deck's frame media base for the rich-text fields; empty until it is fetched, or when frame media is unavailable.
   let fieldMediaBase = $state('');
   let previewTrigger = $state<HTMLButtonElement | null>(null);
@@ -317,8 +326,23 @@
       if (disposed) return;
       loadError = true;
     } finally {
-      if (!disposed) loading = false;
+      if (!disposed) {
+        loading = false;
+        baselineDraft = draftSignature;
+      }
     }
+  }
+
+  /**
+   * Follows a note type shortcut. With unsaved changes the click is held and a confirmation opens instead, because the
+   * note type page replaces this one and the draft would be lost without a word. A modified click (new tab) is left to
+   * the browser: it keeps this page and its draft.
+   */
+  function followTypeShortcut(event: MouseEvent, href: string): void {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (baselineDraft === null || draftSignature === baselineDraft) return;
+    event.preventDefault();
+    leaveTarget = href;
   }
 
   /**
@@ -610,10 +634,30 @@
                     {$t('note_edit.type.current', { name: selectedType?.name ?? '' })}
                   </span>
                 {/if}
-                <Button variant="ghost" size="xs" class="-mr-2" href={newTypeHref} testId="note-edit-new-type">
-                  <Plus class="size-3.5" aria-hidden="true" />
-                  <span>{$t('note_edit.type.create')}</span>
-                </Button>
+                <div class="-mr-2 flex shrink-0 items-center gap-1">
+                  {#if noteTypeId}
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      href={editTypeHref}
+                      testId="note-edit-edit-type"
+                      onclick={(event) => followTypeShortcut(event, editTypeHref)}
+                    >
+                      <Pencil class="size-3.5" aria-hidden="true" />
+                      <span>{$t('note_edit.type.edit')}</span>
+                    </Button>
+                  {/if}
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    href={newTypeHref}
+                    testId="note-edit-new-type"
+                    onclick={(event) => followTypeShortcut(event, newTypeHref)}
+                  >
+                    <Plus class="size-3.5" aria-hidden="true" />
+                    <span>{$t('note_edit.type.create')}</span>
+                  </Button>
+                </div>
               </div>
               {#if noteTypes.length > 1}
                 <Select
@@ -835,6 +879,36 @@
         >
           <Trash2 class="size-4" aria-hidden="true" />
           <span>{$t('notes.delete')}</span>
+        </Button>
+      </div>
+    </Dialog>
+
+    <Dialog
+      open={leaveTarget !== null}
+      onOpenChange={(open) => {
+        if (!open) leaveTarget = null;
+      }}
+      title={$t('note_edit.leave.title')}
+      description={$t('note_edit.leave.desc')}
+      testId="note-edit-leave-dialog"
+      size="sm"
+    >
+      <div class="mt-2 flex items-center justify-end gap-2">
+        <Button type="button" variant="outline" size="lg" testId="note-edit-leave-cancel" onclick={() => (leaveTarget = null)}>
+          {$t('note_edit.cancel')}
+        </Button>
+        <Button
+          type="button"
+          variant="danger"
+          size="lg"
+          testId="note-edit-leave-confirm"
+          onclick={() => {
+            const target = leaveTarget;
+            leaveTarget = null;
+            if (target) navigate(target);
+          }}
+        >
+          {$t('note_edit.leave.confirm')}
         </Button>
       </div>
     </Dialog>

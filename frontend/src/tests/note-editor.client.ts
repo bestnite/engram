@@ -171,6 +171,8 @@ function mountEditor(
 ): void {
   // The deck's note types are the only field metadata; each case states the types its deck stores.
   vi.spyOn(apiClient, 'listNoteTypes').mockResolvedValue({ note_types: noteTypes });
+  // The rich-text fields resolve stored media against the deck's frame media base.
+  vi.spyOn(apiClient, 'frameMediaBase').mockResolvedValue('/fm/token/');
   routeStore.set({ path: '/decks/5/notes', params, query, search: '', route: null });
   target = document.createElement('div');
   document.body.appendChild(target);
@@ -1383,5 +1385,124 @@ describe('unified note editor — shortcut to create a note type', () => {
     await flush();
     expect(target.querySelector('[data-testid="note-edit-no-types"]')).not.toBeNull();
     expect(shortcutTarget().path).toBe('/decks/5/note-types');
+  });
+});
+
+describe('unified note editor — shortcut to edit the note type', () => {
+  function editTypeLink(): HTMLAnchorElement | null {
+    return target.querySelector('[data-testid="note-edit-edit-type"]') as HTMLAnchorElement | null;
+  }
+
+  /** Clicks a link the way a mouse does and reports whether the page held the click. */
+  function click(link: HTMLAnchorElement, init: MouseEventInit = {}): boolean {
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...init });
+    link.dispatchEvent(event);
+    flushSync();
+    return event.defaultPrevented;
+  }
+
+  function leaveDialog(): Element | null {
+    return document.body.querySelector('[data-testid="note-edit-leave-dialog"]');
+  }
+
+  async function mountExisting(): Promise<void> {
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture());
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5', noteId: '9' });
+    await flush();
+  }
+
+  it('opens the note type page on the note type with the way back to the note', async () => {
+    await mountExisting();
+    const [path = '', query = ''] = (editTypeLink()?.getAttribute('href') ?? '').split('?');
+    const params = new URLSearchParams(query);
+    expect(path).toBe('/decks/5/note-types');
+    expect(params.get('note_type')).toBe('nt-basic');
+    expect(params.get('return')).toBe('/decks/5/notes');
+    expect(params.has('create')).toBe(false);
+  });
+
+  it('follows the link at once when nothing changed', async () => {
+    await mountExisting();
+    expect(click(editTypeLink()!)).toBe(false);
+    expect(leaveDialog()).toBeNull();
+  });
+
+  it('holds the click and asks before discarding a changed field', async () => {
+    await mountExisting();
+    setField(FRONT, 'changed');
+    await flush();
+    expect(click(editTypeLink()!)).toBe(true);
+    await flush();
+    expect(leaveDialog()).not.toBeNull();
+    (document.body.querySelector('[data-testid="note-edit-leave-confirm"]') as HTMLButtonElement).click();
+    await flush();
+    expect(get(routeStore).path).toBe('/decks/5/note-types');
+    expect(get(routeStore).query.note_type).toBe('nt-basic');
+  });
+
+  it('keeps the page and the draft when the author cancels', async () => {
+    await mountExisting();
+    setField(FRONT, 'changed');
+    await flush();
+    click(editTypeLink()!);
+    await flush();
+    (document.body.querySelector('[data-testid="note-edit-leave-cancel"]') as HTMLButtonElement).click();
+    // The dialog leaves the DOM once its closing animation has run.
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+    expect(leaveDialog()).toBeNull();
+    expect(get(routeStore).path).toBe('/decks/5/notes');
+    expect(fieldValue(FRONT)).toBe('changed');
+  });
+
+  it('asks before the create shortcut discards changed tags too', async () => {
+    await mountExisting();
+    setInput('note-tags-editor', 'new-tag');
+    await flush();
+    const link = target.querySelector('[data-testid="note-edit-new-type"]') as HTMLAnchorElement;
+    expect(click(link)).toBe(true);
+    await flush();
+    expect(leaveDialog()).not.toBeNull();
+  });
+
+  it('never holds a click that opens a new tab', async () => {
+    await mountExisting();
+    setField(FRONT, 'changed');
+    await flush();
+    expect(click(editTypeLink()!, { ctrlKey: true })).toBe(false);
+    expect(leaveDialog()).toBeNull();
+  });
+});
+
+describe('unified note editor — field media', () => {
+  it('loads every rich-text field with the deck media base', async () => {
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture({ fields: { front: '<img src="ug-map-jeju.png">', back: 'A' } }));
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    mountEditor({ id: '5', noteId: '9' });
+    await flush();
+    fromFrame(frameFor(FRONT), { type: 'ready' });
+    await flush();
+    expect(lastLoad(FRONT)).toMatchObject({ html: '<img src="ug-map-jeju.png">', mediaBase: '/fm/token/' });
+  });
+
+  it('inserts an upload by its deck name', async () => {
+    const sha = 'a'.repeat(64);
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    vi.spyOn(apiClient, 'uploadDeckMedia').mockResolvedValue({
+      sha256: sha,
+      mime: 'image/png',
+      bytes: 1,
+      url: `/media/${sha}`,
+      name: `${sha}.png`,
+    });
+    mountEditor({ id: '5' });
+    await flush();
+    const frame = frameFor(FRONT);
+    fromFrame(frame, { type: 'ready' });
+    fromFrame(frame, { type: 'upload', id: 'u1', file: new File(['x'], 'map.png', { type: 'image/png' }), kind: 'file' });
+    await flush();
+    const uploaded = frame.postMessage.mock.calls.map((call) => call[0] as Record<string, unknown>).find((m) => m.type === 'uploaded');
+    expect(uploaded).toMatchObject({ id: 'u1', url: `${sha}.png`, name: `${sha}.png`, mime: 'image/png' });
   });
 });

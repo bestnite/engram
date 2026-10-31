@@ -1779,4 +1779,8 @@ export const en: LocaleCatalog = {
   'admin.users.quota.save': 'Save',
   'admin.users.quota.unlimited_short': 'unlimited',
   'admin.users.quota.custom_badge': 'Set for this user',
+  'note_edit.type.edit': 'Edit note type',
+  'note_edit.leave.title': 'Discard unsaved changes?',
+  'note_edit.leave.desc': 'Leaving this page discards the changes to this note that are not saved yet.',
+  'note_edit.leave.confirm': 'Discard and leave',
 };

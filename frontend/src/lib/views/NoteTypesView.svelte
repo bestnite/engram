@@ -91,10 +91,11 @@
     config: NoteTypeConfig;
   }
 
-  // The first type is opened during initialization, so an SSR render and a test fixture show the
-  // editor without waiting for onMount; onMount only runs for the real, data-fetching page.
+  // The type the address names, else the first type, is opened during initialization, so an SSR render and a test
+  // fixture show the editor without waiting for onMount; onMount only runs for the real, data-fetching page.
   // svelte-ignore state_referenced_locally
-  const initialEntry = initialNoteTypes?.[0] ?? null;
+  const initialEntry =
+    initialNoteTypes?.find((entry) => entry.id === $routeStore.query[NOTE_TYPE_PARAM]) ?? initialNoteTypes?.[0] ?? null;
   // svelte-ignore state_referenced_locally
   let draft = $state<Draft | null>(
     initialEntry
@@ -253,6 +254,15 @@
     return $state.snapshot(config) as NoteTypeConfig;
   }
 
+  /**
+   * The type the address asks for: the note editor's shortcut names the note's type, so the page opens on it instead of
+   * on the first type. An id this deck does not have falls back to the first type.
+   */
+  function requestedType(): NoteType | undefined {
+    const requested = $routeStore.query[NOTE_TYPE_PARAM];
+    return requested ? noteTypes.find((entry) => entry.id === requested) : undefined;
+  }
+
   /** Select a stored type into the editor. The stored list entry is never mutated. */
   function selectType(entry: NoteType): void {
     draft = {
@@ -279,7 +289,7 @@
       noteTypes = types.note_types;
       stocks = stockList.stocks;
       answerControls = controls.controls;
-      const first = noteTypes[0];
+      const first = requestedType() ?? noteTypes[0];
       if (first) selectType(first);
     } catch (err) {
       loadError = err instanceof Error ? err : new Error(String(err));
@@ -1002,7 +1012,7 @@
       return;
     }
     if (noteTypes.length > 0 && draft === null) {
-      const first = noteTypes[0];
+      const first = requestedType() ?? noteTypes[0];
       if (first) selectType(first);
     }
     if (wantsCreate && initialError === null) openCreate();

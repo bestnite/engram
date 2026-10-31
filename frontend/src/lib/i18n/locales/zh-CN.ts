@@ -1778,4 +1778,8 @@ export const zhCN: LocaleCatalog = {
   'admin.users.quota.save': '保存',
   'admin.users.quota.unlimited_short': '不限',
   'admin.users.quota.custom_badge': '单独设置',
+  'note_edit.type.edit': '编辑笔记类型',
+  'note_edit.leave.title': '放弃未保存的修改？',
+  'note_edit.leave.desc': '离开此页面会丢失这条笔记尚未保存的修改。',
+  'note_edit.leave.confirm': '放弃并离开',
 };

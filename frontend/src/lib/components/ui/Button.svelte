@@ -57,7 +57,7 @@
 </script>
 
 {#if href}
-  <a {href} class={classes} data-testid={testId} aria-label={label} {title} aria-expanded={ariaExpanded} aria-controls={ariaControls}>
+  <a {href} class={classes} data-testid={testId} aria-label={label} {title} aria-expanded={ariaExpanded} aria-controls={ariaControls} {onclick}>
     {@render children?.()}
   </a>
 {:else}
