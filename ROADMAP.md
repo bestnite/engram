@@ -154,21 +154,6 @@ them. `M18-9` lands before `M18-4`, because both change how an `.apkg` import bu
   leaves `version` unchanged on both drivers. Evidence is the raw `go test` output of both runs, the
   PostgreSQL one with `TEST_PG_DSN` set.
 
-- [ ] **M18-9 `.apkg` import honours `apply_weights` and validates package weights** —
-  `createAnkiPreset` in `internal/store/anki_import.go` copies the package's FSRS weights into the new
-  preset whether or not `apply_weights` is on, and never sets `weights_applied` or
-  `weights_discarded`; the `.edeck` path applies weights only when the option is on. The import page
-  shows the weight checkbox for an `.apkg` although ticking it changes nothing. The weights are not
-  validated either: `TestAnkiProgressImport` stores `[1,2,3]`, which `fsrs.MigrateWeights` rejects,
-  so every review in a deck with that preset would fail. The fix: write package weights only when
-  `apply_weights` is on and the target is `new_deck`; write them only when `fsrs.MigrateWeights`
-  accepts them; set `weights_applied` when they are written and `weights_discarded` when the package
-  carried weights that were not written. Desired retention, steps and maximum interval keep travelling
-  as they do now. *Acceptance:* table tests cover weights with the option off (default weights,
-  `weights_discarded` true), on (weights written, `weights_applied` true), on with a weight set
-  `fsrs.MigrateWeights` rejects (default weights, `weights_discarded` true), and a package with no
-  weights (both flags false). Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-10 `.apkg` review rows: fill `interval_days`, `duration_days` and the memory state with
   their real meanings** — `M18-2` wrote `revlog.ivl` into `duration_days`, as its entry specified,
   but that mapping was wrong: in engram `duration_days` is the number of days since the card's
