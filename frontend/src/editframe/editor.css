@@ -34,6 +34,13 @@ body {
   white-space: pre-wrap;
 }
 
+/* Wrapping off: one long line that scrolls sideways instead of breaking. */
+.edit-field.is-nowrap {
+  overflow-wrap: normal;
+  white-space: pre;
+  overflow-x: auto;
+}
+
 .edit-field:focus {
   outline: none;
 }
@@ -81,8 +88,17 @@ body {
 }
 
 .edit-source {
-  white-space: pre;
+  white-space: pre-wrap;
   font-family: ui-monospace, monospace;
+}
+
+/* The textarea's wrap attribute sets this in the browser, but the rule above would win, so the
+   class repeats the no-wrap state for both textareas. */
+.edit-plain.is-nowrap,
+.edit-source.is-nowrap {
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
 }
 
 .is-hidden {

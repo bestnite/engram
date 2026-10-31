@@ -216,6 +216,31 @@ describe('RichTextField toolbar commands', () => {
     expect(target.querySelector('[data-testid="field-source-hint"]')).toBeNull();
   });
 
+  it('toggles line wrapping and tells the frame', () => {
+    const fake = mountField();
+    const toggle = target.querySelector('[data-testid="field-wrap-toggle"]') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+    toggle.click();
+    flushSync();
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(lastPosted(fake)).toEqual({ type: 'wrap', wrapped: false });
+
+    toggle.click();
+    flushSync();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(lastPosted(fake)).toEqual({ type: 'wrap', wrapped: true });
+  });
+
+  it('keeps the wrap toggle available in a plain-text field', () => {
+    const fake = mountField({ options: { plainText: true } });
+    const toggle = target.querySelector('[data-testid="field-wrap-toggle"]') as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    toggle.click();
+    flushSync();
+    expect(lastPosted(fake)).toEqual({ type: 'wrap', wrapped: false });
+  });
+
   it('uploads a chosen file and asks the frame to insert it', async () => {
     const fake = mountField();
     const input = target.querySelector('[data-testid="field-file-input"]') as HTMLInputElement;

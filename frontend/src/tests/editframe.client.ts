@@ -288,6 +288,23 @@ describe('edit frame paste and source view', () => {
     expect(runtime?.value()).toBe(markup);
   });
 
+  it('switches the wrapping of the rich surface and both textareas', () => {
+    load('x');
+    const root = document.getElementById('editor') as HTMLElement;
+    const source = document.querySelector('.edit-source') as HTMLTextAreaElement;
+    const plain = document.querySelector('.edit-plain') as HTMLTextAreaElement;
+
+    runtime?.handleMessage(fromParent({ type: 'wrap', wrapped: false }));
+    expect(root.classList.contains('is-nowrap')).toBe(true);
+    expect(source.wrap).toBe('off');
+    expect(plain.wrap).toBe('off');
+
+    runtime?.handleMessage(fromParent({ type: 'wrap', wrapped: true }));
+    expect(root.classList.contains('is-nowrap')).toBe(false);
+    expect(source.wrap).toBe('soft');
+    expect(plain.wrap).toBe('soft');
+  });
+
   it('renders a plain-text field as plain text and escapes it back to HTML', () => {
     load('<b>x</b>', { plainText: true });
     const plain = document.querySelector('.edit-plain') as HTMLTextAreaElement;

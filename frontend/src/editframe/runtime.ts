@@ -222,6 +222,24 @@ export function createRuntime(options: EditFrameOptions = {}): EditFrameRuntime 
   sourceArea.className = 'edit-source';
   sourceArea.spellcheck = false;
 
+  /** Line wrapping of the field: on by default, and the same state for all three surfaces. */
+  let wrapped = true;
+
+  /**
+   * Applies the wrap state. `wrap="off"` alone is not enough for the source textarea, whose CSS
+   * sets `white-space: pre-wrap`; the class is what makes the long line scroll sideways.
+   */
+  function setWrapped(next: boolean): void {
+    wrapped = next;
+    root.classList.toggle('is-nowrap', !wrapped);
+    plainArea.classList.toggle('is-nowrap', !wrapped);
+    sourceArea.classList.toggle('is-nowrap', !wrapped);
+    plainArea.wrap = wrapped ? 'soft' : 'off';
+    sourceArea.wrap = wrapped ? 'soft' : 'off';
+  }
+
+  setWrapped(wrapped);
+
   const surface = doc.createElement('div');
   surface.className = 'edit-surface';
   doc.body.appendChild(surface);
@@ -570,6 +588,9 @@ export function createRuntime(options: EditFrameOptions = {}): EditFrameRuntime 
       }
       case 'source':
         if (typeof data.open === 'boolean' && !plainText) setMode(data.open ? 'source' : 'rich');
+        return;
+      case 'wrap':
+        if (typeof data.wrapped === 'boolean') setWrapped(data.wrapped);
         return;
       case 'selection':
         // The parent asks for the selected text to prefill an insert dialog. The range is the one a command would act

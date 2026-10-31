@@ -45,6 +45,7 @@
     Subscript,
     Superscript,
     Underline,
+    WrapText,
   } from '@lucide/svelte';
 
   /** The per-field presentation options a note type's field entry can carry. */
@@ -86,6 +87,8 @@
   let ready = $state(false);
   let height = $state(0);
   let sourceOpen = $state(false);
+  /** Line wrapping of the editing surface; applies to the rich surface and both textareas. */
+  let wrapped = $state(true);
   // svelte-ignore state_referenced_locally
   let expanded = $state(!(options.collapsed ?? false));
   let fileInput = $state<HTMLInputElement | null>(null);
@@ -209,6 +212,17 @@
     sourceOpen = !sourceOpen;
     if (ready) send({ type: 'source', open: sourceOpen });
     if (!ready) sendLoad(value);
+  }
+
+  function sendWrap(): void {
+    if (!ready) return;
+    send({ type: 'wrap', wrapped });
+  }
+
+  /** Wrapping is a display choice rather than a formatting command, so it also works in source mode. */
+  function toggleWrap(): void {
+    wrapped = !wrapped;
+    sendWrap();
   }
 
   function applyColor(property: 'textColor' | 'highlight', event: Event): void {
@@ -398,6 +412,7 @@
         // it is empty, because the presentation options still have to reach the new document.
         lastEcho = null;
         sendTheme();
+        sendWrap();
         return;
       case 'change':
         if (typeof data.html !== 'string') return;
@@ -470,6 +485,21 @@
     };
   });
 </script>
+
+{#snippet wrapButton()}
+  <button
+    type="button"
+    class={toolbarButton}
+    data-testid="{testId}-wrap-toggle"
+    aria-label={$t('editor.wrap.label', { field: label })}
+    title={$t('editor.wrap.label', { field: label })}
+    aria-pressed={wrapped}
+    onmousedown={(event) => event.preventDefault()}
+    onclick={toggleWrap}
+  >
+    <WrapText class="size-4" aria-hidden="true" />
+  </button>
+{/snippet}
 
 <div class="field-frame @container" data-testid="{testId}-frame">
   {#if !plainText}
@@ -650,6 +680,7 @@
         >
           <CodeXml class="size-4" aria-hidden="true" />
         </button>
+        {@render wrapButton()}
       </div>
     </div>
     {#if sourceOpen}
@@ -657,6 +688,11 @@
         {$t('editor.source.hint')}
       </p>
     {/if}
+  {:else}
+    <!-- A plain-text field has no formatting, but wrapping is a display choice it shares. -->
+    <div class="field-frame-header flex items-center justify-end px-1.5 py-1" data-testid="{testId}-plain-toolbar">
+      {@render wrapButton()}
+    </div>
   {/if}
   {#if options.collapsed}
     <!-- Only a collapsible field has this row: an empty row would draw a strip between the toolbar and the text. -->

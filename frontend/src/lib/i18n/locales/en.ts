@@ -1683,4 +1683,6 @@ export const en: LocaleCatalog = {
   'notetype.syntax.frontside': 'Inserts the front on the back. When the back shows the question (with this, or by repeating every field of the front), the reveal shows the back alone, as Anki does; otherwise the question stays above the answer.',
   // ---- Rich-text field editor: source mode ----
   'editor.source.hint': 'Formatting is unavailable while the HTML source is shown.',
+  // ---- Rich-text field editor: wrapping ----
+  'editor.wrap.label': 'Wrap long lines in “{field}”',
 };
