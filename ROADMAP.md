@@ -220,18 +220,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   naming `M18-4`; the sentence in `AGENTS.md` section 2.7 names `reuse` and `copy`. Evidence is the
   output of `grep -n 'M18-4\b' ROADMAP.md` limited to the ledger section and the `AGENTS.md` diff.
 
-- [ ] **M18-39 The `ankiWeights` comment states what the function does** — found while reviewing
-  `M18-7`; the code comes from `M18-1`. The comment on `ankiWeights` in
-  `internal/store/anki_export.go` says that an undecodable weights value means "use the defaults", so
-  no weights are written. The code returns an error instead (`decode weights: …`), and that error
-  fails the export. The scheduler also refuses an undecodable value (`presetWeights` in
-  `internal/schedule/scheduler.go`), so a preset with such a value cannot be studied either, and
-  writing no weights would hide that fault from the user. The fix changes the comment only: it states
-  that NULL, an empty string, `null` and an empty array write no weights, and that an undecodable
-  value or a set `fsrs.MigrateWeights` refuses fails the export, because the scheduler refuses the
-  same value. Behaviour is unchanged. *Acceptance:* each statement of the comment matches the code of
-  `ankiWeights`. Evidence is the diff.
-
 - [ ] **M18-40 The memory-state derivation states its rules** — the `M18-7` block in
   `importAnkiProgress` (`internal/store/anki_import.go`) carries no comment, although each of its
   rules is not obvious from the code: why a non-new card needs a derived state (Anki writes `s` and `d`
