@@ -9,51 +9,6 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 
 ## 1. Task backlog
 
-### M17 — Anki-compatible deck content
-
-The compatibility rules live in `AGENTS.md` section 2.7, and the structure in `ARCHITECTURE.md`.
-These tasks land on `main` directly.
-
-- [ ] **M17-63 An unmapped template that the target declares keeps its card** — changing the note type
-  must not remove and restore the same card.
-  *Files:* `internal/store/note_type_change.go` (`buildTemplatePlan`, `moveNoteCards`);
-  `internal/store/note_type_change_test.go`; `internal/api/note_type_change_test.go`.
-  *Problem:* when the template mapping leaves a source template unmapped, and the target config
-  declares the same template id (two note types created from one stock definition share `forward`
-  and `reverse`), the change soft-deletes the card and the card sync then restores the same row with
-  its progress. The impact counts the card in both `cards_removed` and `cards_added`, so the request
-  is refused with `card_removal_unconfirmed`, and the user is asked to confirm a removal that removes
-  nothing.
-  *Work:*
-  - An unmapped source template whose id the target config also declares is treated as mapped to that
-    same id. Its cards keep their ids, templates and `card_states`.
-  - Such a card counts in `cards_moved`. It counts in neither `cards_removed` nor `cards_added`, and
-    it never makes the change require `confirm_card_removal`.
-  - An unmapped source template whose id the target config does not declare is removed as today.
-
-  *Acceptance:* a store test changes a note between two types that both declare `forward` and
-  `reverse`, with a mapping that names only `forward`. The change succeeds without confirmation, both
-  cards keep their ids and `card_states`, and the impact reports `cards_moved = 2`,
-  `cards_removed = 0` and `cards_added = 0`.
-  *Verify:* `go test ./internal/store/... ./internal/api/...`.
-- [ ] **M17-64 Media garbage collection cannot remove media an import is about to reuse** — a long
-  `.apkg` import must not fail because an orphaned medium was collected meanwhile.
-  *Files:* `internal/store/anki_import.go` (`placeAnkiMedia`); `internal/store/media_gc.go`;
-  `internal/store/package_concurrency_test.go`.
-  *Problem:* `placeAnkiMedia` writes no file for a sha that already has a media row, and the import
-  transaction later reuses that row. When the row is orphaned and older than the garbage collection
-  grace (`retention.MediaOrphanGrace`, seven days), a collection run during the import deletes the row
-  and the file. The transaction then fails with "media was not written before the transaction". This
-  happens, for example, when a deck deleted more than seven days ago is imported again.
-  *Work:* before the import transaction opens, `placeAnkiMedia` clears `orphaned_at` on every existing
-  media row it will reuse, so a collection run cannot select that row until it is marked orphaned
-  again and its grace has passed. A dry run clears nothing.
-  *Acceptance:* a store test marks a media row orphaned eight days ago, starts an import of a package
-  that carries the same bytes, runs `DeleteOrphanedMedia` between the media placement and the
-  transaction, and gets a successful import with the row and the file still present. A dry run of the
-  same package leaves `orphaned_at` unchanged.
-  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
-
 ### M10 — Future work (not part of the current release)
 
 These tasks are recorded so the design keeps room for them. They are not part of the current
@@ -194,3 +149,5 @@ bluemonday-sanitised `internal/render` are gone.
 | Cards generated on a note type change (M17-60) | Changing a note's type creates the cards the target config generates for it and the note lacks, through the note write's card sync, so a basic note moved to a basic-and-reversed type gains its reverse card. A template-id permutation between two types succeeds through a two-phase write inside the transaction; a soft-deleted row that already holds a mapped target template is still refused. The impact, the 409 body, the audit row and the dialog carry `cards_added`. | No — one response field is added |
 | Import media outside the transaction, bounded imports (M17-61) | An `.apkg` import places its new media files at their content address before the database transaction opens, and removes exactly those files when the transaction rolls back, when the run is a dry run, or when placement fails; a file that existed before is never removed. `package_max_concurrent_imports` (environment variable, then settings row, then default 2) bounds simultaneous imports per process; the multipart, URL, upload-ticket and MCP entries take a slot before reading or downloading and answer 429 `deck_import_busy` at once when none is free. The CLI import takes no slot. | No — one configuration key and one 429 code are added; imported media is now written before the transaction |
 | Every image-occlusion shape checked against Anki (M17-62) | The oracle builds six image-occlusion notes through Anki's own API — rect, ellipse, polygon, text, two shapes under one cloze number, and inactive masks (`oi=1`, the hide-all guess-one mode) — and records their fields and rendered faces. The editor's shape model rebuilds each field byte for byte, so parsing and saving an untouched note reproduces Anki's stored value exactly. | No |
+| Unmapped templates the target declares keep their cards (M17-63) | A template the mapping leaves out keeps its card when the target config declares the same template id: the card keeps its id, template and `card_states` and counts only in `cards_moved`, so a change between two types that share `forward` and `reverse` no longer asks to confirm a removal that removes nothing. An unmapped template the target does not declare is still removed after confirmation. | No |
+| Orphan marks cleared for media an import reuses (M17-64) | Before the import transaction opens, `placeAnkiMedia` clears `orphaned_at` on every media row the package will reuse, so a garbage-collection run during a long import cannot delete the row and its file and fail the transaction. A dry run clears nothing, and an import still removes only the files it created. | No |
