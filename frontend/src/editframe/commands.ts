@@ -394,7 +394,20 @@ export function pasteHtml(ctx: EditingContext, html: string, keepFormatting: boo
   template.innerHTML = html;
   if (!keepFormatting) return plainTextToHtml(htmlToPlainText(ctx, html));
   filterElement(ctx, template.content);
+  removeComments(ctx, template.content);
   return template.innerHTML;
+}
+
+/**
+ * Drops every comment node from the fragment. Clipboard HTML from Chromium and Word wraps its
+ * payload in `<!--StartFragment-->` / `<!--EndFragment-->`, and the element walk cannot see those
+ * markers because it only visits elements. A comment is not content, so none may reach the value.
+ */
+function removeComments(ctx: EditingContext, node: ParentNode): void {
+  const walker = ctx.doc.createTreeWalker(node as unknown as Node, 128);
+  const comments: Node[] = [];
+  for (let current = walker.nextNode(); current !== null; current = walker.nextNode()) comments.push(current);
+  for (const comment of comments) comment.parentNode?.removeChild(comment);
 }
 
 /** Recursively rewrites a pasted fragment in place. */

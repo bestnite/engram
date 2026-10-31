@@ -249,6 +249,21 @@ describe('edit frame paste and source view', () => {
     expect(editorHtml()).toBe('start<b>bold</b>');
   });
 
+  it('drops clipboard fragment comments on paste and keeps the content', () => {
+    load('start');
+    const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', {
+      value: {
+        files: [],
+        getData: (type: string) =>
+          type === 'text/html' ? '<!--StartFragment--><b>bold</b><!--EndFragment-->' : 'bold',
+      },
+    });
+    document.getElementById('editor')?.dispatchEvent(event);
+    expect(editorHtml()).toBe('start<b>bold</b>');
+    expect(lastChange()).toBe('start<b>bold</b>');
+  });
+
   it('strips pasted formatting while Shift is held', () => {
     load('start');
     const root = document.getElementById('editor') as HTMLElement;
