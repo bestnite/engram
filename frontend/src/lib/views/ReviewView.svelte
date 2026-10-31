@@ -111,6 +111,13 @@
   let frontFace = $state<CardFace | null>(initialFrontFace);
   // svelte-ignore state_referenced_locally
   let backFace = $state<CardFace | null>(initialBackFace);
+  // Whether fetching the current card's faces failed. Only then does the page print the field text itself: while the
+  // faces are on their way the frames stay mounted and empty, so a card change never shows the unstyled text first.
+  let renderFailed = $state(false);
+  // A frame is used for a face unless the faces failed to load or the loaded face is empty. Keeping the frame mounted
+  // across cards keeps its document and runtime loaded, so the next card appears in one step.
+  const frontInFrame = $derived(renderFailed ? false : frontFace === null || frontFace.html !== '');
+  const backInFrame = $derived(renderFailed ? false : backFace === null || backFace.html !== '');
   // The current card's zero-based template ordinal, used for the frame body class `cardN` (N = ordinal + 1).
   let cardOrdinal = $state(0);
   // Whether the front template is a type-in placeholder without an answer spec. Such a card is self-rated like any other,
@@ -224,6 +231,7 @@
         { frame: true },
       );
       if (token !== renderToken) return;
+      renderFailed = false;
       frontFace = response.front;
       backFace = response.back;
       cardOrdinal = response.ordinal ?? 0;
@@ -231,6 +239,7 @@
       editHref = response.edit_href;
     } catch {
       if (token !== renderToken) return;
+      renderFailed = true;
       frontFace = null;
       backFace = null;
       cardOrdinal = 0;
@@ -243,6 +252,7 @@
   $effect(() => {
     const card = current;
     const token = ++renderToken;
+    renderFailed = false;
     frontFace = null;
     backFace = null;
     cardOrdinal = 0;
@@ -929,15 +939,15 @@
 
         {#if !machineGraded}
           <div class="min-h-28" data-testid="review-front">
-            {#if frontFace && frontFace.html}
+            {#if frontInFrame}
               <CardFrame
-                html={frontFace.html}
-                css={faceStyle(REVIEW_FRONT_CSS, frontFace.css)}
-                bodyClass={frontFace.body_class}
+                html={frontFace?.html ?? ''}
+                css={faceStyle(REVIEW_FRONT_CSS, frontFace?.css)}
+                bodyClass={frontFace?.body_class ?? 'card'}
                 side="question"
-                mediaBase={frontFace.media_base}
-                autoplay={frontFace.autoplay ?? false}
-                avTags={frontFace.av_tags ?? []}
+                mediaBase={frontFace?.media_base ?? ''}
+                autoplay={frontFace?.autoplay ?? false}
+                avTags={frontFace?.av_tags ?? []}
                 ordinal={cardOrdinal}
                 title={$t('note_preview.front')}
                 onkey={onFrameKey}
@@ -949,6 +959,31 @@
               </div>
             {/if}
           </div>
+          {#if !essay}
+            <!-- The answer frame is mounted with the question and stays hidden and empty until the reveal: its document and
+                 runtime are then already loaded, so the answer appears at once instead of after a frame load. The face is
+                 sent only on reveal, so its audio does not start early. -->
+            <div class={revealed ? 'border-t border-input pt-6' : 'hidden'} data-testid={revealed ? 'review-answer' : undefined}>
+              {#if backInFrame}
+                <CardFrame
+                  html={revealed ? (backFace?.html ?? '') : ''}
+                  css={faceStyle(REVIEW_BACK_CSS, backFace?.css)}
+                  bodyClass={backFace?.body_class ?? 'card'}
+                  ordinal={cardOrdinal}
+                  side="answer"
+                  mediaBase={backFace?.media_base ?? ''}
+                  autoplay={backFace?.autoplay ?? false}
+                  avTags={revealed ? (backFace?.av_tags ?? []) : []}
+                  title={$t('note_preview.back')}
+                  onkey={onFrameKey}
+                />
+              {:else if revealed}
+                <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">
+                  {#each answerFallback as value, index (index)}<div>{value}</div>{/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
           {#if revealed}
             {#if essay}
               <!-- Short-answer card: first show the answer the learner wrote (plain text, not into the HTML sink), then the reference answer for comparison. -->
@@ -979,27 +1014,6 @@
                   </div>
                 {:else}
                   <p class="text-sm text-muted-foreground" data-testid="review-essay-no-reference">{$t('review.essay.no_reference')}</p>
-                {/if}
-              </div>
-            {:else}
-              <div class="border-t border-input pt-6" data-testid="review-answer">
-                {#if backFace && backFace.html}
-                  <CardFrame
-                    html={backFace.html}
-                    css={faceStyle(REVIEW_BACK_CSS, backFace.css)}
-                    bodyClass={backFace.body_class}
-                    ordinal={cardOrdinal}
-                    side="answer"
-                    mediaBase={backFace.media_base}
-                    autoplay={backFace.autoplay ?? false}
-                    avTags={backFace.av_tags ?? []}
-                    title={$t('note_preview.back')}
-                    onkey={onFrameKey}
-                  />
-                {:else}
-                  <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">
-                    {#each answerFallback as value, index (index)}<div>{value}</div>{/each}
-                  </div>
                 {/if}
               </div>
             {/if}
@@ -1037,16 +1051,16 @@
                behind a divider, so the learner does not have to recall the original question while reading the answer. -->
           <div class="space-y-5">
             <div class="min-h-28" data-testid="review-graded-prompt">
-              {#if frontFace && frontFace.html}
+              {#if frontInFrame}
                 <CardFrame
-                  html={frontFace.html}
-                  css={faceStyle(REVIEW_FRONT_CSS, frontFace.css)}
-                  bodyClass={frontFace.body_class}
+                  html={frontFace?.html ?? ''}
+                  css={faceStyle(REVIEW_FRONT_CSS, frontFace?.css)}
+                  bodyClass={frontFace?.body_class ?? 'card'}
                   ordinal={cardOrdinal}
                   side="question"
-                  mediaBase={frontFace.media_base}
-                  autoplay={frontFace.autoplay ?? false}
-                  avTags={frontFace.av_tags ?? []}
+                  mediaBase={frontFace?.media_base ?? ''}
+                  autoplay={frontFace?.autoplay ?? false}
+                  avTags={frontFace?.av_tags ?? []}
                   title={$t('note_preview.front')}
                   onkey={onFrameKey}
                   onanswer={onFrameAnswer}

@@ -169,10 +169,20 @@ describe('ReviewView face HTML in the frame, edit, and bury parity', () => {
     expect(html).toContain('data-rating="4"');
   });
 
+  it('keeps both frames mounted and prints no field text while the faces are loading', () => {
+    const basic = gradedCard('basic', { front: 'Loading front', back: 'Loading back' });
+    const { html } = render(ReviewView, { props: { initialLoading: false, initialCards: [basic] } });
+    // The question frame waits for its face; the answer frame is mounted hidden, so the reveal needs no frame load.
+    expect((html.match(/data-card-frame/g) ?? [])).toHaveLength(2);
+    expect(html).not.toContain('Loading front');
+    expect(html).not.toContain('Loading back');
+    expect(html).not.toContain('data-testid="review-answer"');
+  });
+
   it('falls back to plain-text fields when the render HTML is empty', () => {
     const basic = gradedCard('basic', { front: 'Plain front', back: 'Plain back' });
     const { html } = render(ReviewView, {
-      props: { initialLoading: false, initialCards: [basic], initialRevealed: true },
+      props: { initialLoading: false, initialCards: [basic], initialRevealed: true, initialFrontFace: face(''), initialBackFace: face('') },
     });
     expect(html).toContain('Plain front');
     expect(html).toContain('Plain back');
@@ -314,8 +324,9 @@ describe('ReviewView card sides and controls come from the due-card payload', ()
       reference: '一致性、可用性、分区容忍',
     });
 
+    // Empty faces: the page prints the fields itself, which is what this case pins.
     const front = render(ReviewView, {
-      props: { initialLoading: false, initialCards: [card] },
+      props: { initialLoading: false, initialCards: [card], initialFrontFace: face(''), initialBackFace: face('') },
     }).html;
     expect(front).toContain('data-testid="review-front"');
     expect(front).toContain('解释一下 CAP 定理');
@@ -325,7 +336,7 @@ describe('ReviewView card sides and controls come from the due-card payload', ()
     expect(front).not.toContain('data-testid="review-graded-input"');
 
     const revealed = render(ReviewView, {
-      props: { initialLoading: false, initialCards: [card], initialRevealed: true },
+      props: { initialLoading: false, initialCards: [card], initialRevealed: true, initialFrontFace: face(''), initialBackFace: face('') },
     }).html;
     expect(revealed).toContain('data-testid="review-answer"');
     expect(revealed).toContain('一致性、可用性、分区容忍');
@@ -363,7 +374,7 @@ describe('ReviewView card sides and controls come from the due-card payload', ()
       field_order: ['f-front', 'f-back'],
     };
     const { html } = render(ReviewView, {
-      props: { initialLoading: false, initialCards: [card] },
+      props: { initialLoading: false, initialCards: [card], initialFrontFace: face(''), initialBackFace: face('') },
     });
     expect(html).toContain('data-testid="review-front"');
     expect(html).toContain('自定义问题');

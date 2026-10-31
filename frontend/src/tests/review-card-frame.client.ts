@@ -66,8 +66,11 @@ describe('ReviewView card faces in the frame', () => {
     // The request asks for frame-ready HTML: relative media names plus the base they resolve against.
     expect(renderReviewCard).toHaveBeenCalledWith({ card_id: 'b1', deck: undefined, tags: undefined }, { frame: true });
     const question = await shownFaces(target);
-    expect(question).toHaveLength(1);
+    // The answer frame is already mounted, hidden, so the reveal needs no frame load; until then it holds no face.
+    expect(question.map((face) => face.side)).toEqual(['question', 'answer']);
     expect(question[0]).toMatchObject({ html: '<p><strong>Stored</strong> front</p>', side: 'question', mediaBase: '/fm/token/' });
+    expect(question[1]).toMatchObject({ html: '', avTags: [] });
+    expect(target.querySelector('[data-testid="review-answer"]')).toBeNull();
     // The raw field text stays out of the parent page entirely.
     expect(target.textContent).not.toContain('RAW-FRONT-TEXT');
 
