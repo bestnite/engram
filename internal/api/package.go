@@ -36,6 +36,25 @@ func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, opts
 	return pkg, nil
 }
 
+// ExportAnkiPackage applies the same permission and server settings as the native export.
+func (a *API) ExportAnkiPackage(ctx context.Context, userID, deckID uint64, opts store.PackageOptions) ([]byte, error) {
+	if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
+		return nil, err
+	}
+	opts.MediaRoot, opts.Now = a.mediaRoot, a.now
+	data, err := a.decks.ExportAnkiPackage(ctx, userID, deckID, opts)
+	if err != nil {
+		return nil, mapPackageError(err)
+	}
+	return data, nil
+}
+
+// PackageQueryOptions applies the transport defaults to export switches.
+func PackageQueryOptions(c *gin.Context) store.PackageOptions {
+	configs := c.DefaultQuery("include_deck_configs", "1") != "0"
+	return store.PackageOptions{IncludeProgress: c.Query("include_progress") == "1", IncludeReviews: c.Query("include_reviews") == "1", IncludeMedia: c.DefaultQuery("include_media", "1") != "0", IncludeWeights: c.Query("include_weights") == "1", IncludeDeckConfigs: &configs}
+}
+
 // ImportDeckPackage parses and imports one deck package (.edeck or .apkg); target picks one of three destinations.
 // allowOthersProgress only takes effect when the caller is an admin (the progress-import boundary).
 func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *uint64, r io.Reader, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
@@ -183,13 +202,24 @@ func (a *API) handleExportPackage(c *gin.Context) {
 		abortNotFound(c)
 		return
 	}
-	pkg, err := a.ExportDeckPackage(ctx, u.ID, d.ID, store.PackageOptions{
-		IncludeProgress: c.Query("include_progress") == "1",
-		IncludeReviews:  c.Query("include_reviews") == "1",
-		IncludeWeights:  c.Query("include_weights") == "1",
-		// include_media defaults to on; passing 0 explicitly turns it off.
-		IncludeMedia: c.DefaultQuery("include_media", "1") != "0",
-	})
+	format := c.DefaultQuery("format", "edeck")
+	if format != "edeck" && format != "apkg" {
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+		return
+	}
+	opts := PackageQueryOptions(c)
+	if format == "apkg" {
+		data, err := a.ExportAnkiPackage(ctx, u.ID, d.ID, opts)
+		if err != nil {
+			writeServiceError(c, err)
+			return
+		}
+		name := strings.TrimSuffix(DeckPackageFilename(d.Name, publicID), ".edeck") + ".apkg"
+		c.Header("Content-Disposition", AttachmentDisposition(name))
+		c.Data(http.StatusOK, "application/zip", data)
+		return
+	}
+	pkg, err := a.ExportDeckPackage(ctx, u.ID, d.ID, opts)
 	if err != nil {
 		writeServiceError(c, err)
 		return

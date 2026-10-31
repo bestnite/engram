@@ -49,7 +49,25 @@ func (s *Server) deckPackageExport(c *gin.Context) {
 	if !ok {
 		return
 	}
-	pkg, err := s.api.ExportDeckPackage(c.Request.Context(), user.ID, deckID, store.PackageOptions{IncludeMedia: true})
+	format := c.DefaultQuery("format", "edeck")
+	if format != "edeck" && format != "apkg" {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	opts := api.PackageQueryOptions(c)
+	if format == "apkg" {
+		data, err := s.api.ExportAnkiPackage(c.Request.Context(), user.ID, deckID, opts)
+		if err != nil {
+			s.logger.Error("deck package export failed", "error", err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		name := strings.TrimSuffix(api.DeckPackageFilename(deck.Name, deck.PublicID), ".edeck") + ".apkg"
+		c.Header("Content-Disposition", api.AttachmentDisposition(name))
+		c.Data(http.StatusOK, "application/zip", data)
+		return
+	}
+	pkg, err := s.api.ExportDeckPackage(c.Request.Context(), user.ID, deckID, opts)
 	if err != nil {
 		s.logger.Error("deck package export failed", "deck_id", deckID, "user_id", user.ID, "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)

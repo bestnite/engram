@@ -136,6 +136,8 @@ func runExport(args []string) error {
 	includeReviews := fs.Bool("include-reviews", false, "include review logs (requires --include-progress)")
 	noMedia := fs.Bool("no-media", false, "do not inline media bytes")
 	includeWeights := fs.Bool("include-weights", false, "include the caller's FSRS weights in preset.json")
+	format := fs.String("format", "edeck", "package format: edeck or apkg")
+	includeDeckConfigs := fs.Bool("include-deck-configs", true, "include deck configuration")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -144,6 +146,9 @@ func runExport(args []string) error {
 	}
 	if *deckID == 0 {
 		return errors.New("export: --deck <id> is required")
+	}
+	if *format != "edeck" && *format != "apkg" {
+		return errors.New("export: unknown package format")
 	}
 	ctx := context.Background()
 	apiSrv, users, db, err := openPackageCLI(ctx)
@@ -154,12 +159,25 @@ func runExport(args []string) error {
 	if err != nil {
 		return err
 	}
-	pkg, err := apiSrv.ExportDeckPackage(ctx, actor.ID, *deckID, store.PackageOptions{
-		IncludeProgress: *includeProgress,
-		IncludeMedia:    !*noMedia,
-		IncludeReviews:  *includeReviews,
-		IncludeWeights:  *includeWeights,
-	})
+	opts := store.PackageOptions{
+		IncludeProgress:    *includeProgress,
+		IncludeMedia:       !*noMedia,
+		IncludeReviews:     *includeReviews,
+		IncludeWeights:     *includeWeights,
+		IncludeDeckConfigs: includeDeckConfigs,
+	}
+	if *format == "apkg" {
+		data, err := apiSrv.ExportAnkiPackage(ctx, actor.ID, *deckID, opts)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(*out, data, 0666); err != nil {
+			return fmt.Errorf("write package: %w", err)
+		}
+		fmt.Fprintf(cliOut, "exported deck %d -> %s\n", *deckID, *out)
+		return nil
+	}
+	pkg, err := apiSrv.ExportDeckPackage(ctx, actor.ID, *deckID, opts)
 	if err != nil {
 		return err
 	}
