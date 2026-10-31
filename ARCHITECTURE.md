@@ -146,19 +146,14 @@ change.
   `[anki:tts]` tag with an `[anki:play:<side>:<n>]` marker and carries the tag list in `av_tags`;
   the answer face is rendered with the already-extracted question in place of `{{FrontSide}}`, so
   its tag list separates the question's tags from the tags the answer adds. `autoplay` is the
-  deck's setting, read by the frame to start a face's own tags. Until the SPA reads the two
-  objects, `front_html`/`back_html` repeat their HTML and `options_html`, `option_order` and
-  `blanks` remain in the payload, though the review page no longer renders controls from them. A due card also carries `answer_control`
-  (the template's answer control name, null when the template has none), `machine_graded` (the rule
-  the submit path applies) and `field_order` (the note type's field ids in config order). The
-  review page chooses the self-rated, essay or machine-graded flow from the first two, so a note
-  type that matches no stock kind answers like any other, and its plain-text fallback lists the
-  field values in `field_order` when a face fails to load. Those flat fields, and the card-kind
-  vocabulary the note response still carries (`kind` as a transitional alias, the description
-  catalog in `internal/api/card_catalog.go`), stay while the SPA note form still reads that
-  catalog; removing them requires the form to read note types instead of card kinds. A note write
-  already uses the permanent payload: `note_type` plus `fields` keyed by field name with HTML
-  values.
+  deck's setting, read by the frame to start a face's own tags. A due card also carries
+  `answer_control` (the template's answer control name, null when the template has none),
+  `machine_graded` (the rule the submit path applies) and `field_order` (the note type's field ids
+  in config order). The review page chooses the self-rated, essay or machine-graded flow from the
+  first two, so a note type with any stored template answers the same way, and its plain-text
+  fallback lists the field values in `field_order` when a face fails to load. A note write and
+  every note response use the note-type payload: `note_type` plus `fields` keyed by field name
+  with HTML values, and no card-kind vocabulary.
 - **Note write and review.** `NoteStore.Save` resolves the note type (deck and note type id),
   rejects a field name the config does not declare and names it, converts the payload values to
   HTML keyed by field id, normalises `/media/<sha256>` and `[sound:<sha256>]` into deck media
@@ -182,8 +177,7 @@ change.
   may send `stock_id` instead of a config; `GET /note-type-stocks` lists the source-prefixed ids of
   Anki's six and engram's ten stock definitions, and the server builds the config from the chosen
   definition. `GET /answer-controls` lists the registered controls with their role names and parses,
-  so a client builds an answer spec without a second hard-coded list. `kind` remains a transitional
-  alias for `note_type` on a note write while the SPA editor still sends the card kind.
+  so a client builds an answer spec without a second hard-coded list.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on
   every request. `list_note_types` and `get_note_type` expose a deck's note types; `create_notes`
   and `update_note` take `note_type` and send field values as an HTML map.
@@ -232,11 +226,11 @@ change.
   enforces and reports blocking and warning notes without writing. `source_url` and `extra_json`
   are nullable TEXT.
 - **Field values are HTML.** A field value is an HTML string; nothing else is stored. The note
-  write path already takes that shape: `fields` maps a field name to an HTML string. The
-  transitional `kind` alias still accepts the old typed shapes on a write (a string array for
-  options, a boolean, a number), but every note response returns each field's stored HTML string
+  write path takes that shape: `fields` maps a field name to an HTML string. A write also accepts
+  an array, boolean or number and stores its text form, so an older client that still sends a
+  typed value is not rejected; every note response returns each field's stored HTML string
   unchanged, keyed by field id, so an editor round-trips content without interpreting it. The deck
-  package format 2 writes the permanent shape only: `note_types.json` plus notes whose `fields`
+  package format 2 writes the HTML-string shape only: `note_types.json` plus notes whose `fields`
   map a field id to HTML.
 - **Cards and subdecks.** `cards.deck_path` is a nullable TEXT path relative to the imported root
   deck (for example `Lesson 1::Verbs`); a card without it sits directly in the note's deck. A

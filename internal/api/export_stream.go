@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -26,8 +25,6 @@ type exportScanRow struct {
 	CardID      string
 	NoteID      string
 	DeckID      string
-	NoteTypePK  uint64
-	Kind        string
 	Template    string
 	FieldsJSON  string
 	TagsJSON    string
@@ -40,9 +37,8 @@ type exportScanRow struct {
 
 // exportPageRow is one row within a page: the external shape plus the auto-increment primary key used to advance to the next page.
 type exportPageRow struct {
-	cardPK     uint64
-	noteTypePK uint64
-	out        ExportRow
+	cardPK uint64
+	out    ExportRow
 }
 
 // ExportCards reads card-level export data page by page via a callback: take a page (closing the cursor once read), hand that page row by row to
@@ -89,9 +85,8 @@ func (a *API) exportCardPage(ctx context.Context, userID uint64, deckIDs []uint6
 	// Progress columns are selected only when include_progress is set; without progress, card_states is not referenced,
 	// otherwise SQL reports "no such column" for the missing JOIN.
 	// All three id columns take each table's public_id (external id); deck needs an extra JOIN on decks to get its external id.
-	// notes.kind is gone; the note type id comes along and the kind is derived from its config below.
 	selectCols := `cards.id AS card_pk, cards.public_id AS card_id, notes.public_id AS note_id,
-	        decks.public_id AS deck_id, notes.note_type_id AS note_type_pk, cards.template AS template,
+	        decks.public_id AS deck_id, cards.template AS template,
 	        notes.fields_json AS fields_json, notes.tags_json AS tags_json,
 	        notes.external_ref AS external_ref`
 	q := a.db.WithContext(ctx).Table("cards").
@@ -126,12 +121,11 @@ func (a *API) exportCardPage(ctx context.Context, userID uint64, deckIDs []uint6
 			cardPK: r.CardPK,
 			out: ExportRow{
 				CardID: r.CardID, NoteID: r.NoteID, DeckID: r.DeckID,
-				Kind: "", Template: r.Template,
-				Fields: store.FieldsOrEmpty(r.FieldsJSON), Tags: store.TagsOrEmpty(r.TagsJSON),
+				Template: r.Template,
+				Fields:   store.FieldsOrEmpty(r.FieldsJSON), Tags: store.TagsOrEmpty(r.TagsJSON),
 				ExternalRef: r.ExternalRef,
 				State:       r.State, DueAt: r.DueAt, Reps: r.Reps, Lapses: r.Lapses,
 			},
-			noteTypePK: r.NoteTypePK,
 		})
 	}
 	iterErr := rows.Err()
@@ -140,26 +134,6 @@ func (a *API) exportCardPage(ctx context.Context, userID uint64, deckIDs []uint6
 	if iterErr != nil {
 		a.logger.Error("iterate export rows failed", "user_id", userID, "error", iterErr)
 		return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to export cards")
-	}
-	// The note kind lives in the note type config, and resolving it needs a query. The cursor is closed by now, so the
-	// single database connection is free; resolving inside the loop over an open cursor would deadlock on SQLite.
-	kinds := map[uint64]string{}
-	noteTypes := store.NewNoteTypeStore(a.db)
-	for i := range page {
-		noteTypePK := page[i].noteTypePK
-		if noteTypePK == 0 {
-			continue
-		}
-		kind, cached := kinds[noteTypePK]
-		if !cached {
-			if nt, err := noteTypes.ByID(ctx, noteTypePK); err == nil {
-				if cfg, err := nt.Config(); err == nil {
-					kind = notetype.EngramStockKindFor(cfg)
-				}
-			}
-			kinds[noteTypePK] = kind
-		}
-		page[i].out.Kind = kind
 	}
 	return page, nil
 }

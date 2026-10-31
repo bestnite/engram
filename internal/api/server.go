@@ -212,7 +212,6 @@ func (a *API) Register(r gin.IRouter) {
 	v1.DELETE("/notes/:id/suspension", a.authn.RequireScope(store.ScopeReview), a.deleteNoteSuspension)
 	v1.GET("/stats/summary", a.authn.RequireScope(store.ScopeRead), a.statsSummary)
 	// Card-type self-description: static metadata (no user state), for the frontend to render edit forms and review controls.
-	v1.GET("/card-types", a.authn.RequireScope(store.ScopeRead), a.cardTypes)
 	v1.GET("/export", a.authn.RequireScope(store.ScopeRead), a.exportCards)
 	v1.GET("/decks/:id/package", a.authn.RequireScope(store.ScopeRead), a.handleExportPackage)
 	v1.POST("/decks/import", a.authn.RequireScope(store.ScopeWrite), a.handleImportPackage)

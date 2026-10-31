@@ -23,7 +23,6 @@ const card: DueCard = {
   state: 'new',
   due_at: '',
   retrievability: 0,
-  kind: 'basic',
   fields: { front: 'Q', back: 'A' },
   tags: [],
   template: 'forward',
@@ -55,14 +54,9 @@ describe('ReviewView audio and speech controls', () => {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
         ...faces(TTS_HTML, AUDIO_HTML),
-        front_html: TTS_HTML,
-        back_html: AUDIO_HTML,
-        options_html: [],
-        blanks: null,
         edit_href: '',
         intervals: [],
       }),
-      getCardTypes: vi.fn(),
     } as unknown as ApiClient;
     const target = document.createElement('div');
     document.body.appendChild(target);

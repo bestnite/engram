@@ -42,18 +42,18 @@ func TestNotePreviewReturnsHTMLAndPreservesTeX(t *testing.T) {
 	}
 	var preview struct {
 		Cards []struct {
-			FrontHTML string `json:"front_html"`
-			BackHTML  string `json:"back_html"`
+			Front CardFace `json:"front"`
+			Back  CardFace `json:"back"`
 		} `json:"cards"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &preview); err != nil || len(preview.Cards) != 1 {
 		t.Fatalf("decode preview response: %v (body %s)", err, rec.Body.String())
 	}
 	// The preview shows the stored HTML unchanged: the server does not sanitise, and the frame sandbox is the boundary.
-	if !strings.Contains(preview.Cards[0].FrontHTML, "onerror") || !strings.Contains(preview.Cards[0].BackHTML, "<script") {
+	if !strings.Contains(preview.Cards[0].Front.HTML, "onerror") || !strings.Contains(preview.Cards[0].Back.HTML, "<script") {
 		t.Fatalf("preview did not return the stored HTML: %+v", preview.Cards[0])
 	}
-	if !strings.Contains(preview.Cards[0].FrontHTML, `\(x^2\)`) || !strings.Contains(preview.Cards[0].BackHTML, "safe") {
+	if !strings.Contains(preview.Cards[0].Front.HTML, `\(x^2\)`) || !strings.Contains(preview.Cards[0].Back.HTML, "safe") {
 		t.Fatalf("TeX or content missing: %+v", preview.Cards[0])
 	}
 }
@@ -72,8 +72,8 @@ func TestNotePreviewKeepsChoiceOptionsInline(t *testing.T) {
 	}
 	var body struct {
 		Cards []struct {
-			FrontHTML string `json:"front_html"`
-			BackHTML  string `json:"back_html"`
+			Front CardFace `json:"front"`
+			Back  CardFace `json:"back"`
 		} `json:"cards"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
@@ -82,7 +82,7 @@ func TestNotePreviewKeepsChoiceOptionsInline(t *testing.T) {
 	if len(body.Cards) != 1 {
 		t.Fatalf("preview cards = %d, want 1 (body %s)", len(body.Cards), rec.Body.String())
 	}
-	front := body.Cards[0].FrontHTML
+	front := body.Cards[0].Front.HTML
 	if !strings.Contains(front, "pick-one") {
 		t.Fatalf("preview front is missing the question: %s", front)
 	}
@@ -91,8 +91,8 @@ func TestNotePreviewKeepsChoiceOptionsInline(t *testing.T) {
 			t.Errorf("preview front repeats option %q that the answer control draws: %s", option, front)
 		}
 	}
-	if !strings.Contains(body.Cards[0].BackHTML, "beta") {
-		t.Errorf("preview back = %s, want the correct option", body.Cards[0].BackHTML)
+	if !strings.Contains(body.Cards[0].Back.HTML, "beta") {
+		t.Errorf("preview back = %s, want the correct option", body.Cards[0].Back.HTML)
 	}
 }
 

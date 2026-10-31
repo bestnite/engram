@@ -17,16 +17,27 @@ func TestSubmitReviewGradingRulesOverMCP(t *testing.T) {
 	deck := seedDeck(t, db, u.ID)
 	key := newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite, store.ScopeReview})
 	cs := connect(t, ts.URL, key)
-	body := `{"notes":[{"kind":"true_false","fields":{"statement":"water is wet","answer":true},"external_ref":"tf:1"},` +
-		`{"kind":"basic","fields":{"front":"q","back":"a"},"external_ref":"b:1"}]}`
+	trueFalseType := createStockNoteType(t, db, deck.ID, "true_false").PublicID
+	basicType := createStockNoteType(t, db, deck.ID, "basic").PublicID
+	body := fmt.Sprintf(`{"notes":[{"note_type":%q,"fields":{"statement":"water is wet","answer":true},"external_ref":"tf:1"},`+
+		`{"note_type":%q,"fields":{"front":"q","back":"a"},"external_ref":"b:1"}]}`, trueFalseType, basicType)
 	if st, raw := rest(t, ts.URL, http.MethodPost, fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID), key, body); st != 200 {
 		t.Fatalf("seed import status = %d body %v", st, raw)
 	}
 	_, exp := rest(t, ts.URL, http.MethodGet, fmt.Sprintf("/api/v1/export?deck=%s&format=json", deck.PublicID), key, "")
-	cardByKind := map[string]string{}
+	var gradedCardID, selfCardID string
 	for _, raw := range exp["cards"].([]any) {
 		c := raw.(map[string]any)
-		cardByKind[c["kind"].(string)] = c["card_id"].(string)
+		fields, _ := c["fields"].(map[string]any)
+		if statement, _ := fields["statement"].(string); statement == "water is wet" {
+			gradedCardID, _ = c["card_id"].(string)
+		}
+		if front, _ := fields["front"].(string); front == "q" {
+			selfCardID, _ = c["card_id"].(string)
+		}
+	}
+	if gradedCardID == "" || selfCardID == "" {
+		t.Fatalf("seeded cards not found in export: %v", exp)
 	}
 
 	rejected := []struct {
@@ -34,8 +45,8 @@ func TestSubmitReviewGradingRulesOverMCP(t *testing.T) {
 		args map[string]any
 		want string
 	}{
-		{"graded card with a rating", map[string]any{"card_id": cardByKind["true_false"], "rating": 4}, "graded by the server"},
-		{"forged grade_source", map[string]any{"card_id": cardByKind["basic"], "rating": 3, "grade_source": "llm"}, "grade_source"},
+		{"graded card with a rating", map[string]any{"card_id": gradedCardID, "rating": 4}, "graded by the server"},
+		{"forged grade_source", map[string]any{"card_id": selfCardID, "rating": 3, "grade_source": "llm"}, "grade_source"},
 	}
 	for _, tc := range rejected {
 		_, isErr, text := callTool(t, cs, "submit_review", tc.args)
@@ -49,7 +60,7 @@ func TestSubmitReviewGradingRulesOverMCP(t *testing.T) {
 		t.Fatalf("rejected submissions wrote %d review rows", rows)
 	}
 
-	out, isErr, text := callTool(t, cs, "submit_review", map[string]any{"card_id": cardByKind["true_false"], "answer": true})
+	out, isErr, text := callTool(t, cs, "submit_review", map[string]any{"card_id": gradedCardID, "answer": true})
 	if isErr {
 		t.Fatalf("graded submission error: %s", text)
 	}

@@ -69,7 +69,7 @@ func (s *Server) notePreview(c *gin.Context) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	// Preview renders the same card faces as the review path. The base travels on every response; the relative media
+	// Preview renders the same card faces as the review path. The media base travels on each face; the relative media
 	// names are handed out only when the caller declares the HTML is for the frame, because without the frame's <base> a
 	// relative name would resolve against the SPA page.
 	mediaBase := s.frameMediaBase(c.Request.Context(), user.ID, deck.ID)
@@ -83,13 +83,11 @@ func (s *Server) notePreview(c *gin.Context) {
 			back.HTML = absoluteMediaRefs(back.HTML)
 		}
 		result = append(result, gin.H{
-			"front":      front,
-			"back":       back,
-			"front_html": front.HTML,
-			"back_html":  back.HTML,
+			"front": front,
+			"back":  back,
 		})
 	}
-	c.JSON(http.StatusOK, gin.H{"cards": result, "media_base": mediaBase})
+	c.JSON(http.StatusOK, gin.H{"cards": result})
 }
 
 // noteTypePreview renders one template of an unsaved note type config.
@@ -148,8 +146,9 @@ func (s *Server) noteTypePreview(c *gin.Context) {
 		writeRenderErrorDetail(c, http.StatusBadRequest, api.CodeInvalidRequest, err.Error())
 		return
 	}
-	// The faces follow the same media rule as the note preview: the base travels on every response, and the relative
-	// names are handed out only when the caller declares the HTML is for the frame.
+	// The faces follow the same media rule as the note preview: the relative names are handed out only when the caller
+	// declares the HTML is for the frame, because without the frame's <base> a relative name would resolve against the
+	// SPA page. The media base itself travels on each face.
 	mediaBase := s.frameMediaBase(c.Request.Context(), user.ID, deck.ID)
 	if !frameOutputRequested(c) || mediaBase == "" {
 		frontHTML = absoluteMediaRefs(frontHTML)
@@ -162,7 +161,6 @@ func (s *Server) noteTypePreview(c *gin.Context) {
 		"back": CardFace{
 			HTML: backHTML, CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideBack.String(), MediaBase: mediaBase,
 		},
-		"media_base": mediaBase,
 	})
 }
 

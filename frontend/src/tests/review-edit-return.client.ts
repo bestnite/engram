@@ -34,7 +34,6 @@ describe('ReviewView edit entry', () => {
     state: 'new',
     due_at: '',
     retrievability: 0,
-    kind: 'basic',
     fields: { front: 'Q', back: 'A' },
     tags: [],
     template: 'forward',
@@ -52,12 +51,8 @@ describe('ReviewView edit entry', () => {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
         ...faces('<p>Q</p>', '<p>A</p>'),
-        front_html: '<p>Q</p>',
-        back_html: '<p>A</p>',
-        blanks: null,
         edit_href: editHref,
       }),
-      getCardTypes: vi.fn(),
     } as unknown as ApiClient;
     const target = document.createElement('div');
     document.body.appendChild(target);

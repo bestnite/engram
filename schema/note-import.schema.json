@@ -31,23 +31,14 @@
   "$defs": {
     "note": {
       "title": "Note",
-      "description": "One note. It names its note type with 'note_type' (the permanent contract) or the transitional 'kind'; 'fields' maps a field name of that note type to its HTML value.",
+      "description": "One note. It names its note type with 'note_type', and 'fields' maps a field name of that note type to its HTML value.",
       "type": "object",
-      "required": ["fields"],
-      "anyOf": [
-        { "required": ["note_type"] },
-        { "required": ["kind"] }
-      ],
+      "required": ["note_type", "fields"],
       "properties": {
         "note_type": {
           "type": "string",
           "minLength": 1,
-          "description": "Opaque public id of a note type of the deck in the path, as returned by GET /api/v1/decks/:id/note-types. The server maps every field name to the matching field id of this note type. When both 'note_type' and 'kind' are present, 'note_type' wins."
-        },
-        "kind": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Transitional alias for 'note_type': an engram stock kind such as 'basic' or 'cloze'. The server resolves it to the deck's stock note type for that kind and creates the note type when the deck has none. New clients send 'note_type'; this field remains until the rich-text editor replaces the card-kind editor."
+          "description": "Opaque public id of a note type of the deck in the path, as returned by GET /api/v1/decks/:id/note-types. The server maps every field name to the matching field id of this note type."
         },
         "fields": {
           "type": "object",

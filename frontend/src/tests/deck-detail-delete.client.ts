@@ -5,7 +5,6 @@ import { apiClient } from '../lib/api';
 import type { Deck } from '../lib/api';
 import { routeStore, matchRoute } from '../lib/router';
 import { setLocale } from '../lib/i18n';
-import { setCardTypes } from '../lib/card-types';
 
 /**
  * Deck deletion from the deck detail header: the entry point opens a confirmation dialog, the confirmed
@@ -42,10 +41,8 @@ describe('DeckDetailView deck deletion', () => {
 
   async function setup(): Promise<void> {
     setLocale('zh-CN');
-    setCardTypes(null);
     window.history.replaceState({}, '', '/decks/d1');
     routeStore.set(matchRoute('/decks/d1'));
-    vi.spyOn(apiClient, 'getCardTypes').mockResolvedValue({ card_types: [] } as never);
     vi.spyOn(apiClient, 'getDeckQueueCounts').mockResolvedValue({ decks: [] });
     target = document.createElement('div');
     document.body.appendChild(target);

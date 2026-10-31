@@ -15,10 +15,7 @@ import (
 func seedNoteMCP(t *testing.T, db *gorm.DB, deckID uint64, kind, fieldsJSON string) string {
 	t.Helper()
 	now := time.Now().UTC()
-	noteType, err := store.NewNoteStore(db).EnsureStockNoteType(t.Context(), deckID, kind)
-	if err != nil {
-		t.Fatalf("ensure note type %q: %v", kind, err)
-	}
+	noteType := createStockNoteType(t, db, deckID, kind)
 	cfg, err := noteType.Config()
 	if err != nil {
 		t.Fatalf("decode note type %q: %v", kind, err)

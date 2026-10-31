@@ -209,9 +209,6 @@ func TestDueCardsContractFields(t *testing.T) {
 	if head.Template != "forward" {
 		t.Errorf("Template = %q, want forward", head.Template)
 	}
-	if head.Kind != "basic" {
-		t.Errorf("Kind = %q, want basic", head.Kind)
-	}
 	if head.Fields["front"] != "q1" {
 		t.Errorf("Fields[front] = %v, want q1", head.Fields["front"])
 	}

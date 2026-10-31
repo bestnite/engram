@@ -14,7 +14,6 @@ import (
 
 	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/auth"
-	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
@@ -466,12 +465,9 @@ func (a *API) GetNote(ctx context.Context, userID uint64, notePublicID string) (
 
 // ImportNote is one note of a bulk import; field names match schema/note-import.schema.json.
 //
-// NoteType is the note type public id and Fields maps a field name to its HTML value. Kind is the
-// transitional alias the current SPA still sends: when NoteType is empty, Kind resolves to the deck's
-// stock note type for that kind, creating it when the deck has none.
+// NoteType is the note type public id and Fields maps a field name to its HTML value.
 type ImportNote struct {
 	NoteType    string         `json:"note_type"`
-	Kind        string         `json:"kind"`
 	Fields      map[string]any `json:"fields"`
 	ExternalRef string         `json:"external_ref"`
 	// NoteID addresses an existing note by external id; mutually exclusive with ExternalRef. An empty string means not addressed by id.
@@ -550,8 +546,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 
 	for i, item := range req.Notes {
 		item.NoteType = strings.TrimSpace(item.NoteType)
-		item.Kind = strings.TrimSpace(item.Kind)
-		if item.NoteType == "" && item.Kind == "" {
+		if item.NoteType == "" {
 			resp.Errors = append(resp.Errors, ImportError{i, "note_type is required"})
 			hasFailure = true
 			continue
@@ -560,13 +555,6 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 			resp.Errors = append(resp.Errors, ImportError{i, "fields are required"})
 			hasFailure = true
 			continue
-		}
-		if item.NoteType == "" {
-			if _, ok := notetype.EngramStockByKind(item.Kind); !ok {
-				resp.Errors = append(resp.Errors, ImportError{i, unknownKindText(item.Kind)})
-				hasFailure = true
-				continue
-			}
 		}
 
 		if strings.TrimSpace(item.NoteID) != "" && strings.TrimSpace(item.ExternalRef) != "" {
@@ -598,24 +586,13 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 			existing = found
 		}
 
-		var noteTypeID uint64
-		if item.NoteType != "" {
-			resolved, err := a.noteTypeIDForPublicID(ctx, d.ID, item.NoteType)
-			if err != nil {
-				resp.Errors = append(resp.Errors, ImportError{i, err.Error()})
-				hasFailure = true
-				continue
-			}
-			noteTypeID = resolved
-		} else {
-			resolved, err := a.noteTypeIDFor(ctx, d.ID, item.Kind)
-			if err != nil {
-				resp.Errors = append(resp.Errors, ImportError{i, err.Error()})
-				hasFailure = true
-				continue
-			}
-			noteTypeID = resolved
+		resolved, err := a.noteTypeIDForPublicID(ctx, d.ID, item.NoteType)
+		if err != nil {
+			resp.Errors = append(resp.Errors, ImportError{i, err.Error()})
+			hasFailure = true
+			continue
 		}
+		noteTypeID := resolved
 		n := store.Note{
 			DeckID:     d.ID,
 			NoteTypeID: store.Ptr(noteTypeID),
@@ -739,10 +716,9 @@ func (a *API) writeImportBatch(ctx context.Context, batch []importPlan, resp *Im
 }
 
 // UpdateNoteInput is the single-note update input; Tags uses a pointer to distinguish "not provided"
-// from "clear it". NoteType is the note type public id, and Kind is the transitional alias the current SPA sends.
+// from "clear it". NoteType is the note type public id the submitted field values belong to.
 type UpdateNoteInput struct {
 	NoteType string
-	Kind     string
 	Fields   map[string]any
 	Tags     *[]string
 }
@@ -758,36 +734,13 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 	if len(in.Fields) == 0 {
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "fields are required")
 	}
-	noteTypeID := uint64(0)
-	if publicID := strings.TrimSpace(in.NoteType); publicID != "" {
-		resolved, err := a.noteTypeIDForPublicID(ctx, existing.DeckID, publicID)
-		if err != nil {
-			return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
-		}
-		noteTypeID = resolved
-	} else {
-		// The kind alias names a shape, not one note type. A deck may hold several note types of the same shape
-		// (a copy with its own CSS or templates), so the note keeps the note type it already has when the request
-		// names no type, or names the shape the note already has. Resolving the alias to "the first type of that
-		// shape" would move the note into a different type on an unrelated content edit.
-		kind := strings.TrimSpace(in.Kind)
-		if kind == "" || kind == a.noteKindOf(ctx, existing) {
-			if existing.NoteTypeID != nil {
-				noteTypeID = *existing.NoteTypeID
-			}
-		} else {
-			resolved, err := a.noteTypeIDFor(ctx, existing.DeckID, kind)
-			if err != nil {
-				return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
-			}
-			noteTypeID = resolved
-		}
-	}
-	if noteTypeID == 0 && existing.NoteTypeID != nil {
-		noteTypeID = *existing.NoteTypeID
-	}
-	if noteTypeID == 0 {
+	publicID := strings.TrimSpace(in.NoteType)
+	if publicID == "" {
 		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "note_type is required")
+	}
+	noteTypeID, err := a.noteTypeIDForPublicID(ctx, existing.DeckID, publicID)
+	if err != nil {
+		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
 	}
 	n := store.Note{ID: existing.ID, DeckID: existing.DeckID, NoteTypeID: store.Ptr(noteTypeID)}
 	if in.Tags != nil {
@@ -1114,7 +1067,6 @@ type ExportRow struct {
 	CardID      string         `json:"card_id"`
 	NoteID      string         `json:"note_id"`
 	DeckID      string         `json:"deck_id"`
-	Kind        string         `json:"kind"`
 	Template    string         `json:"template"`
 	Fields      map[string]any `json:"fields"`
 	Tags        []string       `json:"tags"`
@@ -1135,7 +1087,6 @@ type DueCard struct {
 	State          string            `json:"state"`
 	DueAt          time.Time         `json:"due_at"`
 	Retrievability float64           `json:"retrievability"`
-	Kind           string            `json:"kind"`
 	Fields         map[string]string `json:"fields"`
 	Tags           []string          `json:"tags"`
 	Template       string            `json:"template,omitempty"`
@@ -1149,7 +1100,7 @@ type DueCard struct {
 	// The fields map is keyed by field id but keeps no order, so the client cannot recover this order on its own.
 	FieldOrder []string `json:"field_order"`
 	// OptionOrder is the display order of a choice card's options: slot b shows stored option index OptionOrder[b].
-	// It is null for card kinds without option controls, and the submitted answer stays a stored option index.
+	// It is null for templates whose answer control reads no options, and the submitted answer stays a stored option index.
 	OptionOrder []int `json:"option_order"`
 }
 
@@ -1293,7 +1244,6 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 			State:          it.State.String(),
 			DueAt:          it.DueAt,
 			Retrievability: it.Retrievability,
-			Kind:           view.kind,
 			Fields:         values,
 			Tags:           store.TagsOrEmpty(note.TagsJSON),
 			FieldOrder:     fieldOrder(view.config),

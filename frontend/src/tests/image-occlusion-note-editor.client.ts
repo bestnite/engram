@@ -68,7 +68,6 @@ function noteFixture(overrides: Partial<Note> = {}): Note {
   return {
     id: '42',
     deck_id: '5',
-    kind: '',
     note_type: 'nt-occlusion',
     fields: {},
     tags: [],

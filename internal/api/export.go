@@ -114,7 +114,7 @@ func (a *API) streamCSV(c *gin.Context, ctx context.Context, userID uint64, deck
 
 // csvHeader returns the CSV header; include_progress decides whether progress columns are present (consistent with the JSON export).
 func csvHeader(includeProgress bool) []string {
-	header := []string{"card_id", "note_id", "deck_id", "kind", "template", "fields_json", "tags_json", "external_ref"}
+	header := []string{"card_id", "note_id", "deck_id", "template", "fields_json", "tags_json", "external_ref"}
 	if includeProgress {
 		header = append(header, "state", "due_at", "reps", "lapses")
 	}
@@ -130,7 +130,7 @@ func csvRecord(r ExportRow, includeProgress bool) []string {
 		ref = *r.ExternalRef
 	}
 	rec := []string{
-		r.CardID, r.NoteID, r.DeckID, r.Kind, r.Template,
+		r.CardID, r.NoteID, r.DeckID, r.Template,
 		string(fieldsJSON), string(tagsJSON), ref,
 	}
 	if includeProgress {

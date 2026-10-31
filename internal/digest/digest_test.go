@@ -105,10 +105,7 @@ func seedCard(t *testing.T, db *gorm.DB, userID uint64) uint64 {
 	if err := db.Create(&deck).Error; err != nil {
 		t.Fatalf("create deck: %v", err)
 	}
-	noteType, err := store.NewNoteStore(db).EnsureStockNoteType(context.Background(), deck.ID, "basic")
-	if err != nil {
-		t.Fatalf("ensure note type: %v", err)
-	}
+	noteType := createStockNoteType(t, db, deck.ID, "basic")
 	note := store.Note{
 		DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID), FieldsJSON: `{"front":"q","back":"a"}`,
 		TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,

@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render } from 'svelte/server';
 import NoteFieldsForm from '../lib/components/NoteFieldsForm.svelte';
-import { emptyFields } from '../lib/card-fields';
-import { backField, createCatalog, fieldsForKind, frontField } from '../lib/card-types';
+import { emptyFields, type FieldSpec } from '../lib/card-fields';
 import { setLocale } from '../lib/i18n';
-import { CARD_TYPES } from './card-type-fixture';
 
 /**
  * The rich-text editor is the body of a card face field: an editing frame plus a toolbar whose
@@ -12,20 +10,37 @@ import { CARD_TYPES } from './card-type-fixture';
  * the editor: a face textarea gets the editor, and a field off the face, a single-line field, a
  * field stored as an array or a checkbox never does.
  */
-describe('NoteFieldsForm rich-text field', () => {
-  const catalog = createCatalog(CARD_TYPES.kinds);
+// Field tables of the stock note types the cases below render.
+const SPECS: Record<string, FieldSpec[]> = {
+  basic: [
+    { key: 'front', control: 'textarea', required: true },
+    { key: 'back', control: 'textarea', required: true },
+    { key: 'extra', control: 'textarea', required: false },
+    { key: 'source_url', control: 'text', required: false },
+  ],
+  list: [
+    { key: 'prompt', control: 'textarea', required: true },
+    { key: 'items', control: 'lines', required: true },
+    { key: 'ordered', control: 'bool', required: false },
+  ],
+};
+const FACE_FIELDS: Record<string, string[]> = {
+  basic: ['front', 'back'],
+  list: ['prompt', 'items'],
+};
 
+describe('NoteFieldsForm rich-text field', () => {
   beforeEach(() => {
     setLocale('zh-CN');
   });
 
   function renderKind(kind: string): string {
-    const specs = fieldsForKind(catalog, kind);
+    const specs = SPECS[kind]!;
     return render(NoteFieldsForm, {
       props: {
         specs,
         fields: emptyFields(specs),
-        faceFields: [frontField(catalog, kind), backField(catalog, kind)],
+        faceFields: FACE_FIELDS[kind],
         upload: async () => ({ url: '/media/a', name: 'a', mime: 'image/png' }),
       },
     }).html;
@@ -96,7 +111,7 @@ describe('NoteFieldsForm rich-text field', () => {
   });
 
   it('renders a plain-textarea field without the toolbar of a rich field', () => {
-    const specs = fieldsForKind(catalog, 'basic');
+    const specs = SPECS.basic!;
     const html = render(NoteFieldsForm, {
       props: {
         specs,

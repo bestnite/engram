@@ -52,7 +52,6 @@ type searchNotesIn struct {
 	DeckID  string `json:"deck_id" jsonschema:"the public id of the deck to search in"`
 	Query   string `json:"q,omitempty" jsonschema:"keywords matched case-insensitively against the text of the note fields; every whitespace-separated term must occur"`
 	Tag     string `json:"tag,omitempty" jsonschema:"exact tag filter"`
-	Kind    string `json:"kind,omitempty" jsonschema:"card type filter (e.g. basic, cloze)"`
 	Status  string `json:"status,omitempty" jsonschema:"note status filter"`
 	Page    int    `json:"page,omitempty" jsonschema:"page number, 1-based"`
 	PerPage int    `json:"per_page,omitempty" jsonschema:"items per page"`
@@ -90,10 +89,7 @@ type exportDeckIn struct {
 
 // importNoteIn is the input for a single note; field names match schema/note-import.schema.json.
 type importNoteIn struct {
-	NoteType string `json:"note_type,omitempty" jsonschema:"public id of the note type; list_note_types returns the deck's note types and get_note_type their field names"`
-	// Kind is the transitional alias for note_type: the current SPA still sends a card kind, and the server
-	// resolves it to the deck's stock note type for that kind.
-	Kind        string         `json:"kind,omitempty" jsonschema:"transitional alias for note_type: a stock card kind such as basic or cloze"`
+	NoteType    string         `json:"note_type,omitempty" jsonschema:"public id of the note type; list_note_types returns the deck's note types and get_note_type their field names"`
 	Fields      map[string]any `json:"fields" jsonschema:"field values keyed by field name; every value is an HTML string (the server maps names to field ids)"`
 	ExternalRef string         `json:"external_ref,omitempty" jsonschema:"caller-defined idempotency key, unique per deck"`
 	// NoteID addresses an existing note by public id and rewrites it in place; mutually exclusive with external_ref.
@@ -153,9 +149,8 @@ type createImportUploadIn struct {
 // updateNoteIn is the input of update_note.
 type updateNoteIn struct {
 	NoteID string `json:"note_id" jsonschema:"the public id of the note to update"`
-	// NoteType is the note type public id; Kind is the transitional alias and defaults to the existing type.
-	NoteType string         `json:"note_type,omitempty" jsonschema:"public id of the note type; defaults to the note's existing type"`
-	Kind     string         `json:"kind,omitempty" jsonschema:"transitional alias for note_type: a stock card kind such as basic or cloze"`
+	// NoteType is the note type public id the new field values belong to.
+	NoteType string         `json:"note_type" jsonschema:"public id of the note type the new field values belong to"`
 	Fields   map[string]any `json:"fields" jsonschema:"new field values keyed by field name; every value is an HTML string"`
 	Tags     []string       `json:"tags,omitempty" jsonschema:"replacement tags"`
 }
@@ -297,7 +292,6 @@ func (s *Server) searchNotes(ctx context.Context, id Identity, in searchNotesIn)
 		PerPage: in.PerPage,
 		Query:   in.Query,
 		Tag:     in.Tag,
-		Kind:    in.Kind,
 		Status:  in.Status,
 	})
 	notes, total, err := s.api.ListNotes(ctx, id.User.ID, d.ID, opts)
@@ -454,7 +448,6 @@ func (s *Server) updateNote(ctx context.Context, id Identity, in updateNoteIn) (
 	}
 	updated, err := s.api.UpdateNote(ctx, id.User.ID, n.ID, id.apiKeyID(), api.UpdateNoteInput{
 		NoteType: in.NoteType,
-		Kind:     in.Kind,
 		Fields:   in.Fields,
 		Tags:     tags,
 	})
@@ -561,7 +554,6 @@ func toImportRequest(in bulkNotesIn) api.ImportRequest {
 	for _, n := range in.Notes {
 		notes = append(notes, api.ImportNote{
 			NoteType:    n.NoteType,
-			Kind:        n.Kind,
 			Fields:      n.Fields,
 			ExternalRef: n.ExternalRef,
 			NoteID:      n.NoteID,

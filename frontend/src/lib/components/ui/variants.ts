@@ -28,7 +28,7 @@ export const buttonVariants = tv({
   defaultVariants: { variant: 'primary', size: 'md' },
 });
 
-/** The single source of styling for status badges (revoked, card kind, tags, etc.). */
+/** The single source of styling for status badges (revoked, note type, tags, etc.). */
 export const badgeVariants = tv({
   base: 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
   variants: {

@@ -43,7 +43,7 @@ const MaxNotePageSize = 200
 // handing LIMIT/OFFSET an illegal value; pages beyond the bound are treated as "past the last page" (empty result).
 const MaxNotePage = 1_000_000
 
-// NoteListOptions holds the card list query criteria (paging, search, tag and kind filters).
+// NoteListOptions holds the card list query criteria (paging, search, tag and status filters).
 type NoteListOptions struct {
 	DeckID uint64
 	// Page starts at 1; values below 1 are treated as 1.
@@ -55,9 +55,6 @@ type NoteListOptions struct {
 	Query string
 	// Tag matches a tag in tags_json exactly (quoted boundaries, so a prefix does not match).
 	Tag string
-	// Kind filters by the engram stock kind the note's note type was created from; an empty string means no filter.
-	// The note row itself stores only note_type_id, so the filter is translated into a note type id set first.
-	Kind string
 	// Status takes the constants above; an empty string equals NoteStatusActive.
 	Status string
 }
@@ -94,17 +91,11 @@ type NoteStore struct {
 // NewNoteStore builds the note store.
 func NewNoteStore(db *gorm.DB) *NoteStore { return &NoteStore{db: db} }
 
-// EnsureStockNoteType returns the deck's note type for one engram stock kind, creating it when the deck has none.
+// ensureStockNoteType returns the deck's note type for one engram stock kind, creating it when the deck has none.
 //
-// This is the transitional entry point for the transports that still name a card kind instead of a note type id
-// (the REST/MCP note payloads and the deck package format). A deck keeps one note type per stock kind, so repeated
-// writes resolve to the same row and their notes stay together. The created note type is validated exactly like one
-// created through the note type store, so an invalid stock definition is rejected instead of stored.
-func (s *NoteStore) EnsureStockNoteType(ctx context.Context, deckID uint64, kind string) (*NoteType, error) {
-	return ensureStockNoteType(ctx, s.db, deckID, kind)
-}
-
-// ensureStockNoteType is EnsureStockNoteType on a caller's transaction.
+// A deck keeps one note type per stock kind, so repeated writes resolve to the same row and their notes stay together.
+// The created note type is validated exactly like one created through the note type store, so an invalid stock definition
+// is rejected instead of stored. Cloning a deck uses it to give the copy's notes a note type of their own deck.
 func ensureStockNoteType(ctx context.Context, tx *gorm.DB, deckID uint64, kind string) (*NoteType, error) {
 	kind = strings.TrimSpace(kind)
 	stock, ok := notetype.EngramStockByKind(kind)
@@ -137,41 +128,16 @@ func ensureStockNoteType(ctx context.Context, tx *gorm.DB, deckID uint64, kind s
 	return &nt, nil
 }
 
-// noteTypeIDsForKind returns the ids of the deck's note types created from an engram stock kind.
-func noteTypeIDsForKind(tx *gorm.DB, deckID uint64, kind string) ([]uint64, error) {
-	var types []NoteType
-	if err := tx.Where("deck_id = ?", deckID).Find(&types).Error; err != nil {
-		return nil, fmt.Errorf("list note types of deck %d: %w", deckID, err)
-	}
-	ids := make([]uint64, 0, len(types))
-	for i := range types {
-		cfg, err := types[i].Config()
-		if err != nil {
-			continue
-		}
-		if notetype.EngramStockKindFor(cfg) == kind {
-			ids = append(ids, types[i].ID)
-		}
-	}
-	return ids, nil
-}
-
 // NoteTypeFor resolves the note type of a note and decodes its config.
 func (s *NoteStore) NoteTypeFor(ctx context.Context, n *Note) (*NoteType, notetype.Config, error) {
 	return noteTypeFor(ctx, s.db, n)
 }
 
-// KindOf returns the engram stock kind a note's note type was created from, or the empty string for a note type that is
-// not one of the stock types.
+// kindOfNote returns the engram stock kind a note's note type was created from, or the empty string for a note type
+// that is not one of the stock types.
 //
-// The transitional transports (the old REST/MCP payloads and the deck package format) speak kinds, while a note stores only
-// its note type id, so this is where a kind is derived when one is needed. It is a read-side convenience: nothing that
-// decides behaviour reads a kind.
-func (s *NoteStore) KindOf(ctx context.Context, n *Note) string {
-	return kindOfNote(ctx, s.db, n)
-}
-
-// kindOfNote is KindOf on a caller's transaction.
+// A note stores only its note type id, so this is where a kind is derived when one is needed. Cloning a deck uses it to
+// give a copied note the copy's own note type of the same shape.
 func kindOfNote(ctx context.Context, tx *gorm.DB, n *Note) string {
 	_, cfg, err := noteTypeFor(ctx, tx, n)
 	if err != nil {
@@ -629,19 +595,6 @@ func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int
 	page := opts.Page
 	offset := (page - 1) * perPage
 
-	// The kind filter lives in the note type config, not in a notes column, so it is resolved to a note type id set first.
-	var kindTypeIDs []uint64
-	if v := strings.TrimSpace(opts.Kind); v != "" {
-		ids, err := noteTypeIDsForKind(s.db.WithContext(ctx), opts.DeckID, v)
-		if err != nil {
-			return nil, 0, err
-		}
-		if len(ids) == 0 {
-			return []Note{}, 0, nil
-		}
-		kindTypeIDs = ids
-	}
-
 	// The query is rebuilt on every call, so reusing one *gorm.DB does not carry Count's statement state into Find.
 	build := func() *gorm.DB {
 		q := s.db.WithContext(ctx).Model(&Note{})
@@ -654,9 +607,6 @@ func (s *NoteStore) List(ctx context.Context, opts NoteListOptions) ([]Note, int
 			// By default GORM's soft-delete scope excludes rows whose deleted_at is not null.
 		}
 		q = q.Where("notes.deck_id = ?", opts.DeckID)
-		if len(kindTypeIDs) > 0 {
-			q = q.Where("notes.note_type_id IN ?", kindTypeIDs)
-		}
 		q = whereNoteSearch(q, opts.Query)
 		if v := strings.TrimSpace(opts.Tag); v != "" {
 			q = WhereNoteTagsAny(q, []string{v})

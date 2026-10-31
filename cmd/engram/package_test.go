@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 	"gorm.io/gorm"
 )
@@ -38,8 +39,12 @@ func seedCLIDeck(t *testing.T, db *gorm.DB) (userID, deckID uint64) {
 		t.Fatalf("create deck: %v", err)
 	}
 	ns := store.NewNoteStore(db)
-	noteType, err := ns.EnsureStockNoteType(ctx, d.ID, "basic")
-	if err != nil {
+	stock, ok := notetype.EngramStockByKind("basic")
+	if !ok {
+		t.Fatal("the basic stock kind is not registered")
+	}
+	noteType := &store.NoteType{DeckID: d.ID, Name: stock.Name}
+	if err := store.NewNoteTypeStore(db).Create(ctx, noteType, stock.Config); err != nil {
 		t.Fatalf("create note type: %v", err)
 	}
 	for i, f := range []map[string]any{

@@ -1,25 +1,41 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render } from 'svelte/server';
 import NoteFieldsForm from '../lib/components/NoteFieldsForm.svelte';
-import { emptyFields } from '../lib/card-fields';
-import { backField, createCatalog, fieldsForKind, frontField } from '../lib/card-types';
+import { emptyFields, type FieldSpec } from '../lib/card-fields';
 import { setLocale } from '../lib/i18n';
-import { CARD_TYPES } from './card-type-fixture';
 
 /**
  * The cloze syntax explainer lives in a question-mark popover next to the label: the label
  * itself is now just the field name, and fields with no syntax to explain get no
  * question-mark button.
  */
-describe('NoteFieldsForm field help', () => {
-  const catalog = createCatalog(CARD_TYPES.kinds);
+// Field tables of the stock note types the cases below render.
+const SPECS: Record<string, FieldSpec[]> = {
+  basic: [
+    { key: 'front', control: 'textarea', required: true },
+    { key: 'back', control: 'textarea', required: true },
+    { key: 'extra', control: 'textarea', required: false },
+    { key: 'source_url', control: 'text', required: false },
+  ],
+  cloze: [{ key: 'text', control: 'textarea', required: true }],
+  list: [
+    { key: 'prompt', control: 'textarea', required: true },
+    { key: 'items', control: 'lines', required: true },
+    { key: 'ordered', control: 'bool', required: false },
+  ],
+};
+const FACE_FIELDS: Record<string, string[]> = {
+  basic: ['front', 'back'],
+  list: ['prompt', 'items'],
+};
 
+describe('NoteFieldsForm field help', () => {
   beforeEach(() => {
     setLocale('zh-CN');
   });
 
   function renderKind(kind: string): string {
-    const specs = fieldsForKind(catalog, kind);
+    const specs = SPECS[kind]!;
     return render(NoteFieldsForm, { props: { specs, fields: emptyFields(specs) } }).html;
   }
 
@@ -42,19 +58,17 @@ describe('NoteFieldsForm field help', () => {
  * because a formatting command cannot address one element of an array or text compared verbatim.
  */
 describe('NoteFieldsForm rich-text toolbar', () => {
-  const catalog = createCatalog(CARD_TYPES.kinds);
-
   beforeEach(() => {
     setLocale('zh-CN');
   });
 
   function renderKind(kind: string): string {
-    const specs = fieldsForKind(catalog, kind);
+    const specs = SPECS[kind]!;
     return render(NoteFieldsForm, {
       props: {
         specs,
         fields: emptyFields(specs),
-        faceFields: [frontField(catalog, kind), backField(catalog, kind)],
+        faceFields: FACE_FIELDS[kind],
         upload: async () => ({ url: '/media/a', name: 'a', mime: 'image/png' }),
       },
     }).html;
@@ -89,13 +103,19 @@ describe('NoteFieldsForm rich-text toolbar', () => {
   });
 
   it('gives a single-line back field no toolbar, since its text is compared as the answer', () => {
-    const html = renderKind('typed');
+    const specs: FieldSpec[] = [
+      { key: 'prompt', control: 'textarea', required: true },
+      { key: 'answer', control: 'text', required: true },
+    ];
+    const html = render(NoteFieldsForm, {
+      props: { specs, fields: emptyFields(specs), faceFields: ['prompt', 'answer'] },
+    }).html;
     expect(html).toContain('data-testid="note-field-prompt-toolbar"');
     expect(html).not.toContain('data-testid="note-field-answer-toolbar"');
   });
 
   it('renders no toolbar at all when the host names no face field', () => {
-    const specs = fieldsForKind(catalog, 'basic');
+    const specs = SPECS.basic!;
     const html = render(NoteFieldsForm, { props: { specs, fields: emptyFields(specs) } }).html;
     expect(html).not.toContain('-toolbar"');
   });

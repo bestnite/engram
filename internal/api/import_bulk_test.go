@@ -10,15 +10,15 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// buildBulkBody builds a bulk import body with n valid basic notes, external_ref set to b:<i>.
-func buildBulkBody(n int) string {
+// buildBulkBody builds a bulk import body with n valid notes of one note type, external_ref set to b:<i>.
+func buildBulkBody(n int, noteType string) string {
 	var b strings.Builder
 	b.WriteString(`{"notes":[`)
 	for i := 0; i < n; i++ {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		fmt.Fprintf(&b, `{"kind":"basic","fields":{"front":"q%d","back":"a%d"},"external_ref":"b:%d"}`, i, i, i)
+		fmt.Fprintf(&b, `{"note_type":%q,"fields":{"front":"q%d","back":"a%d"},"external_ref":"b:%d"}`, noteType, i, i, i)
 	}
 	b.WriteString(`]}`)
 	return b.String()
@@ -33,12 +33,13 @@ func TestBulkImportReportsInvalidRowIndexAndImportsValidRows(t *testing.T) {
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
+	noteType := createStockNoteType(t, env.db, deck.ID, "basic").PublicID
 
 	// Index 1 names a field its note type does not declare, so its write is rejected; indexes 0 and 2 are valid.
-	body := `{"notes":[` +
-		`{"kind":"basic","fields":{"front":"q0","back":"a0"},"external_ref":"r:0"},` +
-		`{"kind":"basic","fields":{"front":"q1","nosuch":"x"},"external_ref":"r:1"},` +
-		`{"kind":"basic","fields":{"front":"q2","back":"a2"},"external_ref":"r:2"}]}`
+	body := fmt.Sprintf(`{"notes":[`+
+		`{"note_type":%q,"fields":{"front":"q0","back":"a0"},"external_ref":"r:0"},`+
+		`{"note_type":%q,"fields":{"front":"q1","nosuch":"x"},"external_ref":"r:1"},`+
+		`{"note_type":%q,"fields":{"front":"q2","back":"a2"},"external_ref":"r:2"}]}`, noteType, noteType, noteType)
 
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, body)
 	if status != http.StatusOK {
@@ -73,9 +74,10 @@ func TestBulkImportBatchesTwoHundredRowsPerTransaction(t *testing.T) {
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
+	noteType := createStockNoteType(t, env.db, deck.ID, "basic").PublicID
 
 	const total = 205 // > ImportBatchSize(200), forcing at least two transaction batches.
-	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, buildBulkBody(total))
+	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, buildBulkBody(total, noteType))
 	if status != http.StatusOK {
 		t.Fatalf("first import status = %d, want 200 (body %s)", status, raw)
 	}
@@ -89,7 +91,7 @@ func TestBulkImportBatchesTwoHundredRowsPerTransaction(t *testing.T) {
 	assertNoteCardCount(t, env, deck.ID, total, total)
 
 	// Resubmit the same batch: everything hits on external_ref and is skipped under the skip policy, producing no duplicate cards.
-	body := `{"on_conflict":"skip",` + buildBulkBody(total)[1:]
+	body := `{"on_conflict":"skip",` + buildBulkBody(total, noteType)[1:]
 	status, raw = doJSON(t, router, http.MethodPost, path, k.Plaintext, body)
 	if status != http.StatusOK {
 		t.Fatalf("re-import status = %d, want 200 (body %s)", status, raw)
@@ -115,13 +117,14 @@ func TestBulkImportIsolatesRowErrorWithinBatch(t *testing.T) {
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
+	noteType := createStockNoteType(t, env.db, deck.ID, "basic").PublicID
 
 	// Indexes 0 and 1 use the same external_ref: the first pass finds no existing row for either, so both try to create;
 	// the second row in the batch hits the (deck_id, external_ref) unique constraint, so only it is reported, while 0 and 2 persist normally.
-	body := `{"notes":[` +
-		`{"kind":"basic","fields":{"front":"a","back":"A"},"external_ref":"dup"},` +
-		`{"kind":"basic","fields":{"front":"b","back":"B"},"external_ref":"dup"},` +
-		`{"kind":"basic","fields":{"front":"c","back":"C"},"external_ref":"uniq"}]}`
+	body := fmt.Sprintf(`{"notes":[`+
+		`{"note_type":%q,"fields":{"front":"a","back":"A"},"external_ref":"dup"},`+
+		`{"note_type":%q,"fields":{"front":"b","back":"B"},"external_ref":"dup"},`+
+		`{"note_type":%q,"fields":{"front":"c","back":"C"},"external_ref":"uniq"}]}`, noteType, noteType, noteType)
 
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, body)
 	if status != http.StatusOK {
@@ -149,11 +152,12 @@ func TestBulkImportResumesAfterPartialFailure(t *testing.T) {
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
+	noteType := createStockNoteType(t, env.db, deck.ID, "basic").PublicID
 
-	broken := `{"notes":[` +
-		`{"kind":"basic","fields":{"front":"a","back":"A"},"external_ref":"r:0"},` +
-		`{"kind":"basic","fields":{"front":"b","nosuch":"x"},"external_ref":"r:1"},` +
-		`{"kind":"basic","fields":{"front":"c","back":"C"},"external_ref":"r:2"}]}`
+	broken := fmt.Sprintf(`{"notes":[`+
+		`{"note_type":%q,"fields":{"front":"a","back":"A"},"external_ref":"r:0"},`+
+		`{"note_type":%q,"fields":{"front":"b","nosuch":"x"},"external_ref":"r:1"},`+
+		`{"note_type":%q,"fields":{"front":"c","back":"C"},"external_ref":"r:2"}]}`, noteType, noteType, noteType)
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, broken)
 	if status != http.StatusOK {
 		t.Fatalf("broken import status = %d, want 200 (body %s)", status, raw)
@@ -168,10 +172,10 @@ func TestBulkImportResumesAfterPartialFailure(t *testing.T) {
 	assertNoteCardCount(t, env, deck.ID, 2, 2)
 
 	// Replay the whole batch after fixing r:1: skip keeps the two imported rows from being redone, creating only the fixed row.
-	fixed := `{"on_conflict":"skip","notes":[` +
-		`{"kind":"basic","fields":{"front":"a","back":"A"},"external_ref":"r:0"},` +
-		`{"kind":"basic","fields":{"front":"b","back":"B"},"external_ref":"r:1"},` +
-		`{"kind":"basic","fields":{"front":"c","back":"C"},"external_ref":"r:2"}]}`
+	fixed := fmt.Sprintf(`{"on_conflict":"skip","notes":[`+
+		`{"note_type":%q,"fields":{"front":"a","back":"A"},"external_ref":"r:0"},`+
+		`{"note_type":%q,"fields":{"front":"b","back":"B"},"external_ref":"r:1"},`+
+		`{"note_type":%q,"fields":{"front":"c","back":"C"},"external_ref":"r:2"}]}`, noteType, noteType, noteType)
 	status, raw = doJSON(t, router, http.MethodPost, path, k.Plaintext, fixed)
 	if status != http.StatusOK {
 		t.Fatalf("resume import status = %d, want 200 (body %s)", status, raw)

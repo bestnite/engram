@@ -48,7 +48,7 @@ func TestRESTUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 
 	k := seedKey(t, env.keys, attacker.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
-	body := fmt.Sprintf(`{"fields":{"front":"<img src=\"%s.png\">","back":"x"}}`, sha)
+	body := fmt.Sprintf(`{"note_type":%q,"fields":{"front":"<img src=\"%s.png\">","back":"x"}}`, storedNoteTypeID(t, env, note.ID), sha)
 
 	status, raw := doJSON(t, router, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", note.PublicID), k.Plaintext, body)
 	if status != http.StatusForbidden {
@@ -96,7 +96,8 @@ func TestRESTBulkImportRejectsUnreadableMediaInjection(t *testing.T) {
 
 	k := seedKey(t, env.keys, attacker.ID, []string{store.ScopeWrite, store.ScopeRead}, nil)
 	router := env.router()
-	body := fmt.Sprintf(`{"notes":[{"kind":"basic","fields":{"front":"<img src=\"%s.png\">","back":"x"}}]}`, sha)
+	body := fmt.Sprintf(`{"notes":[{"note_type":%q,"fields":{"front":"<img src=\"%s.png\">","back":"x"}}]}`,
+		createStockNoteType(t, env.db, deck.ID, "basic").PublicID, sha)
 
 	status, raw := doJSON(t, router, http.MethodPost, fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID), k.Plaintext, body)
 	if status != http.StatusOK {

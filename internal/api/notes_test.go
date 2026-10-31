@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -34,10 +33,11 @@ func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite, store.ScopeRead}, nil)
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
+	noteType := createStockNoteType(t, env.db, deck.ID, "basic").PublicID
 
-	body := `{"notes":[` +
-		`{"kind":"basic","fields":{"front":"a","back":"b"},"external_ref":"n:1"},` +
-		`{"kind":"basic","fields":{"front":"c","back":"d"},"external_ref":"n:2"}]}`
+	body := fmt.Sprintf(`{"notes":[`+
+		`{"note_type":%q,"fields":{"front":"a","back":"b"},"external_ref":"n:1"},`+
+		`{"note_type":%q,"fields":{"front":"c","back":"d"},"external_ref":"n:2"}]}`, noteType, noteType)
 
 	// First import: everything created.
 	status, raw := doJSON(t, router, http.MethodPost, path, k.Plaintext, body)
@@ -72,9 +72,9 @@ func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 
 	// Third run with on_conflict=skip: everything skipped, still nothing created.
 	status, raw = doJSON(t, router, http.MethodPost, path, k.Plaintext,
-		`{"on_conflict":"skip","notes":[`+
-			`{"kind":"basic","fields":{"front":"a","back":"b"},"external_ref":"n:1"},`+
-			`{"kind":"basic","fields":{"front":"c","back":"d"},"external_ref":"n:2"}]}`)
+		fmt.Sprintf(`{"on_conflict":"skip","notes":[`+
+			`{"note_type":%q,"fields":{"front":"a","back":"b"},"external_ref":"n:1"},`+
+			`{"note_type":%q,"fields":{"front":"c","back":"d"},"external_ref":"n:2"}]}`, noteType, noteType))
 	if status != http.StatusOK {
 		t.Fatalf("skip import status = %d, want 200 (body %s)", status, raw)
 	}
@@ -92,7 +92,7 @@ func TestBulkImportIsIdempotentByExternalRef(t *testing.T) {
 
 	// dry_run counts without writing: a new ref reports created=1 while the database still holds 2.
 	status, raw = doJSON(t, router, http.MethodPost, path, k.Plaintext,
-		`{"dry_run":true,"notes":[{"kind":"basic","fields":{"front":"e","back":"f"},"external_ref":"n:3"}]}`)
+		fmt.Sprintf(`{"dry_run":true,"notes":[{"note_type":%q,"fields":{"front":"e","back":"f"},"external_ref":"n:3"}]}`, noteType))
 	if status != http.StatusOK {
 		t.Fatalf("dry_run status = %d, want 200 (body %s)", status, raw)
 	}
@@ -127,52 +127,34 @@ func assertNoteCardCount(t *testing.T, env *testEnv, deckID uint64, wantNotes, w
 	}
 }
 
-// TestUpdateNoteKindAliasKeepsNoteType is the M17-37 acceptance: one deck can hold two note types of the basic shape
-// (the second a copy with its own CSS), and a save that names only the transitional kind must leave the note on the type
-// it already has. Resolving the alias to "the first type of that shape" used to move the note into the other type.
-// A request that names a note type explicitly still follows it.
-func TestUpdateNoteKindAliasKeepsNoteType(t *testing.T) {
+// TestUpdateNoteRejectsKindWithoutNoteType is the M17-36 acceptance: the card-kind alias is gone from the note write
+// contract, so a save that carries kind and no note_type is an invalid request and changes nothing.
+func TestUpdateNoteRejectsKindWithoutNoteType(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
 	router := env.router()
 	owner := seedUser(t, env.db, "kind_alias_owner", store.RoleUser)
 	deck := seedDeck(t, env.db, owner.ID)
 	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
-	typesBase := fmt.Sprintf("/api/v1/decks/%s/note-types", deck.PublicID)
+	noteType := createStockNoteType(t, env.db, deck.ID, "basic")
 
-	stock, ok := notetype.EngramStockByKind("basic")
-	if !ok {
-		t.Fatal("the basic stock kind is not registered")
-	}
-	// Both types have the stock shape, so the kind alias cannot tell them apart; the copy differs only in CSS.
-	copyConfig := stock.Config
-	copyConfig.CSS = ".card { color: red; }"
-	first := createNoteTypeREST(t, router, typesBase, key, "Basic", stock.Config)
-	copied := createNoteTypeREST(t, router, typesBase, key, "Basic copy", copyConfig)
-
-	createNotesREST(t, router, deck.PublicID, copied.ID, key, []map[string]string{{"front": "q1", "back": "a1"}})
+	createNotesREST(t, router, deck.PublicID, noteType.PublicID, key, []map[string]string{{"front": "q1", "back": "a1"}})
 	note := noteOfDeck(t, env, deck.ID)
-	if got := storedNoteTypeID(t, env, note.ID); got != copied.ID {
-		t.Fatalf("seeded note type = %q, want the copy %q", got, copied.ID)
-	}
 
-	// The alias must not move the note to the first type of the shape.
 	code, raw := doJSON(t, router, http.MethodPatch, "/api/v1/notes/"+note.PublicID, key,
 		`{"kind":"basic","fields":{"front":"q2","back":"a2"}}`)
-	if code != http.StatusOK {
-		t.Fatalf("PATCH with the kind alias = %d, want 200 (body %s)", code, raw)
+	if code != http.StatusBadRequest {
+		t.Fatalf("PATCH with kind and no note_type = %d, want 400 (body %s)", code, raw)
 	}
-	if got := storedNoteTypeID(t, env, note.ID); got != copied.ID {
-		t.Errorf("note type after a kind-alias save = %q, want the unchanged %q", got, copied.ID)
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
 	}
-
-	// An explicit note type is still followed.
-	code, raw = doJSON(t, router, http.MethodPatch, "/api/v1/notes/"+note.PublicID, key,
-		fmt.Sprintf(`{"note_type":%q,"fields":{"front":"q3","back":"a3"}}`, first.ID))
-	if code != http.StatusOK {
-		t.Fatalf("PATCH with an explicit note type = %d, want 200 (body %s)", code, raw)
+	if err := json.Unmarshal(raw, &body); err != nil || body.Error.Code != CodeInvalidRequest {
+		t.Fatalf("error envelope = %s, want code %q", raw, CodeInvalidRequest)
 	}
-	if got := storedNoteTypeID(t, env, note.ID); got != first.ID {
-		t.Errorf("note type after an explicit save = %q, want %q", got, first.ID)
+	if got := storedNoteTypeID(t, env, note.ID); got != noteType.PublicID {
+		t.Errorf("note type after a rejected save = %q, want the unchanged %q", got, noteType.PublicID)
 	}
 }
 
@@ -185,10 +167,11 @@ func TestImportRejectsScopeAndMalformedBody(t *testing.T) {
 	writeKey := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	router := env.router()
 	path := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
+	noteType := createStockNoteType(t, env.db, deck.ID, "basic").PublicID
 
 	// A key with read scope only calling a write endpoint -> 403 scope_required.
 	status, raw := doJSON(t, router, http.MethodPost, path, readKey.Plaintext,
-		`{"notes":[{"kind":"basic","fields":{"front":"a","back":"b"}}]}`)
+		fmt.Sprintf(`{"notes":[{"note_type":%q,"fields":{"front":"a","back":"b"}}]}`, noteType))
 	if status != http.StatusForbidden {
 		t.Fatalf("read key write status = %d, want 403 (body %s)", status, raw)
 	}

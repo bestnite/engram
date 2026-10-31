@@ -124,7 +124,7 @@ func TestToolsRejectNumericIDs(t *testing.T) {
 		"list_deck_tags":      {"deck_id": deck.ID},
 		"add_extra_new_cards": {"deck_id": deck.ID},
 		"submit_review":       {"card_id": deck.ID, "rating": 3},
-		"update_note":         {"note_id": deck.ID, "fields": map[string]any{"front": "x", "back": "y"}},
+		"update_note":         {"note_id": deck.ID, "note_type": "nt-1", "fields": map[string]any{"front": "x", "back": "y"}},
 		"delete_deck":         {"deck_id": deck.ID},
 	}
 	for name, args := range numeric {
@@ -155,7 +155,7 @@ func TestToolsUnknownPublicIDIsNotFound(t *testing.T) {
 		{"get_due_cards", map[string]any{"deck_ids": []any{missing}}},
 		{"list_deck_tags", map[string]any{"deck_id": missing}},
 		{"add_extra_new_cards", map[string]any{"deck_id": missing}},
-		{"update_note", map[string]any{"note_id": missing, "fields": map[string]any{"front": "x", "back": "y"}}},
+		{"update_note", map[string]any{"note_id": missing, "note_type": "nt-1", "fields": map[string]any{"front": "x", "back": "y"}}},
 		{"delete_note", map[string]any{"note_id": missing}},
 		{"delete_deck", map[string]any{"deck_id": missing}},
 		{"submit_review", map[string]any{"card_id": missing, "rating": 3}},

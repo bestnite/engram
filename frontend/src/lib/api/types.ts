@@ -170,8 +170,6 @@ export interface CreateDeckRequest {
 export interface Note {
   id: string;
   deck_id: string;
-  /** Stock kind derived from the note type; transitional, and the editor does not read it. */
-  kind: string;
   /** Public id of the note's note type, or null for a note written before note types existed. */
   note_type?: string | null;
   fields: Record<string, unknown>;
@@ -196,9 +194,8 @@ export interface NotesResponse {
 
 /** PATCH /api/v1/notes/:id request body. Fields are replaced as a complete object. */
 export interface UpdateNoteRequest {
-  /** Public id of the note type the fields belong to. The editor sends this instead of the transitional kind. */
-  note_type?: string;
-  kind?: string;
+  /** Public id of the note type the fields belong to. */
+  note_type: string;
   fields: Record<string, unknown>;
   tags?: string[];
 }
@@ -244,74 +241,11 @@ export interface CardFace {
 export interface NotePreviewCard {
   front: CardFace;
   back: CardFace;
-  /** Transitional duplicates of front.html / back.html; the SPA reads the face objects. */
-  front_html?: string;
-  back_html?: string;
 }
 
 /** POST /api/v1/decks/:id/notes/preview response; the cards carry the same face objects the review frame shows. */
 export interface NotePreviewResponse {
   cards: NotePreviewCard[];
-  /**
-   * `<base href>` prefix the frame needs to resolve the relative media names in the HTML (`/fm/<token>/`).
-   * The relative names are only handed out when the request carried `X-Engram-Frame: 1`.
-   */
-  media_base?: string;
-}
-
-/**
- * Field control values of GET /api/v1/card-types.
- * Matches the Go internal/cardtype Control* constants item by item; the frontend uses it to pick edit form controls.
- */
-export type CardTypeFieldControl =
-  | 'text'
-  | 'textarea'
-  | 'lines'
-  | 'number'
-  | 'bool'
-  | 'index'
-  | 'indexes';
-
-/**
- * Answer control values of GET /api/v1/card-types.
- * Matches the Go internal/cardtype Answer* constants item by item; none means a self-graded card kind.
- */
-export type CardTypeAnswerControl = 'none' | 'text' | 'number' | 'single' | 'multi' | 'bool' | 'blanks' | 'items' | 'essay';
-
-/** One field spec of a card kind (aligned with Go internal/cardtype.FieldSpec). */
-export interface CardTypeField {
-  key: string;
-  control: CardTypeFieldControl;
-  required: boolean;
-  /** Server default of a boolean field that has a DB default; when there is none the server omits the key. */
-  default?: unknown;
-}
-
-/**
- * Self-description of a card kind (aligned with Go internal/cardtype.Description).
- * The edit form and review page render from it instead of each hardcoding a card-kind table.
- */
-export interface CardTypeDescription {
-  kind: string;
-  label_key: string;
-  /** Whether the server grades it (equivalent to "the card kind implements Grader"). */
-  graded: boolean;
-  answer_control: CardTypeAnswerControl;
-  front_field: string;
-  back_field: string;
-  prompt_field: string;
-  options_field: string;
-  fields: CardTypeField[];
-  /**
-   * A note field value that passes that kind's validation; the server always returns it. It is written so an agent can copy it verbatim (cloze syntax,
-   * option indexes starting at 0, formula delimiters); the frontend does not consume it, hence optional, so test fixtures need not copy one per kind.
-   */
-  example?: Record<string, unknown>;
-}
-
-/** GET /api/v1/card-types response body; kinds are in lexicographic order by kind, so results are stable. */
-export interface CardTypesResponse {
-  kinds: CardTypeDescription[];
 }
 
 /** One note field of a note type (aligned with Go internal/notetype.Field). */
@@ -400,7 +334,6 @@ export interface NoteTypesResponse {
 export interface NoteTypePreviewResponse {
   front: CardFace;
   back: CardFace;
-  media_base?: string;
 }
 
 /**
@@ -579,21 +512,17 @@ export interface NoteListParams {
   per_page?: number;
   q?: string;
   tag?: string;
-  kind?: string;
   status?: string;
 }
 
 /**
  * Request body of the bulk write contract.
  *
- * A note names either the note type public id (note_type) or the transitional card kind; the server resolves both and
- * accepts any note type of the deck. Here kind is not narrowed to 'basic', otherwise the unified editor could not submit
- * other types. fields is a Record whose keys are the selected note type's field names.
+ * Every note names its note type public id; fields is a Record whose keys are the selected note type's field names.
  */
 export interface CreateNotesRequest {
   notes: Array<{
-    note_type?: string;
-    kind?: string;
+    note_type: string;
     fields: Record<string, unknown>;
     tags: string[];
   }>;
@@ -817,14 +746,13 @@ export interface DueCard {
   state: string;
   due_at: string;
   retrievability: number;
-  kind: string;
   fields: Record<string, unknown>;
   tags: string[];
   template?: string;
   version: number;
   /**
    * Control name of the card template's answer spec, or null when the template has none. Together with
-   * `machine_graded` it decides the review page's flow; the page never reads the card kind for that.
+   * `machine_graded` it decides the review page's flow.
    */
   answer_control: string | null;
   /** Whether the server grades this card's answer, by the same rule the submit path applies. */
@@ -834,7 +762,7 @@ export interface DueCard {
   /**
    * Display order of a choice card's options: display slot -> stored option index. `option_order[b] = s` means screen row `b`
    * shows the option stored at index `s`; it is a permutation of `0..n-1` for choice_single / choice_multi and null for every
-   * other kind. The card's `fields.options` stay in stored order, and a submitted answer is a stored index (or an array of
+   * other template. The card's `fields.options` stay in stored order, and a submitted answer is a stored index (or an array of
    * stored indices for choice_multi).
    */
   option_order?: number[] | null;
@@ -891,7 +819,7 @@ export interface SubmitReviewResult {
 }
 
 /**
- * Raw answer submitted for answer-graded card kinds.
+ * Raw answer submitted for answer-graded templates.
  * The grade is produced by the server's grader; the client never submits a grade.
  */
 export type GradedAnswer = string | number | boolean | number[] | string[];
@@ -921,11 +849,9 @@ export interface GradedFeedback {
   answer_html: string;
   /** The answer face the frame renders; carries av_tags and autoplay next to answer_html. */
   back?: CardFace;
-  /** `<base href>` prefix for the media names in `answer_html`; see ReviewRenderResponse.media_base. */
-  media_base?: string;
   given: string;
   parsed?: string;
-  /** Per-item result for card kinds graded item by item (list cards): each item's rendered answer HTML plus correctness, in item order. */
+  /** Per-item result for templates graded item by item (list cards): each item's rendered answer HTML plus correctness, in item order. */
   breakdown?: { answer_html: string; correct: boolean }[];
 }
 
@@ -954,14 +880,12 @@ export interface RevealAnswerResponse {
   answer_html: string;
   /** The answer face the frame renders; carries av_tags and autoplay next to answer_html. */
   back?: CardFace;
-  /** `<base href>` prefix for the media names in `answer_html`; see ReviewRenderResponse.media_base. */
-  media_base?: string;
 }
 
 /**
  * POST /api/v1/review/render response body (Go: internal/web/review_api.go).
  * front / back are the card's faces — rendered HTML plus the note type's CSS, body class and media base — and the review page
- * hands them to the sandboxed frame. front_html / back_html repeat their HTML for older callers only.
+ * hands them to the sandboxed frame.
  * edit_href points at the card edit page, for the `e` shortcut to jump there.
  */
 export interface ReviewRenderResponse {
@@ -971,37 +895,15 @@ export interface ReviewRenderResponse {
    * `cardN` Anki's reviewer uses.
    */
   ordinal?: number;
-  /** The two faces of the card. */
+  /** The two faces of the card, each carrying its own media base. */
   front: CardFace;
   back: CardFace;
-  /** Transitional duplicates of front.html / back.html; the SPA reads the face objects. */
-  front_html?: string;
-  back_html?: string;
-  /**
-   * Rendered HTML of each choice option, one entry per option in option order; null for card types without options.
-   * The answer controls inject these fragments, so they must never be replaced with the raw option text.
-   */
-  options_html?: string[] | null;
-  /**
-   * Display order of the options: display slot -> stored option index. `option_order[b] = s` means screen row `b` shows the
-   * option stored at index `s`; it is a permutation of `0..n-1` for choice_single / choice_multi and null for every other kind.
-   * `options_html` stays in stored order, and a submitted answer is a stored index (or an array of stored indices for
-   * choice_multi), so the page displays in this order and submits stored indices.
-   */
-  option_order?: number[] | null;
-  /** Prompt per blank of a blanks-graded card (answer_control = 'blanks') on this card, in order of appearance; empty string for no prompt, null for other kinds. */
-  blanks?: string[] | null;
   /**
    * True when the front template is a type-in placeholder without an answer spec. The frame draws `input#typeans`, and
    * the answer face compares the typed value with the field the placeholder names; the rating stays self-chosen.
    */
   type_in?: boolean;
   edit_href: string;
-  /**
-   * `<base href>` prefix (`/fm/<token>/`) that the frame needs for the relative media names in front_html / back_html.
-   * The names are relative only when the request carried `X-Engram-Frame: 1`; without it the HTML keeps absolute /media/ URLs.
-   */
-  media_base?: string;
   /** Next interval (seconds) for each of the four grades, ordered Again/Hard/Good/Easy; empty array when the preview fails. */
   intervals?: RatingInterval[];
 }

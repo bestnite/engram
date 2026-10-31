@@ -18,11 +18,14 @@ describe('Centralized typed same-origin REST API client', () => {
 
   describe('note preview faces', () => {
     it('loads session CSRF when absent and posts note_type plus fields to the deck preview route', async () => {
+      const face = { html: '<p>safe</p>', css: '', body_class: 'card', side: 'front', media_base: '' };
       mockFetch
         .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, user: null, csrf_token: 'preview-csrf' }), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ cards: [{ front_html: '<p>safe</p>', back_html: '<p>answer</p>' }] }), { status: 200 }));
+        .mockResolvedValueOnce(new Response(JSON.stringify({ cards: [{ front: face, back: { ...face, html: '<p>answer</p>', side: 'back' } }] }), { status: 200 }));
       const fields = { front: '**question**', back: 'answer' };
-      await expect(client.previewNote('deck /1', 'nt-basic', fields)).resolves.toEqual({ cards: [{ front_html: '<p>safe</p>', back_html: '<p>answer</p>' }] });
+      await expect(client.previewNote('deck /1', 'nt-basic', fields)).resolves.toEqual({
+        cards: [{ front: face, back: { ...face, html: '<p>answer</p>', side: 'back' } }],
+      });
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
       const [url, init] = mockFetch.mock.calls[1]!;
@@ -164,7 +167,7 @@ describe('Centralized typed same-origin REST API client', () => {
         .mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true, user: null, csrf_token: 'new-csrf' }), { status: 200 }))
         .mockResolvedValueOnce(new Response(JSON.stringify({ created: 1, updated: 0, skipped: 0, errors: [], dry_run: false }), { status: 200 }));
 
-      const payload = { notes: [{ kind: 'basic' as const, fields: { front: 'Q', back: 'A' }, tags: ['topic'] }] };
+      const payload = { notes: [{ note_type: 'nt-basic', fields: { front: 'Q', back: 'A' }, tags: ['topic'] }] };
       await expect(client.createNotes('deck /1', payload)).resolves.toMatchObject({ created: 1 });
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
@@ -180,7 +183,7 @@ describe('Centralized typed same-origin REST API client', () => {
     it('preserves server validation errors', async () => {
       client.setCsrfToken('csrf');
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'invalid_request', message: 'Invalid note.' } }), { status: 400 }));
-      await expect(client.createNotes('8', { notes: [{ kind: 'basic', fields: { front: '', back: 'A' }, tags: [] }] }))
+      await expect(client.createNotes('8', { notes: [{ note_type: 'nt-basic', fields: { front: '', back: 'A' }, tags: [] }] }))
         .rejects.toSatisfy((err: unknown) => err instanceof ApiClientError && err.code === 'invalid_request');
     });
   });
@@ -309,21 +312,21 @@ describe('Centralized typed same-origin REST API client', () => {
   describe('Note updates', () => {
     it('sends a typed PATCH payload with the session CSRF token and maps the response', async () => {
       client.setCsrfToken('session-csrf');
-      const updated = { id: '7', deck_id: '3', kind: 'basic', fields: { front: '<' + 'img onerror=alert(1)>' }, tags: ['safe'], created_at: '', updated_at: '', external_ref: '' };
+      const updated = { id: '7', deck_id: '3', note_type: 'nt-basic', fields: { front: '<' + 'img onerror=alert(1)>' }, tags: ['safe'], created_at: '', updated_at: '', external_ref: '' };
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200 }));
-      const result = await client.updateNote('7', { kind: 'basic', fields: updated.fields, tags: ['safe'] });
+      const result = await client.updateNote('7', { note_type: 'nt-basic', fields: updated.fields, tags: ['safe'] });
       expect(result).toEqual(updated);
       const [url, init] = mockFetch.mock.calls[0]!;
       expect(url).toBe('/api/v1/notes/7');
       expect(init?.method).toBe('PATCH');
       expect(new Headers(init?.headers).get('X-CSRF-Token')).toBe('session-csrf');
-      expect(JSON.parse(String(init?.body))).toEqual({ kind: 'basic', fields: updated.fields, tags: ['safe'] });
+      expect(JSON.parse(String(init?.body))).toEqual({ note_type: 'nt-basic', fields: updated.fields, tags: ['safe'] });
     });
 
     it('surfaces server validation and permission errors', async () => {
       for (const [status, code] of [[400, 'invalid_request'], [403, 'insufficient_role']] as const) {
         mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code, message: 'no' } }), { status }));
-        await expect(client.updateNote('1', { fields: {} })).rejects.toMatchObject({ status, code });
+        await expect(client.updateNote('1', { note_type: 'nt-basic', fields: {} })).rejects.toMatchObject({ status, code });
       }
     });
 
@@ -1025,7 +1028,6 @@ describe('Centralized typed same-origin REST API client', () => {
             state: 'review',
             due_at: '2026-10-06T00:00:00Z',
             retrievability: 0.88,
-            kind: 'basic',
             fields: { front: 'question 1', back: 'answer 1' },
             tags: ['biology'],
             template: 'forward',
@@ -1041,7 +1043,6 @@ describe('Centralized typed same-origin REST API client', () => {
             state: 'new',
             due_at: '2026-10-06T00:00:00Z',
             retrievability: 0,
-            kind: 'basic',
             fields: { front: 'question 2', back: 'answer 2' },
             tags: ['chemistry'],
             version: 0,

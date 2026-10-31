@@ -138,7 +138,6 @@ function noteFixture(overrides: Partial<Note> = {}): Note {
   return {
     id: '9',
     deck_id: '5',
-    kind: '',
     note_type: 'nt-basic',
     fields: { front: 'Q', back: 'A' },
     tags: [],
@@ -151,11 +150,11 @@ function noteFixture(overrides: Partial<Note> = {}): Note {
 }
 
 /** The response the preview endpoint sends: one entry per card, each carrying both faces. */
-function createResponse(cards: Array<{ front_html: string; back_html: string }>): NotePreviewResponse {
+function createResponse(cards: Array<{ front: string; back: string }>): NotePreviewResponse {
   return {
     cards: cards.map((card) => ({
-      front: face(card.front_html),
-      back: face(card.back_html, { side: 'back' }),
+      front: face(card.front),
+      back: face(card.back, { side: 'back' }),
     })),
   };
 }
@@ -310,7 +309,7 @@ describe('unified note editor — create mode', () => {
   it('debounces reactive preview and renders the latest result', async () => {
     const previewNote = vi
       .spyOn(apiClient, 'previewNote')
-      .mockResolvedValue(createResponse([{ front_html: '<p>rendered Q</p>', back_html: '<p>A</p>' }]));
+      .mockResolvedValue(createResponse([{ front: '<p>rendered Q</p>', back: '<p>A</p>' }]));
 
     mountEditor({ id: '5' });
     await flush();
@@ -338,7 +337,6 @@ describe('unified note editor — create mode', () => {
           back: { html: '<p>A</p>', css: noteCSS, body_class: 'card type-preview', side: 'back', media_base: '/fm/token/' },
         },
       ],
-      media_base: '/fm/token/',
     });
 
     mountEditor({ id: '5' });
@@ -401,12 +399,12 @@ describe('unified note editor — create mode', () => {
     await vi.advanceTimersByTimeAsync(500); // Request 2 in flight
     expect(previewNote).toHaveBeenCalledTimes(2);
 
-    second.resolve(createResponse([{ front_html: '<p>SECOND</p>', back_html: '' }]));
+    second.resolve(createResponse([{ front: '<p>SECOND</p>', back: '' }]));
     await flush();
     expect(await previewFront()).toContain('SECOND');
 
     // The old request only comes back now: it must be dropped and must not overwrite the newer result.
-    first.resolve(createResponse([{ front_html: '<p>FIRST</p>', back_html: '' }]));
+    first.resolve(createResponse([{ front: '<p>FIRST</p>', back: '' }]));
     await flush();
     expect(await previewFront()).toContain('SECOND');
     expect(await previewFront()).not.toContain('FIRST');
@@ -417,7 +415,7 @@ describe('unified note editor — create mode', () => {
     const previewNote = vi
       .spyOn(apiClient, 'previewNote')
       .mockReturnValueOnce(first.promise)
-      .mockResolvedValueOnce(createResponse([{ front_html: '<p>GOOD</p>', back_html: '' }]));
+      .mockResolvedValueOnce(createResponse([{ front: '<p>GOOD</p>', back: '' }]));
 
     mountEditor({ id: '5' });
     await flush();
@@ -498,7 +496,7 @@ describe('unified note editor — create mode', () => {
 
   it('renders the preview through the frame instead of typesetting it in the parent', async () => {
     vi.spyOn(apiClient, 'previewNote').mockResolvedValue(
-      createResponse([{ front_html: '<p>$x$</p>', back_html: '' }])
+      createResponse([{ front: '<p>$x$</p>', back: '' }])
     );
 
     mountEditor({ id: '5' });
@@ -517,7 +515,7 @@ describe('unified note editor — create mode', () => {
   it('hands the preview face with its shortcode markup to the frame', async () => {
     const sha = 'a'.repeat(64);
     const front = `<p><span class="engram-audio" data-audio-src="/media/${sha}" data-audio-start="12.5">/media/${sha}</span></p>`;
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([{ front_html: front, back_html: '' }]));
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([{ front: front, back: '' }]));
 
     mountEditor({ id: '5' });
     await flush();
@@ -535,7 +533,7 @@ describe('unified note editor — create mode', () => {
     const first = deferred<NotePreviewResponse>();
     vi.spyOn(apiClient, 'previewNote')
       .mockReturnValueOnce(first.promise)
-      .mockResolvedValueOnce(createResponse([{ front_html: '<p>SECOND</p>', back_html: '' }]));
+      .mockResolvedValueOnce(createResponse([{ front: '<p>SECOND</p>', back: '' }]));
 
     mountEditor({ id: '5' });
     await flush();
@@ -550,7 +548,7 @@ describe('unified note editor — create mode', () => {
     expect(await previewFront()).toContain('SECOND');
 
     // The first request lands late: its content must not replace the newer face in the frame.
-    first.resolve(createResponse([{ front_html: '<p>FIRST</p>', back_html: '' }]));
+    first.resolve(createResponse([{ front: '<p>FIRST</p>', back: '' }]));
     await flush();
     expect(await previewFront()).toContain('SECOND');
     expect(await previewFront()).not.toContain('FIRST');
@@ -730,7 +728,7 @@ describe('unified note editor — edit mode', () => {
     vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture());
     const previewNote = vi
       .spyOn(apiClient, 'previewNote')
-      .mockResolvedValue(createResponse([{ front_html: '<p>Q</p>', back_html: '<p>A</p>' }]));
+      .mockResolvedValue(createResponse([{ front: '<p>Q</p>', back: '<p>A</p>' }]));
 
     mountEditor({ id: '5', noteId: '9' });
     await flush();
@@ -782,16 +780,14 @@ describe('unified note editor — edit mode', () => {
     const custom = customNoteType();
     vi.spyOn(apiClient, 'getNote').mockResolvedValue(
       noteFixture({
-        kind: '',
-        note_type: custom.id,
+            note_type: custom.id,
         fields: { 'f-question': '<p>OLD QUESTION</p>', 'f-answer': '<p>OLD ANSWER</p>' },
       })
     );
     const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
     const updateNote = vi.spyOn(apiClient, 'updateNote').mockResolvedValue(
       noteFixture({
-        kind: '',
-        note_type: custom.id,
+            note_type: custom.id,
         fields: { 'f-question': '<p>NEW QUESTION</p>', 'f-answer': '<p>OLD ANSWER</p>' },
       })
     );
@@ -837,11 +833,11 @@ describe('unified note editor — edit mode', () => {
     const optionHTML = '<img src="x.png"><b>bold option</b>';
     const fields = { question: 'Which one?', options: optionHTML, answer: '0' };
     vi.spyOn(apiClient, 'getNote').mockResolvedValue(
-      noteFixture({ kind: 'choice_single', note_type: choice.id, fields })
+      noteFixture({ note_type: choice.id, fields })
     );
     vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
     const updateNote = vi.spyOn(apiClient, 'updateNote').mockResolvedValue(
-      noteFixture({ kind: 'choice_single', note_type: choice.id, fields })
+      noteFixture({ note_type: choice.id, fields })
     );
 
     mountEditor({ id: '5', noteId: '9' }, {}, [choice]);
@@ -952,7 +948,7 @@ describe('unified note editor — lifecycle and routes', () => {
 
     unmount(mountedInstances.pop()!);
     const afterUnmount = target.innerHTML;
-    pending.resolve(createResponse([{ front_html: '<p>late</p>', back_html: '' }]));
+    pending.resolve(createResponse([{ front: '<p>late</p>', back: '' }]));
     await flush();
 
     // Results landing after unmount must not write state: the editor's DOM stays exactly as the unmount left it.
@@ -1043,8 +1039,8 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
 
   it('opens from the header button and keeps updating the same preview while open', async () => {
     vi.spyOn(apiClient, 'previewNote')
-      .mockResolvedValueOnce(createResponse([{ front_html: '<p>before</p>', back_html: '' }]))
-      .mockResolvedValueOnce(createResponse([{ front_html: '<p>after</p>', back_html: '' }]));
+      .mockResolvedValueOnce(createResponse([{ front: '<p>before</p>', back: '' }]))
+      .mockResolvedValueOnce(createResponse([{ front: '<p>after</p>', back: '' }]));
 
     mountEditor({ id: '5' });
     await flush();
@@ -1080,7 +1076,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
   });
 
   it('closes on Esc and returns focus to the header button, keeping the field caret', async () => {
-    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([{ front_html: '<p>x</p>', back_html: '' }]));
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([{ front: '<p>x</p>', back: '' }]));
 
     mountEditor({ id: '5' });
     await flush();
@@ -1126,7 +1122,7 @@ describe('unified note editor — preview drawer below the desktop breakpoint', 
 
   it('renders the desktop preview unchanged while the drawer stays closed', async () => {
     vi.spyOn(apiClient, 'previewNote').mockResolvedValue(
-      createResponse([{ front_html: '<p>desktop</p>', back_html: '<p>back</p>' }])
+      createResponse([{ front: '<p>desktop</p>', back: '<p>back</p>' }])
     );
 
     mountEditor({ id: '5' });

@@ -30,7 +30,6 @@ func (a *API) listNotes(c *gin.Context) {
 		PerPage: queryInt(c, "per_page", store.DefaultNotePageSize),
 		Query:   c.Query("q"),
 		Tag:     c.Query("tag"),
-		Kind:    c.Query("kind"),
 		Status:  c.Query("status"),
 	})
 	notes, total, err := a.ListNotes(ctx, u.ID, d.ID, opts)
@@ -72,8 +71,7 @@ func (a *API) listDeckTags(c *gin.Context) {
 // suspended means the caller suspended the cards under this note (suspension is personal), fetched for a whole page of notes in one query.
 //
 // note_type is the note's note type public id. fields maps each field id to the stored HTML string, unchanged, so an editor
-// round-trips content without interpreting it. kind is transitional: it names the stock kind the note type was created from
-// and a write still accepts it as an alias for the note_type public id; the response keeps both for now.
+// round-trips content without interpreting it.
 func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) []map[string]any {
 	ids := make([]uint64, 0, len(notes))
 	for i := range notes {
@@ -100,7 +98,6 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 		out = append(out, map[string]any{
 			"id":           n.PublicID,
 			"deck_id":      pid,
-			"kind":         view.kind,
 			"note_type":    noteTypePublicID(view.noteType),
 			"fields":       store.NoteFieldValues(n.FieldsJSON),
 			"tags":         store.TagsOrEmpty(n.TagsJSON),
@@ -166,9 +163,8 @@ func (a *API) importNotes(c *gin.Context) {
 
 // updateNoteRequest is the single-card update body; tags uses a pointer to distinguish "not provided" from "clear it".
 type updateNoteRequest struct {
-	// NoteType is the note type public id; Kind is the transitional alias the current SPA still sends.
+	// NoteType is the note type public id the submitted field values belong to.
 	NoteType string         `json:"note_type"`
-	Kind     string         `json:"kind"`
 	Fields   map[string]any `json:"fields"`
 	Tags     *[]string      `json:"tags"`
 }
@@ -193,7 +189,6 @@ func (a *API) updateNote(c *gin.Context) {
 	}
 	updated, err := a.UpdateNote(ctx, u.ID, n.ID, CurrentAPIKeyID(c), UpdateNoteInput{
 		NoteType: req.NoteType,
-		Kind:     req.Kind,
 		Fields:   req.Fields,
 		Tags:     req.Tags,
 	})

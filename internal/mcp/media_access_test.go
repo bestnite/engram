@@ -39,11 +39,16 @@ func TestMCPUpdateNoteRejectsUnreadableMediaInjection(t *testing.T) {
 		t.Fatalf("save note: %v", err)
 	}
 
+	noteType, err := store.NewNoteTypeStore(db).ByID(context.Background(), *note.NoteTypeID)
+	if err != nil {
+		t.Fatalf("load note type: %v", err)
+	}
 	key := newKey(t, keys, attacker.ID, []string{store.ScopeWrite})
 	cs := connect(t, ts.URL, key)
 	_, isErr, text := callTool(t, cs, "update_note", map[string]any{
-		"note_id": note.PublicID,
-		"fields":  map[string]any{"front": `<img src="` + sha + `.png">`, "back": "x"},
+		"note_id":   note.PublicID,
+		"note_type": noteType.PublicID,
+		"fields":    map[string]any{"front": `<img src="` + sha + `.png">`, "back": "x"},
 	})
 	if !isErr {
 		t.Fatalf("MCP update_note accepted an unreadable media reference (text %q)", text)

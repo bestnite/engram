@@ -9,7 +9,6 @@
   import type { Deck, DeckQueueCount, DeckTag, Note, BulkNotesResponse } from '../api';
   import DeckSharingView from './DeckSharingView.svelte';
   import DeckSettingsView from './DeckSettingsView.svelte';
-  import Select from '../components/ui/Select.svelte';
   import Dialog from '../components/ui/Dialog.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
@@ -25,8 +24,6 @@
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
   import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, FileText, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, SearchX, Tags, Trash2, X } from '@lucide/svelte';
-  import { noteKindLabel as kindLabel } from '../labels';
-  import { backField, cardTypes, frontField, kindOrder, loadCardTypes } from '../card-types';
   import EmptyState from '../components/ui/EmptyState.svelte';
 
   interface Props {
@@ -80,17 +77,16 @@
 
   // Filter criteria: input takes effect immediately (there is no "apply" button), text input is debounced 300ms.
   // Deleted cards no longer offer a filter entry (the list only presents non-deleted content).
-  // The filters and the page number live in the address as well (q, tag, kind, page), so a reload, the
+  // The filters and the page number live in the address as well (q, tag, page), so a reload, the
   // browser's back button and the card editor's return link all come back to the same list. They are read
   // once on mount; afterwards the page writes them back after every load.
   const initialQuery = get(routeStore).query;
   const initialPage = Math.max(1, Number.parseInt(initialQuery.page ?? '', 10) || 1);
   let queryInput = $state(initialQuery.q ?? '');
   let tagInput = $state(initialQuery.tag ?? '');
-  let kindSelect = $state(initialQuery.kind ?? '');
   // The filters of the list on screen. The inputs can run ahead of it while the debounce is pending, and an
   // address must describe the list the user sees, not the half-typed next one.
-  let appliedFilters = $state({ q: '', tag: '', kind: '' });
+  let appliedFilters = $state({ q: '', tag: '' });
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Study by tag: tags are only selectable within this deck (a same-named tag in another deck is not the same category); multiple selections take the union.
@@ -138,11 +134,6 @@
   let bulkTagsOpen = $state(false);
   let bulkResult = $state<{ affected: number; notFound: number; insufficientRole: number } | null>(null);
 
-  // The card type list's backend identifier is kept apart from its display name: the identifier goes into the query string, display names always come from the language pack
-  // (previously the dropdown rendered the kind literal directly, leaking internal identifiers such as basic/cloze in the Chinese UI).
-  // The list itself comes from the server's card type self-description — writing the same card type list a second time somewhere else will drift sooner or later.
-  const cardKinds = $derived(kindOrder($cardTypes));
-
   const deckId = $derived($routeStore.params.id || '');
 
   // This list's address, filters and page included: mirrored into the address bar, and handed to the card
@@ -151,7 +142,6 @@
     const params = new URLSearchParams();
     if (appliedFilters.q) params.set('q', appliedFilters.q);
     if (appliedFilters.tag) params.set('tag', appliedFilters.tag);
-    if (appliedFilters.kind) params.set('kind', appliedFilters.kind);
     if (page > 1) params.set('page', String(page));
     const search = params.toString();
     return `${$routeStore.path}${search ? `?${search}` : ''}`;
@@ -163,7 +153,7 @@
     return withReturn(`/decks/${encodeURIComponent(deckId)}/notes/${encodeURIComponent(noteId)}/edit`, listAddress);
   }
   const totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
-  const hasFilter = $derived(Boolean(queryInput.trim() || tagInput.trim() || kindSelect));
+  const hasFilter = $derived(Boolean(queryInput.trim() || tagInput.trim()));
   const allSelected = $derived(notes.length > 0 && notes.every((n) => selectedIds.includes(n.id)));
   // The content-editing entries are shown according to the role the server returns: a reader can view, review, pause and configure study settings,
   // but cannot create/edit/delete cards or run bulk tag actions (the server rejects those writes anyway).
@@ -241,7 +231,7 @@
     selectedIds = [];
     confirmingBulkDelete = false;
 
-    const filters = { q: queryInput.trim(), tag: tagInput.trim(), kind: kindSelect };
+    const filters = { q: queryInput.trim(), tag: tagInput.trim() };
 
     try {
       if (!deck) {
@@ -255,7 +245,6 @@
         per_page: perPage,
         q: filters.q || undefined,
         tag: filters.tag || undefined,
-        kind: filters.kind || undefined,
       });
 
       notes = res.notes;
@@ -311,17 +300,10 @@
     debounceTimer = setTimeout(() => loadData(1), 300);
   }
 
-  /** Dropdown selection: takes effect immediately (the selection itself is a definite decision, no debounce needed). */
-  function applyFilterNow(): void {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    loadData(1);
-  }
-
   function handleFilterReset(): void {
     if (debounceTimer) clearTimeout(debounceTimer);
     queryInput = '';
     tagInput = '';
-    kindSelect = '';
     loadData(1);
   }
 
@@ -471,28 +453,23 @@
   }
 
   /**
-   * The two-line summary of a list row: the first line takes the front field declared by the card type, the second takes the back field;
-   * when the card type metadata is not loaded yet, or the card type declares none, it falls back to the first and second non-empty field.
-   * Newlines and consecutive whitespace are squeezed into a single space — the row only shows one line, the full content is on the edit page.
+   * The two-line summary of a list row: the first line is the note type's first non-empty field, the second the next
+   * distinct one. Newlines and consecutive whitespace are squeezed into a single space — the row only shows one line,
+   * the full content is on the edit page.
    */
   function noteSummary(note: Note): { primary: string; secondary: string } {
     const flat = (value: unknown) => fieldText(value).replace(/\s+/g, ' ').trim();
-    const front = frontField($cardTypes, note.kind);
-    const back = backField($cardTypes, note.kind);
     const filled = Object.entries(note.fields)
       .map(([key, value]) => [key, flat(value)] as const)
       .filter(([, value]) => value !== '');
-    const pick = (key: string) => (key ? flat(note.fields[key]) : '');
-    const primary = pick(front) || filled[0]?.[1] || '';
-    const secondary = pick(back) || filled.find(([, value]) => value !== primary)?.[1] || '';
+    const primary = filled[0]?.[1] ?? '';
+    const secondary = filled.find(([, value]) => value !== primary)?.[1] ?? '';
     return { primary, secondary };
   }
 
   onMount(() => {
     if (initialLoading) loadData(initialPage);
     void loadProgress();
-    // Metadata is loaded only once (idempotent within the module); on failure the filter dropdown degrades to just "all card types" without interrupting the page.
-    void loadCardTypes(apiClient).catch(() => {});
   });
 
   onDestroy(() => {
@@ -664,17 +641,6 @@
         oninput={scheduleFilterReload}
         class="field-input w-full text-sm sm:w-36"
       />
-      <Select
-        class="w-full sm:w-40"
-        value={kindSelect}
-        onValueChange={(value) => { kindSelect = value; applyFilterNow(); }}
-        testId="filter-kind-select"
-        ariaLabel={$t('notes.filter_kind')}
-        options={[
-          { value: '', label: $t('notes.all_kinds') },
-          ...cardKinds.map((kind) => ({ value: kind, label: kindLabel(kind, $cardTypes, $t) })),
-        ]}
-      />
       {#if hasFilter}
         <Button variant="ghost" size="lg" testId="filter-reset-btn" onclick={handleFilterReset}>
           <X class="size-4" aria-hidden="true" />
@@ -734,7 +700,6 @@
             />
           {/if}
           <span>{$t('notes.col_content')}</span>
-          <span class="hidden md:block">{$t('notes.col_kind')}</span>
           <span class="hidden md:block">{$t('notes.col_tags')}</span>
           <span class="hidden md:block">{$t('notes.col_created')}</span>
           <span></span>
@@ -783,7 +748,6 @@
                 <p class="truncate text-[13px] text-muted-foreground">{summary.secondary}</p>
               {/if}
             </div>
-            <span class="hidden truncate text-[13px] text-muted-foreground md:block">{kindLabel(note.kind, $cardTypes, $t)}</span>
             <div class="hidden min-w-0 flex-wrap gap-1 md:flex" data-testid={`note-tags-${note.id}`}>
               {#each (note.tags ?? []).slice(0, 3) as tag (tag)}
                 <span class="inline-flex h-5 max-w-full items-center truncate rounded-full border border-border px-2 text-xs text-muted-foreground">{tag}</span>

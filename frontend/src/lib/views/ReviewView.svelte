@@ -410,7 +410,7 @@
       remaining = response.remaining;
       newRemaining = countNew(response.cards);
       feedback = response.feedback ?? null;
-      feedbackMediaBase = response.feedback?.media_base ?? backFace?.media_base ?? '';
+      feedbackMediaBase = response.feedback?.back?.media_base ?? backFace?.media_base ?? '';
       lastUndo = { cardId: current.card_id, version: response.version, rating: response.feedback?.rating ?? 0 };
       done += 1;
       // The answer face goes into the frame; only the per-item breakdown stays here, so it is what gets typeset and enhanced.
@@ -441,7 +441,7 @@
       );
       revealedAnswerHTML = response.answer_html;
       revealedAVTags = response.back?.av_tags ?? [];
-      revealedMediaBase = response.media_base ?? backFace?.media_base ?? '';
+      revealedMediaBase = response.back?.media_base ?? backFace?.media_base ?? '';
       gradedRevealed = true;
     } catch (cause) {
       error = cause;

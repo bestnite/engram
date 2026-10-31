@@ -30,18 +30,11 @@ type queueBody struct {
 
 // reviewRenderBody is the external shape of the card render response.
 type reviewRenderBody struct {
-	CardID string `json:"card_id"`
-	Front  struct {
-		HTML string `json:"html"`
-	} `json:"front"`
-	FrontHTML string `json:"front_html"`
-	BackHTML  string `json:"back_html"`
-	// OptionsHTML is null for card types without options.
-	OptionsHTML []string `json:"options_html"`
-	// OptionOrder is the display order of a choice card's options, null for card types without option controls.
-	OptionOrder []int  `json:"option_order"`
-	EditHref    string `json:"edit_href"`
-	Intervals   []struct {
+	CardID    string   `json:"card_id"`
+	Front     CardFace `json:"front"`
+	Back      CardFace `json:"back"`
+	EditHref  string   `json:"edit_href"`
+	Intervals []struct {
 		Rating  int   `json:"rating"`
 		Seconds int64 `json:"seconds"`
 	} `json:"intervals"`
@@ -206,16 +199,16 @@ func TestReviewRenderReturnsFaceHTML(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
 	}
-	if body.FrontHTML == "" || body.BackHTML == "" {
+	if body.Front.HTML == "" || body.Back.HTML == "" {
 		t.Fatalf("render returned empty HTML: %+v", body)
 	}
 	// The stored markup is returned as it is stored. Sanitising here would be a second, divergent rule: the frame is
 	// sandboxed and is the only place the HTML is ever executed.
-	if !strings.Contains(body.FrontHTML, "<script>alert(1)</script> front-text") {
-		t.Errorf("render front HTML is not the stored HTML: %s", body.FrontHTML)
+	if !strings.Contains(body.Front.HTML, "<script>alert(1)</script> front-text") {
+		t.Errorf("render front HTML is not the stored HTML: %s", body.Front.HTML)
 	}
-	if !strings.Contains(body.BackHTML, `<img src=x onerror=alert(1)> back-text`) {
-		t.Errorf("render back HTML is not the stored HTML: %s", body.BackHTML)
+	if !strings.Contains(body.Back.HTML, `<img src=x onerror=alert(1)> back-text`) {
+		t.Errorf("render back HTML is not the stored HTML: %s", body.Back.HTML)
 	}
 	if body.EditHref != "/decks/"+deck.PublicID+"/notes/"+note.PublicID {
 		t.Errorf("render edit_href = %q, want the note edit path", body.EditHref)
@@ -238,7 +231,7 @@ func TestReviewRenderReturnsFaceHTML(t *testing.T) {
 }
 
 // TestReviewRenderOmitsChoiceOptionsFromFront asserts the review card front of a choice question holds only the stem: the options are rendered by the review page
-// as answer controls, so concatenating them into front_html again would show them twice on the page. The back still gives the correct options.
+// as answer controls, so concatenating them into the front face again would show them twice on the page. The back still gives the correct options.
 func TestReviewRenderOmitsChoiceOptionsFromFront(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Choice render deck")
@@ -266,16 +259,16 @@ func TestReviewRenderOmitsChoiceOptionsFromFront(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
 			}
-			if !strings.Contains(body.FrontHTML, tc.question) {
-				t.Errorf("front_html lost the question: %s", body.FrontHTML)
+			if !strings.Contains(body.Front.HTML, tc.question) {
+				t.Errorf("front face lost the question: %s", body.Front.HTML)
 			}
 			for _, option := range tc.absent {
-				if strings.Contains(body.FrontHTML, option) {
-					t.Errorf("front_html repeats option %q that the answer controls already show: %s", option, body.FrontHTML)
+				if strings.Contains(body.Front.HTML, option) {
+					t.Errorf("front face repeats option %q that the answer controls already show: %s", option, body.Front.HTML)
 				}
 			}
-			if !strings.Contains(body.BackHTML, tc.wantBack) {
-				t.Errorf("back_html = %s, want it to contain the correct option %q", body.BackHTML, tc.wantBack)
+			if !strings.Contains(body.Back.HTML, tc.wantBack) {
+				t.Errorf("back face = %s, want it to contain the correct option %q", body.Back.HTML, tc.wantBack)
 			}
 		})
 	}
@@ -336,110 +329,39 @@ func TestReviewRenderDeckFieldsFollowTheSubdeckPath(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 			t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
 		}
-		return body.FrontHTML
+		return body.Front.HTML
 	}
 
 	if front := render(nested.ID); !strings.Contains(front, "deck=Path deck::Lesson 1::Verbs sub=Verbs") {
-		t.Errorf("nested front_html = %q, want {{Deck}} = the deck name plus deck_path and {{Subdeck}} = the last component", front)
+		t.Errorf("nested front face = %q, want {{Deck}} = the deck name plus deck_path and {{Subdeck}} = the last component", front)
 	}
 	if front := render(plain.ID); !strings.Contains(front, "deck=Path deck sub=Path deck") {
-		t.Errorf("front_html without deck_path = %q, want both fields = the deck name", front)
+		t.Errorf("front face without deck_path = %q, want both fields = the deck name", front)
 	}
 	if front := render(emptyPath.ID); !strings.Contains(front, "deck=Path deck sub=Path deck") {
-		t.Errorf("front_html with an empty deck_path = %q, want both fields = the deck name", front)
+		t.Errorf("front face with an empty deck_path = %q, want both fields = the deck name", front)
 	}
 }
 
-// TestReviewRenderReturnsOptionHTML asserts the render response carries one stored HTML fragment per choice option, in
-// option order: the answer controls inject these fragments, and a formula option keeps its TeX delimiters for
-// typesetting. It also asserts a card type without options returns JSON null, not an empty array.
-func TestReviewRenderReturnsOptionHTML(t *testing.T) {
+// TestReviewRenderMasksTheActiveClozeDeletion asserts the cloze card's front masks the active deletion while keeping its
+// content in the data-cloze attribute, which is the engine's markup contract for animating the answer back in.
+func TestReviewRenderMasksTheActiveClozeDeletion(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	deck := seedReviewDeck(t, db, ownerID, "Choice option HTML deck")
-	note := seedGradedNote(t, db, deck.ID, "choice_single", map[string]any{
-		"question": "pick-question",
-		"options":  []string{`\(x^2\)`, "opt-beta", "<script>alert(1)</script>"},
-		"answer":   0,
-	})
+	deck := seedReviewDeck(t, db, ownerID, "Cloze render deck")
+	cloze := seedGradedNote(t, db, deck.ID, "cloze", map[string]any{"text": "{{c1::Paris}} and {{c1::Rome::city}} are capitals"})
+
 	rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{
-		"card_id": cardPublicIDOfNote(t, db, note.ID), "deck": []string{deck.PublicID},
+		"card_id": cardPublicIDOfNote(t, db, cloze.ID), "deck": []string{deck.PublicID},
 	}, cookies, csrf)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
 	var body reviewRenderBody
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
+		t.Fatalf("decode render response: %v", err)
 	}
-	if len(body.OptionsHTML) != 3 {
-		t.Fatalf("options_html = %#v, want one entry per option", body.OptionsHTML)
-	}
-	if !strings.Contains(body.OptionsHTML[0], `\(x^2\)`) {
-		t.Errorf("option 0 lost its TeX delimiters, MathJax cannot typeset it: %s", body.OptionsHTML[0])
-	}
-	if body.OptionsHTML[1] != "opt-beta" {
-		t.Errorf("option 1 = %q, want the stored option in option order", body.OptionsHTML[1])
-	}
-	if body.OptionsHTML[2] != "<script>alert(1)</script>" {
-		t.Errorf("option 2 = %q, want the stored HTML (the server does not sanitise)", body.OptionsHTML[2])
-	}
-	for _, option := range []string{`\(x^2\)`, "opt-beta"} {
-		if strings.Contains(body.FrontHTML, option) {
-			t.Errorf("front_html repeats option %q that the answer controls already show: %s", option, body.FrontHTML)
-		}
-	}
-
-	basic := seedBasic(t, db, deck.ID, "basic-front", "basic-back")
-	rec = postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{
-		"card_id": cardPublicIDOfNote(t, db, basic.ID), "deck": []string{deck.PublicID},
-	}, cookies, csrf)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("basic render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
-		t.Fatalf("decode basic render response: %v", err)
-	}
-	if got := string(raw["options_html"]); got != "null" {
-		t.Errorf("non-choice options_html = %s, want null", got)
-	}
-}
-
-// TestReviewRenderReturnsClozeBlanks asserts the cloze card's render response gives the hint for each blank of the card in order of appearance
-// (the review page adds one input box per blank from it), and the front does not leak the answer; other question types have no blanks.
-func TestReviewRenderReturnsClozeBlanks(t *testing.T) {
-	srv, db, ownerID, cookies, csrf := newNotesServer(t)
-	deck := seedReviewDeck(t, db, ownerID, "Cloze render deck")
-	cloze := seedGradedNote(t, db, deck.ID, "cloze", map[string]any{"text": "{{c1::Paris}} and {{c1::Rome::city}} are capitals"})
-	basic := seedBasic(t, db, deck.ID, "Q", "A")
-
-	render := func(noteID uint64) map[string]any {
-		t.Helper()
-		rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{
-			"card_id": cardPublicIDOfNote(t, db, noteID), "deck": []string{deck.PublicID},
-		}, cookies, csrf)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("render = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
-		}
-		var body map[string]any
-		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-			t.Fatalf("decode render response: %v", err)
-		}
-		return body
-	}
-
-	body := render(cloze.ID)
-	blanks, ok := body["blanks"].([]any)
-	if !ok || len(blanks) != 2 || blanks[0] != "" || blanks[1] != "city" {
-		t.Errorf("cloze blanks = %#v, want [\"\", \"city\"]", body["blanks"])
-	}
-	// The visible text of the active deletion is masked. Its content stays in the data-cloze attribute, which is the
-	// engine's markup contract for animating the answer back in.
-	if front, _ := body["front_html"].(string); !strings.Contains(front, `data-cloze="Paris"`) {
-		t.Errorf("cloze front_html = %s, want the active deletion carried as data-cloze", front)
-	}
-	if got := render(basic.ID)["blanks"]; got != nil {
-		t.Errorf("basic blanks = %#v, want null", got)
+	if !strings.Contains(body.Front.HTML, `data-cloze="Paris"`) {
+		t.Errorf("cloze front = %s, want the active deletion carried as data-cloze", body.Front.HTML)
 	}
 }
 
@@ -578,15 +500,15 @@ func TestReviewRenderEmptyCardShowsLocalizedNotice(t *testing.T) {
 				t.Errorf("render card_id = %q, want the empty card %q", body.CardID, reverse.PublicID)
 			}
 			for _, notice := range tc.notices {
-				if !strings.Contains(body.FrontHTML, notice) {
-					t.Errorf("front_html = %q, want it to contain %q", body.FrontHTML, notice)
+				if !strings.Contains(body.Front.HTML, notice) {
+					t.Errorf("front face = %q, want it to contain %q", body.Front.HTML, notice)
 				}
 			}
-			if body.Front.HTML != body.FrontHTML {
-				t.Errorf("front.html = %q, front_html = %q, want the same notice", body.Front.HTML, body.FrontHTML)
+			if body.Front.HTML != body.Front.HTML {
+				t.Errorf("front.html = %q, want the same notice", body.Front.HTML)
 			}
-			if strings.Contains(body.FrontHTML, tc.other) {
-				t.Errorf("front_html carries the other locale's notice %q: %q", tc.other, body.FrontHTML)
+			if strings.Contains(body.Front.HTML, tc.other) {
+				t.Errorf("front face carries the other locale's notice %q: %q", tc.other, body.Front.HTML)
 			}
 		})
 	}

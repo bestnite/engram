@@ -70,7 +70,6 @@ describe('Deck and notes list API client and view contracts', () => {
         per_page: 20,
         q: 'algorithm & data',
         tag: 'cs+math',
-        kind: 'basic',
         status: 'active',
       });
 
@@ -83,7 +82,6 @@ describe('Deck and notes list API client and view contracts', () => {
       expect(parsedUrl.searchParams.get('per_page')).toBe('20');
       expect(parsedUrl.searchParams.get('q')).toBe('algorithm & data');
       expect(parsedUrl.searchParams.get('tag')).toBe('cs+math');
-      expect(parsedUrl.searchParams.get('kind')).toBe('basic');
       expect(parsedUrl.searchParams.get('status')).toBe('active');
     });
 
@@ -125,7 +123,7 @@ describe('Deck and notes list API client and view contracts', () => {
       const mockNote: Note = {
         id: '101',
         deck_id: '1',
-        kind: 'basic',
+        note_type: 'nt-basic',
         fields: {
           front: 'What is FSRS?',
           back: 'Free Spaced Repetition Scheduler',
@@ -161,7 +159,7 @@ describe('Deck and notes list API client and view contracts', () => {
       const item = res.notes[0]!;
       expect(item.id).toBe('101');
       expect(item.deck_id).toBe('1');
-      expect(item.kind).toBe('basic');
+      expect(item.note_type).toBe('nt-basic');
       expect(item.fields).toEqual({
         front: 'What is FSRS?',
         back: 'Free Spaced Repetition Scheduler',
@@ -259,14 +257,11 @@ describe('Deck and notes list API client and view contracts', () => {
         'notes.retry',
         'notes.search_placeholder',
         'notes.tag_placeholder',
-        'notes.filter_kind',
-        'notes.all_kinds',
         'notes.filter_reset',
         'notes.total_count',
         'notes.page_info',
         'notes.prev_page',
         'notes.next_page',
-        'notes.col_kind',
         'notes.col_tags',
         'notes.col_created',
         'notes.select_all',
@@ -400,7 +395,7 @@ describe('GET /api/v1/notes/:id single-note read', () => {
     const mockNote: Note = {
       id: 'note-7',
       deck_id: 'deck-3',
-      kind: 'basic',
+      note_type: 'nt-basic',
       fields: { front: 'q', back: 'a' },
       tags: [],
       created_at: '2026-10-01T00:00:00Z',

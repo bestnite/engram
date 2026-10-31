@@ -33,7 +33,6 @@ describe('ReviewView short answer', () => {
     state: 'new',
     due_at: '',
     retrievability: 0,
-    kind: 'short_answer',
     fields: { prompt: '月相为什么会变化？', reference: '太阳照亮月球的一半。' },
     tags: [],
     template: 'forward',
@@ -51,9 +50,6 @@ describe('ReviewView short answer', () => {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 's1',
         ...faces('<p>月相为什么会变化？</p>', backHTML),
-        front_html: '<p>月相为什么会变化？</p>',
-        back_html: backHTML,
-        blanks: null,
         edit_href: '',
       }),
       submitSelfReview,

@@ -3,7 +3,7 @@ import { mount, unmount, flushSync } from 'svelte';
 import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-import { faces } from './card-face-fixture';
+import { face, faces } from './card-face-fixture';
 import { shownFaces, postAnswerFromFrame, frameDocument } from './card-frame-fixture';
 import { REVIEW_BACK_CSS, REVIEW_FRONT_CSS } from '../lib/card-frame';
 
@@ -48,7 +48,6 @@ describe('ReviewView card faces in the frame', () => {
       state: 'new',
       due_at: '',
       retrievability: 0,
-      kind: 'basic',
       fields: { front: 'RAW-FRONT-TEXT', back: 'RAW-BACK-TEXT' },
       tags: [],
       template: 'forward',
@@ -60,14 +59,9 @@ describe('ReviewView card faces in the frame', () => {
     const renderReviewCard = vi.fn().mockResolvedValue({
       card_id: 'b1',
       ...faces('<p><strong>Stored</strong> front</p>', '<p><em>Stored</em> back</p>', '/fm/token/'),
-      front_html: '<p><strong>Stored</strong> front</p>',
-      back_html: '<p><em>Stored</em> back</p>',
-      options_html: [],
-      blanks: null,
       edit_href: '/decks/d1/notes/n1',
-      media_base: '/fm/token/',
     });
-    const target = await mountView(card, { renderReviewCard, getCardTypes: vi.fn() });
+    const target = await mountView(card, { renderReviewCard });
 
     // The request asks for frame-ready HTML: relative media names plus the base they resolve against.
     expect(renderReviewCard).toHaveBeenCalledWith({ card_id: 'b1', deck: undefined, tags: undefined }, { frame: true });
@@ -86,14 +80,14 @@ describe('ReviewView card faces in the frame', () => {
     expect(target.textContent).not.toContain('RAW-BACK-TEXT');
   });
 
-  it('hands a graded result answer to the frame and keeps the parent free of the answer HTML', async () => {    const card: DueCard = {
+  it('hands a graded result answer to the frame and keeps the parent free of the answer HTML', async () => {
+    const card: DueCard = {
       card_id: 'g1',
       note_id: 'n2',
       deck_id: 'd1',
       state: 'new',
       due_at: '',
       retrievability: 0,
-      kind: 'typed',
       fields: { prompt: 'Capital of France?', answer: 'Paris' },
       tags: [],
       template: 'forward',
@@ -113,7 +107,7 @@ describe('ReviewView card faces in the frame', () => {
         score: 1,
         rating: 3,
         answer_html: '<strong>Paris</strong>',
-        media_base: '/fm/graded/',
+        back: face('<strong>Paris</strong>', { side: 'back', media_base: '/fm/graded/' }),
         given: 'paris',
       },
     });
@@ -121,14 +115,8 @@ describe('ReviewView card faces in the frame', () => {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'g1',
         ...faces('<p>Capital of France?</p>', '<strong>Paris</strong>', '/fm/token/'),
-        front_html: '<p>Capital of France?</p>',
-        back_html: '<strong>Paris</strong>',
-        options_html: [],
-        blanks: null,
         edit_href: '/decks/d1/notes/n2',
-        media_base: '/fm/token/',
       }),
-      getCardTypes: vi.fn(),
       submitGradedReview,
     });
 
@@ -154,7 +142,6 @@ describe('ReviewView card faces in the frame', () => {
       state: 'new',
       due_at: '',
       retrievability: 0,
-      kind: 'basic',
       fields: { front: 'Question', back: 'Answer' },
       tags: [],
       template: 'forward',
@@ -172,12 +159,8 @@ describe('ReviewView card faces in the frame', () => {
         card_id: 'n1',
         front: { html: '<p>Question</p>', css: frontCSS, body_class: 'card type-front', side: 'front', media_base: '/fm/token/' },
         back: { html: '<p>Answer</p>', css: backCSS, body_class: 'card type-back', side: 'back', media_base: '/fm/token/' },
-        options_html: [],
-        blanks: null,
         edit_href: '',
-        media_base: '/fm/token/',
       }),
-      getCardTypes: vi.fn(),
     });
 
     (target.querySelector('[data-testid="review-reveal"]') as HTMLElement).click();

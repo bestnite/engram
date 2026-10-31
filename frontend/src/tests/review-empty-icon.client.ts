@@ -32,7 +32,6 @@ describe('ReviewView empty-state icon', () => {
     state: 'review',
     due_at: '',
     retrievability: 0,
-    kind: 'basic',
     fields: { front: 'q', back: 'a' },
     tags: [],
     template: 'forward',
@@ -59,7 +58,6 @@ describe('ReviewView empty-state icon', () => {
   it('shows a check mark, not a celebration, when the queue was empty from the start', async () => {
     const client = {
       getDueCards: vi.fn().mockResolvedValue({ cards: [] }),
-      getCardTypes: vi.fn(),
     } as unknown as ApiClient;
     const target = mountReview(client);
     await flush();
@@ -76,12 +74,8 @@ describe('ReviewView empty-state icon', () => {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
         ...faces('<p>q</p>', '<p>a</p>'),
-        front_html: '<p>q</p>',
-        back_html: '<p>a</p>',
-        blanks: null,
         edit_href: '',
       }),
-      getCardTypes: vi.fn(),
       submitSelfReview: vi.fn().mockResolvedValue({ card_id: 'c1', state: 'review', version: 1, remaining: 0, cards: [] }),
     } as unknown as ApiClient;
     const target = mountReview(client);

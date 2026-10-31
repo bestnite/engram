@@ -46,7 +46,6 @@ describe('ReviewView another batch of new cards', () => {
     state: 'new',
     due_at: '',
     retrievability: 0,
-    kind: 'basic',
     fields: { front: 'q', back: 'a' },
     tags: [],
     template: 'forward',
@@ -67,12 +66,8 @@ describe('ReviewView another batch of new cards', () => {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
         ...faces('<p>q</p>', '<p>a</p>'),
-        front_html: '<p>q</p>',
-        back_html: '<p>a</p>',
-        blanks: null,
         edit_href: '',
       }),
-      getCardTypes: vi.fn(),
     } as unknown as ApiClient;
     return { client, getDueCards, getExtraNew, addExtraNew };
   }

@@ -6,7 +6,6 @@ import { apiClient } from '../lib/api';
 import type { Deck, Note } from '../lib/api';
 import { routeStore, matchRoute } from '../lib/router';
 import { setLocale } from '../lib/i18n';
-import { setCardTypes } from '../lib/card-types';
 import { withReturn } from '../lib/return-to';
 
 /**
@@ -32,7 +31,6 @@ describe('DeckDetailView list address', () => {
   const note: Note = {
     id: 'n1',
     deck_id: 'd1',
-    kind: 'basic',
     fields: { front: 'Q', back: 'A' },
     tags: [],
     created_at: '2026-10-01T00:00:00Z',
@@ -56,10 +54,8 @@ describe('DeckDetailView list address', () => {
 
   async function setup(address: string) {
     setLocale('zh-CN');
-    setCardTypes(null);
     window.history.replaceState({}, '', address);
     routeStore.set(matchRoute(address));
-    vi.spyOn(apiClient, 'getCardTypes').mockResolvedValue({ card_types: [] } as never);
     vi.spyOn(apiClient, 'getDeckQueueCounts').mockResolvedValue({ decks: [] });
     vi.spyOn(apiClient, 'getDeck').mockResolvedValue(deck);
     const getDeckNotes = vi
@@ -77,9 +73,9 @@ describe('DeckDetailView list address', () => {
   }
 
   it('restores the filters and the page from the address', async () => {
-    const { getDeckNotes } = await setup('/decks/d1?q=verb&tag=n2&kind=cloze&page=2');
+    const { getDeckNotes } = await setup('/decks/d1?q=verb&tag=n2&page=2');
 
-    expect(getDeckNotes).toHaveBeenCalledWith('d1', { page: 2, per_page: 50, q: 'verb', tag: 'n2', kind: 'cloze' });
+    expect(getDeckNotes).toHaveBeenCalledWith('d1', { page: 2, per_page: 50, q: 'verb', tag: 'n2' });
     expect((target.querySelector('[data-testid="filter-query-input"]') as HTMLInputElement).value).toBe('verb');
   });
 

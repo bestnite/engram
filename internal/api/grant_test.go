@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -94,7 +95,8 @@ func TestEditorCannotChangeDeckSettingsOrGrants(t *testing.T) {
 
 	// Positive: an editor can change card content.
 	if _, err := env.api.UpdateNote(ctx, editor.ID, note.ID, nil, UpdateNoteInput{
-		Fields: map[string]any{"front": "edited", "back": "edited"},
+		NoteType: storedNoteTypeID(t, env, note.ID),
+		Fields:   map[string]any{"front": "edited", "back": "edited"},
 	}); err != nil {
 		t.Fatalf("editor UpdateNote error = %v, want nil", err)
 	}
@@ -168,7 +170,7 @@ func TestHTTPReaderUpdateReturnsStableCode(t *testing.T) {
 	path := "/api/v1/notes/" + note.PublicID
 
 	status, raw := doJSON(t, router, http.MethodPatch, path, key.Plaintext,
-		`{"kind":"basic","fields":{"front":"x","back":"y"}}`)
+		fmt.Sprintf(`{"note_type":%q,"fields":{"front":"x","back":"y"}}`, storedNoteTypeID(t, env, note.ID)))
 	if status != http.StatusForbidden {
 		t.Fatalf("reader PATCH note status = %d, want 403 (body %s)", status, raw)
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/reviewday"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -45,9 +46,13 @@ func seedDeck(t *testing.T, db *gorm.DB, now time.Time) uint64 {
 // is NOT NULL, so every note fixture must name a type.
 func seedNoteType(t *testing.T, db *gorm.DB, deckID uint64) uint64 {
 	t.Helper()
-	nt, err := store.NewNoteStore(db).EnsureStockNoteType(context.Background(), deckID, "basic")
-	if err != nil {
-		t.Fatalf("ensure note type: %v", err)
+	stock, ok := notetype.EngramStockByKind("basic")
+	if !ok {
+		t.Fatal("the basic stock kind is not registered")
+	}
+	nt := &store.NoteType{DeckID: deckID, Name: stock.Name}
+	if err := store.NewNoteTypeStore(db).Create(context.Background(), nt, stock.Config); err != nil {
+		t.Fatalf("create note type: %v", err)
 	}
 	return nt.ID
 }

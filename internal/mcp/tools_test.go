@@ -28,27 +28,12 @@ func TestToolsMatchREST(t *testing.T) {
 	deckPath := fmt.Sprintf("/api/v1/decks/%s/notes", deck.PublicID)
 
 	// Pre-create two cards with identical content via REST, for the later comparisons.
-	body := `{"notes":[` +
-		`{"kind":"basic","fields":{"front":"q1","back":"a1"},"external_ref":"n:1"},` +
-		`{"kind":"basic","fields":{"front":"q2","back":"a2"},"external_ref":"n:2"}]}`
+	basicTypeID := createStockNoteType(t, db, deck.ID, "basic").PublicID
+	body := fmt.Sprintf(`{"notes":[`+
+		`{"note_type":%q,"fields":{"front":"q1","back":"a1"},"external_ref":"n:1"},`+
+		`{"note_type":%q,"fields":{"front":"q2","back":"a2"},"external_ref":"n:2"}]}`, basicTypeID, basicTypeID)
 	if st, raw := rest(t, base, http.MethodPost, deckPath, key, body); st != 200 {
 		t.Fatalf("seed import status = %d body %v", st, raw)
-	}
-
-	// list_note_types: the initial import created the deck's stock basic note type; its public id is
-	// what the note_type payload needs.
-	typesOut, isErr, text := callTool(t, cs, "list_note_types", map[string]any{"deck_id": deck.PublicID})
-	if isErr {
-		t.Fatalf("list_note_types error: %s", text)
-	}
-	types, _ := typesOut["note_types"].([]any)
-	if len(types) == 0 {
-		t.Fatalf("list_note_types returned no note types: %v", typesOut)
-	}
-	basicType, _ := types[0].(map[string]any)
-	basicTypeID, _ := basicType["id"].(string)
-	if basicTypeID == "" {
-		t.Fatalf("list_note_types entry has no id: %v", basicType)
 	}
 
 	// list_decks
@@ -70,7 +55,7 @@ func TestToolsMatchREST(t *testing.T) {
 	}
 
 	// export_deck: returns the deck package document, with manifest/notes/cards/preset.
-	mcpOut, isErr, text = callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID})
+	mcpOut, isErr, text := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID})
 	if isErr {
 		t.Fatalf("export_deck error: %s", text)
 	}

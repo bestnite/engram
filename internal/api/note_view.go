@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"gorm.io/gorm"
 
@@ -12,19 +11,16 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// This file holds the transitional view of a note: the shape the SPA and the old REST contract still read while the
-// note-type payload and the frame runtime replace them.
+// This file holds the view of a note used by the REST and MCP payloads.
 //
-// A note stores only its note type id and HTML field values keyed by field id. The helpers here derive the note type's
-// stock kind and read the note type config; the field values themselves are returned exactly as stored, because a field
-// value is HTML and any reshaping would lose the formatting an editor writes back. Nothing that decides behaviour reads
-// the derived kind.
+// A note stores only its note type id and HTML field values keyed by field id. The helpers here read the note type
+// config; the field values themselves are returned exactly as stored, because a field value is HTML and any reshaping
+// would lose the formatting an editor writes back.
 
 // noteTypeView is one note's note type together with its decoded config, cached per request by noteTypeCache.
 type noteTypeView struct {
 	noteType *store.NoteType
 	config   notetype.Config
-	kind     string
 }
 
 // noteTypeCache loads note types by id within one call, so a page of notes costs one query rather than one per note.
@@ -53,7 +49,7 @@ func (c *noteTypeCache) load(ctx context.Context, note *store.Note) noteTypeView
 	if err != nil {
 		return noteTypeView{}
 	}
-	view := noteTypeView{noteType: nt, config: cfg, kind: notetype.EngramStockKindFor(cfg)}
+	view := noteTypeView{noteType: nt, config: cfg}
 	c.byID[*note.NoteTypeID] = view
 	return view
 }
@@ -110,18 +106,6 @@ func gradeMappingFor(preset *store.Preset) *answer.GradeMapping {
 	return &mapping
 }
 
-// noteTypeIDFor resolves the note type a write names with the transitional kind alias.
-//
-// The alias names a card kind; the note type is the deck's stock note type for that kind, created when the
-// deck has none yet. An unknown kind is a request error naming the kind.
-func (a *API) noteTypeIDFor(ctx context.Context, deckID uint64, kind string) (uint64, error) {
-	nt, err := a.notes.EnsureStockNoteType(ctx, deckID, kind)
-	if err != nil {
-		return 0, err
-	}
-	return nt.ID, nil
-}
-
 // noteTypeIDForPublicID resolves a note type public id scoped to a deck.
 //
 // A public id that names no note type, or names one of another deck, yields the same error: a write
@@ -133,14 +117,4 @@ func (a *API) noteTypeIDForPublicID(ctx context.Context, deckID uint64, publicID
 		return 0, fmt.Errorf("unknown note type %q", publicID)
 	}
 	return nt.ID, nil
-}
-
-// noteKindOf returns the stock kind of a note's note type, or the empty string when it is not a stock type.
-func (a *API) noteKindOf(ctx context.Context, note *store.Note) string {
-	return a.notes.KindOf(ctx, note)
-}
-
-// unknownKindText is the stable English message for a kind the catalog does not know.
-func unknownKindText(kind string) string {
-	return "unknown note type kind " + strconv.Quote(kind)
 }

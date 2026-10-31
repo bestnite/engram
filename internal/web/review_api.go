@@ -169,9 +169,8 @@ func (s *Server) gradeReveal(c *gin.Context, user *store.User, card *store.Card)
 	c.JSON(http.StatusOK, gin.H{
 		"revealed":    true,
 		"card_id":     card.PublicID,
-		"answer_html": view.BackHTML,
+		"answer_html": view.Back.HTML,
 		"back":        view.Back,
-		"media_base":  view.MediaBase,
 	})
 }
 
@@ -286,12 +285,11 @@ func (s *Server) reviewUndo(c *gin.Context) {
 	s.writeQueue(c, user, scope, gin.H{"undone_card_id": result.CardID})
 }
 
-// reviewRender returns both sides of a card and each choice option's HTML.
+// reviewRender returns both sides of a card.
 //
-// front and back carry the card-view contract (html, css, body_class, side, media_base); front_html and back_html repeat
-// their HTML for the SPA until it reads the objects. An answer carries the typed value of a type-in card so the back can
-// compare it. edit_href is the review page's edit entry; intervals are the next interval for each of the four grades
-// (api.PreviewIntervals).
+// front and back carry the card-view contract (html, css, body_class, side, media_base), and the frame renders them
+// directly. An answer carries the typed value of a type-in card so the back can compare it. edit_href is the review
+// page's edit entry; intervals are the next interval for each of the four grades (api.PreviewIntervals).
 func (s *Server) reviewRender(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -321,19 +319,13 @@ func (s *Server) reviewRender(c *gin.Context) {
 		intervals = []api.RatingInterval{}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"card_id":      card.PublicID,
-		"ordinal":      view.Ordinal,
-		"front":        view.Front,
-		"back":         view.Back,
-		"front_html":   view.FrontHTML,
-		"back_html":    view.BackHTML,
-		"options_html": view.OptionsHTML,
-		"option_order": view.OptionOrder,
-		"blanks":       view.Blanks,
-		"type_in":      view.TypeIn,
-		"edit_href":    view.EditHref,
-		"media_base":   view.MediaBase,
-		"intervals":    intervals,
+		"card_id":   card.PublicID,
+		"ordinal":   view.Ordinal,
+		"front":     view.Front,
+		"back":      view.Back,
+		"type_in":   view.TypeIn,
+		"edit_href": view.EditHref,
+		"intervals": intervals,
 	})
 }
 
@@ -434,9 +426,8 @@ func (s *Server) gradeFeedback(ctx context.Context, user *store.User, card *stor
 		"verdict":     grade.Verdict,
 		"score":       grade.Score,
 		"rating":      grade.Rating,
-		"answer_html": view.BackHTML,
+		"answer_html": view.Back.HTML,
 		"back":        view.Back,
-		"media_base":  view.MediaBase,
 		"given":       grade.Given,
 	}
 	if parsed, ok := grade.Detail["parsed_answer"]; ok {

@@ -32,7 +32,6 @@ describe('ReviewView list items', () => {
     state: 'new',
     due_at: '',
     retrievability: 0,
-    kind: 'list',
     fields: { prompt: '光的三原色是什么？', items: ['red', 'green', 'blue'] },
     tags: [],
     template: 'forward',
@@ -68,12 +67,8 @@ describe('ReviewView list items', () => {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'l1',
         ...faces('<p>光的三原色是什么？</p>', '<ul><li>red</li><li>green</li><li>blue</li></ul>'),
-        front_html: '<p>光的三原色是什么？</p>',
-        back_html: '<ul><li>red</li><li>green</li><li>blue</li></ul>',
-        blanks: ['', '', ''],
         edit_href: '/decks/d1/notes/n1',
       }),
-      getCardTypes: vi.fn(),
       submitGradedReview,
     } as unknown as ApiClient;
     const target = document.createElement('div');

@@ -14,10 +14,7 @@ func TestNoteToolsReturnStoredFieldHTML(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "note_html_reader")
 	deck := seedDeck(t, db, u.ID)
-	noteType, err := store.NewNoteStore(db).EnsureStockNoteType(context.Background(), deck.ID, "choice_single")
-	if err != nil {
-		t.Fatalf("ensure choice_single note type: %v", err)
-	}
+	noteType := createStockNoteType(t, db, deck.ID, "choice_single")
 	const optionHTML = `<img src="x.png"><b>bold option</b>`
 	note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID), CreatedBy: store.Ptr(u.ID)}
 	if _, err := store.NewNoteStore(db).Create(context.Background(), note, map[string]any{

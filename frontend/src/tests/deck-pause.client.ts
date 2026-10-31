@@ -7,7 +7,6 @@ import { apiClient } from '../lib/api';
 import type { Deck, StatsSummary } from '../lib/api';
 import { routeStore, matchRoute } from '../lib/router';
 import { setLocale } from '../lib/i18n';
-import { setCardTypes } from '../lib/card-types';
 
 /**
  * Deck pause: the deck list keeps a paused deck with a badge and a toggle, the deck detail header offers the same toggle
@@ -64,10 +63,8 @@ describe('deck pause', () => {
 
   async function mountDetail(initial: Deck): Promise<void> {
     mountTarget();
-    setCardTypes(null);
     window.history.replaceState({}, '', `/decks/${initial.id}`);
     routeStore.set(matchRoute(`/decks/${initial.id}`));
-    vi.spyOn(apiClient, 'getCardTypes').mockResolvedValue({ card_types: [] } as never);
     vi.spyOn(apiClient, 'getDeckQueueCounts').mockResolvedValue({ decks: [] });
     instance = mount(DeckDetailView, {
       target,

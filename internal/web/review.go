@@ -106,8 +106,7 @@ func (s *Server) parseDeckScope(c *gin.Context, user *store.User) (reviewScope, 
 // which side it is, the media base its relative media names resolve against, and the audio/TTS tags that HTML
 // references as [anki:play:<side>:<n>] markers.
 //
-// This object is the card-view contract. The transitional front_html/back_html fields travel next to it until the frame
-// runtime reads this object directly.
+// This object is the card-view contract: the frame reads it directly.
 type CardFace struct {
 	HTML      string `json:"html"`
 	CSS       string `json:"css"`
@@ -137,29 +136,11 @@ type ReviewCardView struct {
 	// Front and Back are the card faces: HTML, CSS, body class, side and media base.
 	Front CardFace
 	Back  CardFace
-	// FrontHTML / BackHTML are the transitional flat fields the SPA reads until it switches to Front and Back.
-	FrontHTML string
-	BackHTML  string
-	// OptionsHTML holds one HTML fragment per option of a choice card, in option order; nil for every other card kind.
-	// The review page renders these fragments inside its own answer controls, so the answer control's own markup stays
-	// out of the card face.
-	OptionsHTML []string
-	// OptionOrder is the display order of a choice card's options: display slot b shows stored option index OptionOrder[b].
-	// Each OptionsHTML entry stays at its stored index, and the submitted answer stays a stored option index.
-	OptionOrder []int
-	// Blanks holds the hint for each input box of per-blank/per-item answer controls (cloze and list), in order, empty
-	// string when there is no hint; the review page uses it to decide the number of input boxes.
-	Blanks []string
 	// TypeIn is true when the front template carries a type placeholder without an answer spec. The frame draws the
 	// type-in input, and the answer side compares the typed value with the field it names.
 	TypeIn bool
 	// EditHref points at the edit page of that note, for the e-key jump.
 	EditHref string
-	// MediaBase is the frame document's <base href> ("/fm/<token>/") for this user and this card's deck. It is set on every
-	// card-face response so a frame consumer can resolve the relative media names; only a request carrying the
-	// X-Engram-Frame: 1 header receives those relative names, and every other request keeps the absolute /media/ URLs.
-	// Empty when the frame media feature is unavailable (secrets not wired).
-	MediaBase string
 }
 
 // typeMarkerPattern matches the placeholder the type filter renders, in all of its written forms.
@@ -317,9 +298,9 @@ func deckFieldNames(deckName string, deckPath *string) (deck, subdeck string) {
 // faces renders both sides into the card-view shape.
 //
 // For a frame request the front side substitutes the answer control's input markup for the type marker, so the frame
-// draws the control and posts its value. A non-frame request keeps the marker stripped: the transitional SPA draws its
-// own controls from options_html and blanks. The back side substitutes the control's breakdown for the marker, so the
-// correct answer is visible with or without a submitted answer.
+// draws the control and posts its value. A non-frame request keeps the marker stripped, because without a frame the
+// control cannot be driven. The back side substitutes the control's breakdown for the marker, so the correct answer is
+// visible with or without a submitted answer.
 func (s *Server) faces(ctx context.Context, user *store.User, item *cardFace, submitted json.RawMessage, result *answer.GradeResult, forFrame bool, optionOrder []int) (CardFace, CardFace) {
 	mediaBase := s.frameMediaBase(ctx, user.ID, item.note.DeckID)
 	frontHTML, backHTML := item.frontRaw, item.backRaw
@@ -357,7 +338,7 @@ func (s *Server) faces(ctx context.Context, user *store.User, item *cardFace, su
 
 // frontFaceHTML renders the front side. A frame request replaces the type marker with the answer control's input
 // markup, or with a type-in input when the template has no answer spec; every other request strips the marker,
-// because the transitional SPA draws its own control.
+// because a control cannot be driven outside the frame.
 func frontFaceHTML(item *cardFace, source string, optionOrder []int, forFrame bool) string {
 	marker := typeMarkerPattern.FindString(source)
 	if marker == "" {
@@ -572,6 +553,9 @@ var optionLineBreak = regexp.MustCompile(`(?i)<br\s*/?>|\r?\n`)
 
 // answerOptionCount returns the number of options an answer control reads, or zero when it reads none.
 func answerOptionCount(spec *notetype.AnswerSpec, values map[string]string) int {
+	if spec == nil {
+		return 0
+	}
 	control, ok := answer.Lookup(spec.Control)
 	if !ok {
 		return 0
@@ -587,47 +571,6 @@ func answerOptionCount(spec *notetype.AnswerSpec, values map[string]string) int 
 		return len(optionLines(values[spec.Bindings[role.Name]]))
 	}
 	return 0
-}
-
-// optionHTML returns one HTML fragment per option of a choice answer control, in stored order.
-func optionHTML(spec *notetype.AnswerSpec, values map[string]string) []string {
-	if spec == nil {
-		return nil
-	}
-	control, ok := answer.Lookup(spec.Control)
-	if !ok {
-		return nil
-	}
-	roles, ok := control.(answer.Roles)
-	if !ok {
-		return nil
-	}
-	for _, role := range roles.Roles() {
-		if role.Name != "options" {
-			continue
-		}
-		lines := optionLines(values[spec.Bindings[role.Name]])
-		if len(lines) == 0 {
-			return nil
-		}
-		return lines
-	}
-	return nil
-}
-
-// blankHints returns one hint per input box the answer control draws for this card.
-func blankHints(spec *notetype.AnswerSpec, values map[string]string, clozeOrdinal int) []string {
-	if spec == nil {
-		return nil
-	}
-	switch spec.Control {
-	case "cloze_blanks":
-		return notetype.ExtractClozeHints(values[spec.Bindings["text"]], clozeOrdinal)
-	case "list":
-		return make([]string, len(answer.ParseLines(values[spec.Bindings["items"]])))
-	default:
-		return nil
-	}
 }
 
 // cardView renders both sides of a card and fetches the optimistic-lock version.
@@ -646,14 +589,11 @@ func (s *Server) cardViewWithAnswer(ctx context.Context, user *store.User, item 
 		return nil, err
 	}
 	version := s.stateVersion(ctx, user.ID, card.ID)
-	// The choice options stay in the parent page, which has no <base> element, so their media references are always absolute.
-	options := optionHTML(rendered.spec, rendered.values)
-	for i := range options {
-		options[i] = absoluteMediaRefs(options[i])
-	}
+	// The choice options are rendered inside the face by the answer control, which reads them from the note type,
+	// so only the display order needed for that rendering is computed here.
 	var optionOrder []int
-	if len(options) > 1 {
-		optionOrder = api.OptionOrder(len(options), user.ID, card.ID, version)
+	if count := answerOptionCount(rendered.spec, rendered.values); count > 1 {
+		optionOrder = api.OptionOrder(count, user.ID, card.ID, version)
 	}
 	front, back := s.faces(ctx, user, rendered, submitted, result, forFrame, optionOrder)
 	if rendered.empty {
@@ -671,14 +611,8 @@ func (s *Server) cardViewWithAnswer(ctx context.Context, user *store.User, item 
 		Ordinal:         card.Ordinal,
 		Front:           front,
 		Back:            back,
-		FrontHTML:       front.HTML,
-		BackHTML:        back.HTML,
-		OptionsHTML:     options,
-		OptionOrder:     optionOrder,
-		Blanks:          blankHints(rendered.spec, rendered.values, rendered.ordinal),
 		TypeIn:          rendered.spec == nil && typeMarkerPattern.MatchString(rendered.frontRaw),
 		EditHref:        "/decks/" + rendered.deck.PublicID + "/notes/" + rendered.note.PublicID,
-		MediaBase:       front.MediaBase,
 	}, nil
 }
 

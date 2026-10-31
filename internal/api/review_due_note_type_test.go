@@ -91,9 +91,6 @@ func TestDueCardsAnswerFlowForCustomNoteType(t *testing.T) {
 	if got.MachineGraded {
 		t.Error("machine_graded = true, want false for a template without an answer spec")
 	}
-	if got.Kind != "" {
-		t.Errorf("kind = %q, want the empty string for a note type matching no stock kind", got.Kind)
-	}
 	if want := []string{"f-front", "f-back"}; !reflect.DeepEqual(got.FieldOrder, want) {
 		t.Errorf("field_order = %v, want %v in config order", got.FieldOrder, want)
 	}

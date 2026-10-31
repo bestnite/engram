@@ -3,7 +3,6 @@ import { render } from 'svelte/server';
 import DeckDetailView from '../lib/views/DeckDetailView.svelte';
 import { routeStore, matchRoute } from '../lib/router';
 import { setLocale } from '../lib/i18n';
-import { setCardTypes } from '../lib/card-types';
 import type { Deck, Note } from '../lib/api';
 
 const deck: Deck = {
@@ -21,7 +20,6 @@ function note(id: string, extra: Partial<Note> = {}): Note {
   return {
     id,
     deck_id: 'd1',
-    kind: 'basic',
     fields: { front: '促す', back: 'うながす · 催促' },
     tags: ['动词', 'N2'],
     created_at: '2026-03-01T08:00:00Z',
@@ -38,7 +36,6 @@ function renderView(notes: Note[], role: Deck['role'] = 'owner') {
 describe('DeckDetailView notes table', () => {
   beforeEach(() => {
     setLocale('zh-CN');
-    setCardTypes(null);
     routeStore.set(matchRoute('/decks/d1'));
   });
 
@@ -119,7 +116,6 @@ describe('DeckDetailView notes table', () => {
 describe('DeckDetailView deck deletion entry', () => {
   beforeEach(() => {
     setLocale('zh-CN');
-    setCardTypes(null);
     routeStore.set(matchRoute('/decks/d1'));
   });
 

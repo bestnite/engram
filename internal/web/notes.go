@@ -177,10 +177,8 @@ func (s *Server) noteNewRoute(c *gin.Context) {
 
 // previewCard is the rendered front and back of one card.
 type previewCard struct {
-	Front     CardFace
-	Back      CardFace
-	FrontHTML string
-	BackHTML  string
+	Front CardFace
+	Back  CardFace
 }
 
 // buildPreview renders the front and back of every card the given payload would produce against a stored note type.
@@ -239,10 +237,8 @@ func buildPreview(nt *store.NoteType, cfg notetype.Config, deck *store.Deck, fie
 		faces.backAV = backAV
 		autoplay := deck.AutoplayEnabled()
 		out = append(out, previewCard{
-			Front:     CardFace{HTML: typeMarkerPattern.ReplaceAllString(frontHTML, ""), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideFront.String(), AVTags: frontAV, Autoplay: autoplay},
-			Back:      CardFace{HTML: faces.staticBackHTML(), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideBack.String(), AVTags: faces.backAV, Autoplay: autoplay},
-			FrontHTML: typeMarkerPattern.ReplaceAllString(frontHTML, ""),
-			BackHTML:  faces.staticBackHTML(),
+			Front: CardFace{HTML: typeMarkerPattern.ReplaceAllString(frontHTML, ""), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideFront.String(), AVTags: frontAV, Autoplay: autoplay},
+			Back:  CardFace{HTML: faces.staticBackHTML(), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideBack.String(), AVTags: faces.backAV, Autoplay: autoplay},
 		})
 	}
 	return out, true

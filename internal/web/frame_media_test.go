@@ -206,10 +206,8 @@ func (f *frameMediaFixture) get(t *testing.T, path string) *httptest.ResponseRec
 
 // frameRenderResponse is the subset of the review render response the tests read.
 type frameRenderResponse struct {
-	FrontHTML   string   `json:"front_html"`
-	BackHTML    string   `json:"back_html"`
-	OptionsHTML []string `json:"options_html"`
-	MediaBase   string   `json:"media_base"`
+	Front CardFace `json:"front"`
+	Back  CardFace `json:"back"`
 }
 
 // renderCard posts to the SPA review render endpoint as the reader, optionally marking the request as frame output.
@@ -231,10 +229,9 @@ func (f *frameMediaFixture) renderCard(t *testing.T, cardPublicID string, forFra
 // framePreviewResponse is the subset of the note preview response the tests read.
 type framePreviewResponse struct {
 	Cards []struct {
-		FrontHTML string `json:"front_html"`
-		BackHTML  string `json:"back_html"`
+		Front CardFace `json:"front"`
+		Back  CardFace `json:"back"`
 	} `json:"cards"`
-	MediaBase string `json:"media_base"`
 }
 
 // preview posts to the editor preview endpoint as the deck owner, optionally marking the request as frame output.
@@ -388,11 +385,11 @@ func TestFrameMediaServesEditorAbsoluteReference(t *testing.T) {
 	}
 	name := media.Sha256 + ".png"
 	rendered := f.renderCard(t, cards[0].PublicID, true)
-	if !strings.Contains(rendered.FrontHTML, `src="`+name+`"`) {
-		t.Fatalf("frame-rendered front_html = %q, want the relative media name %q", rendered.FrontHTML, name)
+	if !strings.Contains(rendered.Front.HTML, `src="`+name+`"`) {
+		t.Fatalf("frame-rendered front face = %q, want the relative media name %q", rendered.Front.HTML, name)
 	}
-	if strings.Contains(rendered.FrontHTML, "/media/") {
-		t.Fatalf("frame-rendered front_html kept an absolute media URL: %s", rendered.FrontHTML)
+	if strings.Contains(rendered.Front.HTML, "/media/") {
+		t.Fatalf("frame-rendered front face kept an absolute media URL: %s", rendered.Front.HTML)
 	}
 
 	token := f.token(t, f.reader.ID, f.deck.ID)
@@ -634,46 +631,46 @@ func TestCardFaceCarriesFrameMediaBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cardView() error = %v", err)
 	}
-	token := frameMediaTokenFromBase(t, view.MediaBase)
-	if view.MediaBase != "/fm/"+token+"/" {
-		t.Fatalf("MediaBase = %q, want /fm/<token>/", view.MediaBase)
+	token := frameMediaTokenFromBase(t, view.Front.MediaBase)
+	if view.Front.MediaBase != "/fm/"+token+"/" {
+		t.Fatalf("MediaBase = %q, want /fm/<token>/", view.Front.MediaBase)
 	}
 	// The view itself keeps absolute URLs: cardView is shared with every consumer, and only a marked request may rewrite.
-	if !strings.Contains(view.FrontHTML, "/media/"+f.readable.Sha256) {
-		t.Errorf("cardView front HTML lost the absolute media URL: %s", view.FrontHTML)
+	if !strings.Contains(view.Front.HTML, "/media/"+f.readable.Sha256) {
+		t.Errorf("cardView front HTML lost the absolute media URL: %s", view.Front.HTML)
 	}
 	// The base must actually authorize a read of the name the marked request refers to.
-	rec := f.get(t, view.MediaBase+f.readable.Sha256)
+	rec := f.get(t, view.Front.MediaBase+f.readable.Sha256)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET %s = %d, want 200 (body %q)", view.MediaBase+f.readable.Sha256, rec.Code, rec.Body.String())
+		t.Fatalf("GET %s = %d, want 200 (body %q)", view.Front.MediaBase+f.readable.Sha256, rec.Code, rec.Body.String())
 	}
 
 	// A default request is for the SPA: absolute URLs and the base, because the SPA has no <base> element.
 	rendered := f.renderCard(t, card.PublicID, false)
-	if rendered.MediaBase == "" || !strings.HasPrefix(rendered.MediaBase, "/fm/") {
-		t.Errorf("render media_base = %q, want a /fm/ base", rendered.MediaBase)
+	if rendered.Front.MediaBase == "" || !strings.HasPrefix(rendered.Front.MediaBase, "/fm/") {
+		t.Errorf("render media_base = %q, want a /fm/ base", rendered.Front.MediaBase)
 	}
-	if !strings.Contains(rendered.FrontHTML, "/media/"+f.readable.Sha256) {
-		t.Errorf("default render front_html = %s, want the absolute media URL", rendered.FrontHTML)
+	if !strings.Contains(rendered.Front.HTML, "/media/"+f.readable.Sha256) {
+		t.Errorf("default render front face = %s, want the absolute media URL", rendered.Front.HTML)
 	}
 
 	// The editor preview carries the same fields and follows the same rule.
 	fields := map[string]any{"front": fmt.Sprintf(`<img src="%s.png">`, f.readable.Sha256), "back": "back"}
 	preview := f.preview(t, "basic", fields, false)
-	if preview.MediaBase == "" || !strings.HasPrefix(preview.MediaBase, "/fm/") {
-		t.Errorf("preview media_base = %q, want a /fm/ base", preview.MediaBase)
+	if len(preview.Cards) != 1 || preview.Cards[0].Front.MediaBase == "" || !strings.HasPrefix(preview.Cards[0].Front.MediaBase, "/fm/") {
+		t.Errorf("preview media_base = %+v, want a /fm/ base", preview.Cards)
 	}
-	if len(preview.Cards) != 1 || !strings.Contains(preview.Cards[0].FrontHTML, "/media/"+f.readable.Sha256) {
-		t.Errorf("default preview front_html = %+v, want the absolute media URL", preview.Cards)
+	if len(preview.Cards) != 1 || !strings.Contains(preview.Cards[0].Front.HTML, "/media/"+f.readable.Sha256) {
+		t.Errorf("default preview front face = %+v, want the absolute media URL", preview.Cards)
 	}
 }
 
 // TestCardFaceFrameOutputRewritesFaces covers the marked request: only the card faces that move into the frame lose the
-// /media/ prefix, and choice options keep their absolute URLs because they stay in the parent page.
+// /media/ prefix, and both choose and plain cards follow the same rule.
 func TestCardFaceFrameOutputRewritesFaces(t *testing.T) {
 	f := newFrameMediaFixture(t)
 	ctx := context.Background()
-	// A choice card whose option carries media: its options must survive a frame request unchanged.
+	// A choice card whose option carries media: the option is rendered inside the frame like the rest of the face.
 	choiceFields := map[string]any{
 		"question": "pick one",
 		"options":  []any{fmt.Sprintf(`<img src="%s.png">`, f.readable.Sha256), "plain"},
@@ -688,20 +685,14 @@ func TestCardFaceFrameOutputRewritesFaces(t *testing.T) {
 	card := choiceCards[0]
 
 	rendered := f.renderCard(t, card.PublicID, true)
-	if rendered.MediaBase == "" || !strings.HasPrefix(rendered.MediaBase, "/fm/") {
-		t.Errorf("marked render media_base = %q, want a /fm/ base", rendered.MediaBase)
+	if rendered.Front.MediaBase == "" || !strings.HasPrefix(rendered.Front.MediaBase, "/fm/") {
+		t.Errorf("marked render media_base = %q, want a /fm/ base", rendered.Front.MediaBase)
 	}
-	if strings.Contains(rendered.FrontHTML, "/media/") {
-		t.Errorf("marked render front_html keeps an absolute media URL: %s", rendered.FrontHTML)
+	if strings.Contains(rendered.Front.HTML, "/media/") {
+		t.Errorf("marked render front face keeps an absolute media URL: %s", rendered.Front.HTML)
 	}
-	if strings.Contains(rendered.BackHTML, "/media/") {
-		t.Errorf("marked render back_html keeps an absolute media URL: %s", rendered.BackHTML)
-	}
-	if len(rendered.OptionsHTML) != 2 {
-		t.Fatalf("marked render options_html = %d entries, want 2", len(rendered.OptionsHTML))
-	}
-	if !strings.Contains(rendered.OptionsHTML[0], "/media/"+f.readable.Sha256) {
-		t.Errorf("marked render rewrote a choice option, want absolute: %s", rendered.OptionsHTML[0])
+	if strings.Contains(rendered.Back.HTML, "/media/") {
+		t.Errorf("marked render back_html keeps an absolute media URL: %s", rendered.Back.HTML)
 	}
 
 	// The preview path follows the same marker: only a marked request receives relative names.
@@ -710,13 +701,13 @@ func TestCardFaceFrameOutputRewritesFaces(t *testing.T) {
 	if len(framePreview.Cards) != 1 {
 		t.Fatalf("marked preview cards = %d, want 1", len(framePreview.Cards))
 	}
-	if strings.Contains(framePreview.Cards[0].FrontHTML, "/media/") {
-		t.Errorf("marked preview front_html keeps an absolute media URL: %s", framePreview.Cards[0].FrontHTML)
+	if strings.Contains(framePreview.Cards[0].Front.HTML, "/media/") {
+		t.Errorf("marked preview front face keeps an absolute media URL: %s", framePreview.Cards[0].Front.HTML)
 	}
-	if !strings.Contains(framePreview.Cards[0].FrontHTML, f.readable.Sha256) {
-		t.Errorf("marked preview front_html lost the media reference: %s", framePreview.Cards[0].FrontHTML)
+	if !strings.Contains(framePreview.Cards[0].Front.HTML, f.readable.Sha256) {
+		t.Errorf("marked preview front face lost the media reference: %s", framePreview.Cards[0].Front.HTML)
 	}
-	if framePreview.MediaBase == "" {
+	if framePreview.Cards[0].Front.MediaBase == "" {
 		t.Error("marked preview media_base is empty")
 	}
 }
@@ -781,18 +772,17 @@ func TestFrameMediaWithoutSecretsDegrades(t *testing.T) {
 	}
 	var body struct {
 		Cards []struct {
-			FrontHTML string `json:"front_html"`
+			Front CardFace `json:"front"`
 		} `json:"cards"`
-		MediaBase string `json:"media_base"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode preview response: %v (body %s)", err, rec.Body.String())
 	}
-	if body.MediaBase != "" {
-		t.Errorf("preview media_base = %q without secrets, want empty", body.MediaBase)
+	if len(body.Cards) != 1 || !strings.Contains(body.Cards[0].Front.HTML, "/media/") {
+		t.Errorf("preview front = %+v, want the absolute media URL preserved", body.Cards)
 	}
-	if len(body.Cards) != 1 || !strings.Contains(body.Cards[0].FrontHTML, "/media/") {
-		t.Errorf("preview front_html = %+v, want the absolute media URL preserved", body.Cards)
+	if len(body.Cards) == 1 && body.Cards[0].Front.MediaBase != "" {
+		t.Errorf("preview face media_base = %q without secrets, want empty", body.Cards[0].Front.MediaBase)
 	}
 }
 

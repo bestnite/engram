@@ -379,15 +379,7 @@ func TestGradeListFeedbackBreakdown(t *testing.T) {
 	note := seedGradedNote(t, db, deck.ID, "list", map[string]any{"prompt": "primary colours", "items": []string{"red", "green", "<strong>blue</strong>|violet"}})
 	cardPub := cardPublicIDOfNote(t, db, note.ID)
 
-	rec := postJSONWithCSRF(t, srv, "/api/v1/review/render", map[string]any{"card_id": cardPub, "deck": []string{deck.PublicID}}, cookies, csrf)
-	var rendered struct {
-		Blanks []string `json:"blanks"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &rendered); err != nil || len(rendered.Blanks) != 3 {
-		t.Fatalf("render blanks = %v (err %v), want three inputs (body %s)", rendered.Blanks, err, snippet(rec.Body.String()))
-	}
-
-	rec = postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
+	rec := postJSONWithCSRF(t, srv, "/api/v1/review/grade", map[string]any{
 		"card_id": cardPub, "expected_version": 0, "deck": []string{deck.PublicID}, "answer": []string{"violet", "red", ""},
 	}, cookies, csrf)
 	if rec.Code != http.StatusOK {

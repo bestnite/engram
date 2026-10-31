@@ -5,7 +5,6 @@ import { apiClient } from '../lib/api';
 import type { Deck } from '../lib/api';
 import { routeStore, matchRoute } from '../lib/router';
 import { setLocale } from '../lib/i18n';
-import { setCardTypes } from '../lib/card-types';
 
 /**
  * The deck description is stored HTML (or Markdown rendered to HTML by the server) and is untrusted content, so it must live
@@ -67,7 +66,6 @@ async function flush(): Promise<void> {
 
 beforeEach(() => {
   setLocale('en');
-  setCardTypes(null);
   routeStore.set(matchRoute('/decks/d1'));
   vi.spyOn(apiClient, 'getDeckQueueCounts').mockRejectedValue(new Error('unused in this test'));
 });

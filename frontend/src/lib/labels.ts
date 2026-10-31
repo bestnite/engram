@@ -1,10 +1,8 @@
-import type { CardTypeCatalog } from './card-types';
-
 /**
  * Backend enums → UI copy.
  *
  * Values like `basic_both` from the backend are **machine vocabulary**: splicing one straight into a template
- * (`<span>{note.kind}</span>`) prints English in a Chinese UI - the result is exactly the same as
+ * (`<span>{status}</span>`) prints English in a Chinese UI - the result is exactly the same as
  * hardcoded English, only it does not look like it, so the lint that greps for hardcoded copy cannot catch it either.
  *
  * Two rules:
@@ -12,25 +10,13 @@ import type { CardTypeCatalog } from './card-types';
  *  1. The criterion is "is this string for a machine or for a person". Values going into query strings or request bodies must be raw; anything that will
  *     appear on screen is first translated into a language pack key.
  *  2. **Unknown values always count as empty**. When `formatMessage` cannot find a key it **returns the key name as-is**, so
- *     `$t('notes.kind.' + kind)` prints `notes.kind.foo` when the backend adds a new card kind; splicing the raw value
+ *     `$t('status.' + value)` prints `status.newvalue` when the backend adds a value; splicing the raw value
  *     prints the machine word instead. Both are worse than "one badge fewer": the UI would rather briefly show one cell less than misreport or
  *     leak an internal identifier - the next change will fill it in anyway, while a wrong status goes unnoticed.
  */
 
 /** Minimal shape of a translation function (`$t` is enough). */
 export type Translate = (key: string) => string;
-
-/**
- * Language pack key for a card kind; returns null for unknown/empty values or when metadata is not ready.
- * The card kind list takes the server's self-description (GET /api/v1/card-types) as its only source.
- */
-export function noteKindLabelKey(
-  kind: string | null | undefined,
-  catalog: CardTypeCatalog | null
-): string | null {
-  if (!kind || !catalog || !catalog.byKind.has(kind)) return null;
-  return `notes.kind.${kind}`;
-}
 
 /**
  * Kinds of dangerous action on a deck card.
@@ -56,16 +42,6 @@ export function deckActionKind(role: string | null | undefined): DeckActionKind 
     default:
       return null;
   }
-}
-
-/** Card kind badge copy; returns an empty string for an unknown enum or when metadata is not ready. */
-export function noteKindLabel(
-  kind: string | null | undefined,
-  catalog: CardTypeCatalog | null,
-  t: Translate
-): string {
-  const key = noteKindLabelKey(kind, catalog);
-  return key ? t(key) : '';
 }
 
 /**

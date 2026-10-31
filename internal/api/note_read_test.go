@@ -83,11 +83,7 @@ func TestNoteResponsesReturnStoredFieldHTML(t *testing.T) {
 	router := env.router()
 
 	const optionHTML = `<img src="x.png"><b>bold option</b>`
-	noteType, err := store.NewNoteStore(env.db).EnsureStockNoteType(context.Background(), deck.ID, "choice_single")
-	if err != nil {
-		t.Fatalf("ensure choice_single note type: %v", err)
-	}
-	note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID), CreatedBy: store.Ptr(user.ID)}
+	note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(stockNoteTypeID(t, env.db, deck.ID, "choice_single")), CreatedBy: store.Ptr(user.ID)}
 	if _, err := store.NewNoteStore(env.db).Create(context.Background(), note, map[string]any{
 		"question": "Which one?",
 		"options":  optionHTML,

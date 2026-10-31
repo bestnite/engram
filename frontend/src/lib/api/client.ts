@@ -75,7 +75,6 @@ import {
   type ResendVerificationResponse,
   type OIDCInfo,
   type RegistrationInfo,
-  type CardTypesResponse,
   type NoteTypesResponse,
   type NoteTypeStocksResponse,
   type AnswerControlsResponse,
@@ -374,14 +373,6 @@ export class ApiClient {
         apply_weights: options.applyWeights === true,
       }),
     }));
-  }
-
-  /**
-   * Read the self-description of all card kinds (GET /api/v1/card-types, scope: read).
-   * Static metadata with no user state; requires a session or API key, and the server returns 401 when unauthenticated.
-   */
-  async getCardTypes(): Promise<CardTypesResponse> {
-    return this.request<CardTypesResponse>('/api/v1/card-types');
   }
 
   /**
@@ -720,9 +711,6 @@ export class ApiClient {
       if (params.tag !== undefined && params.tag !== '') {
         searchParams.set('tag', params.tag);
       }
-      if (params.kind !== undefined && params.kind !== '') {
-        searchParams.set('kind', params.kind);
-      }
       if (params.status !== undefined && params.status !== '') {
         searchParams.set('status', params.status);
       }
@@ -761,7 +749,7 @@ export class ApiClient {
     }));
   }
 
-  /** Create notes via the safe bulk endpoint using the same-origin session and in-memory CSRF token (kind can be any registered card kind). */
+  /** Create notes via the safe bulk endpoint using the same-origin session and in-memory CSRF token. */
   async createNotes(deckId: string, input: CreateNotesRequest): Promise<CreateNotesResponse> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -1006,7 +994,7 @@ export class ApiClient {
   }
 
   /**
-   * Submit raw answers for answer-graded card kinds; the server grades them and writes reviews.
+   * Submit raw answers for answer-graded templates; the server grades them and writes reviews.
    * The client does not submit a grade; the grade comes from the server's graderFor and the preset mapping.
    */
   async submitGradedReview(
@@ -1020,7 +1008,7 @@ export class ApiClient {
     }));
   }
 
-  /** Request revealing the correct answer for answer-graded kinds (read-only preview, writes no progress). */
+  /** Request revealing the correct answer for answer-graded templates (read-only preview, writes no progress). */
   async revealGradedAnswer(
     input: SubmitGradedReviewRequest,
     options?: CardFaceRequestOptions,

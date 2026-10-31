@@ -107,20 +107,24 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	}
 	var prevBody struct {
 		Cards []struct {
-			FrontHTML string `json:"front_html"`
+			Front CardFace `json:"front"`
 		} `json:"cards"`
 	}
 	if err := json.Unmarshal(prev.Body.Bytes(), &prevBody); err != nil {
 		t.Fatalf("decode preview: %v", err)
 	}
-	if len(prevBody.Cards) == 0 || !strings.Contains(prevBody.Cards[0].FrontHTML, `<img src="`+saved.URL+`">`) {
+	if len(prevBody.Cards) == 0 || !strings.Contains(prevBody.Cards[0].Front.HTML, `<img src="`+saved.URL+`">`) {
 		t.Fatalf("preview did not resolve the uploaded image to its absolute URL: %s", snippet(prev.Body.String()))
 	}
 
 	// 4) Save the reference (SPA card updates go through PATCH /api/v1/notes/:id).
+	noteType, err := store.NewNoteTypeStore(db).ByID(context.Background(), *note.NoteTypeID)
+	if err != nil {
+		t.Fatalf("load note type: %v", err)
+	}
 	saveBody, err := json.Marshal(map[string]any{
-		"kind":   "basic",
-		"fields": map[string]any{"front": "see " + ref, "back": "back"},
+		"note_type": noteType.PublicID,
+		"fields":    map[string]any{"front": "see " + ref, "back": "back"},
 	})
 	if err != nil {
 		t.Fatalf("encode save body: %v", err)
@@ -140,7 +144,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	}
 	var reloadBody struct {
 		Cards []struct {
-			FrontHTML string `json:"front_html"`
+			Front CardFace `json:"front"`
 		} `json:"cards"`
 	}
 	if err := json.Unmarshal(reload.Body.Bytes(), &reloadBody); err != nil {
@@ -149,7 +153,7 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	if len(reloadBody.Cards) == 0 {
 		t.Fatalf("reload preview returned no cards: %s", snippet(reload.Body.String()))
 	}
-	body := reloadBody.Cards[0].FrontHTML
+	body := reloadBody.Cards[0].Front.HTML
 	if !strings.Contains(body, saved.URL) {
 		t.Errorf("reloaded preview lost the /media reference: %s", snippet(body))
 	}

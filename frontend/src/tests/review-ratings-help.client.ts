@@ -32,7 +32,6 @@ describe('ReviewView rating guidance', () => {
     state: 'new',
     due_at: '',
     retrievability: 0,
-    kind: 'basic',
     fields: { front: 'q', back: 'a' },
     tags: [],
     template: 'forward',
@@ -49,12 +48,8 @@ describe('ReviewView rating guidance', () => {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
         ...faces('<p>q</p>', '<p>a</p>'),
-        front_html: '<p>q</p>',
-        back_html: '<p>a</p>',
-        blanks: null,
         edit_href: '',
       }),
-      getCardTypes: vi.fn(),
     } as unknown as ApiClient;
     const target = document.createElement('div');
     document.body.appendChild(target);

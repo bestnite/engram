@@ -1,16 +1,24 @@
 /**
  * Field specs and blank form initialization.
  *
- * The field table (order, control shape, requiredness, default values) comes from the server's card-kind self-description (GET /api/v1/card-types,
- * with the contract in internal/cardtype/describe.go). This file keeps only transport-agnostic pure functions: the control vocabulary,
- * empty form initialization, and multi-line text conversion. A note field value itself is an HTML string and is never converted here.
+ * A note type's fields are data: the editor builds a spec per field from the stored config. This file keeps only
+ * transport-agnostic pure functions: the control vocabulary, empty form initialization, and multi-line text
+ * conversion. A note field value itself is an HTML string and is never converted here.
  */
-import type { CardTypeField } from './api/types';
 
-/** Field spec, i.e. the shape the server sends (key, control, required, default). */
-export type FieldSpec = CardTypeField;
+/** Control shape of one edit-form field. */
+export type FieldControl = 'text' | 'textarea' | 'lines' | 'number' | 'bool' | 'index' | 'indexes';
 
-/** Blank fields when creating/switching card kind: boolean defaults follow the server semantics (missing means default false). */
+/** Field spec, i.e. the shape the edit form renders one note-type field from. */
+export interface FieldSpec {
+  key: string;
+  control: FieldControl;
+  required: boolean;
+  /** Server default of a boolean field that has one; when there is none the key is omitted. */
+  default?: unknown;
+}
+
+/** Blank fields for a set of specs: boolean defaults follow the server semantics (missing means default false). */
 export function emptyFields(specs: readonly FieldSpec[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const spec of specs) {

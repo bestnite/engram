@@ -15,11 +15,7 @@ import (
 
 func seedStockNoteType(t *testing.T, db *gorm.DB, deckID uint64) *store.NoteType {
 	t.Helper()
-	nt, err := store.NewNoteStore(db).EnsureStockNoteType(t.Context(), deckID, "basic")
-	if err != nil {
-		t.Fatalf("ensure stock note type: %v", err)
-	}
-	return nt
+	return createStockNoteType(t, db, deckID, "basic")
 }
 
 func TestListNoteTypesIsDeckScoped(t *testing.T) {

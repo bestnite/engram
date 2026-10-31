@@ -156,6 +156,10 @@ func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 	if err := db.Where("note_id = ?", note.ID).First(&card).Error; err != nil {
 		t.Fatalf("load seeded card: %v", err)
 	}
+	noteType, err := store.NewNoteTypeStore(db).ByID(context.Background(), *note.NoteTypeID)
+	if err != nil {
+		t.Fatalf("load seeded note type: %v", err)
+	}
 	due := time.Now().UTC()
 	if err := db.Create(&store.CardState{
 		CardID: card.ID, UserID: u.ID, State: "review", DueAt: &due, Reps: 4, Lapses: 2,
@@ -168,7 +172,7 @@ func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 	out, isErr, text := callTool(t, cs, "create_notes", map[string]any{
 		"deck_id": deck.PublicID,
 		"notes": []any{map[string]any{
-			"note_id": note.PublicID, "kind": "basic",
+			"note_id": note.PublicID, "note_type": noteType.PublicID,
 			"fields": map[string]any{"front": "new", "back": "newA"}, "tags": []any{"t1"},
 		}},
 	})
@@ -208,7 +212,7 @@ func TestCreateNotesByNoteIDRewritesInPlace(t *testing.T) {
 	out, isErr, text = callTool(t, cs, "create_notes", map[string]any{
 		"deck_id": deck.PublicID,
 		"notes": []any{map[string]any{
-			"note_id": note.PublicID, "kind": "basic",
+			"note_id": note.PublicID, "note_type": noteType.PublicID,
 			"fields": map[string]any{"front": "z", "back": "z"}, "external_ref": "e:1",
 		}},
 	})

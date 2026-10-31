@@ -8,10 +8,10 @@
   import type { MediaReference } from '../../editframe/runtime';
 
   /**
-   * Renders the field form per card kind.
+   * Renders the field form of one note type.
    *
-   * Field order and control shape come from the server's card-kind self-description, and this component contains no per-kind branching
-   * business logic; views therefore no longer hand fields to the user as raw JSON to edit.
+   * Field order and control shape come from the specs the caller builds from the stored note type, and this component
+   * contains no per-note-type branching business logic; views therefore never hand fields to the user as raw JSON to edit.
    *
    * The card face fields render as a RichTextField: a sandboxed editing frame with the formatting and
    * insertion tools in the field's own header. Every other field stays a plain control: an answer,
@@ -23,21 +23,18 @@
     /** Form model: written in place directly (the parent holds it with $state, deeply reactive). */
     fields: Record<string, unknown>;
     /**
-     * The card face field names (the kind's front and back fields). Only a face field whose control is
-     * a textarea gets the rich-text editor; without this prop no field gets it.
+     * The card face field names. Only a face field whose control is a textarea gets the rich-text editor;
+     * without this prop no field gets it.
      */
     faceFields?: readonly string[];
     /** Prefix for generating data-testid: `<prefix>-<field name>`. */
     testIdPrefix?: string;
     /**
-     * Presentation options per field name: sticky, collapsed, plain text, RTL, font and size. The
-     * current card-kind catalog carries none, so a host that has note-type field options passes them
-     * here; a field without an entry uses the editor defaults.
+     * Presentation options per field name: sticky, collapsed, plain text, RTL, font and size.
      */
     fieldOptions?: Record<string, RichFieldOptions>;
     /**
-     * Visible labels per field key, for a host whose field names are data rather than catalog keys
-     * (a note type's fields). A key with no entry falls back to the catalog label of that field name.
+     * Visible labels per field key. A key with no entry falls back to the machine field name.
      */
     labels?: Record<string, string>;
     /** Uploads one media file for the editor; without it the field inserts nothing by upload. */

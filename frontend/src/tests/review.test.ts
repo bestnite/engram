@@ -68,7 +68,10 @@ describe('review submission API', () => {
 
   it('renders one card through the render endpoint with session CSRF', async () => {
     fetcher.mockResolvedValueOnce(new Response(JSON.stringify({
-      card_id: 11, front_html: '<p>F</p>', back_html: '<p>B</p>', edit_href: '/decks/2/notes/7',
+      card_id: 11,
+      front: { html: '<p>F</p>', css: '', body_class: 'card', side: 'front', media_base: '' },
+      back: { html: '<p>B</p>', css: '', body_class: 'card', side: 'back', media_base: '' },
+      edit_href: '/decks/2/notes/7',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
 
     const result = await client.renderReviewCard({ card_id: '11', deck: ['2', '7'] });
@@ -80,7 +83,7 @@ describe('review submission API', () => {
     expect(headers.get('X-CSRF-Token')).toBe('session-token');
     expect(headers.has('Authorization')).toBe(false);
     expect(JSON.parse(init?.body as string)).toEqual({ card_id: '11', deck: ['2', '7'] });
-    expect(result.front_html).toBe('<p>F</p>');
+    expect(result.front.html).toBe('<p>F</p>');
     expect(result.edit_href).toBe('/decks/2/notes/7');
   });
 

@@ -1,29 +1,23 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
-import { clearCardTypes } from './card-type-fixture';
 import { faces } from './card-face-fixture';
 
 /**
- * A note type created through POST /api/v1/decks/:id/note-types stores opaque field ids and matches no engram stock
- * kind, so the card-kind catalog has no entry for it. The review page answers it from the due-card payload alone:
- * `answer_control` and `machine_graded` choose the flow, and `field_order` orders the plain-text fallback.
+ * A note type created through POST /api/v1/decks/:id/note-types stores opaque field ids. The review page answers it
+ * from the due-card payload alone: `answer_control` and `machine_graded` choose the flow, and `field_order` orders
+ * the plain-text fallback.
  */
 describe('ReviewView any note type', () => {
   let instance: ReturnType<typeof mount> | null = null;
 
-  beforeEach(() => {
-    // No catalog is loaded: the page must not need one.
-    clearCardTypes();
-  });
 
   afterEach(() => {
     if (instance) unmount(instance);
     instance = null;
     document.body.innerHTML = '';
-    clearCardTypes();
     vi.restoreAllMocks();
   });
 
@@ -32,7 +26,7 @@ describe('ReviewView any note type', () => {
     flushSync();
   }
 
-  /** A card of a note type the stock catalog does not describe: opaque field ids, an unknown template id, kind "". */
+  /** A card of a hand-made note type: opaque field ids and an unknown template id. */
   function customCard(flow: Pick<DueCard, 'answer_control' | 'machine_graded'>, fields: Record<string, unknown>): DueCard {
     return {
       card_id: 'x1',
@@ -41,7 +35,6 @@ describe('ReviewView any note type', () => {
       state: 'new',
       due_at: '',
       retrievability: 0,
-      kind: '',
       fields,
       tags: [],
       template: 'card-1',
@@ -63,15 +56,13 @@ describe('ReviewView any note type', () => {
     return target;
   }
 
-  it('reaches reveal and rating with no catalog loaded', async () => {
+  it('reaches reveal and rating from the due-card payload alone', async () => {
     const card = customCard(
       { answer_control: null, machine_graded: false },
       { 'f-front': '自定义问题', 'f-back': '自定义答案' },
     );
-    const getCardTypes = vi.fn();
     const submitSelfReview = vi.fn().mockResolvedValue({ card_id: 'x1', state: 'learning', version: 1, remaining: 0, cards: [] });
     const target = await mountView(card, {
-      getCardTypes,
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'x1',
         ...faces('<p>自定义问题</p>', '<p>自定义答案</p>'),
@@ -80,8 +71,7 @@ describe('ReviewView any note type', () => {
       submitSelfReview,
     });
 
-    // The catalog is never requested: the flow came from the card payload.
-    expect(getCardTypes).not.toHaveBeenCalled();
+    // The flow came from the card payload; no separate metadata request is needed.
     expect(target.querySelector('[data-testid="review-front"]')).not.toBeNull();
 
     (target.querySelector('[data-testid="review-reveal"]') as HTMLElement).click();

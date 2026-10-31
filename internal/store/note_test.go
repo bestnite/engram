@@ -564,8 +564,8 @@ func TestNoteCardTemplateUniqueness(t *testing.T) {
 	}
 }
 
-// TestNoteValidationRejectsInvalid covers the negative cases of the write path: missing deck, missing note type,
-// an unknown field name (named in the error) and an unknown stock kind.
+// TestNoteValidationRejectsInvalid covers the negative cases of the write path: missing deck, missing note type
+// and an unknown field name (named in the error).
 func TestNoteValidationRejectsInvalid(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -582,9 +582,6 @@ func TestNoteValidationRejectsInvalid(t *testing.T) {
 			}
 			if _, err := notes.Create(ctx, &Note{DeckID: deckID}, map[string]any{"front": "q", "back": "a"}); !errors.Is(err, ErrNoteTypeRequired) {
 				t.Errorf("Create(no note type) error = %v, want ErrNoteTypeRequired", err)
-			}
-			if _, err := NewNoteStore(db).EnsureStockNoteType(ctx, deckID, "nope"); err == nil {
-				t.Error("EnsureStockNoteType(unknown kind) error = nil, want an error")
 			}
 			if _, err := notes.Create(ctx, noteOfKind(t, db, deckID, "basic"), map[string]any{"front": "q", "nosuch": "x"}); err == nil ||
 				!strings.Contains(err.Error(), "nosuch") {

@@ -5,7 +5,7 @@ import type { DueCard, GradedFeedback } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { face } from './card-face-fixture';
 
-/** How the server answers one stock kind: the template's answer control, whether the submit path grades it, and the field order. */
+/** How the server answers one note type shape: the template's answer control, whether the submit path grades it, and the field order. */
 const flows: Record<string, Pick<DueCard, 'answer_control' | 'machine_graded' | 'field_order'>> = {
   basic: { answer_control: null, machine_graded: false, field_order: ['front', 'back'] },
   typed: { answer_control: 'text', machine_graded: true, field_order: ['prompt', 'answer', 'accept'] },
@@ -25,7 +25,6 @@ function gradedCard(kind: string, fields: Record<string, unknown>): DueCard {
     state: 'new',
     due_at: '2026-10-06T00:00:00Z',
     retrievability: 0,
-    kind,
     fields,
     tags: [],
     template: 'forward',
@@ -355,7 +354,6 @@ describe('ReviewView card sides and controls come from the due-card payload', ()
       state: 'new',
       due_at: '2026-10-06T00:00:00Z',
       retrievability: 0,
-      kind: '',
       fields: { 'f-front': '自定义问题', 'f-back': '自定义答案' },
       tags: [],
       template: 'card-1',

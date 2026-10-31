@@ -34,7 +34,6 @@ describe('ReviewView due counter split', () => {
       state,
       due_at: '',
       retrievability: 0,
-      kind: 'basic',
       fields: { front: 'front ' + id, back: 'back ' + id },
       tags: [],
       template: 'forward',
@@ -71,7 +70,6 @@ describe('ReviewView due counter split', () => {
     // The queue request never settles: the numbers proven here can only come from the mount props.
     const client = {
       getDueCards: vi.fn().mockReturnValue(new Promise(() => {})),
-      getCardTypes: vi.fn(),
     } as unknown as ApiClient;
     const target = mountReview({ client, initialCards, initialLoading: true });
     await flush();
@@ -84,7 +82,6 @@ describe('ReviewView due counter split', () => {
     const initialCards = [dueCard('c1', 'learning'), dueCard('c2', 'review'), dueCard('c3', 'relearning')];
     const client = {
       getDueCards: vi.fn().mockReturnValue(new Promise(() => {})),
-      getCardTypes: vi.fn(),
     } as unknown as ApiClient;
     const target = mountReview({ client, initialCards, initialLoading: true });
     await flush();
@@ -109,12 +106,8 @@ describe('ReviewView due counter split', () => {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'c1',
         ...faces('<p>front</p>', '<p>back</p>'),
-        front_html: '<p>front</p>',
-        back_html: '<p>back</p>',
-        blanks: null,
         edit_href: '',
       }),
-      getCardTypes: vi.fn(),
       submitSelfReview,
     } as unknown as ApiClient;
     const target = mountReview({ client });

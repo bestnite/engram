@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ func TestRoleDenialWritesPermissionDeniedAudit(t *testing.T) {
 	path := "/api/v1/notes/" + note.PublicID
 
 	status, raw := doJSON(t, router, http.MethodPatch, path, key.Plaintext,
-		`{"kind":"basic","fields":{"front":"x","back":"y"}}`)
+		fmt.Sprintf(`{"note_type":%q,"fields":{"front":"x","back":"y"}}`, storedNoteTypeID(t, env, note.ID)))
 	if status != http.StatusForbidden {
 		t.Fatalf("reader PATCH note status = %d, want 403 (body %s)", status, raw)
 	}

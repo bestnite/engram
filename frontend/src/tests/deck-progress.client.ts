@@ -8,7 +8,6 @@ import { apiClient } from '../lib/api';
 import type { Deck, DeckQueueCountsResponse, StatsSummary } from '../lib/api';
 import { routeStore, matchRoute } from '../lib/router';
 import { setLocale } from '../lib/i18n';
-import { setCardTypes } from '../lib/card-types';
 
 /**
  * Deck progress: the deck list, the home deck list and the deck detail header show how many cards of the deck
@@ -72,10 +71,8 @@ describe('deck progress display', () => {
 
   async function mountDetail(): Promise<void> {
     mountTarget();
-    setCardTypes(null);
     window.history.replaceState({}, '', '/decks/d1');
     routeStore.set(matchRoute('/decks/d1'));
-    vi.spyOn(apiClient, 'getCardTypes').mockResolvedValue({ card_types: [] } as never);
     instance = mount(DeckDetailView, {
       target,
       props: { initialDeck: deck('d1', 'Alpha'), initialNotes: [], initialTotal: 0, initialLoading: false },
