@@ -272,6 +272,59 @@ func TestAnkiProgressImport(t *testing.T) {
 	}
 }
 
+func TestAnkiProgressLastReview(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		for _, tc := range []struct {
+			name           string
+			kind, interval int
+			data           string
+			reviews        []anki.Review
+			want           *int64
+		}{
+			{"lrt wins", 2, 7, `{"s":4.5,"d":6.2,"lrt":1600000000}`, []anki.Review{{ID: 1600086400123, Ease: 3, Type: 1}}, Ptr(int64(1600000000000))},
+			{"kept revlog", 2, 7, `{"s":4.5,"d":6.2}`, []anki.Review{{ID: 1600000000000, Ease: 3, Type: 1}, {ID: 1600000001000, Type: 4}, {ID: 1600000002123, Ease: 3, Type: 1}, {ID: 1600000003000, Ease: 0, Type: 1}}, Ptr(int64(1600000002123))},
+			{"review due minus days", 2, 7, `{"s":4.5,"d":6.2}`, nil, nil},
+			{"relearning due minus seconds", 3, -600, `{"s":4.5,"d":6.2}`, nil, Ptr(int64(1699999400000))},
+			{"learning without history", 1, -600, `{"s":4.5,"d":6.2}`, nil, nil},
+		} {
+			t.Run(driver+"/"+tc.name, func(t *testing.T) {
+				user := seedUsers(t, db, fmt.Sprintf("last_review_%s_%s", driver, tc.name))[0]
+				pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				pkg.Notes, pkg.Cards = pkg.Notes[:1], pkg.Cards[:1]
+				card := &pkg.Cards[0]
+				card.Type, card.Queue, card.Interval, card.Data = tc.kind, tc.kind, tc.interval, tc.data
+				card.Due = 1700000000
+				if tc.kind == 2 {
+					card.Due = 10
+				}
+				pkg.Reviews = append([]anki.Review(nil), tc.reviews...)
+				for i := range pkg.Reviews {
+					pkg.Reviews[i].CardID = card.ID
+				}
+				plan, report := planAnkiDecks(pkg), &PackageImportReport{}
+				opts := PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: true, Now: time.Now}
+				if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, opts, report); err != nil {
+					t.Fatal(err)
+				}
+				var state CardState
+				if err := db.Where("user_id = ?", user).First(&state).Error; err != nil {
+					t.Fatal(err)
+				}
+				want := tc.want
+				if tc.name == "review due minus days" {
+					want = Ptr((pkg.CreatedAt + 3*86400) * 1000)
+				}
+				if want == nil && state.LastReviewAt != nil || want != nil && (state.LastReviewAt == nil || state.LastReviewAt.UnixMilli() != *want) {
+					t.Fatalf("last review = %v, want milliseconds %v", state.LastReviewAt, want)
+				}
+			})
+		}
+	}
+}
+
 func TestAnkiProgressMissingMemory(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		for _, tc := range []struct {

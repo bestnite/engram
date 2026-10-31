@@ -506,6 +506,7 @@ func ankiCardWithState(row anki.WriteCard, state CardState, createdAt int64) ank
 	}
 	if state.LastReviewAt != nil {
 		row.Modified = state.LastReviewAt.UTC().Unix()
+		row.LastReview = &row.Modified
 	}
 	return row
 }

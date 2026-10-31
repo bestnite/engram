@@ -199,6 +199,9 @@ func TestExportAnkiPackageRoundTrip(t *testing.T) {
 			if got.State != source.State || got.DueAt == nil || !got.DueAt.Equal(*source.DueAt) || got.Stability == nil || *got.Stability != *source.Stability || got.Difficulty == nil || *got.Difficulty != *source.Difficulty || got.Reps != source.Reps || got.Lapses != source.Lapses {
 				t.Fatalf("state: got %+v want %+v", got, source)
 			}
+			if got.LastReviewAt == nil || source.LastReviewAt == nil || !got.LastReviewAt.Equal(*source.LastReviewAt) {
+				t.Fatalf("last review: got %v want %v", got.LastReviewAt, source.LastReviewAt)
+			}
 			var sourceReview, review Review
 			if err := db.Where("user_id = ?", owner).First(&sourceReview).Error; err != nil {
 				t.Fatal(err)

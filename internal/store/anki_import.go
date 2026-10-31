@@ -1598,6 +1598,16 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 				at = time.UnixMilli(stamp).UTC()
 			}
 			state.LastReviewAt = &at
+		} else if ids := keptIDs[card.ID]; len(ids) > 0 {
+			at := time.UnixMilli(ids[len(ids)-1]).UTC()
+			state.LastReviewAt = &at
+		} else if (card.Type == 2 || card.Type == 3) && state.DueAt != nil {
+			interval := time.Duration(card.Interval) * 24 * time.Hour
+			if card.Interval < 0 {
+				interval = -time.Duration(card.Interval) * time.Second
+			}
+			at := state.DueAt.Add(-interval)
+			state.LastReviewAt = &at
 		}
 		if previous[card.ID] != 0 && last[card.ID] >= previous[card.ID] {
 			state.ElapsedDays = int((last[card.ID] - previous[card.ID]) / 86400000)
