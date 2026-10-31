@@ -513,3 +513,64 @@ func TestReviewRenderEmptyCardShowsLocalizedNotice(t *testing.T) {
 		})
 	}
 }
+
+// TestReviewRenderLegacyClozeZeroCardIsEmpty covers a "cloze:0" card stored by the parser that
+// accepted {{c0::...}} before note types existed. No note generates it any more, so review must show
+// the empty-card notice instead of failing the render, and the empty-card report must list it so the
+// cleanup can remove it. Its ordinal 0 equals that of the live cloze:1 card, which is why the report
+// cannot rely on the ordinal.
+func TestReviewRenderLegacyClozeZeroCardIsEmpty(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedReviewDeck(t, db, ownerID, "Legacy cloze deck")
+	note := seedGradedNote(t, db, deck.ID, "cloze", map[string]any{
+		"text": "<ruby>{{c1::你好}}<rt>nǐ hǎo</rt></ruby>",
+	})
+	legacy := store.Card{NoteID: note.ID, Template: "cloze:0", Ordinal: 0, CreatedAt: time.Now()}
+	if err := db.Create(&legacy).Error; err != nil {
+		t.Fatalf("create legacy cloze:0 card: %v", err)
+	}
+	var live store.Card
+	if err := db.Where("note_id = ? AND template = ?", note.ID, "cloze:1").First(&live).Error; err != nil {
+		t.Fatalf("load cloze:1 card: %v", err)
+	}
+
+	render := func(t *testing.T, cardID string) reviewRenderBody {
+		t.Helper()
+		rec := postJSON(srv, "/api/v1/review/render", map[string]any{
+			"card_id": cardID, "deck": []string{deck.PublicID},
+		}, cookies, map[string]string{auth.CSRFHeaderName: csrf})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("render %s = %d, want 200 (body %s)", cardID, rec.Code, snippet(rec.Body.String()))
+		}
+		var body reviewRenderBody
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode render response: %v (body %s)", err, snippet(rec.Body.String()))
+		}
+		return body
+	}
+
+	t.Run("legacy card shows the empty notice", func(t *testing.T) {
+		body := render(t, legacy.PublicID)
+		if !strings.Contains(body.Front.HTML, "empty-card-notice") {
+			t.Errorf("front face = %q, want the empty-card notice", body.Front.HTML)
+		}
+	})
+	t.Run("live card still renders the cloze", func(t *testing.T) {
+		body := render(t, live.PublicID)
+		if strings.Contains(body.Front.HTML, "empty-card-notice") {
+			t.Errorf("front face of cloze:1 = %q, want the cloze, not the empty notice", body.Front.HTML)
+		}
+		if !strings.Contains(body.Front.HTML, `<span class="cloze"`) || !strings.Contains(body.Front.HTML, "[...]</span><rt>nǐ hǎo</rt>") {
+			t.Errorf("front face of cloze:1 = %q, want the deletion hidden", body.Front.HTML)
+		}
+	})
+	t.Run("empty-card report lists only the legacy card", func(t *testing.T) {
+		empty, err := store.NewNoteStore(db).ListEmptyCards(context.Background(), deck.ID)
+		if err != nil {
+			t.Fatalf("ListEmptyCards: %v", err)
+		}
+		if len(empty) != 1 || empty[0].CardID != legacy.ID {
+			t.Errorf("ListEmptyCards = %+v, want only card %d", empty, legacy.ID)
+		}
+	})
+}

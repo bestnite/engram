@@ -547,6 +547,52 @@ func TestEmptyExistingCards(t *testing.T) {
 	if len(empty) != 1 || empty[0] != clozeExisting[1] {
 		t.Errorf("EmptyExistingCards = %v, want [%+v]", empty, clozeExisting[1])
 	}
+
+	// A legacy cloze:0 card shares ordinal 0 with cloze:1, yet no note generates it.
+	legacy := []ExistingCard{{Template: "cloze:0", Ordinal: 0}, {Template: "cloze:1", Ordinal: 0}}
+	empty, err = EmptyExistingCards(cloze, clozeData, legacy)
+	if err != nil {
+		t.Fatalf("EmptyExistingCards for legacy cloze: %v", err)
+	}
+	if len(empty) != 1 || empty[0] != legacy[0] {
+		t.Errorf("EmptyExistingCards = %v, want [%+v]", empty, legacy[0])
+	}
+}
+
+// TestCardTemplateCloze checks which stored cloze template values resolve, and
+// to which cloze number.
+func TestCardTemplateCloze(t *testing.T) {
+	cloze := cardgenConfig(KindCloze, []string{"Text"}, []string{"{{cloze:Text}}"})
+	cases := []struct {
+		template   string
+		wantNumber int
+		wantErr    bool
+	}{
+		{template: "cloze:1", wantNumber: 1},
+		{template: "cloze:12", wantNumber: 12},
+		{template: "cloze:0", wantNumber: 0},
+		{template: "cloze:-1", wantErr: true},
+		{template: "cloze:x", wantErr: true},
+		{template: "cloze:", wantErr: true},
+		{template: "t0", wantErr: true},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.template, func(t *testing.T) {
+			tmpl, number, err := CardTemplate(cloze, testCase.template)
+			if testCase.wantErr {
+				if err == nil {
+					t.Fatalf("CardTemplate(%q) succeeded, want an error", testCase.template)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("CardTemplate(%q): %v", testCase.template, err)
+			}
+			if number != testCase.wantNumber || tmpl.ID != "t0" {
+				t.Errorf("CardTemplate(%q) = (%q, %d), want (t0, %d)", testCase.template, tmpl.ID, number, testCase.wantNumber)
+			}
+		})
+	}
 }
 
 // TestGenerateCardsErrors checks that a template which cannot be rendered fails

@@ -16,6 +16,7 @@ package notetype
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // GeneratedCard identifies one card a note should have. Template is the
@@ -44,6 +45,22 @@ const clozeTemplatePrefix = "cloze:"
 // Anki clamps the ordinal this way, so numbers from 500 upwards share the last
 // card ordinal.
 const maxClozeCardOrdinal = 499
+
+// clozeCardNumber returns the cloze number a "cloze:<n>" card template names.
+// It reports false for a value without the prefix or whose number is not a
+// non-negative decimal integer. Zero is accepted because legacy cards carry it;
+// see CardTemplate.
+func clozeCardNumber(cardTemplate string) (int, bool) {
+	digits, ok := strings.CutPrefix(cardTemplate, clozeTemplatePrefix)
+	if !ok {
+		return 0, false
+	}
+	number, err := strconv.Atoi(digits)
+	if err != nil || number < 0 {
+		return 0, false
+	}
+	return number, true
+}
 
 // GenerateCards returns the cards a note should have.
 //
@@ -133,6 +150,11 @@ func generateClozeCards(cfg Config, data RenderData) []GeneratedCard {
 // covers a normal card whose front now references no non-empty field, a normal
 // card whose template no longer exists, and a cloze card whose cloze number
 // appears in no field.
+//
+// A cloze card whose template names no positive cloze number, such as the
+// legacy "cloze:0", is empty whatever its ordinal: no note generates it, and
+// its stored ordinal can coincide with that of a generated card ("cloze:0" and
+// "cloze:1" both carry ordinal 0), so the ordinal test alone would keep it.
 func EmptyExistingCards(cfg Config, data RenderData, existing []ExistingCard) ([]ExistingCard, error) {
 	generated, err := GenerateCards(cfg, data)
 	if err != nil {
@@ -144,6 +166,12 @@ func EmptyExistingCards(cfg Config, data RenderData, existing []ExistingCard) ([
 	}
 	var empty []ExistingCard
 	for _, card := range existing {
+		if cfg.Kind == KindCloze {
+			if number, ok := clozeCardNumber(card.Template); !ok || number < 1 {
+				empty = append(empty, card)
+				continue
+			}
+		}
 		if !wanted[card.Ordinal] {
 			empty = append(empty, card)
 		}
