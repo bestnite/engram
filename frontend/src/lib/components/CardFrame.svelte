@@ -81,7 +81,9 @@
   function sendShow(): void {
     const win = iframe?.contentWindow;
     if (!win || !ready) return;
-    win.postMessage({ type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal }, '*');
+    // The tag list usually comes from Svelte state, which is a proxy, and postMessage cannot clone a proxy
+    // (DataCloneError): the show would never arrive. A snapshot is the plain value of the same list.
+    win.postMessage({ type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags: $state.snapshot(avTags), ordinal }, '*');
   }
 
   /** Sends the current theme; the frame owns its own `<html>` element, so it cannot inherit the parent's class. */
