@@ -119,6 +119,23 @@ describe('CardFrame outbound messages', () => {
 });
 
 describe('CardFrame inbound messages', () => {
+  it('reports a content click from its own iframe only', () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    const onclick = vi.fn();
+    instance = mount(CardFrame, {
+      target,
+      props: { html: '<p>face</p>', css: '', bodyClass: 'card', side: 'question', mediaBase: '', onclick },
+    });
+    flushSync();
+    const win = frame(target).contentWindow!;
+
+    receive(window, { type: 'click' });
+    expect(onclick).not.toHaveBeenCalled();
+    receive(win, { type: 'click' });
+    expect(onclick).toHaveBeenCalledTimes(1);
+  });
+
   it('applies a height only from its own iframe', () => {
     const target = mountFrame();
     const win = frame(target).contentWindow!;

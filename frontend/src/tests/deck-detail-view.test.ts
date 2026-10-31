@@ -76,12 +76,39 @@ describe('DeckDetailView notes table', () => {
     expect(html).toMatch(/data-testid="deck-title"[\s\S]*日语 N2 词汇/);
   });
 
-  it('shows the description only inside the sandboxed frame', () => {
+  it('shows a description without markup as text the owner clicks to edit, like the name', () => {
     const html = renderView([note('n1')]);
+    expect(html).toMatch(/data-testid="deck-description"[^>]*>N2 核心词汇</);
+    expect(html).not.toContain('data-testid="deck-description-rendered"');
+    expect(html).not.toContain('data-card-frame');
+  });
+
+  it('shows an HTML description only inside the sandboxed frame', () => {
+    const html = render(DeckDetailView, {
+      props: {
+        initialDeck: { ...deck, description: '<b>N2</b> 核心词汇' },
+        initialNotes: [note('n1')],
+        initialTotal: 1,
+        initialLoading: false,
+      },
+    }).html;
     expect(html).toContain('data-testid="deck-description-rendered"');
     expect(html).toMatch(/<iframe[^>]*sandbox="allow-scripts"[^>]*data-card-frame/);
     // Stored HTML never enters the parent markup: the frame receives it with postMessage.
-    expect(html).not.toContain('N2 核心词汇');
+    expect(html).not.toContain('核心词汇');
+  });
+
+  it('frames a Markdown description even when its source has no markup', () => {
+    const html = render(DeckDetailView, {
+      props: {
+        initialDeck: { ...deck, description: '*N2* 核心词汇', description_markdown: true, description_html: '<p><em>N2</em> 核心词汇</p>' },
+        initialNotes: [note('n1')],
+        initialTotal: 1,
+        initialLoading: false,
+      },
+    }).html;
+    expect(html).toContain('data-testid="deck-description-rendered"');
+    expect(html).not.toContain('核心词汇');
   });
 
   it('offers an "add a description" prompt to the owner when the deck has none', () => {

@@ -26,9 +26,11 @@
     testId?: string;
     /**
      * Display-state content that replaces the plain text, such as a sandboxed frame for HTML that must not enter the parent
-     * page. It is used only when the value is non-empty; the edit state still edits the raw value.
+     * page. It is used only when the value is non-empty; the edit state still edits the raw value. The snippet receives the
+     * function that enters editing, because a click inside a frame never reaches this component: the content calls it the
+     * way a click on plain text does. It is a no-op when the value is not editable.
      */
-    display?: Snippet;
+    display?: Snippet<[() => void]>;
   }
 
   let {
@@ -103,7 +105,7 @@
       aria-label={label}
       disabled={saving}
       data-testid={testId ? `${testId}-input` : undefined}
-      class={cn(fieldClass, 'block resize-none')}
+      class={cn(fieldClass, 'block resize-none [field-sizing:content]')}
       onkeydown={onKeydown}
       onblur={commit}
     ></textarea>
@@ -123,7 +125,7 @@
 {:else if editable}
   <span class="group/inline flex min-w-0 items-start gap-1.5">
     {#if display && value}
-      <span class="block min-w-0 flex-1">{@render display()}</span>
+      <span class="block min-w-0 flex-1">{@render display(start)}</span>
     {:else}
       <!-- The text itself is clickable too: a small icon should not be the only way into editing. -->
       <span
@@ -145,7 +147,7 @@
     </button>
   </span>
 {:else if display && value}
-  <span class="block {klass}" data-testid={testId}>{@render display()}</span>
+  <span class="block {klass}" data-testid={testId}>{@render display(() => {})}</span>
 {:else if value}
   <span class={klass} data-testid={testId}>{value}</span>
 {/if}
