@@ -1011,3 +1011,188 @@ func renderAnswerControl(spec notetype.AnswerSpec, face string, fields map[strin
 		Marker: marker, Side: notetype.SideBack, Bindings: bindings, ClozeOrdinal: clozeOrdinal,
 	}, face)
 }
+
+// TestConvertNoteRubyShortcodes is migration 0017's acceptance: the ruby
+// shortcode the old renderer expanded becomes a ruby element, the literal cases
+// stay byte-for-byte as they were, a ruby inside a TTS is expanded together with
+// its marker, a soft-deleted note is converted, and a second run changes
+// nothing.
+func TestConvertNoteRubyShortcodes(t *testing.T) {
+	cases := []struct {
+		name      string
+		front     string
+		wantFront string
+		unchanged bool
+		deleted   bool
+	}{
+		{
+			name:      "plain ruby",
+			front:     `{{ruby:漢字|かんじ}}`,
+			wantFront: `<ruby>漢字<rt>かんじ</rt></ruby>`,
+		},
+		{
+			name:      "reading html escaped",
+			front:     `{{ruby:B|a<b&c}}`,
+			wantFront: `<ruby>B<rt>a&lt;b&amp;c</rt></ruby>`,
+		},
+		{
+			name:      "ruby inside tts",
+			front:     `{{tts:{{ruby:漢字|かんじ}}|lang=ja}}`,
+			wantFront: `<ruby>漢字<rt>かんじ</rt></ruby>[anki:tts lang=ja]漢字[/anki:tts]`,
+		},
+		{
+			name:      "soft-deleted ruby",
+			front:     `{{ruby:漢字|かんじ}}`,
+			wantFront: `<ruby>漢字<rt>かんじ</rt></ruby>`,
+			deleted:   true,
+		},
+		{
+			name:      "empty base stays literal",
+			front:     `{{ruby:|R}}`,
+			unchanged: true,
+		},
+		{
+			name:      "empty reading stays literal",
+			front:     `{{ruby:B|}}`,
+			unchanged: true,
+		},
+		{
+			name:      "equals in reading stays literal",
+			front:     `{{ruby:B|R=x}}`,
+			unchanged: true,
+		},
+		{
+			name:      "pipe in reading stays literal",
+			front:     `{{ruby:B|R|x}}`,
+			unchanged: true,
+		},
+		{
+			name:      "shortcode in reading stays literal",
+			front:     `{{ruby:B|{{x}}}}`,
+			unchanged: true,
+		},
+		{
+			name:      "shortcode in base stays literal",
+			front:     `{{ruby:{{tts:x}}|R}}`,
+			unchanged: true,
+		},
+		{
+			name:      "no ruby stays unchanged",
+			front:     `<p>plain HTML, no shortcode</p>`,
+			unchanged: true,
+		},
+		{
+			name:      "tts marker alone stays unchanged",
+			front:     `<p>a {{tts:spoken}} marker this migration does not touch</p>`,
+			unchanged: true,
+		},
+	}
+
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			owner := seedUsers(t, db, "ruby_migration_owner")[0]
+			deckID := seedDeck(t, db, owner)
+			nt := seedNoteType(t, db, deckID, "Ruby")
+			cfg, err := nt.Config()
+			if err != nil {
+				t.Fatalf("note type config: %v", err)
+			}
+
+			type noteRow struct {
+				ID         uint64
+				FieldsJSON string    `gorm:"column:fields_json"`
+				SearchText string    `gorm:"column:search_text"`
+				UpdatedAt  time.Time `gorm:"column:updated_at"`
+			}
+			readNote := func(id uint64) noteRow {
+				t.Helper()
+				var rows []noteRow
+				if err := db.Unscoped().Table("notes").
+					Select("id, fields_json, search_text, updated_at").
+					Where("id = ?", id).Scan(&rows).Error; err != nil {
+					t.Fatalf("read note %d: %v", id, err)
+				}
+				if len(rows) != 1 {
+					t.Fatalf("note %d read = %d rows, want 1", id, len(rows))
+				}
+				return rows[0]
+			}
+
+			now := time.Now().UTC().Truncate(time.Second)
+			noteTypeID := nt.ID
+			ids := make(map[string]uint64, len(cases))
+			before := make(map[uint64]noteRow, len(cases))
+			for _, tc := range cases {
+				raw, err := json.Marshal(map[string]string{"f-front": tc.front, "f-back": "back"})
+				if err != nil {
+					t.Fatalf("%s: encode fields: %v", tc.name, err)
+				}
+				note := Note{
+					DeckID: deckID, NoteTypeID: &noteTypeID, FieldsJSON: string(raw),
+					TagsJSON: "[]", SearchText: "stale", CreatedAt: now, UpdatedAt: now,
+				}
+				if tc.deleted {
+					note.DeletedAt = gorm.DeletedAt{Time: now, Valid: true}
+				}
+				if err := db.Create(&note).Error; err != nil {
+					t.Fatalf("%s: create note: %v", tc.name, err)
+				}
+				ids[tc.name] = note.ID
+				before[note.ID] = readNote(note.ID)
+			}
+
+			if err := convertNoteRubyShortcodes(db); err != nil {
+				t.Fatalf("convertNoteRubyShortcodes() error = %v", err)
+			}
+
+			for _, tc := range cases {
+				id := ids[tc.name]
+				got := readNote(id)
+				if !got.UpdatedAt.Equal(before[id].UpdatedAt) {
+					t.Errorf("%s: updated_at = %v, want unchanged %v", tc.name, got.UpdatedAt, before[id].UpdatedAt)
+				}
+				if tc.unchanged {
+					if got.FieldsJSON != before[id].FieldsJSON {
+						t.Errorf("%s: fields_json = %q, want unchanged %q", tc.name, got.FieldsJSON, before[id].FieldsJSON)
+					}
+					if got.SearchText != before[id].SearchText {
+						t.Errorf("%s: search_text = %q, want unchanged %q", tc.name, got.SearchText, before[id].SearchText)
+					}
+					continue
+				}
+				wantFields, err := json.Marshal(map[string]string{"f-front": tc.wantFront, "f-back": "back"})
+				if err != nil {
+					t.Fatalf("%s: encode want fields: %v", tc.name, err)
+				}
+				if got.FieldsJSON != string(wantFields) {
+					t.Errorf("%s: fields_json = %q, want %q", tc.name, got.FieldsJSON, string(wantFields))
+				}
+				wantSearch := noteSearchText(cfg, map[string]string{"f-front": tc.wantFront, "f-back": "back"})
+				if got.SearchText != wantSearch {
+					t.Errorf("%s: search_text = %q, want %q", tc.name, got.SearchText, wantSearch)
+				}
+				if got.SearchText == "stale" {
+					t.Errorf("%s: search_text was not recomputed", tc.name)
+				}
+			}
+
+			// A second run finds no marker, so no row changes.
+			after := make(map[uint64]noteRow, len(ids))
+			for _, id := range ids {
+				after[id] = readNote(id)
+			}
+			if err := convertNoteRubyShortcodes(db); err != nil {
+				t.Fatalf("second convertNoteRubyShortcodes() error = %v", err)
+			}
+			for id, want := range after {
+				if got := readNote(id); got != want {
+					t.Errorf("second run changed note %d: %+v, want %+v", id, got, want)
+				}
+			}
+		})
+	}
+}

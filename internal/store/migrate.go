@@ -132,6 +132,14 @@ var BuiltinMigrations = []Migration{
 		Name: "0016_notes_note_type_not_null_repair",
 		Up:   notesNoteTypeNotNullRepair,
 	},
+	{
+		// 0012 converted note content to HTML but left the {{ruby:base|reading}} marker as source text, and a
+		// {{tts:...}} wrapping a ruby stayed literal because its parameter split stopped inside the nested marker.
+		// This expands both in every rich-text note field, soft-deleted notes included, following the old renderer's
+		// rule so a marker it rejected stays literal. A second run finds no marker and writes nothing.
+		Name: "0017_convert_note_ruby_shortcodes",
+		Up:   convertNoteRubyShortcodes,
+	},
 }
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).

@@ -526,6 +526,15 @@ var shortcodeNumberRE = regexp.MustCompile(`^[0-9]{1,9}(?:\.[0-9]{1,6})?$`)
 // reader without a speech engine still sees the text; hide drops that visible
 // copy because the author asked the client not to show it.
 func expandTTSShortcodes(html string) string {
+	return expandTTSShortcodesWithSpeech(html, nil)
+}
+
+// expandTTSShortcodesWithSpeech applies the same rewrite while letting the
+// caller derive the spoken text from the visible body. A nil speech keeps the
+// body itself, which is the rule migration 0012 used. Migration 0017 passes a
+// function that drops a ruby reading, because the annotation is not spoken: the
+// old speech text read the base alone.
+func expandTTSShortcodesWithSpeech(html string, speech func(string) string) string {
 	return ttsShortcodeRE.ReplaceAllStringFunc(html, func(match string) string {
 		inner := match[len("{{tts:") : len(match)-len("}}")]
 		parts := strings.Split(inner, "|")
@@ -563,7 +572,11 @@ func expandTTSShortcodes(html string) string {
 			b.WriteString(" speed=" + rate)
 		}
 		b.WriteString("]")
-		b.WriteString(body)
+		spoken := body
+		if speech != nil {
+			spoken = speech(body)
+		}
+		b.WriteString(spoken)
 		b.WriteString("[/anki:tts]")
 		return b.String()
 	})
@@ -714,3 +727,165 @@ type noteTypeNotNullColumn struct {
 }
 
 func (noteTypeNotNullColumn) TableName() string { return "notes" }
+
+// convertNoteRubyShortcodes is migration 0017: it expands the
+// {{ruby:base|reading}} shortcode in every rich-text note field, soft-deleted
+// notes included, and then expands a {{tts:...}} marker whose body wraps a ruby.
+// A plain-text field holds machine syntax rather than rendered content, so a
+// marker in it is left as it is.
+//
+// Migration 0012 rendered note content as HTML but left the ruby marker alone,
+// and a TTS marker around a ruby stayed literal because 0012 split its
+// parameters inside the nested braces. The rewrite follows the old renderer's
+// rule exactly, so a marker that renderer rejected stays literal source text.
+//
+// Rows are read in primary-key batches and written only when a field changed,
+// so a second run finds no marker and writes nothing. updated_at is left alone:
+// no user edited the note, so the rewrite must not make it look recently
+// changed.
+func convertNoteRubyShortcodes(tx *gorm.DB) error {
+	if !tx.Migrator().HasTable("notes") {
+		return nil
+	}
+	const batchSize = 500
+	configs := make(map[uint64]notetype.Config)
+	var last uint64
+	for {
+		var batch []struct {
+			ID         uint64
+			NoteTypeID uint64 `gorm:"column:note_type_id"`
+			FieldsJSON string `gorm:"column:fields_json"`
+		}
+		if err := tx.Unscoped().Table("notes").
+			Select("id, note_type_id, fields_json").
+			Where("id > ?", last).Order("id ASC").Limit(batchSize).
+			Scan(&batch).Error; err != nil {
+			return fmt.Errorf("convert note ruby shortcodes: scan notes after id %d: %w", last, err)
+		}
+		if len(batch) == 0 {
+			return nil
+		}
+		for _, row := range batch {
+			last = row.ID
+			cfg, ok := configs[row.NoteTypeID]
+			if !ok {
+				var nt NoteType
+				if err := tx.Select("id", "config_json").First(&nt, row.NoteTypeID).Error; err != nil {
+					return fmt.Errorf("convert note ruby shortcodes: note %d: load note type %d: %w", row.ID, row.NoteTypeID, err)
+				}
+				decoded, err := nt.Config()
+				if err != nil {
+					return fmt.Errorf("convert note ruby shortcodes: note %d: %w", row.ID, err)
+				}
+				cfg = decoded
+				configs[row.NoteTypeID] = cfg
+			}
+			values, err := ParseFieldValues(row.FieldsJSON)
+			if err != nil {
+				return fmt.Errorf("convert note ruby shortcodes: note %d: %w", row.ID, err)
+			}
+			plain := make(map[string]bool, len(cfg.Fields))
+			for _, field := range cfg.Fields {
+				if field.PlainText {
+					plain[field.ID] = true
+				}
+			}
+			converted := make(map[string]string, len(values))
+			changed := false
+			for key, value := range values {
+				// A plain-text field holds machine syntax rather than rich text
+				// (the typed note's regex is the only one today), so a marker in
+				// it is literal content the renderer never expanded.
+				if plain[key] {
+					converted[key] = value
+					continue
+				}
+				rewritten := expandRubyShortcodes(value)
+				if rewritten != value {
+					rewritten = expandTTSShortcodesWithSpeech(rewritten, rubySpeechText)
+					changed = true
+				}
+				converted[key] = rewritten
+			}
+			if !changed {
+				continue
+			}
+			raw, err := json.Marshal(converted)
+			if err != nil {
+				return fmt.Errorf("convert note ruby shortcodes: note %d: encode fields: %w", row.ID, err)
+			}
+			if err := tx.Unscoped().Model(&Note{}).Where("id = ?", row.ID).UpdateColumns(map[string]any{
+				"fields_json": string(raw),
+				"search_text": noteSearchText(cfg, converted),
+			}).Error; err != nil {
+				return fmt.Errorf("convert note ruby shortcodes: note %d: write: %w", row.ID, err)
+			}
+		}
+	}
+}
+
+// expandRubyShortcodes turns every {{ruby:base|reading}} marker that the old
+// renderer would have accepted into its ruby element.
+//
+// The field already holds HTML from migration 0012, so the base is written as
+// it stands: Markdown inside it was rendered, and a cloze span in the base is
+// markup, not text. Only the reading is escaped, as the old renderer escaped
+// it. A marker that fails the old rule is written back unchanged, and scanning
+// resumes after its first closing braces, which is exactly where the old parser
+// stopped; the source therefore stays byte-for-byte as it was.
+func expandRubyShortcodes(html string) string {
+	const open = "{{ruby:"
+	var b strings.Builder
+	b.Grow(len(html))
+	for i := 0; i < len(html); {
+		start := strings.Index(html[i:], open)
+		if start < 0 {
+			b.WriteString(html[i:])
+			break
+		}
+		start += i
+		b.WriteString(html[i:start])
+		end := strings.Index(html[start:], "}}")
+		if end < 0 {
+			b.WriteString(html[start:])
+			break
+		}
+		end += start
+		if element, ok := rubyElement(html[start+len(open) : end]); ok {
+			b.WriteString(element)
+		} else {
+			b.WriteString(html[start : end+2])
+		}
+		i = end + 2
+	}
+	return b.String()
+}
+
+// rubyElement renders the body of one ruby marker, the text between its colon
+// and its closing braces. It accepts exactly what the old renderer accepted: a
+// base and a reading that are both non-empty, neither containing "=" or "|",
+// and no nested shortcode. Anything else is not a ruby annotation and stays
+// source text.
+func rubyElement(rest string) (string, bool) {
+	if strings.Contains(rest, "{{") {
+		return "", false
+	}
+	base, reading, found := strings.Cut(rest, "|")
+	if !found || base == "" || reading == "" {
+		return "", false
+	}
+	if strings.ContainsAny(base, "=|") || strings.ContainsAny(reading, "=|") {
+		return "", false
+	}
+	return "<ruby>" + base + "<rt>" + stdhtml.EscapeString(reading) + "</rt></ruby>", true
+}
+
+// rubyAnnotationRE matches one ruby element produced by rubyElement.
+var rubyAnnotationRE = regexp.MustCompile(`(?s)<ruby>(.*?)<rt>.*?</rt></ruby>`)
+
+// rubySpeechText returns the text a speech directive should read from a body:
+// the base of a ruby annotation alone. The reading annotates the base instead of
+// being pronounced as a second word, which is what the old speech text did.
+func rubySpeechText(body string) string {
+	return rubyAnnotationRE.ReplaceAllString(body, "$1")
+}
