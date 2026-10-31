@@ -60,8 +60,10 @@ const defaultMaxBytes = 10 * 1024 * 1024
 // DefaultMaxBytes exposes the default limit so the routing layer can fall back when the system setting is missing.
 func DefaultMaxBytes() int64 { return defaultMaxBytes }
 
-// The settings key and environment variable override name for the upload limit. Web uploads and REST deck-package import
-// share the single resolution below, so the two entry points do not each define their own constants and drift apart.
+// The settings key and environment variable override name for the single-file upload limit. The limit applies to media
+// uploaded directly as one file (the web /media and /decks/:id/media entries). It does not apply to media inside an
+// imported deck package: a package legitimately carries files larger than one direct upload, so package import is
+// bounded by its own package_* caps in internal/store/package_import.go instead.
 const (
 	SettingKeyMediaMaxBytes = "media_max_bytes"
 	EnvMediaMaxBytes        = "MEDIA_MAX_BYTES"
@@ -69,7 +71,7 @@ const (
 
 // ResolveMaxBytes resolves the effective upload byte limit: environment variable > settings table > default 10 MiB.
 // The precedence and environment variable semantics match internal/config; the settings table is read per request, so changes take effect immediately.
-// Both Web upload and REST import must go through here, keeping "the size limit and the upload limit configured in one place".
+// Every entry point that accepts one directly uploaded media file must go through here, so the limit is configured in one place.
 func ResolveMaxBytes(ctx context.Context, db *gorm.DB) int64 {
 	if raw := strings.TrimSpace(os.Getenv(EnvMediaMaxBytes)); raw != "" {
 		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 0 {
