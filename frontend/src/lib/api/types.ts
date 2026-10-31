@@ -619,6 +619,7 @@ export interface PackageImportReport {
   progress_skipped: number;
   progress_discarded: boolean;
   weights_applied: boolean;
+  weights_invalid: boolean;
   weights_discarded: boolean;
   match_rule?: string;
   /** Anki .apkg report: media references with no bytes in the package. */

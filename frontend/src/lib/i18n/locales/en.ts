@@ -1806,4 +1806,5 @@ export const en: LocaleCatalog = {
   'note_preview.next': 'Next card',
   'note_preview.position': '{current} / {total}',
   'note_preview.cloze_name': '{template} {ordinal}',
+  'package.report.weights_invalid': 'Package weights rejected as invalid',
 };

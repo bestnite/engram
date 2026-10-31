@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"path"
 	"regexp"
@@ -1870,6 +1871,9 @@ func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName s
 				}
 				text := string(raw)
 				preset.WeightsJSON = &text
+			} else {
+				report.WeightsInvalid = true
+				slog.Warn("Anki package weights rejected", "user_id", owner, "error", err)
 			}
 		}
 	}

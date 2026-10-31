@@ -306,6 +306,7 @@ type PackageImportReport struct {
 	WeightsApplied bool `json:"weights_applied"`
 	// WeightsDiscarded means the package carried weights that were not adopted, including rejected Anki weights.
 	WeightsDiscarded bool `json:"weights_discarded"`
+	WeightsInvalid   bool `json:"weights_invalid"`
 	// CardsRemoved counts the stored cards this import soft-deleted because the note they belong to
 	// moved to a note type that no longer declares their template. The card_states and reviews rows
 	// of those cards stay.

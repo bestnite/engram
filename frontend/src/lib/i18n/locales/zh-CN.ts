@@ -1805,4 +1805,5 @@ export const zhCN: LocaleCatalog = {
   'note_preview.next': '下一张卡片',
   'note_preview.position': '{current} / {total}',
   'note_preview.cloze_name': '{template} {ordinal}',
+  'package.report.weights_invalid': '包内权重无效，未采用',
 };

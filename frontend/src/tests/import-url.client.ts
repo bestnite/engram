@@ -45,6 +45,7 @@ function reportFixture(overrides: Partial<PackageImportReport> = {}): PackageImp
     progress_skipped: 0,
     progress_discarded: false,
     weights_applied: false,
+    weights_invalid: false,
     weights_discarded: false,
     match_rule: '',
     errors: [],
@@ -196,6 +197,20 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
 });
 
 describe('ImportView — package weights', () => {
+  it.each([true, false])('shows invalid weights only when reported: %s', async (invalid) => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(reportFixture({ weights_invalid: invalid }));
+    mountView();
+    await flush();
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+    expect(reportSection()).toBeTruthy();
+    const text = reportSection()?.textContent ?? '';
+    expect(text.includes(formatMessage('zh-CN', 'package.report.weights_invalid'))).toBe(invalid);
+  });
+
   it('offers apply_weights only for a new deck and sends it when ticked', async () => {
     vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
     const importFile = vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(reportFixture({ dry_run: false }));

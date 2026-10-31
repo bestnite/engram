@@ -1,9 +1,14 @@
 package store
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
 	"math"
 	"testing"
+	"time"
 
 	"git.nite07.com/nite/engram/internal/anki"
 )
@@ -39,6 +44,69 @@ func TestCreateAnkiPresetSchedulerLimits(t *testing.T) {
 					}
 					if got.LearningSteps != tc.wantLearning || got.RelearningSteps != tc.wantRelearning || got.MaximumIntervalDays != tc.wantMax {
 						t.Fatalf("stored preset: %+v", got)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestAnkiImportWeightsInvalid(t *testing.T) {
+	cases := []struct {
+		name    string
+		weights []float64
+		apply   bool
+		target  string
+		invalid bool
+	}{
+		{"refused", []float64{1, 2, 3}, true, PackageTargetNewDeck, true},
+		{"option off", []float64{1, 2, 3}, false, PackageTargetNewDeck, false},
+		{"accepted", packageTestWeights(), true, PackageTargetNewDeck, false},
+		{"absent", nil, true, PackageTargetNewDeck, false},
+		{"existing deck", []float64{1, 2, 3}, true, "into_deck", false},
+	}
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			owner := seedUsers(t, db, "anki_invalid_weights")[0]
+			pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan := planAnkiDecks(pkg)
+			s := NewDeckStore(db)
+			opts := PackageImportOptions{PresetMode: PackagePresetNew, Now: time.Now}
+			deckID, err := s.resolveAnkiTargetDeck(context.Background(), db, owner, pkg, &plan, PackageTargetNewDeck, 0, opts, &PackageImportReport{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					pkg.DeckConfigs[0].Weights = tc.weights
+					opts.ApplyWeights = tc.apply
+					report := &PackageImportReport{}
+					var logs bytes.Buffer
+					previous := slog.Default()
+					slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+					defer slog.SetDefault(previous)
+					_, err := s.resolveAnkiTargetDeck(context.Background(), db, owner, pkg, &plan, tc.target, deckID, opts, report)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if report.WeightsInvalid != tc.invalid {
+						t.Fatalf("weights_invalid = %t, want %t", report.WeightsInvalid, tc.invalid)
+					}
+					if !tc.invalid {
+						if logs.Len() != 0 {
+							t.Fatalf("unexpected log: %s", logs.String())
+						}
+						return
+					}
+					var record map[string]any
+					if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &record); err != nil {
+						t.Fatalf("expected one log: %s: %v", logs.String(), err)
+					}
+					if record["level"] != "WARN" || fmt.Sprint(record["user_id"]) != fmt.Sprint(owner) || record["error"] == nil || record["error"] == "" {
+						t.Fatalf("unexpected log: %v", record)
 					}
 				})
 			}

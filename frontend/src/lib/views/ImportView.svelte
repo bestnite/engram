@@ -191,6 +191,7 @@
       ['package.report.media_missing', value.media_missing], ['package.report.progress_applied', value.progress_applied],
       ['package.report.progress_skipped', value.progress_skipped], ['package.report.progress_discarded', value.progress_discarded ? 1 : 0],
       ['package.report.weights_applied', value.weights_applied ? 1 : 0], ['package.report.weights_discarded', value.weights_discarded ? 1 : 0],
+      ...(value.weights_invalid ? [['package.report.weights_invalid', 1] as [string, number]] : []),
       ['package.report.match_rule', value.match_rule || '—'],
     ];
   }
