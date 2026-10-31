@@ -45,6 +45,44 @@ func TestSchedulingRows(t *testing.T) {
 	}
 }
 
+func TestDeckConfigsSkipped(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		modern bool
+		setup  []string
+		want   bool
+	}{
+		{"legacy invalid", false, []string{`CREATE TABLE col (dconf TEXT)`, `INSERT INTO col VALUES ('invalid')`}, true},
+		{"legacy valid", false, []string{`CREATE TABLE col (dconf TEXT)`, `INSERT INTO col VALUES ('{"1":{"id":1}}')`}, false},
+		{"modern invalid row", true, []string{`CREATE TABLE deck_config (id INTEGER, name TEXT, config BLOB)`, `INSERT INTO deck_config VALUES (1, 'bad', x'320100'), (2, 'good', x'')`}, true},
+		{"modern valid rows", true, []string{`CREATE TABLE deck_config (id INTEGER, name TEXT, config BLOB)`, `INSERT INTO deck_config VALUES (1, 'one', x''), (2, 'two', x'')`}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, q := range tc.setup {
+				if err := db.Exec(q).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			pkg := &Package{}
+			if tc.modern {
+				err = readModernDeckConfigs(db, pkg)
+			} else {
+				err = readLegacyDeckConfigs(db, pkg)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if pkg.DeckConfigsSkipped != tc.want {
+				t.Fatalf("DeckConfigsSkipped = %v, want %v", pkg.DeckConfigsSkipped, tc.want)
+			}
+		})
+	}
+}
+
 func TestSchedulingTolerance(t *testing.T) {
 	tests := []struct {
 		name, query string

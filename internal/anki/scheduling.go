@@ -65,6 +65,7 @@ func readLegacyDeckConfigs(db *gorm.DB, pkg *Package) error {
 		} `json:"rev"`
 	}
 	if err := json.Unmarshal([]byte(raw), &configs); err != nil {
+		pkg.DeckConfigsSkipped = true
 		return nil
 	}
 	for _, c := range configs {
@@ -96,6 +97,7 @@ func readModernDeckConfigs(db *gorm.DB, pkg *Package) error {
 		}
 		cfg, err := decodeDeckConfig(data)
 		if err != nil {
+			pkg.DeckConfigsSkipped = true
 			continue
 		}
 		cfg.ID, cfg.Name = id, name

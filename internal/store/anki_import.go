@@ -1458,7 +1458,7 @@ func ankiTopConfig(pkg *anki.Package, top string) *anki.DeckConfig {
 			}
 		}
 	}
-	if len(pkg.DeckConfigs) == 1 {
+	if len(pkg.DeckConfigs) == 1 && !pkg.DeckConfigsSkipped {
 		return &pkg.DeckConfigs[0]
 	}
 	return nil

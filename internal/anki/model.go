@@ -12,10 +12,11 @@ type Package struct {
 	Cards     []Card
 	Reviews   []Review
 	// RevlogErr records an incomplete review log without preventing content import.
-	RevlogErr   error
-	DeckConfigs []DeckConfig
-	CreatedAt   int64
-	Media       []MediaEntry
+	RevlogErr          error
+	DeckConfigs        []DeckConfig
+	DeckConfigsSkipped bool
+	CreatedAt          int64
+	Media              []MediaEntry
 	// UnpackedBytes is the decompressed size of what the reader itself produced: the
 	// collection, the meta entry and the media table. Media payloads are streamed by the
 	// caller, so their bytes are added by the caller when it enforces the total cap.
