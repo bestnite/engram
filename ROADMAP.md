@@ -78,9 +78,12 @@ must not edit that file.
   values (`fsrsParams6`, `fsrsParams5`, `fsrsWeights`, `desiredRetention`, `new.delays`,
   `lapse.delays`, `rev.maxIvl`), preferring the 21-value FSRS-6 set and falling back to the 19- and
   17-value sets, which the scheduler already migrates. The answer specs are read back from the note
-  type's unknown `engram` model key and reattached by template name, and `notes.data`/`cards.data`
-  are not read at all: verified against `anki==26.9.3`, Anki drops both columns on import, so
-  nothing may be stored there.
+  type's unknown `engram` model key and reattached by template name. `notes.data` is not read at all:
+  verified against `anki==26.9.3`, Anki drops it on import, so nothing may be stored there.
+  `cards.data` is read for the FSRS memory state (`s`, `d`), which is where Anki keeps it once FSRS
+  is enabled and no column carries it; the exporter writes those two keys there as well, so an
+  Engram round trip keeps stability and difficulty (Anki discards the column on import, which the
+  writer's comment states).
   `PackageImportOptions` gains `IncludeProgress` (default false), which governs the `.apkg` path
   only; the `.edeck` path keeps `AllowOthersProgress` until `M18-5` removes it. Off writes no
   `card_states` and no `reviews` row and the report counts what was discarded; on writes the
