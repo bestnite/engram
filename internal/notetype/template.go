@@ -105,13 +105,8 @@ func renderError(code ErrorCode, field, format string, args ...any) *RenderError
 // cardTemplate is the value of cards.template: a template id for a normal note
 // type and "cloze:<n>" for a cloze note type. The returned clozeNumber is the
 // 1-based cloze number of a cloze card and zero for every other card. A
-// template the config does not declare, or a cloze value that is not a
-// non-negative number, is an error.
-//
-// "cloze:0" resolves to the cloze template with cloze number zero. The parser
-// used before note types accepted {{c0::...}} and stored such cards; Anki
-// ignores c0, so no note generates that card any more. It still has to render,
-// as an empty card, so that review and the empty-card cleanup can reach it.
+// template the config does not declare, or a cloze value that does not name a
+// positive number, is an error.
 func CardTemplate(cfg Config, cardTemplate string) (Template, int, error) {
 	if cfg.Kind == KindCloze {
 		if len(cfg.Templates) == 0 {
@@ -119,7 +114,7 @@ func CardTemplate(cfg Config, cardTemplate string) (Template, int, error) {
 		}
 		number, ok := clozeCardNumber(cardTemplate)
 		if !ok {
-			return Template{}, 0, fmt.Errorf("notetype: card template %q is not a cloze card", cardTemplate)
+			return Template{}, 0, fmt.Errorf("notetype: card template %q has no positive cloze number", cardTemplate)
 		}
 		return cfg.Templates[0], number, nil
 	}

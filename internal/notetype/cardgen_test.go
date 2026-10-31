@@ -548,7 +548,7 @@ func TestEmptyExistingCards(t *testing.T) {
 		t.Errorf("EmptyExistingCards = %v, want [%+v]", empty, clozeExisting[1])
 	}
 
-	// A legacy cloze:0 card shares ordinal 0 with cloze:1, yet no note generates it.
+	// A cloze:0 card shares ordinal 0 with cloze:1, yet no note generates it.
 	legacy := []ExistingCard{{Template: "cloze:0", Ordinal: 0}, {Template: "cloze:1", Ordinal: 0}}
 	empty, err = EmptyExistingCards(cloze, clozeData, legacy)
 	if err != nil {
@@ -570,7 +570,7 @@ func TestCardTemplateCloze(t *testing.T) {
 	}{
 		{template: "cloze:1", wantNumber: 1},
 		{template: "cloze:12", wantNumber: 12},
-		{template: "cloze:0", wantNumber: 0},
+		{template: "cloze:0", wantErr: true},
 		{template: "cloze:-1", wantErr: true},
 		{template: "cloze:x", wantErr: true},
 		{template: "cloze:", wantErr: true},

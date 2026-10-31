@@ -147,6 +147,13 @@ var BuiltinMigrations = []Migration{
 		Name: "0018_plain_text_deck_descriptions",
 		Up:   plainTextDeckDescriptions,
 	},
+	{
+		// A card whose template its note type cannot resolve - the "cloze:0" cards the pre-note-type parser
+		// stored for {{c0::...}} - can never render, yet it sits in the review queue. Soft-deleting it is a data
+		// repair AutoMigrate cannot express; card_states and reviews stay.
+		Name: "0019_remove_unresolvable_cards",
+		Up:   removeUnresolvableCards,
+	},
 }
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).
