@@ -63,43 +63,13 @@ release; a task moves into a release milestone when it is scheduled.
 
 ### M18 — Deck package: `.apkg` becomes the only format
 
-`M18-1` (landed) wrote the `.apkg` export, `M18-2` and `M18-3` complete the package path, `M18-4`
-adds the import-time preset choice, and `M18-5` removes `.edeck`. `M18-5` must not start before the
-others land: a user has to be able to export a deck before the export they have today disappears. The
-release that carries `M18-5` breaks the `.edeck` file format, the package export route and the
-`export_deck` MCP tool. The parent updates `AGENTS.md` section 2.7 with the maintainer present
-(`M18-1` moved `.apkg` export into it; `M18-2` moves `.apkg` progress import into it); a subagent
-must not edit that file.
-
-- [ ] **M18-2 `.apkg` import: deck configuration, card states and the review log** — the importer
-  reads what the package says about scheduling instead of discarding it. `internal/anki/protobuf.go`
-  gains a decoder for `DeckConfig.Config` (`fsrs_params_6`, `desired_retention`, `learn_steps`,
-  `relearn_steps`, `maximum_review_interval`), and the legacy `col.dconf` JSON is read for the same
-  values (`fsrsParams6`, `fsrsParams5`, `fsrsWeights`, `desiredRetention`, `new.delays`,
-  `lapse.delays`, `rev.maxIvl`), preferring the 21-value FSRS-6 set and falling back to the 19- and
-  17-value sets, which the scheduler already migrates. The answer specs are read back from the note
-  type's unknown `engram` model key and reattached by template name. `notes.data` is not read at all:
-  verified against `anki==26.9.3`, Anki drops it on import, so nothing may be stored there.
-  `cards.data` is read for the FSRS memory state (`s`, `d`), which is where Anki keeps it once FSRS
-  is enabled and no column carries it; the exporter writes those two keys there as well, so an
-  Engram round trip keeps stability and difficulty (Anki discards the column on import, which the
-  writer's comment states).
-  `PackageImportOptions` gains `IncludeProgress` (default false), which governs the `.apkg` path
-  only; the `.edeck` path keeps `AllowOthersProgress` until `M18-5` removes it. Off writes no
-  `card_states` and no `reviews` row and the report counts what was discarded; on writes the
-  importing user's card states and review rows. The review mapping is `rating` from `revlog.ease` (a
-  row whose ease is outside 1–4 is skipped and counted), `reviewed_at` from `revlog.id`, `elapsed_ms`
-  from `revlog.time`, `duration_days` from `revlog.ivl`, and `state_before` from `revlog.type`: 0 with
-  no earlier review of that card → 0, any later 0 → 1, 1 and 3 → 2, 2 → 3, while 4 and 5 (manual,
-  rescheduled) are skipped and counted. Because Anki's log has no pre-rating state, the derivation is
-  recorded in a code comment as the lossy part of the mapping. A repeated import writes no review row
-  whose `(card_id, reviewed_at, rating)` already exists. The memory state (`stability`, `difficulty`) is read from wherever the
-  layout stores it, verified against the oracle, not assumed. *Acceptance:* a package produced by
-  `M18-1` and imported into a fresh user reproduces its card states and review rows; a second import
-  of the same package adds no row; `include_progress` off writes none; the skipped review rows appear
-  in the report; a package whose review rows belong to cards that stay new imports without error,
-  which Anki accepts and Engram must accept too; the SQLite cases run by default and the PostgreSQL
-  cases run when `TEST_PG_DSN` is set. Evidence is the raw scoped `go test` and `go vet` output.
+`M18-1` (landed) wrote the `.apkg` export and `M18-2` (landed) the import side; `M18-3` adds the
+transports, `M18-4` the import-time preset choice, and `M18-5` removes `.edeck`. `M18-5` must not
+start before the others land: a user has to be able to export a deck before the export they have
+today disappears. The release that carries `M18-5` breaks the `.edeck` file format, the package
+export route and the `export_deck` MCP tool. The parent updates `AGENTS.md` section 2.7 with the
+maintainer present (`M18-1` moved `.apkg` export into it and `M18-2` moved `.apkg` progress import
+into it); a subagent must not edit that file.
 
 - [ ] **M18-3 `.apkg` export transports and the MCP download URL** — `GET /api/v1/decks/:id/package`
   takes `format=apkg` plus the four switches as query parameters, and the web deck page downloads the

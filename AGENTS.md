@@ -149,10 +149,13 @@ this file, and commit messages.
   front-end-only enhancement that Anki lacks is allowed, for example the audio progress bar and the
   seek buttons.
 - **Not covered by the compatibility target.** Schedulers other than FSRS, queue behaviour (sibling
-  burying, display order, new-card position, leeches, subdeck limits, auto-advance, timers),
-  importing progress or the review log from an `.apkg` (imported cards start as new cards), deck
+  burying, display order, new-card position, leeches, subdeck limits, auto-advance, timers), deck
   hierarchy behaviour, and Anki's browser, search syntax, sync, statistics and add-ons. Adding any of
   them is a new decision, not a compatibility fix.
+- **Importing an `.apkg`.** Content, note types (with the `engram` answer-spec key when present) and
+  media always travel; the package's deck configuration becomes the new deck's preset; card states and
+  the review log are applied to the importer's own account only when the import asks for them, and
+  every imported card starts as new otherwise.
 - **Export format.** engram writes an `.apkg` the reference release imports: the collection is legacy
   schema 11 in `collection.anki21`; note types, notes, cards, media and one deck configuration travel;
   the caller's own card states, review log and FSRS weights travel only when requested; and answer

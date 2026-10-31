@@ -44,6 +44,8 @@ Import a deck from the **Import** page (upload the file, or paste the file's pub
 
 Choose the target: `new_deck` creates a deck, and `into_deck:<id>` merges into a deck you can edit. The CLI and the MCP tool also take `replace_deck:<id>` to replace an existing deck, which only the deck's owner may do.
 
+An `.apkg` import carries its deck configuration into the new deck's preset. Learning progress travels only when asked: `include_progress` (off by default) applies the package's card states and review log to your own account, and without it every imported card starts as new.
+
 ### Anki `.apkg` packages
 
 The package brings these across:
