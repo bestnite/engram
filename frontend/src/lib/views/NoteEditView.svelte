@@ -518,7 +518,9 @@
      keyboard dismissal is handled here; an open delete dialog keeps its own Esc. -->
 <svelte:window onkeydown={handleWindowKeydown} />
 
-<Page as="section">
+<!-- The sticky action bar carries its own vertical padding, so the page's default bottom padding would
+     only add an empty band under the buttons when the form is short. -->
+<Page as="section" class="pb-0">
   <PageHeader
     title={isCreate ? $t('note_create.title') : $t('note_edit.title')}
     back={{
