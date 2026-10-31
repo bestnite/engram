@@ -197,6 +197,69 @@ func TestImportURLSuccess(t *testing.T) {
 	}
 }
 
+func TestImportURLPresetSelection(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "url_preset", store.RoleUser)
+	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
+	preset := store.NewPreset(user.ID, "Chosen")
+	if err := env.db.Create(&preset).Error; err != nil {
+		t.Fatal(err)
+	}
+	f := &stubFetcher{body: minimalPackageZip(t)}
+	env.api.fetcher = f
+	for _, mode := range []string{"reuse", "copy"} {
+		t.Run(mode, func(t *testing.T) {
+			body := fmt.Sprintf(`{"url":"https://example.com/deck.edeck","target":"new_deck","preset_mode":%q,"preset_id":%q}`, mode, preset.PublicID)
+			rec := postImportURL(t, env, k.Plaintext, body)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+			}
+			var report store.PackageImportReport
+			if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil {
+				t.Fatal(err)
+			}
+			deck, err := store.NewDeckStore(env.db).ByPublicID(t.Context(), report.DeckPublicID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if report.PresetMode != mode || (mode == "reuse" && deck.PresetID != preset.ID) || (mode == "copy" && deck.PresetID == preset.ID) {
+				t.Fatalf("report = %+v, deck preset = %d, chosen = %d", report, deck.PresetID, preset.ID)
+			}
+			if mode == "copy" {
+				var copied store.Preset
+				if err := env.db.First(&copied, deck.PresetID).Error; err != nil || copied.Name != "Chosen (copy)" {
+					t.Fatalf("copied preset = %+v, err = %v", copied, err)
+				}
+			}
+		})
+	}
+	for _, tc := range []struct{ name, options string }{
+		{"bogus", `"preset_mode":"bogus"`},
+		{"reuse_weights", fmt.Sprintf(`"preset_mode":"reuse","preset_id":%q,"apply_weights":true`, preset.PublicID)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := f.calls
+			body := fmt.Sprintf(`{"url":"https://example.com/deck.edeck","target":"new_deck",%s}`, tc.options)
+			for i := 0; i < importURLRateLimit+1; i++ {
+				rec := postImportURL(t, env, k.Plaintext, body)
+				if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != CodeInvalidRequest {
+					t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+				}
+			}
+			if f.calls != before {
+				t.Fatalf("fetcher calls = %d, want %d", f.calls, before)
+			}
+		})
+	}
+	// Invalid requests must not consume the remaining direct-link quota.
+	for i := f.calls; i < importURLRateLimit; i++ {
+		rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/deck.edeck","target":"new_deck","dry_run":true}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("remaining quota: status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func TestImportURLCorruptPackageIsRejected(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "url_corrupt", store.RoleUser)

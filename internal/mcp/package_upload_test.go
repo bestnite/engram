@@ -57,6 +57,28 @@ func TestImportToolsPresetSelection(t *testing.T) {
 	}
 }
 
+func TestImportURLRejectsReuseWithWeightsBeforeFetch(t *testing.T) {
+	f := &stubPackageFetcher{body: mcpMinimalPackageZip(t)}
+	_, db, keys, _, ts := newEnvWithPackageFetcher(t, f)
+	u := seedUser(t, db, "mcp_url_preset_weights")
+	key := newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite})
+	cs := connect(t, ts.URL, key)
+	preset := store.NewPreset(u.ID, "Chosen")
+	if err := db.Create(&preset).Error; err != nil {
+		t.Fatal(err)
+	}
+	_, isErr, text := callTool(t, cs, "import_deck", map[string]any{
+		"url": "https://example.com/deck.edeck", "preset_mode": "reuse",
+		"preset_id": preset.PublicID, "apply_weights": true,
+	})
+	if !isErr || !strings.Contains(text, "invalid_request") {
+		t.Fatalf("import_deck = (isErr=%v, %q), want invalid_request", isErr, text)
+	}
+	if f.calls != 0 {
+		t.Fatalf("fetcher calls = %d, want 0", f.calls)
+	}
+}
+
 // Acceptance for create_import_upload: the ticket MCP issues goes through the same service method as REST,
 // and the package bytes are then PUT straight to the ticket URL with no credentials at all, never passing through tool arguments.
 

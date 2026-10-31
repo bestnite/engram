@@ -46,6 +46,8 @@ type importURLRequest struct {
 	IncludeProgress     bool   `json:"include_progress"`
 	SkipMissingMedia    bool   `json:"skip_missing_media"`
 	ApplyWeights        bool   `json:"apply_weights"`
+	PresetMode          string `json:"preset_mode"`
+	PresetID            string `json:"preset_id"`
 }
 
 // ImportDeckPackageURL downloads a deck package from a public HTTPS direct link and imports it.
@@ -54,6 +56,9 @@ type importURLRequest struct {
 // would let unauthorized users turn this entry into an outbound pivot for the server. After the download it reuses ImportDeckPackage, which resolves the target
 // once more and authorizes once more - redundant but idempotent, in exchange for the invariant "authorization precedes fetching bytes".
 func (a *API) ImportDeckPackageURL(ctx context.Context, u *store.User, apiKeyID *uint64, rawURL string, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
+	if err := a.validateImportPreset(ctx, u.ID, &opts); err != nil {
+		return nil, err
+	}
 	// Target deck permission: the same check as file import, and before the download.
 	if _, err := a.authorizeImportTarget(ctx, u.ID, opts.Target); err != nil {
 		return nil, err
@@ -118,7 +123,14 @@ func (a *API) handleImportPackageURL(c *gin.Context) {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
+	presetID, err := a.ImportPresetID(c.Request.Context(), u.ID, req.PresetID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	report, err := a.ImportDeckPackageURL(c.Request.Context(), u, CurrentAPIKeyID(c), req.URL, store.PackageImportOptions{
+		PresetMode: req.PresetMode,
+		PresetID:   presetID,
 		Target:     req.Target,
 		DryRun:     req.DryRun,
 		OnConflict: req.OnConflict,
