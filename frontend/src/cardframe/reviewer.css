@@ -13,6 +13,13 @@ body {
   margin: 0;
 }
 
+/* app.css reserves a scrollbar gutter on the page's html so the layout does not shift when a page starts to scroll. The
+   frame never scrolls: the parent sizes it to its content. Its reserved gutter would only push a centred face off
+   centre by half the gutter width. */
+html {
+  scrollbar-gutter: auto;
+}
+
 body {
   padding: 0.125rem 0.25rem;
   background: var(--background);
