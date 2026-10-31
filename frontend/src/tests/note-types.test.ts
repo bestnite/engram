@@ -43,6 +43,7 @@ const stocks: NoteTypeStock[] = [
 const controls: AnswerControl[] = [
   {
     name: 'text',
+    label_key: 'notetype.answer.control.text',
     roles: [
       { name: 'answer', kind: 'text', required: true },
       { name: 'accept', kind: 'lines', required: false },
@@ -100,6 +101,8 @@ describe('NoteTypesView', () => {
     expect(html).toContain('data-testid="notetype-preview-back"');
     expect(html).toContain('data-testid="notetype-answer-control"');
     expect(html).toContain('data-testid="notetype-answer-binding-answer"');
+    // The control picker shows the catalog label, not the registry identifier.
+    expect(html).toContain('文本答案');
     expect(html).toContain('版本 3');
   });
 
@@ -159,11 +162,14 @@ describe('common template catalog keys', () => {
     }
   });
 
-  it.each(['anki', 'template', 'engram'])('source %s has a label in both catalogs', async (source) => {
-    const { formatMessage } = await import('../lib/i18n');
-    for (const locale of ['zh-CN', 'en'] as const) {
-      const key = `notetype.stock.source.${source}`;
-      expect(formatMessage(locale, key)).not.toBe(key);
-    }
-  });
+  it.each(['choice_single', 'choice_multi', 'true_false', 'numeric', 'text', 'short_answer', 'list', 'cloze_blanks'])(
+    'answer control %s has a label in both catalogs',
+    async (control) => {
+      const { formatMessage } = await import('../lib/i18n');
+      for (const locale of ['zh-CN', 'en'] as const) {
+        const key = `notetype.answer.control.${control}`;
+        expect(formatMessage(locale, key)).not.toBe(key);
+      }
+    },
+  );
 });

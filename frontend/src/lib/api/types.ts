@@ -351,6 +351,8 @@ export interface AnswerControlRole {
 /** One registered answer control and the roles it declares. */
 export interface AnswerControl {
   name: string;
+  /** Translation catalog entry for the display name; the UI never shows the raw registry name. */
+  label_key: string;
   roles: AnswerControlRole[];
 }
 

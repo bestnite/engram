@@ -125,9 +125,12 @@ type AnswerControlRoleJSON struct {
 }
 
 // AnswerControlJSON is one registered answer control and the roles it declares.
+// LabelKey names the translation catalog entry for the display name, so the editor
+// never shows the registry identifier.
 type AnswerControlJSON struct {
-	Name  string                  `json:"name"`
-	Roles []AnswerControlRoleJSON `json:"roles"`
+	Name     string                  `json:"name"`
+	LabelKey string                  `json:"label_key"`
+	Roles    []AnswerControlRoleJSON `json:"roles"`
 }
 
 // AnswerControlsResponse is the response body of the answer-control registry list.
@@ -157,7 +160,7 @@ func (a *API) AnswerControls() AnswerControlsResponse {
 				Required: role.Required,
 			})
 		}
-		out = append(out, AnswerControlJSON{Name: name, Roles: roles})
+		out = append(out, AnswerControlJSON{Name: name, LabelKey: "notetype.answer.control." + name, Roles: roles})
 	}
 	return AnswerControlsResponse{Controls: out}
 }

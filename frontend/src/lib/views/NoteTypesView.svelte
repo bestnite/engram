@@ -146,12 +146,11 @@
   const guideSteps = ['create', 'fields', 'templates', 'style', 'preview', 'use', 'tools'];
 
   // Stock picker labels come from the translation catalog through the server's label_key; the
-  // stock's canonical English name is only the default note type name. Each label names its source,
-  // because Anki's types and engram's question types share names such as Basic and Cloze.
+  // stock's canonical English name is only the default note type name.
   const stockOptions = $derived(
     stocks.map((stock) => ({
       value: stock.id,
-      label: $t('notetype.stock.option', { name: $t(stock.label_key), source: $t(`notetype.stock.source.${stock.source}`) }),
+      label: $t(stock.label_key),
     })),
   );
 
@@ -159,9 +158,14 @@
     noteTypes.map((entry) => ({ value: entry.id, label: entry.name })),
   );
 
+  // Control labels come from the translation catalog through the registry's label_key. A control
+  // registered without a catalog entry falls back to its identifier instead of leaking the key.
   const controlOptions = $derived([
     { value: '', label: $t('notetype.answer.none') },
-    ...answerControls.map((control) => ({ value: control.name, label: control.name })),
+    ...answerControls.map((control) => {
+      const label = $t(control.label_key);
+      return { value: control.name, label: label === control.label_key ? control.name : label };
+    }),
   ]);
 
   // A change stays inside one deck and one kind: the store refuses a cross-deck target and a kind

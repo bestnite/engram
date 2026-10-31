@@ -240,7 +240,7 @@ describe('NoteTypesView stock picker', () => {
     vi.restoreAllMocks();
   });
 
-  it('labels each stock with its source, so equally named types stay distinguishable', async () => {
+  it('labels each stock with its catalog name, without a vendor or source annotation', async () => {
     setLocale('zh-CN');
     routeStore.set(matchRoute('/decks/d1/note-types'));
     const target = document.createElement('div');
@@ -261,7 +261,14 @@ describe('NoteTypesView stock picker', () => {
     (target.querySelector('[data-testid="note-types-empty-create"]') as HTMLButtonElement).click();
     for (let i = 0; i < 20; i++) await Promise.resolve();
     flushSync();
-    const picker = document.body.querySelector('[data-testid="notetype-create-stock"]');
-    expect(picker?.textContent).toContain('词汇卡（带读音） · 常用模板');
+    const picker = document.body.querySelector('[data-testid="notetype-create-stock"]') as HTMLElement;
+    expect(picker.textContent).toContain('词汇卡（带读音）');
+    picker.click();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+    const optionLabels = Array.from(document.body.querySelectorAll('[role="option"]')).map((el) => el.textContent?.trim() ?? '');
+    expect(optionLabels).toContain('词汇卡（带读音）');
+    expect(optionLabels).toContain('基础');
+    expect(optionLabels.some((label) => label.includes('Anki') || label.includes('常用模板'))).toBe(false);
   });
 });
