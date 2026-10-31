@@ -488,33 +488,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   naming `M18-4`; the sentence in `AGENTS.md` section 2.7 names `reuse` and `copy`. Evidence is the
   output of `grep -n 'M18-4\b' ROADMAP.md` limited to the ledger section and the `AGENTS.md` diff.
 
-- [ ] **M18-37 The replay starts where the card's memory actually starts** — `M18-7` replays every
-  kept revlog row of a card (type 0–3, ease 1–4) from an empty memory state. Two kinds of history
-  make that result wrong. First, a history that does not begin with the card's first learning row,
-  for example a collection whose older rows were removed or a card that came from SM-2 with only its
-  recent reviews logged: the first kept row is treated as the card's first ever rating. Measured with
-  the go-fsrs v4.0.0 default weights: a review card with `ivl` 300 and factor 2500 whose only kept row
-  is one Good review gets stability 2.31 days, while `MemoryStateFromSM2(2.5, 300, 0.9)` gives 300
-  days, and that SM-2 state followed by the same Good review gives 750 days. Second, a card that was
-  reset to new in Anki (Forget, a revlog type 4 row with ease 0) and learned again: the rows before
-  the reset are still replayed, so the old history decides the new state. Measured: four Good rows
-  followed by Again 200 days later give stability 4.61 and difficulty 7.39, while the Again row alone
-  gives stability 0.212 and difficulty 6.41. The rule is decided. First, the reference comes from
-  `tools/anki-oracle` at `anki==26.9.3` (its README holds the commands): add a fixture whose
-  collection carries both histories above and commit the memory states Anki reports as goldens under
-  `internal/notetype/testdata/anki/`. Second, the Go replay reproduces those goldens, which settles
-  the two questions in code rather than by argument: a history without its learning start begins from
-  the state Anki uses (SM-2 built from `factor` and `ivl`), and every row up to and including the
-  card's last reset row (revlog type 4) is dropped. Third, if the oracle environment cannot be
-  installed in the work session, the fallback is `MemoryStateFromSM2(factor/1000, ivl, 0.9)` as the
-  starting state, the same reset truncation, and acceptance by re-scheduling the derived state to
-  within one day of `ivl`; the closing commit then records that Anki parity was not verified. `M18-10` fills earlier review rows from the same replay, so it uses the rows
-  this rule selects. *Acceptance:* table tests in `internal/store/anki_progress_import_test.go` cover a
-  card whose history begins with its first learning row, a review card whose history begins with a
-  review row, and a card with a reset row followed by new learning rows, and each stored state follows
-  the decided rule (equals the golden, when the rule requires Anki's result). Evidence is the raw
-  scoped `go test` and `go vet` output and, when goldens are used, the oracle script's output.
-
 - [ ] **M18-38 One function decodes a preset's weights** — `M18-7` added a second copy of
   `presetWeights` from `internal/schedule/scheduler.go` to `importAnkiProgress` in
   `internal/store/anki_import.go`: both treat NULL, an empty string and `null` as the default weights,
