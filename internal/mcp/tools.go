@@ -118,6 +118,8 @@ type bulkActionIn struct {
 
 // importDeckIn is the input of import_deck: it accepts a deck package, with the source being one of two alternatives.
 type importDeckIn struct {
+	PresetMode string `json:"preset_mode,omitempty" jsonschema:"preset mode: new, reuse or copy"`
+	PresetID   string `json:"preset_id,omitempty" jsonschema:"public id of the preset to reuse or copy"`
 	// Package is the package body itself: the JSON document export_deck outputs, a base64-encoded .edeck zip, or a base64-encoded .apkg archive. Mutually exclusive with URL.
 	Package any `json:"package,omitempty" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck/.apkg archive; mutually exclusive with url"`
 	// URL is a public HTTPS direct link (.edeck/.zip/.apkg); it is downloaded and validated by the server, and is mutually exclusive with Package.
@@ -137,6 +139,8 @@ type importDeckIn struct {
 
 // createImportUploadIn is the input of create_import_upload: the import options are fixed into the ticket when it is issued.
 type createImportUploadIn struct {
+	PresetMode string `json:"preset_mode,omitempty" jsonschema:"preset mode: new, reuse or copy"`
+	PresetID   string `json:"preset_id,omitempty" jsonschema:"public id of the preset to reuse or copy"`
 	// Target takes new_deck (default), into_deck:<public id>, or replace_deck:<public id>.
 	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<public id> or replace_deck:<public id>"`
 	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
@@ -422,7 +426,12 @@ func (s *Server) bulkNotes(ctx context.Context, id Identity, in bulkActionIn) (a
 // into_deck:<public id> / replace_deck:<public id> in target are resolved by the service itself.
 // package and url are mutually exclusive: exactly one of them, and omitting both reports an argument error.
 func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (any, error) {
+	presetID, err := s.api.ImportPresetID(ctx, id.User.ID, in.PresetID)
+	if err != nil {
+		return nil, err
+	}
 	opts := store.PackageImportOptions{
+		PresetMode: in.PresetMode, PresetID: presetID,
 		Target:              in.Target,
 		DryRun:              in.DryRun,
 		OnConflict:          in.OnConflict,
@@ -459,7 +468,12 @@ func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (
 // createImportUpload issues a one-time upload ticket: it goes through the same service method as REST `POST /decks/import-uploads`.
 // The package bytes are then PUT by the agent straight to the returned URL, never passing through model output.
 func (s *Server) createImportUpload(ctx context.Context, id Identity, in createImportUploadIn) (*api.ImportUpload, error) {
+	presetID, err := s.api.ImportPresetID(ctx, id.User.ID, in.PresetID)
+	if err != nil {
+		return nil, err
+	}
 	return s.api.CreateImportUpload(ctx, id.User, id.apiKeyID(), store.PackageImportOptions{
+		PresetMode: in.PresetMode, PresetID: presetID,
 		Target:              in.Target,
 		DryRun:              in.DryRun,
 		OnConflict:          in.OnConflict,

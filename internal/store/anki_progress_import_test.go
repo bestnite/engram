@@ -98,7 +98,7 @@ func TestAnkiProgressImport(t *testing.T) {
 						{ID: 1600000000007, CardID: 99999, Ease: 3, Type: 1},
 					}
 					now := time.Unix(1700000000, 0).UTC()
-					opts := PackageImportOptions{IncludeProgress: enabled, OnConflict: "update", Now: func() time.Time { return now }}
+					opts := PackageImportOptions{IncludeProgress: enabled, ApplyWeights: true, OnConflict: "update", Now: func() time.Time { return now }}
 					plan := planAnkiDecks(pkg)
 					report := &PackageImportReport{}
 					s := NewDeckStore(db)

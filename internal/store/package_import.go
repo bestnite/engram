@@ -219,6 +219,8 @@ func packageDeckMetaError(entries []string) error {
 
 // PackageImportOptions controls one import.
 type PackageImportOptions struct {
+	PresetMode string
+	PresetID   uint64
 	// Target takes new_deck (the default), into_deck:<id>, replace_deck:<id>.
 	Target string
 	DryRun bool
@@ -259,8 +261,10 @@ type PackageImportError struct {
 
 // PackageImportReport is the report of an import (dry_run included), shaped like the bulk import report.
 type PackageImportReport struct {
-	Target string `json:"target"`
-	DryRun bool   `json:"dry_run"`
+	PresetMode string `json:"preset_mode"`
+	PresetName string `json:"preset_name"`
+	Target     string `json:"target"`
+	DryRun     bool   `json:"dry_run"`
 	// DeckID is the internal numeric primary key, for internal uses such as audit; what is exposed externally is DeckPublicID.
 	DeckID            uint64 `json:"-"`
 	DeckPublicID      string `json:"deck_id,omitempty"`
@@ -519,6 +523,21 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 	if err != nil {
 		return nil, err
 	}
+	if opts.PresetMode == "" {
+		opts.PresetMode = "new"
+	}
+	if opts.PresetMode != "new" && opts.PresetMode != "reuse" && opts.PresetMode != "copy" || opts.PresetMode != "new" && (opts.PresetID == 0 || opts.ApplyWeights || targetKind != PackageTargetNewDeck) {
+		return nil, &PackageError{Message: "invalid preset selection"}
+	}
+	if opts.PresetMode != "new" {
+		var count int64
+		if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ? AND owner_user_id = ?", opts.PresetID, actorUserID).Count(&count).Error; err != nil {
+			return nil, err
+		}
+		if count != 1 {
+			return nil, &PackageError{Message: "invalid preset selection"}
+		}
+	}
 
 	importLimits := opts.Limits.effective()
 	source, size, cleanup, err := packageSource(r, importLimits.MaxPackageBytes)
@@ -554,7 +573,7 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 
 	username, _ := s.lookupUsername(ctx, actorUserID)
 
-	report := &PackageImportReport{Target: targetKind, DryRun: opts.DryRun, Errors: []PackageImportError{}}
+	report := &PackageImportReport{Target: targetKind, PresetMode: opts.PresetMode, DryRun: opts.DryRun, Errors: []PackageImportError{}}
 	mediaMissing := missingMediaRefs(pkg)
 	if len(mediaMissing) > 0 && !opts.SkipMissingMedia && !opts.DryRun {
 		return nil, &PackageError{Code: CodePackageBadFormat, Message: "package references media that is not included", Entries: mediaMissing}
@@ -989,6 +1008,9 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 		return err
 	}
 	report.DeckID = deckID
+	if err := fillImportPresetReport(ctx, tx, deckID, report); err != nil {
+		return err
+	}
 	if len(pkg.Preset.Weights) > 0 {
 		report.WeightsApplied = targetKind == PackageTargetNewDeck && opts.ApplyWeights
 		report.WeightsDiscarded = !report.WeightsApplied
@@ -1231,7 +1253,9 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 		if err != nil {
 			return 0, err
 		}
-		presetID, err := createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset, name, opts.ApplyWeights)
+		presetID, err := selectImportPreset(ctx, tx, actorUserID, opts, func() (uint64, error) {
+			return createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset, name, opts.ApplyWeights)
+		})
 		if err != nil {
 			return 0, err
 		}
@@ -1254,6 +1278,44 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 	default:
 		return 0, &PackageError{Code: CodePackageBadFormat, Message: "unknown target"}
 	}
+}
+
+func selectImportPreset(ctx context.Context, tx *gorm.DB, owner uint64, opts PackageImportOptions, create func() (uint64, error)) (uint64, error) {
+	if opts.PresetMode == "new" || opts.PresetMode == "" {
+		return create()
+	}
+	var p Preset
+	if err := tx.WithContext(ctx).Where("id = ? AND owner_user_id = ?", opts.PresetID, owner).First(&p).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, &PackageError{Message: "invalid preset selection"}
+		}
+		return 0, err
+	}
+	if opts.PresetMode == "reuse" {
+		return p.ID, nil
+	}
+	name, err := uniqueOwnerName(ctx, tx, &Preset{}, owner, p.Name+" (copy)")
+	if err != nil {
+		return 0, err
+	}
+	p.ID, p.PublicID, p.Name = 0, "", name
+	if err := tx.WithContext(ctx).Create(&p).Error; err != nil {
+		return 0, err
+	}
+	return p.ID, nil
+}
+
+func fillImportPresetReport(ctx context.Context, tx *gorm.DB, deckID uint64, report *PackageImportReport) error {
+	var deck Deck
+	if err := tx.WithContext(ctx).First(&deck, deckID).Error; err != nil {
+		return err
+	}
+	var p Preset
+	if err := tx.WithContext(ctx).First(&p, deck.PresetID).Error; err != nil {
+		return err
+	}
+	report.PresetName = p.Name
+	return nil
 }
 
 // uniqueDeckName appends a (2), (3)... suffix on a name clash.

@@ -39,3 +39,14 @@ func (a *API) PresetByPublicID(ctx context.Context, publicID string) (*store.Pre
 	}
 	return p, nil
 }
+
+func (a *API) ImportPresetID(ctx context.Context, owner uint64, publicID string) (uint64, error) {
+	if publicID == "" {
+		return 0, nil
+	}
+	p, err := a.presets.ByPublicID(ctx, publicID)
+	if err != nil || p.OwnerUserID != owner {
+		return 0, InvalidRequest("invalid preset selection")
+	}
+	return p.ID, nil
+}

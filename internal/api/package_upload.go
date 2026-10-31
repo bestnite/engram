@@ -55,6 +55,8 @@ type ImportUpload struct {
 // importUploadTicket is the ticket content written into action_tokens.payload: the import options fixed at issuance,
 // plus the API key used for issuance (re-checked for validity at upload time).
 type importUploadTicket struct {
+	PresetMode          string  `json:"preset_mode"`
+	PresetID            uint64  `json:"preset_id"`
 	Target              string  `json:"target"`
 	DryRun              bool    `json:"dry_run"`
 	OnConflict          string  `json:"on_conflict"`
@@ -67,6 +69,8 @@ type importUploadTicket struct {
 
 // importUploadRequest is the body of POST /api/v1/decks/import-uploads; its fields map one-to-one onto the file import options.
 type importUploadRequest struct {
+	PresetMode          string `json:"preset_mode"`
+	PresetID            string `json:"preset_id"`
 	Target              string `json:"target"`
 	DryRun              bool   `json:"dry_run"`
 	OnConflict          string `json:"on_conflict"`
@@ -91,6 +95,7 @@ func (a *API) CreateImportUpload(ctx context.Context, u *store.User, apiKeyID *u
 		return nil, InvalidRequest("on_conflict must be one of skip, update, fail")
 	}
 	payload, err := json.Marshal(importUploadTicket{
+		PresetMode: opts.PresetMode, PresetID: opts.PresetID,
 		Target:              opts.Target,
 		DryRun:              opts.DryRun,
 		OnConflict:          opts.OnConflict,
@@ -159,6 +164,7 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 		}
 	}
 	opts := store.PackageImportOptions{
+		PresetMode: ticket.PresetMode, PresetID: ticket.PresetID,
 		Target:              ticket.Target,
 		DryRun:              ticket.DryRun,
 		OnConflict:          ticket.OnConflict,
@@ -255,7 +261,13 @@ func (a *API) handleCreateImportUpload(c *gin.Context) {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
+	presetID, err := a.ImportPresetID(c.Request.Context(), u.ID, req.PresetID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	upload, err := a.CreateImportUpload(c.Request.Context(), u, CurrentAPIKeyID(c), store.PackageImportOptions{
+		PresetMode: req.PresetMode, PresetID: presetID,
 		Target:              req.Target,
 		DryRun:              req.DryRun,
 		OnConflict:          req.OnConflict,

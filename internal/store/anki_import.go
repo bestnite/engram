@@ -894,10 +894,11 @@ func (s *DeckStore) prepareAnkiImport(ctx context.Context, actorUserID uint64, r
 	}
 
 	report := &PackageImportReport{
-		Target:    targetKind,
-		DryRun:    opts.DryRun,
-		MatchRule: "anki_guid",
-		Errors:    []PackageImportError{},
+		Target:     targetKind,
+		PresetMode: opts.PresetMode,
+		DryRun:     opts.DryRun,
+		MatchRule:  "anki_guid",
+		Errors:     []PackageImportError{},
 	}
 	placed, writtenMedia, err := s.placeAnkiMedia(ctx, files, opts, report)
 	if err != nil {
@@ -1034,6 +1035,9 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 		return err
 	}
 	report.DeckID = deckID
+	if err := fillImportPresetReport(ctx, tx, deckID, report); err != nil {
+		return err
+	}
 	pid, err := deckPublicID(ctx, tx, deckID)
 	if err != nil {
 		return err
@@ -1610,7 +1614,9 @@ func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, acto
 		if err != nil {
 			return 0, err
 		}
-		presetID, err := createAnkiPreset(ctx, tx, actorUserID, unique, cfg, opts.ApplyWeights, report)
+		presetID, err := selectImportPreset(ctx, tx, actorUserID, opts, func() (uint64, error) {
+			return createAnkiPreset(ctx, tx, actorUserID, unique, cfg, opts.ApplyWeights, report)
+		})
 		if err != nil {
 			return 0, err
 		}

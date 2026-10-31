@@ -206,6 +206,8 @@ func runImport(args []string) error {
 	onConflict := fs.String("on-conflict", "", "conflict policy: skip, update (default) or fail")
 	skipMissing := fs.Bool("skip-missing-media", false, "skip missing media instead of failing")
 	applyWeights := fs.Bool("apply-weights", false, "use the package's FSRS weights for the new deck's preset (new_deck only)")
+	presetMode := fs.String("preset-mode", "new", "preset mode: new, reuse or copy")
+	presetRef := fs.String("preset-id", "", "public id of the preset to reuse or copy")
 	includeProgress := fs.Bool("include-progress", false, "import Anki scheduling progress")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -231,7 +233,12 @@ func runImport(args []string) error {
 		return fmt.Errorf("open %s: %w", *in, err)
 	}
 	defer f.Close()
+	presetID, err := apiSrv.ImportPresetID(ctx, actor.ID, *presetRef)
+	if err != nil {
+		return err
+	}
 	report, err := apiSrv.ImportDeckPackage(ctx, actor, nil, f, store.PackageImportOptions{
+		PresetMode: *presetMode, PresetID: presetID,
 		Target:           *target,
 		DryRun:           *dryRun,
 		OnConflict:       *onConflict,

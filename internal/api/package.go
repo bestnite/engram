@@ -279,7 +279,13 @@ func (a *API) handleImportPackage(c *gin.Context) {
 	defer f.Close()
 
 	dryRun := c.PostForm("dry_run") == "1" || c.PostForm("dry_run") == "true"
+	presetID, err := a.ImportPresetID(c.Request.Context(), u.ID, c.PostForm("preset_id"))
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
 	report, err := a.ImportDeckPackage(c.Request.Context(), u, CurrentAPIKeyID(c), f, store.PackageImportOptions{
+		PresetMode: c.PostForm("preset_mode"), PresetID: presetID,
 		Target:     c.PostForm("target"),
 		DryRun:     dryRun,
 		OnConflict: c.PostForm("on_conflict"),
