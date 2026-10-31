@@ -338,6 +338,24 @@ describe('card frame shown report', () => {
     expect(types.lastIndexOf('height')).toBeLessThan(types.indexOf('shown'));
   });
 
+  it('puts the caret in a question face input unless the show turns focus off', async () => {
+    const cases: Array<{ focus?: boolean; side: string; want: boolean }> = [
+      { side: 'question', want: true },
+      { focus: true, side: 'question', want: true },
+      { focus: false, side: 'question', want: false },
+      { focus: true, side: 'answer', want: false },
+    ];
+    for (const { focus, side, want } of cases) {
+      runtime?.destroy();
+      document.body.innerHTML = '<div id="qa"></div>';
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      runtime = createRuntime({ parent: parent as unknown as Window });
+      const extra = focus === undefined ? {} : { focus };
+      await runtime.handleMessage(showMessage({ html: '<p>Q</p><input id="typeans" type="text">', side, ...extra }));
+      expect(document.activeElement === document.getElementById('typeans'), `focus ${String(focus)} on ${side}`).toBe(want);
+    }
+  });
+
   it('does not report shown for a show from a foreign source', async () => {
     runtime = createRuntime({ parent: parent as unknown as Window });
     await runtime.handleMessage(fromParent({ type: 'show', html: '<p>x</p>', css: '', bodyClass: '', side: 'question', mediaBase: '', autoplay: false, ordinal: 0, seq: 1 }, window));

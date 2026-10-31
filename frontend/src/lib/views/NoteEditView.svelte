@@ -850,6 +850,7 @@
                           autoplay={card.front.autoplay ?? false}
                           avTags={card.front.av_tags ?? []}
                           title={$t('note_preview.front')}
+                          focusAnswer={false}
                         />
                       </div>
                       <div data-testid="note-preview-back-{index}" class="space-y-2 p-4">

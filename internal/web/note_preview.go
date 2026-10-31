@@ -13,9 +13,17 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
+// notePreviewRequest is one unsaved note and the note type it is rendered with. Exactly one of NoteType and Config names
+// that type.
 type notePreviewRequest struct {
-	NoteType string         `json:"note_type"`
-	Fields   map[string]any `json:"fields"`
+	// NoteType is the public id of a stored note type of the deck in the address.
+	NoteType string `json:"note_type"`
+	// Config is an unsaved note type config, rendered without creating a type. The note type help renders its worked
+	// examples this way, with sample values, so a reader sees the faces a real note of that shape produces.
+	Config *notetype.Config `json:"config"`
+	Fields map[string]any   `json:"fields"`
+	// Tags fill {{Tags}}. A preview has no stored note to read them from, so the caller supplies them.
+	Tags []string `json:"tags"`
 }
 
 // noteTypePreviewRequest is the editor's unsaved note type and the template whose two faces it wants.
@@ -47,33 +55,56 @@ func (s *Server) notePreview(c *gin.Context) {
 		return
 	}
 	var req notePreviewRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.Fields == nil || strings.TrimSpace(req.NoteType) == "" {
+	if err := c.ShouldBindJSON(&req); err != nil || req.Fields == nil {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
 	}
-	// The preview renders the note type the caller names, not a stock definition derived from a kind. A type of another deck
-	// is reported as not found, so the endpoint never confirms ids outside the deck in the address.
-	nt, err := store.NewNoteTypeStore(s.db).ByPublicID(c.Request.Context(), strings.TrimSpace(req.NoteType))
-	if err != nil || nt.DeckID != deck.ID {
-		writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
-		return
-	}
-	cfg, err := nt.Config()
-	if err != nil {
-		s.logger.Error("decode note type config failed", "note_type_id", nt.ID, "error", err)
-		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
-		return
-	}
-	cards, ok := buildPreview(nt, cfg, deck, req.Fields)
-	if !ok || len(cards) == 0 {
+	// Naming both or neither leaves the type ambiguous, so the request is rejected instead of preferring one.
+	stored := strings.TrimSpace(req.NoteType) != ""
+	if stored == (req.Config != nil) {
 		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
 		return
+	}
+	var (
+		cfg      notetype.Config
+		typeName string
+	)
+	if stored {
+		// The preview renders the note type the caller names, not a stock definition derived from a kind. A type of
+		// another deck is reported as not found, so the endpoint never confirms ids outside the deck in the address.
+		nt, err := store.NewNoteTypeStore(s.db).ByPublicID(c.Request.Context(), strings.TrimSpace(req.NoteType))
+		if err != nil || nt.DeckID != deck.ID {
+			writeRenderError(c, http.StatusNotFound, api.CodeNotFound)
+			return
+		}
+		cfg, err = nt.Config()
+		if err != nil {
+			s.logger.Error("decode note type config failed", "note_type_id", nt.ID, "error", err)
+			writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
+			return
+		}
+		typeName = nt.Name
+	} else {
+		// An unsaved config passes the validation a stored note type runs, as in noteTypePreview. It has no name, so
+		// {{Type}} renders empty.
+		var probe store.NoteType
+		if err := probe.SetConfig(previewNoteTypeName, *req.Config); err != nil {
+			writeRenderErrorDetail(c, http.StatusBadRequest, api.CodeInvalidRequest, err.Error())
+			return
+		}
+		cfg = *req.Config
 	}
 	// Preview renders the same card faces as the review path. The media base travels on each face; the relative media
 	// names are handed out only when the caller declares the HTML is for the frame, because without the frame's <base> a
 	// relative name would resolve against the SPA page.
+	// The answer control follows the request alone, as in review: the frame draws it whether or not a media base exists.
 	mediaBase := s.frameMediaBase(c.Request.Context(), user.ID, deck.ID)
 	forFrame := frameOutputRequested(c) && mediaBase != ""
+	cards, ok := buildPreview(typeName, cfg, deck, req.Fields, store.NormalizeTags(req.Tags), frameOutputRequested(c))
+	if !ok || len(cards) == 0 {
+		writeRenderError(c, http.StatusBadRequest, api.CodeInvalidRequest)
+		return
+	}
 	result := make([]gin.H, 0, len(cards))
 	for _, card := range cards {
 		front, back := card.Front, card.Back

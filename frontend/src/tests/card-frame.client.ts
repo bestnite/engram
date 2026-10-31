@@ -81,6 +81,7 @@ describe('CardFrame outbound messages', () => {
       avTags: [],
       ordinal: 0,
       seq: 1,
+      focus: true,
     });
 
     (target.querySelector('[data-testid="harness-next"]') as HTMLButtonElement).click();
@@ -175,6 +176,21 @@ describe('CardFrame outbound messages', () => {
       await flush();
     }
     expect(tops).toEqual([null, null, null, null, null]);
+  });
+
+  it('tells the frame not to take the focus when the caller turns it off', async () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(CardFrame, {
+      target,
+      props: { html: '<p>Q</p>', css: '', bodyClass: 'card', side: 'question', mediaBase: '/fm/token/', focusAnswer: false },
+    });
+    flushSync();
+    const win = frame(target).contentWindow!;
+    vi.spyOn(win, 'postMessage').mockImplementation(() => {});
+    receive(win, { type: 'ready' });
+    await flush();
+    expect(posted(win).find((message) => message.type === 'show')).toMatchObject({ focus: false });
   });
 
   it('ignores a shown report from another window', async () => {

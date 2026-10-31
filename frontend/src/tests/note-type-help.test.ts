@@ -49,6 +49,20 @@ describe('NoteTypeHelpView', () => {
     expect(html).toContain('{{type:Options}}');
   });
 
+  it('writes each sample note as field lines read from the same catalog values the preview renders', () => {
+    routeStore.set(matchRoute('/decks/d1/note-types/help'));
+    const { html } = render(NoteTypeHelpView);
+    const sample = (id: string) => {
+      const match = html.match(new RegExp(`data-testid="note-type-help-sample-${id}"><code>([\\s\\S]*?)</code>`));
+      return match?.[1] ?? '';
+    };
+    expect(sample('basic')).toBe('Front: 法国的首都是哪里？\nBack: 巴黎');
+    // A value of several lines is indented below its field, an empty field is marked, and tags come last.
+    expect(sample('choice')).toBe('Question: 下面哪一个是质数？\nOptions:\n  9\n  7\n  15\nAnswer: 1');
+    expect(sample('hint')).toContain('Notes: （留空）');
+    expect(sample('style')).toMatch(/\n标签: 物理 热力学$/);
+  });
+
   it('renders in English with no missing key either', () => {
     setLocale('en');
     routeStore.set(matchRoute('/decks/d1/note-types/help'));

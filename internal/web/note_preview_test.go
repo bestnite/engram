@@ -374,3 +374,191 @@ func TestNotePreviewNamesEachCard(t *testing.T) {
 		})
 	}
 }
+
+// draftPreviewConfig is an unsaved note type whose second card exists only when Add Reverse is filled, and whose answer
+// shows the tags, so one config covers card generation and {{Tags}}.
+func draftPreviewConfig() *notetype.Config {
+	return &notetype.Config{
+		Kind: notetype.KindNormal,
+		Fields: []notetype.Field{
+			{ID: "f0", Name: "Front"}, {ID: "f1", Name: "Back"}, {ID: "f2", Name: "Add Reverse"},
+		},
+		Templates: []notetype.Template{
+			{ID: "t0", Name: "Card 1", QFormat: "{{Front}}", AFormat: "{{FrontSide}}<hr id=answer>{{Back}}<p class=tags>{{Tags}}</p>"},
+			{ID: "t1", Name: "Card 2", QFormat: "{{#Add Reverse}}{{Back}}{{/Add Reverse}}", AFormat: "{{FrontSide}}<hr id=answer>{{Front}}"},
+		},
+	}
+}
+
+// TestNotePreviewRendersUnsavedConfig covers the config mode the note type help uses: the sample values are rendered, the
+// cards are the ones a real note would generate, and the supplied tags fill {{Tags}}.
+func TestNotePreviewRendersUnsavedConfig(t *testing.T) {
+	type face struct {
+		HTML string `json:"html"`
+	}
+	type card struct {
+		Template string `json:"template"`
+		Front    face   `json:"front"`
+		Back     face   `json:"back"`
+	}
+	cases := []struct {
+		name      string
+		fields    map[string]any
+		tags      []string
+		templates []string
+		backHas   string
+	}{
+		{"conditional card left out", map[string]any{"Front": "SAMPLE-FRONT", "Back": "SAMPLE-BACK"}, []string{" physics ", "", "heat"}, []string{"Card 1"}, "physics heat"},
+		{"conditional card generated", map[string]any{"Front": "SAMPLE-FRONT", "Back": "SAMPLE-BACK", "Add Reverse": "y"}, nil, []string{"Card 1", "Card 2"}, "SAMPLE-BACK"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, db, ownerID, cookies, csrf := newNotesServer(t)
+			deck := seedDeck(t, db, ownerID, "Unsaved preview")
+			rec := postPreview(t, srv, deck.PublicID, cookies, csrf, notePreviewRequest{Config: draftPreviewConfig(), Fields: tc.fields, Tags: tc.tags})
+			if rec.Code != http.StatusOK {
+				t.Fatalf("preview status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+			}
+			var body struct {
+				Cards []card `json:"cards"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode preview response: %v", err)
+			}
+			var names []string
+			for _, c := range body.Cards {
+				names = append(names, c.Template)
+			}
+			if strings.Join(names, ",") != strings.Join(tc.templates, ",") {
+				t.Fatalf("cards = %v, want %v", names, tc.templates)
+			}
+			if !strings.Contains(body.Cards[0].Front.HTML, "SAMPLE-FRONT") {
+				t.Errorf("front = %q, want the sample value", body.Cards[0].Front.HTML)
+			}
+			if !strings.Contains(body.Cards[0].Back.HTML, tc.backHas) {
+				t.Errorf("back = %q, want it to contain %q", body.Cards[0].Back.HTML, tc.backHas)
+			}
+		})
+	}
+}
+
+// TestNotePreviewRejectsAmbiguousOrInvalidType covers the negative cases of the type selection: naming both a stored type
+// and a config, naming neither, sending a config that fails note type validation, and a field the config does not declare.
+func TestNotePreviewRejectsAmbiguousOrInvalidType(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Ambiguous preview")
+	nt := &store.NoteType{DeckID: deck.ID, Name: "Stored"}
+	if err := store.NewNoteTypeStore(db).Create(t.Context(), nt, *draftPreviewConfig()); err != nil {
+		t.Fatalf("create note type: %v", err)
+	}
+	broken := draftPreviewConfig()
+	broken.Templates[0].QFormat = "{{Missing}}"
+	fields := map[string]any{"Front": "a", "Back": "b"}
+	cases := []struct {
+		name string
+		req  notePreviewRequest
+	}{
+		{"both a stored type and a config", notePreviewRequest{NoteType: nt.PublicID, Config: draftPreviewConfig(), Fields: fields}},
+		{"neither a stored type nor a config", notePreviewRequest{Fields: fields}},
+		{"invalid config", notePreviewRequest{Config: broken, Fields: fields}},
+		{"undeclared field", notePreviewRequest{Config: draftPreviewConfig(), Fields: map[string]any{"Front": "a", "Nope": "x"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := postPreview(t, srv, deck.PublicID, cookies, csrf, tc.req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestNotePreviewUnsavedConfigRequiresEditor covers the role gate of the config mode: a reader may not render through the
+// preview, exactly as with a stored type.
+func TestNotePreviewUnsavedConfigRequiresEditor(t *testing.T) {
+	srv, db, ownerID, ownerCookies, ownerCSRF := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Reader unsaved preview")
+	readerID, readerCookies, readerCSRF := createUserAndLogin(t, srv, db, "unsaved-preview-reader")
+	grantRole(t, srv, deck.ID, readerID, store.RoleReader, ownerCookies, ownerCSRF)
+	rec := postPreview(t, srv, deck.PublicID, readerCookies, readerCSRF, notePreviewRequest{
+		Config: draftPreviewConfig(), Fields: map[string]any{"Front": "a", "Back": "b"},
+	})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("reader preview status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+// TestNotePreviewDrawsAnswerControlForFrame pins the front a frame preview shows: the answer control's input in place of
+// the type marker, as review draws it, both for a registered control and for an Anki type-in field. A request that is
+// not for the frame keeps the marker stripped (TestNotePreviewKeepsChoiceOptionsInline).
+func TestNotePreviewDrawsAnswerControlForFrame(t *testing.T) {
+	typeIn := &notetype.Config{
+		Kind:   notetype.KindNormal,
+		Fields: []notetype.Field{{ID: "f0", Name: "Front"}, {ID: "f1", Name: "Back"}},
+		Templates: []notetype.Template{{
+			ID: "t0", Name: "Card 1", QFormat: "{{Front}}{{type:Back}}", AFormat: "{{Front}}<hr id=answer>{{type:Back}}",
+		}},
+	}
+	cases := []struct {
+		name     string
+		req      func(deck *store.Deck, db func() string) notePreviewRequest
+		frontHas []string
+	}{
+		{
+			name: "registered choice control",
+			req: func(_ *store.Deck, choiceType func() string) notePreviewRequest {
+				return notePreviewRequest{NoteType: choiceType(), Fields: map[string]any{
+					"question": "pick-one", "options": []any{"alpha", "beta"}, "answer": 1,
+				}}
+			},
+			frontHas: []string{`type="radio"`, "alpha", "beta"},
+		},
+		{
+			name: "Anki type-in field",
+			req: func(*store.Deck, func() string) notePreviewRequest {
+				return notePreviewRequest{Config: typeIn, Fields: map[string]any{"Front": "thanks", "Back": "thank you"}}
+			},
+			frontHas: []string{`id="typeans"`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, db, ownerID, cookies, csrf := newNotesServer(t)
+			deck := seedDeck(t, db, ownerID, "Frame preview controls")
+			choiceType := func() string { return stockNoteTypePublicID(t, db, deck.ID, "choice_single") }
+			payload, err := json.Marshal(tc.req(deck, choiceType))
+			if err != nil {
+				t.Fatalf("encode preview request: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes/preview", bytes.NewReader(payload))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-CSRF-Token", csrf)
+			req.Header.Set(frameOutputHeader, "1")
+			for _, cookie := range cookies {
+				req.AddCookie(cookie)
+			}
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("preview status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+			}
+			var body struct {
+				Cards []struct {
+					Front CardFace `json:"front"`
+				} `json:"cards"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || len(body.Cards) != 1 {
+				t.Fatalf("decode preview response: %v (body %s)", err, rec.Body.String())
+			}
+			front := body.Cards[0].Front.HTML
+			for _, want := range tc.frontHas {
+				if !strings.Contains(front, want) {
+					t.Errorf("front = %s, want it to contain %q", front, want)
+				}
+			}
+			if typeMarkerPattern.MatchString(front) {
+				t.Errorf("front = %s still carries a type marker", front)
+			}
+		})
+	}
+}

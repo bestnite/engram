@@ -56,6 +56,11 @@
     /** Accessible name of the iframe. */
     title?: string;
     /**
+     * Whether a question face puts the caret in its answer input, as review does. A preview passes false, because the
+     * author is working in the parent page and the frame must not take the focus from it.
+     */
+    focusAnswer?: boolean;
+    /**
      * Whether the frame has finished showing the current props: true once it reports `shown` for the latest show, false from
      * every new show until then. A caller binds it to cover the face with a loading placeholder while it renders.
      */
@@ -80,6 +85,7 @@
     onkey,
     onanswer,
     title = '',
+    focusAnswer = true,
     shown = $bindable(false),
     onshown,
   }: Props = $props();
@@ -102,7 +108,19 @@
     // The tag list usually comes from Svelte state, which is a proxy, and postMessage cannot clone a proxy
     // (DataCloneError): the show would never arrive. A snapshot is the plain value of the same list.
     win.postMessage(
-      { type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags: $state.snapshot(avTags), ordinal, seq: showSeq },
+      {
+        type: 'show',
+        html,
+        css,
+        bodyClass,
+        side,
+        mediaBase,
+        autoplay,
+        avTags: $state.snapshot(avTags),
+        ordinal,
+        seq: showSeq,
+        focus: focusAnswer,
+      },
       '*',
     );
   }
@@ -117,7 +135,7 @@
   // One show per face: the first after `ready`, and one after every prop change. The effect reads every prop that `show`
   // carries, so a change to any of them resends the face instead of leaving the frame with a stale one.
   $effect(() => {
-    void [html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal, ready, iframe];
+    void [html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal, focusAnswer, ready, iframe];
     sendShow();
   });
 

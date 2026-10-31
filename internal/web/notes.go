@@ -187,12 +187,15 @@ type previewCard struct {
 	Back         CardFace
 }
 
-// buildPreview renders the front and back of every card the given payload would produce against a stored note type.
+// buildPreview renders the front and back of every card the given payload would produce against a note type, stored or
+// unsaved. typeName fills {{Type}} and tags fill {{Tags}}. For a frame request the front draws the answer control in
+// place of the type marker, exactly as review does, so a preview shows the input or options the learner will see; every
+// other request strips the marker, because a control cannot be driven outside the frame.
 //
 // The preview shows unsaved content, so it takes the note type's own config - its fields, templates and CSS - and converts
 // the payload exactly like the note write path. It reports false when the payload cannot be rendered; the endpoint answers
 // that with one stable invalid_request code, so the cause is not carried along.
-func buildPreview(nt *store.NoteType, cfg notetype.Config, deck *store.Deck, fields map[string]any) ([]previewCard, bool) {
+func buildPreview(typeName string, cfg notetype.Config, deck *store.Deck, fields map[string]any, tags []string, forFrame bool) ([]previewCard, bool) {
 	values, err := store.PayloadFieldValues(cfg, fields)
 	if err != nil {
 		return nil, false
@@ -200,7 +203,7 @@ func buildPreview(nt *store.NoteType, cfg notetype.Config, deck *store.Deck, fie
 	// {{Deck}} and {{Subdeck}} are filled from the deck the preview is addressed to. A preview has no card row, so there is
 	// no stored subdeck path to append.
 	deckName, subdeckName := deckFieldNames(deck.Name, nil)
-	data := notetype.RenderData{Fields: values, TypeName: nt.Name, DeckName: deckName, SubdeckName: subdeckName}
+	data := notetype.RenderData{Fields: values, Tags: tags, TypeName: typeName, DeckName: deckName, SubdeckName: subdeckName}
 	generated, err := notetype.GenerateCards(cfg, data)
 	if err != nil {
 		return nil, false
@@ -245,7 +248,7 @@ func buildPreview(nt *store.NoteType, cfg notetype.Config, deck *store.Deck, fie
 		out = append(out, previewCard{
 			Template:     tmpl.Name,
 			ClozeOrdinal: clozeOrdinal,
-			Front:        CardFace{HTML: typeMarkerPattern.ReplaceAllString(frontHTML, ""), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideFront.String(), AVTags: frontAV, Autoplay: autoplay},
+			Front:        CardFace{HTML: frontFaceHTML(faces, frontHTML, nil, forFrame), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideFront.String(), AVTags: frontAV, Autoplay: autoplay},
 			Back:         CardFace{HTML: faces.staticBackHTML(), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideBack.String(), AVTags: faces.backAV, Autoplay: autoplay},
 		})
 	}

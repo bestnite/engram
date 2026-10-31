@@ -51,6 +51,11 @@ export interface ShowMessage {
    * the parent sent none.
    */
   seq: number;
+  /**
+   * Whether a question face puts the caret in its answer input, as Anki's reviewer does. A preview turns it off: the
+   * author is typing in the parent page, and a frame taking the focus would pull it away. True when the parent sent none.
+   */
+  focus: boolean;
 }
 
 export interface FrameRuntime {
@@ -97,7 +102,8 @@ function parseShow(data: Record<string, unknown>): ShowMessage | null {
   // A face from an older server carries no tag list; the literal [sound:] fallback still finds those tags.
   const avTags = Array.isArray(data.avTags) ? data.avTags.filter(isAVTag) : [];
   const seq = typeof data.seq === 'number' && Number.isFinite(data.seq) ? data.seq : 0;
-  return { type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal, seq };
+  const focus = typeof data.focus === 'boolean' ? data.focus : true;
+  return { type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal, seq, focus };
 }
 
 function containsMath(html: string): boolean {
@@ -295,7 +301,7 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     // The audio and speech controls are part of the face, so they are attached here, after the content and its typesetting: a card
     // face leaving the parent DOM must not lose its audio or TTS controls.
     enhanceShortcodes([nextRoot]);
-    if (message.side === 'question') focusAnswer(nextRoot);
+    if (message.side === 'question' && message.focus) focusAnswer(nextRoot);
     win.onShownHook?.();
     // Autoplay follows the deck setting and starts only the tags this face adds: on the answer side the question's
     // tags, carried in by {{FrontSide}}, are already markers with side q and are not replayed.

@@ -801,6 +801,29 @@ export class ApiClient {
   }
 
   /**
+   * Preview a note against an unsaved note type config: the same endpoint as previewNote, with `config` in place of a
+   * stored type. The note type help renders its worked examples this way without creating a type. fields is keyed by the
+   * config's field names; tags fill {{Tags}}.
+   */
+  async previewNoteDraft(
+    deckId: string,
+    config: NoteTypeConfig,
+    fields: Record<string, string>,
+    tags: string[],
+    options?: CardFaceRequestOptions,
+  ): Promise<NotePreviewResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const encodedId = encodeURIComponent(String(deckId));
+    return this.request<NotePreviewResponse>(`/api/v1/decks/${encodedId}/notes/preview`, {
+      method: 'POST',
+      headers: frameHeaders(options),
+      body: JSON.stringify({ config, fields, tags }),
+    });
+  }
+
+  /**
    * List one page of the media library the current user can read (GET /api/v1/media).
    * Replaces the removed SSR fragment endpoint: each returned JSON item has a sha256 and a directly usable url (/media/<sha256>),
    * so the frontend no longer parses HTML. When params are omitted the server applies a default page size; an invalid/oversized cursor gets a 400 from the server.

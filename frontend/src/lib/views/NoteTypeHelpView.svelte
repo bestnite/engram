@@ -4,7 +4,9 @@
   import { t } from '../i18n';
   import Page from '../components/ui/Page.svelte';
   import PageHeader from '../components/ui/PageHeader.svelte';
+  import NoteTypeExamplePreview from '../components/NoteTypeExamplePreview.svelte';
   import { guideSteps, syntaxRows } from '../note-type-syntax';
+  import { apiClient, type ApiClient, type NoteTypeConfig } from '../api';
 
   /**
    * The note type help page: what note types, fields, templates and cards are, how the note type page is used, the full
@@ -13,7 +15,12 @@
    * Every example is data: the field names and the template code are Anki template syntax and stay literal, while the
    * title, the explanation, the sample note and the result come from the catalog. Code is printed as text, never as HTML,
    * so an example can show markup without it being interpreted.
+   *
+   * Each example also shows its rendered cards: the example becomes an unsaved note type and its sample note, which the
+   * server renders as it would a real note. The sample note's text and the rendered note read the same catalog values.
    */
+
+  let { client = apiClient }: { client?: ApiClient } = $props();
 
   const deckId = $derived($routeStore.params.id || '');
   // The note type page passes its own address so a visit from the note editor keeps its way back; without one the help
@@ -31,7 +38,13 @@
 
   interface Example {
     id: string;
+    /** A cloze note type; every other example is a normal one. */
+    cloze?: boolean;
     fields: string[];
+    /** Fields the sample note leaves empty, to show what a template does without them. */
+    blank?: string[];
+    /** Whether the sample note carries tags (the catalog's `.tags` entry). */
+    tags?: boolean;
     templates: ExampleTemplate[];
     css?: string;
     /** The answer control and its bindings, written as role → field. */
@@ -64,9 +77,11 @@
     },
     {
       id: 'cloze',
+      cloze: true,
       fields: ['Text', 'Back Extra'],
       templates: [
         {
+          name: 'Cloze',
           front: '{{cloze:Text}}',
           back: '{{cloze:Text}}\n\n{{#Back Extra}}\n<hr>\n{{Back Extra}}\n{{/Back Extra}}',
         },
@@ -85,6 +100,7 @@
     {
       id: 'hint',
       fields: ['Front', 'Back', 'Example', 'Notes'],
+      blank: ['Notes'],
       templates: [
         {
           front: '{{Front}}\n\n{{#Example}}\n<div class="example">{{hint:Example}}</div>\n{{/Example}}',
@@ -112,6 +128,7 @@
     {
       id: 'style',
       fields: ['Front', 'Back'],
+      tags: true,
       templates: [
         {
           front: '<div class="question">{{Front}}</div>',
@@ -138,6 +155,74 @@
   ];
 
   const sections = ['concepts', 'steps', 'syntax', 'examples'] as const;
+
+  /** The catalog key of one field of an example's sample note: the field name in lower case, spaces as underscores. */
+  function fieldKey(example: Example, field: string): string {
+    return `notetype_help.example.${example.id}.field.${field.toLowerCase().replaceAll(' ', '_')}`;
+  }
+
+  /** The example's sample note, keyed by field name; a blank field is the empty string. */
+  function sampleFields(example: Example): Record<string, string> {
+    return Object.fromEntries(
+      example.fields.map((field) => [field, example.blank?.includes(field) ? '' : $t(fieldKey(example, field))]),
+    );
+  }
+
+  function sampleTags(example: Example): string[] {
+    return example.tags ? $t(`notetype_help.example.${example.id}.tags`).split(' ').filter(Boolean) : [];
+  }
+
+  /**
+   * The sample note as the reader types it into the editor: one `Field: value` line per field, a value of several lines
+   * indented below its field, an empty field marked as such, and the tags last.
+   */
+  function sampleText(example: Example): string {
+    const values = sampleFields(example);
+    const lines = example.fields.map((field) => {
+      const value = values[field] ?? '';
+      if (value === '') return `${field}: ${$t('notetype_help.label.empty_value')}`;
+      return value.includes('\n') ? `${field}:\n${value.split('\n').map((line) => `  ${line}`).join('\n')}` : `${field}: ${value}`;
+    });
+    const tags = sampleTags(example);
+    if (tags.length) lines.push(`${$t('notetype_help.label.tags')}: ${tags.join(' ')}`);
+    return lines.join('\n');
+  }
+
+  /**
+   * The example as an unsaved note type. Field and template ids are positional, because nothing stores them; an answer
+   * control binds its roles to field ids, so the example's role → field-name bindings are translated here.
+   */
+  function exampleConfig(example: Example): NoteTypeConfig {
+    const fieldId = (name: string) => `f${example.fields.indexOf(name)}`;
+    const answer = example.control
+      ? {
+          control: example.control.name,
+          bindings: Object.fromEntries(example.control.bindings.map((binding) => [binding.role, fieldId(binding.field)])),
+        }
+      : null;
+    return {
+      kind: example.cloze ? 'cloze' : 'normal',
+      fields: example.fields.map((name, index) => ({
+        id: `f${index}`,
+        name,
+        sticky: false,
+        rtl: false,
+        font: '',
+        font_size: 0,
+        description: '',
+        plain_text: false,
+        collapsed: false,
+      })),
+      templates: example.templates.map((template, index) => ({
+        id: `t${index}`,
+        name: template.name ?? `Card ${index + 1}`,
+        qfmt: template.front,
+        afmt: template.back,
+        answer,
+      })),
+      css: example.css ?? '',
+    };
+  }
 
   function scrollTo(id: string): void {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -266,12 +351,22 @@
 
           <div class="space-y-1">
             <div class="text-xs text-muted-foreground">{$t('notetype_help.label.sample')}</div>
-            {@render code($t(`notetype_help.example.${example.id}.sample`))}
+            {@render code(sampleText(example), `note-type-help-sample-${example.id}`)}
           </div>
           <p class="rounded-md bg-muted/60 px-3 py-2 text-foreground">
             <span class="font-medium">{$t('notetype_help.label.result')}</span>
             {$t(`notetype_help.example.${example.id}.result`)}
           </p>
+          {#if deckId}
+            <NoteTypeExamplePreview
+              {client}
+              {deckId}
+              config={exampleConfig(example)}
+              fields={sampleFields(example)}
+              tags={sampleTags(example)}
+              testId={`note-type-help-preview-${example.id}`}
+            />
+          {/if}
         </article>
       {/each}
     </section>
