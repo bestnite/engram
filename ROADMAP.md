@@ -145,17 +145,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-8 `.apkg` progress import is idempotent on PostgreSQL** — `importAnkiProgress` decides
-  "unchanged" with `reflect.DeepEqual` on two `CardState` values. PostgreSQL returns `time.Time`
-  values with a different location than the freshly built row, so a repeated import counts every state
-  as changed, bumps `version` and adds to `progress_applied`. With `TEST_PG_DSN` set,
-  `TestAnkiProgressImport` and `TestExportAnkiPackageRoundTrip` fail today on their repeat-import
-  assertions, although the `M18-2` acceptance required the PostgreSQL cases. The fix compares the
-  state columns one by one, time columns with `time.Time.Equal` and nullable columns by presence and
-  value. *Acceptance:* both named tests pass on SQLite and with `TEST_PG_DSN` set; a repeated import
-  leaves `version` unchanged on both drivers. Evidence is the raw `go test` output of both runs, the
-  PostgreSQL one with `TEST_PG_DSN` set.
-
 - [ ] **M18-14 `.apkg` progress report counts and transport tests** — with `include_progress` off,
   `importAnkiProgress` sets `states_discarded` to the number of all package cards and
   `progress_discarded` to true for every package that has a card, including a package whose cards are
