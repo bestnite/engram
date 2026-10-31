@@ -118,6 +118,23 @@ class FixtureNotetype:
     css: str = FIXTURE_CSS
 
 
+@dataclass
+class FixtureOcclusionNote:
+    """One note added through Anki's image-occlusion API.
+
+    The API is what turns the occlusion field into the note's Image, Header and
+    Back Extra fields, so the fixture records Anki's own field writing rather
+    than a copy of this script's assumptions. `occlusions` is the field value
+    the editor stores: one `{{cN::image-occlusion:...}}` deletion per shape.
+    """
+
+    guid: str
+    occlusions: str
+    header: str
+    back_extra: str = ""
+    image: str = "placeholder.png"
+
+
 def t(name: str, qfmt: str, afmt: str) -> tuple[str, str, str]:
     return (name, qfmt, afmt)
 
@@ -177,6 +194,53 @@ STOCK_NOTES: dict[str, list[FixtureNote]] = {
     ],
 }
 
+# The image-occlusion group is added through Anki's own image-occlusion API,
+# which writes the note type's Image and Header fields as well as the occlusion
+# field. The guids sort after every other fixture guid, so the ids Anki assigns
+# to the older notes after normalisation do not change and their packages stay
+# byte-identical.
+#
+# `oi=1` marks a shape as an inactive mask. Anki writes the attribute on every
+# shape to express the "hide all, guess one" mode: the inactive masks stay
+# visible on the question, and the shape under test is the one active deletion.
+# Without `oi` the note is in "hide one, guess one" mode, where the other
+# shapes stay visible. The runtime in `frontend/src/cardframe/image-occlusion.ts`
+# implements exactly that reading.
+OCCLUSION_NOTES = [
+    FixtureOcclusionNote(
+        "zz-occlusion-rect",
+        "{{c1::image-occlusion:rect:left=0.1:top=0.2:width=0.3:height=0.4}}",
+        "rect shape",
+    ),
+    FixtureOcclusionNote(
+        "zz-occlusion-ellipse",
+        "{{c1::image-occlusion:ellipse:left=0.5:top=0.1:rx=0.1:ry=0.08}}",
+        "ellipse shape",
+    ),
+    FixtureOcclusionNote(
+        "zz-occlusion-polygon",
+        "{{c1::image-occlusion:polygon:left=0.1:top=0.5:"
+        "points=0.1,0.5 0.28,0.5 0.19,0.64}}",
+        "polygon shape",
+    ),
+    FixtureOcclusionNote(
+        "zz-occlusion-text",
+        "{{c1::image-occlusion:text:left=0.2:top=0.3:text=Label:scale=1:fs=0.1}}",
+        "text shape",
+    ),
+    FixtureOcclusionNote(
+        "zz-occlusion-group",
+        "{{c2::image-occlusion:rect:left=0.1:top=0.1:width=0.2:height=0.1}}"
+        "{{c2::image-occlusion:ellipse:left=0.5:top=0.2:rx=0.1:ry=0.1}}",
+        "two shapes under one number",
+    ),
+    FixtureOcclusionNote(
+        "zz-occlusion-hide-all",
+        "{{c1::image-occlusion:rect:left=0.1:top=0.2:width=0.3:height=0.4:oi=1}}"
+        "{{c2::image-occlusion:ellipse:left=0.5:top=0.1:rx=0.1:ry=0.08:oi=1}}",
+        "inactive masks",
+    ),
+]
 
 SYNTAX_NOTETYPES = [
     FixtureNotetype(
@@ -661,6 +725,8 @@ class Package:
     stock: bool = False
     # Record the note type names Anki's importer adds to an empty collection in the golden.
     record_import_note_types: bool = False
+    # Notes built through Anki's image-occlusion API, using the stock note type.
+    occlusion_notes: list[FixtureOcclusionNote] = field(default_factory=list)
 
 
 PACKAGES = [
@@ -705,6 +771,12 @@ PACKAGES = [
         notetypes=IMPORT_NOTETYPES,
         formats=("anki21b",),
         record_import_note_types=True,
+    ),
+    Package(
+        fixture="image-occlusion",
+        notetypes=[],
+        formats=("anki21b",),
+        occlusion_notes=OCCLUSION_NOTES,
     ),
 ]
 
@@ -821,6 +893,13 @@ RULE_ROWS: list[tuple[str, str, str, str]] = [
      "typeanswer: Type Nc", "typeanswer-nc-one"),
     ("typeanswer.cloze-extraction", "the expected text for `type:cloze`",
      "typeanswer: Type Cloze", "typeanswer-cloze-one"),
+    # M17-62 image occlusion
+    ("occlusion.shape-kinds", "every image-occlusion shape kind is stored and rendered as Anki writes it",
+     "image-occlusion: Image Occlusion", "zz-occlusion-rect/ellipse/polygon/text"),
+    ("occlusion.group", "two shapes under one cloze number share one card and one number",
+     "image-occlusion: Image Occlusion", "zz-occlusion-group"),
+    ("occlusion.inactive", "`oi=1` marks an inactive mask for the hide-all, guess-one mode",
+     "image-occlusion: Image Occlusion", "zz-occlusion-hide-all"),
     # stock
     ("stock.notetypes", "the six stock note types",
      "stock", "stock-*"),
@@ -963,6 +1042,31 @@ def build_collection(path: Path) -> None:
                 for field_name in note_spec.blank_after_add:
                     stored[field_name] = ""
                 col.update_note(stored)
+
+    # The image-occlusion notes go through Anki's own API: it reads the image
+    # file, writes it to media, fills the note type's Image and Header fields,
+    # and creates the cards from the occlusion field.
+    occlusion_notetype = col.models.by_name("Image Occlusion")
+    assert occlusion_notetype is not None, "the stock Image Occlusion note type is missing"
+    image_bytes = media_bytes()
+    for package in PACKAGES:
+        for spec in package.occlusion_notes:
+            image_path = path.parent / spec.image
+            image_path.write_bytes(image_bytes[spec.image])
+            before = set(col.find_notes(""))
+            col.add_image_occlusion_note(
+                notetype_id=occlusion_notetype["id"],
+                image_path=str(image_path),
+                occlusions=spec.occlusions,
+                header=spec.header,
+                back_extra=spec.back_extra,
+                tags=[],
+            )
+            added = [nid for nid in col.find_notes("") if nid not in before]
+            assert len(added) == 1, (spec.guid, added)
+            note = col.get_note(added[0])
+            note.guid = spec.guid
+            col.update_note(note)
 
     col.close()
 
@@ -1724,7 +1828,9 @@ def notetype_entry(notetype) -> dict:
 def package_guids(package: Package) -> list[str]:
     if package.stock:
         return [spec.guid for notes in STOCK_NOTES.values() for spec in notes]
-    return [spec.guid for nt in package.notetypes for spec in nt.notes]
+    return [spec.guid for nt in package.notetypes for spec in nt.notes] + [
+        spec.guid for spec in package.occlusion_notes
+    ]
 
 
 def render_package(col: Collection, package: Package) -> dict:
@@ -1741,6 +1847,9 @@ def render_package(col: Collection, package: Package) -> dict:
     for nt in package.notetypes:
         for spec in nt.notes:
             note_specs[spec.guid] = (nt.name, spec)
+    for spec in package.occlusion_notes:
+        # The API wrote the fields; the fixture spec only supplies the guid.
+        note_specs[spec.guid] = ("Image Occlusion", FixtureNote(spec.guid, {}))
 
     golden_notes = []
     compare = []

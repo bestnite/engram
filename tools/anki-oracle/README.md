@@ -57,6 +57,7 @@ drift apart.
 | `audio-tts-latex.anki21b.apkg` | `collection.anki21b` | audio, TTS and LaTeX markup (M17-10) |
 | `typeanswer.anki21b.apkg` | `collection.anki21b` | type-in comparison (M17-11) |
 | `notetype-import.anki21b.apkg` | `collection.anki21b` | two note types, one of which no note uses (M17-54) |
+| `image-occlusion.anki21b.apkg` | `collection.anki21b` | one note per shape kind, a group of two shapes, and the inactive-mask mode (M17-62) |
 
 Each package is imported back into a fresh collection at the end of the run, and the note guids
 and card count must match its golden. A package that cannot be imported fails the run.
@@ -70,6 +71,15 @@ timestamps and ZIP are normalised, so the fixture is as deterministic as every o
 
 The media files (`placeholder.png`, `placeholder2.png`, `placeholder.wav`, `placeholder2.wav`)
 are generated as fixed bytes. A package carries only the media its own notes reference.
+
+The `image-occlusion` group is built through Anki's image-occlusion API
+(`Collection.add_image_occlusion_note`), not by assigning the note fields directly. That API writes
+the image, the note type's `Image` and `Header` fields, and the cards Anki generates from the
+occlusion field, so the golden records Anki's own field writing. `oi=1` is the inactive-mask flag:
+a note that carries it on its shapes is in "hide all, guess one" mode, and a note without it is in
+"hide one, guess one" mode. The fixture has one note per shape kind (`rect`, `ellipse`, `polygon`,
+`text`), one note with two shapes under one cloze number, and one note whose shapes all carry
+`oi=1`.
 
 ## Rule to fixture
 
@@ -129,6 +139,9 @@ are generated as fixed bytes. A package carries only the media its own notes ref
 | `typeanswer.combining` | whitespace is combined before comparing | typeanswer: Type Nc | `typeanswer-nc-one` |
 | `typeanswer.nc` | `type-nc` compares without combining | typeanswer: Type Nc | `typeanswer-nc-one` |
 | `typeanswer.cloze-extraction` | the expected text for `type:cloze` | typeanswer: Type Cloze | `typeanswer-cloze-one` |
+| `occlusion.shape-kinds` | every image-occlusion shape kind is stored and rendered as Anki writes it | image-occlusion: Image Occlusion | `zz-occlusion-rect/ellipse/polygon/text` |
+| `occlusion.group` | two shapes under one cloze number share one card and one number | image-occlusion: Image Occlusion | `zz-occlusion-group` |
+| `occlusion.inactive` | `oi=1` marks an inactive mask for the hide-all, guess-one mode | image-occlusion: Image Occlusion | `zz-occlusion-hide-all` |
 | `stock.notetypes` | the six stock note types | stock | `stock-*` |
 | `stock.formats` | the same stock content in the three package formats | stock.anki2 / stock.anki21 / stock.anki21b | `every stock note` |
 

@@ -3,8 +3,16 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { mount, unmount, flushSync } from 'svelte';
 import ImageOcclusionEditor from '../lib/components/ImageOcclusionEditor.svelte';
-import { extractShapesFromRenderedClozes, Rectangle } from '../cardframe/image-occlusion';
 import {
+  Ellipse,
+  Polygon,
+  Rectangle,
+  Text,
+  extractShapesFromRenderedClozes,
+  type Shape,
+} from '../cardframe/image-occlusion';
+import {
+  documentMode,
   documentShapes,
   parseOcclusionField,
   serializeOcclusionField,
@@ -23,9 +31,94 @@ import {
 const GOLDEN_DIR = join(import.meta.dirname, '../../../internal/notetype/testdata/anki');
 const ANKI_FIELD = '{{c1::image-occlusion:rect:left=0.1:top=0.2:width=0.3:height=0.4:oi=1}}';
 
+interface GoldenCard {
+  ordinal: number;
+  question_html: string;
+  answer_html: string;
+}
+
 interface GoldenNote {
+  guid: string;
   fields: Record<string, string>;
-  cards: Array<{ question_html: string }>;
+  cards: GoldenCard[];
+}
+
+interface Golden {
+  notes: GoldenNote[];
+}
+
+function occlusionField(note: GoldenNote): string {
+  const field = Object.values(note.fields).find((value) => value.includes('image-occlusion:'));
+  if (field === undefined) throw new Error(`note ${note.guid} has no image-occlusion field`);
+  return field;
+}
+
+/**
+ * The image-occlusion fixture from the Anki oracle: one note per shape kind, a group of two
+ * shapes under one cloze number, and a note whose shapes carry `oi=1`.
+ *
+ * `oi=1` is Anki's inactive-mask flag, so that note is "hide all, guess one": the question
+ * shows the inactive masks and hides only the shape under test. A note without the flag is
+ * "hide one, guess one", where every other shape stays visible. The fixture was produced
+ * through Anki's own image-occlusion API, so the fields and the rendered faces are Anki's.
+ */
+const FIXTURE = JSON.parse(
+  readFileSync(join(GOLDEN_DIR, 'image-occlusion.golden.json'), 'utf8'),
+) as Golden;
+
+const FIXTURE_NOTES = FIXTURE.notes.map((note) => ({ guid: note.guid, field: occlusionField(note), note }));
+
+/** The shape class Anki's runtime builds for each stored kind. */
+const SHAPE_CLASSES = { rect: Rectangle, ellipse: Ellipse, polygon: Polygon, text: Text } as const;
+
+function shapeSnapshot(shape: Shape): Record<string, unknown> {
+  const snapshot: Record<string, unknown> = {
+    left: shape.left,
+    top: shape.top,
+    ordinal: shape.ordinal,
+    occludeInactive: shape.occludeInactive,
+  };
+  if (shape instanceof Rectangle) {
+    snapshot.width = shape.width;
+    snapshot.height = shape.height;
+  } else if (shape instanceof Ellipse) {
+    snapshot.rx = shape.rx;
+    snapshot.ry = shape.ry;
+  } else if (shape instanceof Polygon) {
+    snapshot.points = shape.points.map((point) => ({ x: point.x, y: point.y }));
+  } else if (shape instanceof Text) {
+    snapshot.text = shape.text;
+    snapshot.scaleX = shape.scaleX;
+    snapshot.scaleY = shape.scaleY;
+    snapshot.fontSize = shape.fontSize;
+  }
+  return snapshot;
+}
+
+/** The same snapshot for a shape the editor's field model read. */
+function editorSnapshot(shape: ReturnType<typeof documentShapes>[number]): Record<string, unknown> {
+  const geometry = shapeGeometry(shape);
+  const snapshot: Record<string, unknown> = {
+    left: geometry.left,
+    top: geometry.top,
+    ordinal: shape.ordinal,
+    occludeInactive: geometry.occludeInactive ?? false,
+  };
+  if (shape.kind === 'rect') {
+    snapshot.width = geometry.width;
+    snapshot.height = geometry.height;
+  } else if (shape.kind === 'ellipse') {
+    snapshot.rx = geometry.rx;
+    snapshot.ry = geometry.ry;
+  } else if (shape.kind === 'polygon') {
+    snapshot.points = (geometry.points ?? []).map((point) => ({ x: point.x, y: point.y }));
+  } else {
+    snapshot.text = geometry.text;
+    snapshot.scaleX = geometry.scale;
+    snapshot.scaleY = geometry.scale;
+    snapshot.fontSize = geometry.fontSize;
+  }
+  return snapshot;
 }
 
 let target: HTMLElement | null = null;
@@ -169,5 +262,68 @@ describe('image occlusion editor', () => {
     setSelect('occlusion-mode', 'hideAll');
     await flush();
     expect(lastValue(onchange)).toBe(ANKI_FIELD);
+  });
+});
+
+describe('image occlusion Anki fixture', () => {
+  it.each(FIXTURE_NOTES)('$guid: the editor model matches every face Anki rendered', ({ field, note }) => {
+    const editorShapes = documentShapes(parseOcclusionField(field));
+    const expected = editorShapes.map(editorSnapshot);
+
+    for (const card of note.cards) {
+      const cardCloze = card.ordinal + 1;
+      for (const [side, html, activeSelector] of [
+        ['question', card.question_html, '.cloze'],
+        ['answer', card.answer_html, '.cloze-highlight'],
+      ] as const) {
+        const rendered = document.createElement('div');
+        rendered.innerHTML = html;
+
+        // The face's classes divide the shapes into the deletion under test and the
+        // inactive shapes. The editor's field model must produce the same division.
+        expect(
+          extractShapesFromRenderedClozes(rendered, activeSelector).map((shape) => shape.ordinal),
+          `${side} active ordinals`,
+        ).toEqual(editorShapes.filter((shape) => shape.ordinal === cardCloze).map((shape) => shape.ordinal));
+        expect(
+          extractShapesFromRenderedClozes(rendered, '.cloze-inactive').map((shape) => shape.ordinal),
+          `${side} inactive ordinals`,
+        ).toEqual(editorShapes.filter((shape) => shape.ordinal !== cardCloze).map((shape) => shape.ordinal));
+
+        // Document order is field order, so the geometry can be compared shape by shape.
+        const renderedShapes = extractShapesFromRenderedClozes(
+          rendered,
+          '.cloze, .cloze-inactive, .cloze-highlight',
+        );
+        expect(renderedShapes, `${side} shape count`).toHaveLength(editorShapes.length);
+        renderedShapes.forEach((shape, index) => {
+          const editorShape = editorShapes[index]!;
+          expect(shape, `${side} shape ${index} class`).toBeInstanceOf(SHAPE_CLASSES[editorShape.kind]);
+          expect(shapeSnapshot(shape), `${side} shape ${index} geometry`).toEqual(expected[index]);
+        });
+      }
+    }
+  });
+
+  it.each(FIXTURE_NOTES)('$guid: applying the existing number saves the field byte for byte', async ({ field }) => {
+    const { onchange } = mountEditor(field);
+    await flush();
+    expect(onchange).not.toHaveBeenCalled();
+
+    const lastOrdinal = documentShapes(parseOcclusionField(field)).at(-1)!.ordinal;
+    setNumber('occlusion-cloze', lastOrdinal);
+    click('occlusion-apply-cloze');
+    await flush();
+    expect(lastValue(onchange)).toBe(field);
+  });
+
+  it.each(FIXTURE_NOTES)('$guid: re-applying the recorded mode saves the field byte for byte', async ({ field }) => {
+    const { onchange } = mountEditor(field);
+    await flush();
+
+    const mode = documentMode(parseOcclusionField(field));
+    setSelect('occlusion-mode', mode);
+    await flush();
+    expect(lastValue(onchange)).toBe(field);
   });
 });

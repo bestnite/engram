@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   assignOrdinal,
   createShape,
@@ -11,6 +13,10 @@ import {
   setDocumentMode,
   setShapeGeometry,
   shapeGeometry,
+  type OcclusionDocument,
+  type OcclusionMode,
+  type OcclusionPart,
+  type OcclusionShapeKind,
 } from '../lib/image-occlusion/markup';
 import { geometryFromObject } from '../lib/image-occlusion/geometry';
 
@@ -135,6 +141,80 @@ describe('image-occlusion markup', () => {
     expect(firstImageSource('<div><img class="x" src="/fm/token/a.png" /></div>')).toBe('/fm/token/a.png');
     expect(firstImageSource("<img src='b.png'>")).toBe('b.png');
     expect(firstImageSource('<p>no image</p>')).toBe('');
+  });
+});
+
+/**
+ * The editor has to reproduce every shape Anki writes, not only the rectangle in the stock
+ * fixture. The golden under test records one note per shape kind, a group of two shapes
+ * under one cloze number, and a note whose shapes carry `oi=1`.
+ *
+ * `oi=1` is Anki's inactive-mask flag: a note that carries it on its shapes is in the
+ * "hide all, guess one" mode, because every other shape stays visible as a mask. A note
+ * without it is in "hide one, guess one" mode. The golden's rendered faces show the same
+ * division: the face under test is the active deletion and the shapes marked `oi=1` are
+ * rendered as inactive masks.
+ */
+interface GoldenNote {
+  guid: string;
+  fields: Record<string, string>;
+}
+
+interface Golden {
+  notes: GoldenNote[];
+}
+
+const GOLDEN_DIR = join(import.meta.dirname, '../../../internal/notetype/testdata/anki');
+
+function occlusionField(note: GoldenNote): string {
+  const field = Object.values(note.fields).find((value) => value.includes('image-occlusion:'));
+  if (field === undefined) throw new Error(`note ${note.guid} has no image-occlusion field`);
+  return field;
+}
+
+const FIXTURE_KINDS: Record<string, OcclusionShapeKind[]> = {
+  'zz-occlusion-rect': ['rect'],
+  'zz-occlusion-ellipse': ['ellipse'],
+  'zz-occlusion-polygon': ['polygon'],
+  'zz-occlusion-text': ['text'],
+  'zz-occlusion-group': ['rect', 'ellipse'],
+  'zz-occlusion-hide-all': ['rect', 'ellipse'],
+};
+
+const FIXTURE_NOTES = (
+  JSON.parse(readFileSync(join(GOLDEN_DIR, 'image-occlusion.golden.json'), 'utf8')) as Golden
+).notes.map((note) => ({
+  guid: note.guid,
+  field: occlusionField(note),
+  kinds: FIXTURE_KINDS[note.guid] ?? [],
+  mode: (note.guid === 'zz-occlusion-hide-all' ? 'hideAll' : 'hideOne') as OcclusionMode,
+}));
+
+/** Rebuilds a field from the shapes the parser read, using the editor's public constructors. */
+function rebuildField(field: string): string {
+  const parsed = parseOcclusionField(field);
+  const parts: OcclusionPart[] = parsed.parts.map((part) => {
+    if (part.type === 'text') return part;
+    const shape = part.shape;
+    return { type: 'shape', shape: createShape(shape.kind, shape.ordinal, shapeGeometry(shape)) };
+  });
+  const rebuilt: OcclusionDocument = { parts };
+  return serializeOcclusionField(rebuilt);
+}
+
+describe('image-occlusion Anki fixture', () => {
+  it.each(FIXTURE_NOTES)('$guid: opening and saving without an edit is byte-identical', ({ field }) => {
+    expect(serializeOcclusionField(parseOcclusionField(field))).toBe(field);
+  });
+
+  it.each(FIXTURE_NOTES)('$guid: the shape model writes the same field Anki stored', ({ field }) => {
+    expect(rebuildField(field)).toBe(field);
+  });
+
+  it.each(FIXTURE_NOTES)('$guid: reads the recorded shape kinds and mode', ({ field, kinds, mode }) => {
+    const document = parseOcclusionField(field);
+    expect(documentShapes(document).map((shape) => shape.kind)).toEqual(kinds);
+    expect(documentMode(document)).toBe(mode);
   });
 });
 

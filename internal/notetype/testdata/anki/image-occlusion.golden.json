@@ -1,0 +1,320 @@
+{
+  "compare_answers": [],
+  "fixture": "image-occlusion",
+  "note_types": [
+    {
+      "css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+      "fields": [
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Occlusion",
+          "ord": 0,
+          "plain_text": false,
+          "prevent_deletion": true,
+          "rtl": false,
+          "sticky": false,
+          "tag": 0
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Image",
+          "ord": 1,
+          "plain_text": false,
+          "prevent_deletion": true,
+          "rtl": false,
+          "sticky": false,
+          "tag": 1
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Header",
+          "ord": 2,
+          "plain_text": false,
+          "prevent_deletion": true,
+          "rtl": false,
+          "sticky": false,
+          "tag": 2
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Back Extra",
+          "ord": 3,
+          "plain_text": false,
+          "prevent_deletion": true,
+          "rtl": false,
+          "sticky": false,
+          "tag": 3
+        },
+        {
+          "collapsed": false,
+          "description": "",
+          "exclude_from_search": false,
+          "font": "Arial",
+          "font_size": 20,
+          "name": "Comments",
+          "ord": 4,
+          "plain_text": false,
+          "prevent_deletion": false,
+          "rtl": false,
+          "sticky": false,
+          "tag": 4
+        }
+      ],
+      "kind": "cloze",
+      "latex_post": "\\end{document}",
+      "latex_pre": "\\documentclass[12pt]{article}\n\\special{papersize=3in,5in}\n\\usepackage[utf8]{inputenc}\n\\usepackage{amssymb,amsmath}\n\\pagestyle{empty}\n\\setlength{\\parindent}{0in}\n\\begin{document}\n",
+      "latex_svg": false,
+      "name": "Image Occlusion",
+      "original_stock_kind": "image_occlusion",
+      "sort_field_index": 0,
+      "templates": [
+        {
+          "afmt": "{{#Header}}<div>{{Header}}</div>{{/Header}}\n<div style=\"display: none\">{{cloze:Occlusion}}</div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    {{Image}}\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n{{#Back Extra}}<div>{{Back Extra}}</div>{{/Back Extra}}\n",
+          "bafmt": "",
+          "bqfmt": "",
+          "browser_font": "",
+          "browser_font_size": 0,
+          "name": "Image Occlusion",
+          "ord": 0,
+          "qfmt": "{{#Header}}<div>{{Header}}</div>{{/Header}}\n<div style=\"display: none\">{{cloze:Occlusion}}</div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    {{Image}}\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>rect shape</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "answer_nodes_text": "<div>rect shape</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "front_is_empty": false,
+          "id": 1500000000082,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>rect shape</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n",
+          "question_nodes_text": "<div>rect shape</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        }
+      ],
+      "cloze_numbers": [
+        1
+      ],
+      "fields": {
+        "Back Extra": "",
+        "Comments": "",
+        "Header": "rect shape",
+        "Image": "<img src=\"placeholder.png\">",
+        "Occlusion": "{{c1::image-occlusion:rect:left=0.1:top=0.2:width=0.3:height=0.4}}"
+      },
+      "guid": "zz-occlusion-rect",
+      "notetype_name": "Image Occlusion"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>ellipse shape</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "answer_nodes_text": "<div>ellipse shape</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "front_is_empty": false,
+          "id": 1500000000077,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>ellipse shape</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n",
+          "question_nodes_text": "<div>ellipse shape</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        }
+      ],
+      "cloze_numbers": [
+        1
+      ],
+      "fields": {
+        "Back Extra": "",
+        "Comments": "",
+        "Header": "ellipse shape",
+        "Image": "<img src=\"placeholder.png\">",
+        "Occlusion": "{{c1::image-occlusion:ellipse:left=0.5:top=0.1:rx=0.1:ry=0.08}}"
+      },
+      "guid": "zz-occlusion-ellipse",
+      "notetype_name": "Image Occlusion"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>polygon shape</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"polygon\" data-left=\"0.1\" data-top=\"0.5\" data-points=\"0.1,0.5 0.28,0.5 0.19,0.64\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "answer_nodes_text": "<div>polygon shape</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"polygon\" data-left=\"0.1\" data-top=\"0.5\" data-points=\"0.1,0.5 0.28,0.5 0.19,0.64\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "front_is_empty": false,
+          "id": 1500000000081,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>polygon shape</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"polygon\" data-left=\"0.1\" data-top=\"0.5\" data-points=\"0.1,0.5 0.28,0.5 0.19,0.64\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n",
+          "question_nodes_text": "<div>polygon shape</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"polygon\" data-left=\"0.1\" data-top=\"0.5\" data-points=\"0.1,0.5 0.28,0.5 0.19,0.64\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        }
+      ],
+      "cloze_numbers": [
+        1
+      ],
+      "fields": {
+        "Back Extra": "",
+        "Comments": "",
+        "Header": "polygon shape",
+        "Image": "<img src=\"placeholder.png\">",
+        "Occlusion": "{{c1::image-occlusion:polygon:left=0.1:top=0.5:points=0.1,0.5 0.28,0.5 0.19,0.64}}"
+      },
+      "guid": "zz-occlusion-polygon",
+      "notetype_name": "Image Occlusion"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>text shape</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"text\" data-left=\"0.2\" data-top=\"0.3\" data-text=\"Label\" data-scale=\"1\" data-font-size=\"0.1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "answer_nodes_text": "<div>text shape</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"text\" data-left=\"0.2\" data-top=\"0.3\" data-text=\"Label\" data-scale=\"1\" data-font-size=\"0.1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "front_is_empty": false,
+          "id": 1500000000083,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>text shape</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"text\" data-left=\"0.2\" data-top=\"0.3\" data-text=\"Label\" data-scale=\"1\" data-font-size=\"0.1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n",
+          "question_nodes_text": "<div>text shape</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"text\" data-left=\"0.2\" data-top=\"0.3\" data-text=\"Label\" data-scale=\"1\" data-font-size=\"0.1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        }
+      ],
+      "cloze_numbers": [
+        1
+      ],
+      "fields": {
+        "Back Extra": "",
+        "Comments": "",
+        "Header": "text shape",
+        "Image": "<img src=\"placeholder.png\">",
+        "Occlusion": "{{c1::image-occlusion:text:left=0.2:top=0.3:text=Label:scale=1:fs=0.1}}"
+      },
+      "guid": "zz-occlusion-text",
+      "notetype_name": "Image Occlusion"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        1
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>two shapes under one number</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"2\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.1\" data-width=\"0.2\" data-height=\"0.1\" ></div><div class=\"cloze-highlight\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.2\" data-rx=\"0.1\" data-ry=\"0.1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "answer_nodes_text": "<div>two shapes under one number</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"2\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.1\" data-width=\"0.2\" data-height=\"0.1\" ></div><div class=\"cloze-highlight\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.2\" data-rx=\"0.1\" data-ry=\"0.1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "front_is_empty": false,
+          "id": 1500000000078,
+          "ordinal": 1,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>two shapes under one number</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"2\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.1\" data-width=\"0.2\" data-height=\"0.1\" ></div><div class=\"cloze\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.2\" data-rx=\"0.1\" data-ry=\"0.1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n",
+          "question_nodes_text": "<div>two shapes under one number</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"2\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.1\" data-width=\"0.2\" data-height=\"0.1\" ></div><div class=\"cloze\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.2\" data-rx=\"0.1\" data-ry=\"0.1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        }
+      ],
+      "cloze_numbers": [
+        2
+      ],
+      "fields": {
+        "Back Extra": "",
+        "Comments": "",
+        "Header": "two shapes under one number",
+        "Image": "<img src=\"placeholder.png\">",
+        "Occlusion": "{{c2::image-occlusion:rect:left=0.1:top=0.1:width=0.2:height=0.1}}{{c2::image-occlusion:ellipse:left=0.5:top=0.2:rx=0.1:ry=0.1}}"
+      },
+      "guid": "zz-occlusion-group",
+      "notetype_name": "Image Occlusion"
+    },
+    {
+      "cardgen_expected_ordinals": [
+        0,
+        1
+      ],
+      "cards": [
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>inactive masks</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div><div class=\"cloze-inactive\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "answer_nodes_text": "<div>inactive masks</div>\n<div style=\"display: none\"><div class=\"cloze-highlight\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div><div class=\"cloze-inactive\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "front_is_empty": false,
+          "id": 1500000000079,
+          "ordinal": 0,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>inactive masks</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div><div class=\"cloze-inactive\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n",
+          "question_nodes_text": "<div>inactive masks</div>\n<div style=\"display: none\"><div class=\"cloze\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div><div class=\"cloze-inactive\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        },
+        {
+          "answer_av_tags": [],
+          "answer_av_tags_parsed": [],
+          "answer_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>inactive masks</div>\n<div style=\"display: none\"><div class=\"cloze-inactive\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div><div class=\"cloze-highlight\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "answer_nodes_text": "<div>inactive masks</div>\n<div style=\"display: none\"><div class=\"cloze-inactive\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div><div class=\"cloze-highlight\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n\n<div><button id=\"toggle\">Toggle Masks</button></div>\n\n",
+          "front_is_empty": false,
+          "id": 1500000000080,
+          "ordinal": 1,
+          "question_av_tags": [],
+          "question_av_tags_parsed": [],
+          "question_css": "#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n",
+          "question_html": "<style>#image-occlusion-canvas {\n    --inactive-shape-color: #ffeba2;\n    --active-shape-color: #ff8e8e;\n    --inactive-shape-border: 1px #212121;\n    --active-shape-border: 1px #212121;\n    --highlight-shape-color: #ff8e8e00;\n    --highlight-shape-border: 1px #ff8e8e;\n}\n\n.card {\n    font-family: arial;\n    font-size: 20px;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n</style><div>inactive masks</div>\n<div style=\"display: none\"><div class=\"cloze-inactive\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div><div class=\"cloze\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n",
+          "question_nodes_text": "<div>inactive masks</div>\n<div style=\"display: none\"><div class=\"cloze-inactive\" data-ordinal=\"1\" data-shape=\"rect\" data-left=\"0.1\" data-top=\"0.2\" data-width=\"0.3\" data-height=\"0.4\" data-occludeInactive=\"1\" ></div><div class=\"cloze\" data-ordinal=\"2\" data-shape=\"ellipse\" data-left=\"0.5\" data-top=\"0.1\" data-rx=\"0.1\" data-ry=\"0.08\" data-occludeInactive=\"1\" ></div></div>\n<div id=\"err\"></div>\n<div id=\"image-occlusion-container\">\n    <img src=\"placeholder.png\">\n    <canvas id=\"image-occlusion-canvas\"></canvas>\n</div>\n<script>\ntry {\n    anki.imageOcclusion.setup();\n} catch (exc) {\n    document.getElementById(\"err\").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;\n}\n</script>\n"
+        }
+      ],
+      "cloze_numbers": [
+        1,
+        2
+      ],
+      "fields": {
+        "Back Extra": "",
+        "Comments": "",
+        "Header": "inactive masks",
+        "Image": "<img src=\"placeholder.png\">",
+        "Occlusion": "{{c1::image-occlusion:rect:left=0.1:top=0.2:width=0.3:height=0.4:oi=1}}{{c2::image-occlusion:ellipse:left=0.5:top=0.1:rx=0.1:ry=0.08:oi=1}}"
+      },
+      "guid": "zz-occlusion-hide-all",
+      "notetype_name": "Image Occlusion"
+    }
+  ],
+  "packages": [
+    "image-occlusion.anki21b.apkg"
+  ],
+  "source": "anki==26.9.3"
+}
