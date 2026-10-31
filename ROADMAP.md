@@ -63,60 +63,13 @@ release; a task moves into a release milestone when it is scheduled.
 
 ### M18 — Deck package: `.apkg` becomes the only format
 
-`M18-1` to `M18-3` build the Anki package path, `M18-4` adds the import-time preset choice, and
-`M18-5` removes `.edeck`. `M18-5` must not start before the others land: a user has to be able to
-export a deck before the export they have today disappears. The release that carries `M18-5` breaks
-the `.edeck` file format, the package export route and the `export_deck` MCP tool. The parent updates
-`AGENTS.md` section 2.7 with the maintainer present (`M18-1` moves `.apkg` export into the
-compatibility target, `M18-2` moves `.apkg` progress import into it); a subagent must not edit that
-file.
-
-- [ ] **M18-1 `.apkg` export: write a legacy `collection.anki21` package** — a new writer turns one
-  deck into an archive that both Anki 26.09.3 and `internal/store/anki_import.go` read.
-  `internal/anki/write.go` builds a schema-11 SQLite collection (`col`, `notes`, `cards`, `revlog`,
-  `graves`, with the columns the oracle-generated `internal/notetype/testdata/anki/stock.anki2.apkg`
-  carries) through the pure-Go `github.com/glebarez/sqlite` driver already in `go.mod`, then adds
-  `meta` (`\x08\x02`), `media` (a JSON number → file name map) and the numbered media entries.
-  `internal/store/anki_export.go` maps store rows onto that model: one Anki deck per distinct
-  `cards.deck_path` (the flat deck plus real subdecks); each note type as Anki's legacy model JSON
-  (field options, template formats, `req`, `sortf`, CSS, LaTeX, `originalStockKind`, `type`, `usn`,
-  `mod`, and `anki_origin.notetype_id` as the note type id when present, so a re-import matches it);
-  each note with `flds` joined by `\x1f` in field order, `sfld` as the sort field's plain text and a
-  `csum` value (both are recomputed on import, so approximate values are acceptable and the writer's
-  doc comment says so), `guid` from an `anki:`
-  `external_ref` or derived deterministically from the note's public id, tags as Anki stores them
-  and `data` as `{}`; each card with its template ordinal and a new-card position, or its real
-  scheduling state when progress is exported; and one `dconf` entry with `desiredRetention`, the
-  learn and relearn delays, `rev.maxIvl` and, when weights are exported, the FSRS-6 weights in
-  `fsrsParams6`. `fsrsWeights` maps to `fsrs_params_4` and `fsrsParams5` to `fsrs_params_5`, so both
-  stay empty, and the entry's id must not be 1: a config with id 1 merges into the target's stock
-  `Default` and its values are lost. The note type's answer specs are written as one unknown model
-  key holding JSON (`engram`), which Anki carries through import and both exports; without it a deck
-  exported and imported back would lose machine grading.
-  `store.PackageOptions` gains `IncludeDeckConfigs`, and `IncludeReviews` stops depending on
-  `IncludeProgress` so the two switches are independent (this also changes the `.edeck` export until
-  `M18-5` removes it). Progress and reviews are the caller's own rows only; both default off, deck
-  configuration and media default on. Parameters legacy `dconf` cannot express are named in the
-  writer's doc comment and left out. Verified against `anki==26.9.3` and therefore required:
-  `col.ver` is exactly 11 (`9` is `FileTooOld`, `12` is `FileTooNew`) and `col.conf` may be `{}`;
-  `meta` is `\x08\x02` and neither a `collection.anki2` stub nor a `collection.anki21b` is needed;
-  `req` may be omitted because the importer recomputes it; `sfld` and `csum` are recomputed on
-  import, so approximate values are allowed and the writer's doc comment must say so; `flds` holds
-  exactly one value per declared field; and note and card ids must not be later than about a day from
-  now, because Anki silently replaces later ones; Anki remaps note and card ids that collide
-  with rows already in the target collection, verified against `anki==26.9.3`, so small sequential
-  ids are safe. The id mapping is verified with Engram's small autoincrement ids, not only with
-  timestamp-shaped ones. *Acceptance:* a unit test asserts the archive's entries and the collection's
-  tables, columns and required rows; two exports of one deck are byte-identical; a round trip through
-  `ImportPackage` into a fresh user reproduces notes, cards, note types (answer specs included) and
-  media, while card states and reviews are compared against the exported collection and by a real
-  Anki import (their import-side comparison lands with `M18-2`, which teaches the importer to read
-  them); a new `tools/anki-oracle/verify_package.py` opens the produced file with `anki==26.9.3` and
-  prints its note, card, note type, media, deck-config and answer-spec counts. Evidence is the raw
-  output of
-  `go test ./internal/anki/... ./internal/store/... && go vet ./internal/anki/... ./internal/store/...`
-  plus that script's output. `ARCHITECTURE.md`'s `internal/anki` row is updated in the same commit,
-  because the package stops being a reader only.
+`M18-1` (landed) wrote the `.apkg` export, `M18-2` and `M18-3` complete the package path, `M18-4`
+adds the import-time preset choice, and `M18-5` removes `.edeck`. `M18-5` must not start before the
+others land: a user has to be able to export a deck before the export they have today disappears. The
+release that carries `M18-5` breaks the `.edeck` file format, the package export route and the
+`export_deck` MCP tool. The parent updates `AGENTS.md` section 2.7 with the maintainer present
+(`M18-1` moved `.apkg` export into it; `M18-2` moves `.apkg` progress import into it); a subagent
+must not edit that file.
 
 - [ ] **M18-2 `.apkg` import: deck configuration, card states and the review log** — the importer
   reads what the package says about scheduling instead of discarding it. `internal/anki/protobuf.go`
