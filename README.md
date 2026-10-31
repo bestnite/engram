@@ -29,6 +29,7 @@ Live demo: <https://engram.nite07.com/> (registration is open; you can also sign
 
 - **FSRS v6 Scheduling**: Adaptive scheduling based on the open-source FSRS v6 algorithm, optimizing review intervals and reducing workload compared to legacy SM-2 algorithms. Supports custom parameter optimization.
 - **Anki-Compatible Note Types**: Note types are data — fields, templates, CSS and Anki's note type options — with eight registered answer controls (text, numeric, single choice, multiple choice, true/false, list, cloze blanks and short answer). Field values are HTML, formulas render with MathJax, and audio/TTS use Anki syntax (`[sound:<name>]`, `[anki:tts …]…[/anki:tts]`).
+- **Anki `.apkg` Deck Import**: Import decks straight from Anki packages. Engram reads all three `.apkg` layouts (legacy `collection.anki2` and `collection.anki21`, and the zstd-compressed `collection.anki21b`), and the package's deck tree, note types, notes, tags, cards and media arrive as Anki has them. Re-importing a package matches notes by Anki's GUID, so it updates the deck in place and keeps the progress already recorded against it.
 - **Multi-user & Deck Sharing**: Multi-tenant architecture with OIDC / Single Sign-On (SSO) support. Decks can be shared across users while keeping each user's review scheduling and progress strictly isolated.
 - **AI & MCP Native**: Built-in Model Context Protocol server exposing dedicated tools for LLMs and agents to search, create, update, review, and export flashcards.
 - **Modern Interface & PWA**: Clean single-page application built with Svelte 5 and Tailwind CSS, featuring dark/light themes, keyboard navigation shortcuts, internationalization (`zh-CN` and `en`), and PWA support.
@@ -40,6 +41,32 @@ Live demo: <https://engram.nite07.com/> (registration is open; you can also sign
 ## Deck Library
 
 Ready-to-import `.edeck` packages live in [`decks/`](./decks/). Pick one, then import it from the **Import** page (upload the file, or paste the file's public direct link), the CLI (`engram import`), or the MCP `import_deck` tool. See [`decks/README.md`](./decks/README.md) for the deck list and the step-by-step instructions.
+
+An Anki `.apkg` package imports through the same three entry points; see [Importing Anki Decks](#importing-anki-decks) for what arrives and what does not.
+
+---
+
+## Importing Anki Decks
+
+The **Import** page, `engram import` and the MCP `import_deck` tool accept an Anki `.apkg` package. As with an `.edeck`, choose the target: `new_deck` creates a deck, and `into_deck:<id>` merges into a deck you can edit. The CLI and the MCP tool also take `replace_deck:<id>` to replace an existing deck, which only the deck's owner may do.
+
+The package brings these across:
+
+- **Deck tree**: the longest `::` name prefix shared by the package's decks that hold cards becomes the Engram deck name; when they share none, the branch holding the most cards names the deck. Each deeper deck name stays on its cards as a subdeck path, so `A::B::C` becomes deck `A::B` with path `C`.
+- **Note types**: fields, templates (all four sides, including browser variants), CSS, the LaTeX preamble and suffix, and Anki's note type options arrive unchanged.
+- **Notes, tags and cards**: every note is created as the package holds it, with its tags, and the package's cards are created as they exist.
+- **Media**: images, audio and video are registered under their Anki file names and resolved by the package's fields, templates and CSS.
+
+These parts of the package are not imported:
+
+- **Scheduling state and review history.** Anki's due dates, intervals and review log stay behind: imported cards start as new cards, and FSRS schedules them from your own reviews.
+- **Anki's deck options and FSRS parameters.** A new deck starts from the default preset, and Engram optimises its parameters from the reviews you record.
+
+An imported note type carries no answer control, so its cards are self-rated until you add one in the note type editor.
+
+Re-importing the same package, or a newer export of it, matches notes by Anki's GUID and note types by the package's origin id. A note and note type that still have the same field and template structure are updated in place and keep their cards and progress; a changed structure creates a new note type and moves the notes to it.
+
+The import report lists what the package refers to but does not carry: missing media files, video a browser cannot play, external scripts or stylesheets, and LaTeX images the package does not embed. A package with missing media fails by default; tick "Continue when media files are missing" to import it anyway.
 
 ---
 
@@ -79,7 +106,7 @@ Engram provides 23 dedicated MCP tools:
 - `bury_card`: Postpone one card to the start of your next review day without touching its progress. Mirrors REST `POST /cards/{id}/bury`.
 - `set_deck_paused`: Pause or resume a deck for yourself only. A paused deck leaves the default review queue, the due count and the reminder emails, but keeps its progress and can still be reviewed by name.
 - `get_stats`: Retrieve learning summaries, queue counts, and retention rates.
-- `export_deck` / `import_deck`: Export and import portable deck packages (`.edeck`).
+- `export_deck` / `import_deck`: Export and import portable deck packages (`.edeck`). `import_deck` also accepts an Anki `.apkg` package and targets a new deck, an existing deck, or a full deck replacement.
 - `create_import_upload`: Get a single-use upload URL for a deck package. The agent sends the file to it with an HTTP client such as `curl`, so a large package never passes through the model and the API key never leaves the MCP client.
 
 ---
