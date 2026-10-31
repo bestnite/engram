@@ -74,6 +74,7 @@ into it); a subagent must not edit that file.
 - [ ] **M18-3 `.apkg` export transports and the MCP download URL** — `GET /api/v1/decks/:id/package`
   takes `format=apkg` plus the four switches as query parameters, and the web deck page downloads the
   same bytes; the CLI gains `--format` and the switch flags; the MCP `export_deck` gains `format`.
+  The SPA export dialog is not part of this task: it moves to `.apkg` in `M18-5`.
   A new MCP tool `create_export_download` returns a single-use URL the caller fetches the archive
   from, modelled on the import-upload ticket, so package bytes never enter the model context. It is
   scoped to the caller, works once and expires. *Acceptance:* route tests cover the format switch,
@@ -99,8 +100,8 @@ into it); a subagent must not edit that file.
 - [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
   half of `internal/store/package_import.go`, `internal/store/package_document.go`,
   `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
-  of `schema/README.md`, the `.edeck` choice in the export dialog of
-  `frontend/src/lib/views/DeckDetailView.svelte`, the `export_deck` MCP tool, the JSON document branch
+  of `schema/README.md`, the export dialog of `frontend/src/lib/views/DeckDetailView.svelte`, which
+  then offers only `.apkg` with the four switches, the `export_deck` MCP tool, the JSON document branch
   of the upload ticket, and the CLI's `.edeck` export. Keep in a package-named file everything the
   `.apkg` path still uses: `PackageError` and its codes, `PackageImportOptions`,
   `PackageImportReport`, `PackageImportError`, the package limits, `MediaQuotaBytes`,
