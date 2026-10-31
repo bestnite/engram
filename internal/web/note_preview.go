@@ -83,8 +83,10 @@ func (s *Server) notePreview(c *gin.Context) {
 			back.HTML = absoluteMediaRefs(back.HTML)
 		}
 		result = append(result, gin.H{
-			"front": front,
-			"back":  back,
+			"template":      card.Template,
+			"cloze_ordinal": card.ClozeOrdinal,
+			"front":         front,
+			"back":          back,
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{"cards": result})

@@ -1783,4 +1783,8 @@ export const en: LocaleCatalog = {
   'note_edit.leave.title': 'Discard unsaved changes?',
   'note_edit.leave.desc': 'Leaving this page discards the changes to this note that are not saved yet.',
   'note_edit.leave.confirm': 'Discard and leave',
+  'note_preview.prev': 'Previous card',
+  'note_preview.next': 'Next card',
+  'note_preview.position': '{current} / {total}',
+  'note_preview.cloze_name': '{template} {ordinal}',
 };

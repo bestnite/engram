@@ -227,6 +227,10 @@ export interface CardFace {
 
 /** One preview card: the two faces the review frame would show. */
 export interface NotePreviewCard {
+  /** The name of the template that produced the card. */
+  template: string;
+  /** The cloze number of a cloze card, which tells the cards of one cloze template apart; 0 for a normal template. */
+  cloze_ordinal: number;
   front: CardFace;
   back: CardFace;
 }

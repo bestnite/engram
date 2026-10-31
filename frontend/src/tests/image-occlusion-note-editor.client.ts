@@ -80,7 +80,9 @@ function noteFixture(overrides: Partial<Note> = {}): Note {
 }
 
 function previewResponse(): NotePreviewResponse {
-  return { cards: [{ front: face('<div>front</div>'), back: face('<div>back</div>', { side: 'back' }) }] };
+  return {
+    cards: [{ template: 'Image Occlusion', cloze_ordinal: 1, front: face('<div>front</div>'), back: face('<div>back</div>', { side: 'back' }) }],
+  };
 }
 
 let target: HTMLElement;

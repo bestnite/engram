@@ -149,10 +149,14 @@ function noteFixture(overrides: Partial<Note> = {}): Note {
   };
 }
 
-/** The response the preview endpoint sends: one entry per card, each carrying both faces. */
-function createResponse(cards: Array<{ front: string; back: string }>): NotePreviewResponse {
+/** The response the preview endpoint sends: one entry per card, each naming its template and carrying both faces. */
+function createResponse(
+  cards: Array<{ front: string; back: string; template?: string; cloze_ordinal?: number }>
+): NotePreviewResponse {
   return {
-    cards: cards.map((card) => ({
+    cards: cards.map((card, index) => ({
+      template: card.template ?? `Card ${index + 1}`,
+      cloze_ordinal: card.cloze_ordinal ?? 0,
       front: face(card.front),
       back: face(card.back, { side: 'back' }),
     })),
@@ -335,6 +339,8 @@ describe('unified note editor — create mode', () => {
     vi.spyOn(apiClient, 'previewNote').mockResolvedValue({
       cards: [
         {
+          template: 'Card 1',
+          cloze_ordinal: 0,
           front: { html: '<p>Q</p>', css: noteCSS, body_class: 'card type-preview', side: 'front', media_base: '/fm/token/' },
           back: { html: '<p>A</p>', css: noteCSS, body_class: 'card type-preview', side: 'back', media_base: '/fm/token/' },
         },
@@ -1504,5 +1510,111 @@ describe('unified note editor — field media', () => {
     await flush();
     const uploaded = frame.postMessage.mock.calls.map((call) => call[0] as Record<string, unknown>).find((m) => m.type === 'uploaded');
     expect(uploaded).toMatchObject({ id: 'u1', url: `${sha}.png`, name: `${sha}.png`, mime: 'image/png' });
+  });
+});
+
+describe('unified note editor — preview pager', () => {
+  function pager(): Element | null {
+    return target.querySelector('[data-testid="note-preview-pager"]');
+  }
+
+  function button(which: 'prev' | 'next'): HTMLButtonElement {
+    return target.querySelector(`[data-testid="note-preview-${which}"]`) as HTMLButtonElement;
+  }
+
+  function shownLabel(): string {
+    const position = target.querySelector('[data-testid="note-preview-position"]')?.textContent?.trim() ?? '';
+    const name = target.querySelector('[data-testid="note-preview-card-name"]')?.textContent?.trim() ?? '';
+    return `${position} ${name}`;
+  }
+
+  /** Types into the front field and lets the debounced preview land. */
+  async function typeAndPreview(value: string): Promise<void> {
+    setField(FRONT, value);
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+  }
+
+  const threeCards = createResponse([
+    { front: '<p>FIRST</p>', back: '<p>a</p>', template: 'Forward' },
+    { front: '<p>SECOND</p>', back: '<p>b</p>', template: 'Reverse' },
+    { front: '<p>THIRD</p>', back: '<p>c</p>', template: 'Map' },
+  ]);
+
+  it('shows a single card without a pager', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([{ front: '<p>ONLY</p>', back: '<p>a</p>' }]));
+    mountEditor({ id: '5' });
+    await flush();
+    await typeAndPreview('Q');
+    expect(pager()).toBeNull();
+    expect(await previewFront()).toContain('ONLY');
+  });
+
+  it('shows one card at a time and steps through them without wrapping', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(threeCards);
+    mountEditor({ id: '5' });
+    await flush();
+    await typeAndPreview('Q');
+
+    expect(shownLabel()).toBe('1 / 3 Forward');
+    expect(await shownFaces(target)).toHaveLength(2);
+    expect(await previewFront()).toContain('FIRST');
+    expect(button('prev').disabled).toBe(true);
+
+    button('next').click();
+    await flush();
+    expect(shownLabel()).toBe('2 / 3 Reverse');
+    expect(await previewFront()).toContain('SECOND');
+
+    button('next').click();
+    await flush();
+    expect(shownLabel()).toBe('3 / 3 Map');
+    expect(await previewFront()).toContain('THIRD');
+    expect(button('next').disabled).toBe(true);
+
+    button('prev').click();
+    await flush();
+    expect(shownLabel()).toBe('2 / 3 Reverse');
+  });
+
+  it('names a cloze card by its template and number', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(
+      createResponse([
+        { front: '<p>one</p>', back: '<p>one</p>', template: 'Cloze', cloze_ordinal: 1 },
+        { front: '<p>two</p>', back: '<p>two</p>', template: 'Cloze', cloze_ordinal: 2 },
+      ]),
+    );
+    mountEditor({ id: '5' });
+    await flush();
+    await typeAndPreview('Q');
+    button('next').click();
+    await flush();
+    expect(shownLabel()).toBe('2 / 2 Cloze 2');
+  });
+
+  it('keeps the chosen card while typing and moves to the last card when the cards shrink', async () => {
+    const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(threeCards);
+    mountEditor({ id: '5' });
+    await flush();
+    await typeAndPreview('Q');
+    button('next').click();
+    button('next').click();
+    await flush();
+    expect(shownLabel()).toBe('3 / 3 Map');
+
+    await typeAndPreview('QR');
+    expect(shownLabel()).toBe('3 / 3 Map');
+
+    previewNote.mockResolvedValue(
+      createResponse([
+        { front: '<p>FIRST</p>', back: '<p>a</p>', template: 'Forward' },
+        { front: '<p>SECOND</p>', back: '<p>b</p>', template: 'Reverse' },
+      ]),
+    );
+    await typeAndPreview('QRS');
+    expect(shownLabel()).toBe('2 / 2 Reverse');
+    expect(await previewFront()).toContain('SECOND');
+    expect(button('next').disabled).toBe(true);
   });
 });

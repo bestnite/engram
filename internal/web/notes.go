@@ -177,10 +177,14 @@ func (s *Server) noteNewRoute(c *gin.Context) {
 	s.shell.ServeIndex(c)
 }
 
-// previewCard is the rendered front and back of one card.
+// previewCard is the rendered front and back of one card, with the template that produced it. Template and ClozeOrdinal
+// name the card the way the review shows it: a cloze template yields one card per cloze number, all with the same template
+// name, so the number is what tells them apart. ClozeOrdinal is 0 for a card of a normal template.
 type previewCard struct {
-	Front CardFace
-	Back  CardFace
+	Template     string
+	ClozeOrdinal int
+	Front        CardFace
+	Back         CardFace
 }
 
 // buildPreview renders the front and back of every card the given payload would produce against a stored note type.
@@ -239,8 +243,10 @@ func buildPreview(nt *store.NoteType, cfg notetype.Config, deck *store.Deck, fie
 		faces.backAV = backAV
 		autoplay := deck.AutoplayEnabled()
 		out = append(out, previewCard{
-			Front: CardFace{HTML: typeMarkerPattern.ReplaceAllString(frontHTML, ""), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideFront.String(), AVTags: frontAV, Autoplay: autoplay},
-			Back:  CardFace{HTML: faces.staticBackHTML(), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideBack.String(), AVTags: faces.backAV, Autoplay: autoplay},
+			Template:     tmpl.Name,
+			ClozeOrdinal: clozeOrdinal,
+			Front:        CardFace{HTML: typeMarkerPattern.ReplaceAllString(frontHTML, ""), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideFront.String(), AVTags: frontAV, Autoplay: autoplay},
+			Back:         CardFace{HTML: faces.staticBackHTML(), CSS: cfg.CSS, BodyClass: "card", Side: notetype.SideBack.String(), AVTags: faces.backAV, Autoplay: autoplay},
 		})
 	}
 	return out, true

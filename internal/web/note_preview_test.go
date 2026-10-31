@@ -305,3 +305,72 @@ func TestNotePreviewRequiresSessionAndCSRF(t *testing.T) {
 		t.Errorf("missing CSRF status = %d, want 403", got)
 	}
 }
+
+// TestNotePreviewNamesEachCard asserts every preview card carries the template that produced it and, for a cloze note,
+// its cloze number: the editor pages through the cards one at a time and names the card it shows.
+func TestNotePreviewNamesEachCard(t *testing.T) {
+	type cardName struct {
+		Template     string `json:"template"`
+		ClozeOrdinal int    `json:"cloze_ordinal"`
+	}
+	cases := []struct {
+		name   string
+		cfg    notetype.Config
+		fields map[string]any
+		want   []cardName
+	}{
+		{
+			name: "normal templates in order",
+			cfg: notetype.Config{
+				Kind:   notetype.KindNormal,
+				Fields: []notetype.Field{{ID: "f-front", Name: "Front"}, {ID: "f-back", Name: "Back"}},
+				Templates: []notetype.Template{
+					{ID: "t-forward", Name: "Forward", QFormat: "{{Front}}", AFormat: "{{Back}}"},
+					{ID: "t-reverse", Name: "Reverse", QFormat: "{{Back}}", AFormat: "{{Front}}"},
+				},
+			},
+			fields: map[string]any{"Front": "front", "Back": "back"},
+			want:   []cardName{{Template: "Forward"}, {Template: "Reverse"}},
+		},
+		{
+			name: "cloze numbers in order",
+			cfg: notetype.Config{
+				Kind:   notetype.KindCloze,
+				Fields: []notetype.Field{{ID: "f-text", Name: "Text"}},
+				Templates: []notetype.Template{{
+					ID: "t-cloze", Name: "Cloze", QFormat: "{{cloze:Text}}", AFormat: "{{cloze:Text}}",
+				}},
+			},
+			fields: map[string]any{"Text": "{{c3::three}} and {{c1::one}}"},
+			want:   []cardName{{Template: "Cloze", ClozeOrdinal: 1}, {Template: "Cloze", ClozeOrdinal: 3}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, db, ownerID, cookies, csrf := newNotesServer(t)
+			deck := seedDeck(t, db, ownerID, "Card names")
+			nt := &store.NoteType{DeckID: deck.ID, Name: "Named cards"}
+			if err := store.NewNoteTypeStore(db).Create(t.Context(), nt, tc.cfg); err != nil {
+				t.Fatalf("create note type: %v", err)
+			}
+			rec := postPreview(t, srv, deck.PublicID, cookies, csrf, notePreviewRequest{NoteType: nt.PublicID, Fields: tc.fields})
+			if rec.Code != http.StatusOK {
+				t.Fatalf("preview status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+			}
+			var body struct {
+				Cards []cardName `json:"cards"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode preview response: %v", err)
+			}
+			if len(body.Cards) != len(tc.want) {
+				t.Fatalf("cards = %+v, want %+v", body.Cards, tc.want)
+			}
+			for i := range tc.want {
+				if body.Cards[i] != tc.want[i] {
+					t.Errorf("card %d = %+v, want %+v", i, body.Cards[i], tc.want[i])
+				}
+			}
+		})
+	}
+}

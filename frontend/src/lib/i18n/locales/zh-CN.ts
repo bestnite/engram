@@ -1782,4 +1782,8 @@ export const zhCN: LocaleCatalog = {
   'note_edit.leave.title': '放弃未保存的修改？',
   'note_edit.leave.desc': '离开此页面会丢失这条笔记尚未保存的修改。',
   'note_edit.leave.confirm': '放弃并离开',
+  'note_preview.prev': '上一张卡片',
+  'note_preview.next': '下一张卡片',
+  'note_preview.position': '{current} / {total}',
+  'note_preview.cloze_name': '{template} {ordinal}',
 };

@@ -20,7 +20,7 @@
   import { emptyFields, type FieldSpec } from '../card-fields';
   import type { RichFieldOptions } from '../components/RichTextField.svelte';
   import type { MediaReference } from '../../editframe/runtime';
-  import { Check, Eye, Pencil, Plus, Trash2, X } from '@lucide/svelte';
+  import { Check, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Trash2, X } from '@lucide/svelte';
 
   // One implementation covers both create and edit: whether the address carries a noteId decides the mode, and every other part of the UI is identical item by item
   // (note type, fields with their own insertion tools, tags and live preview). A successful create always leaves the editor, leaving no second "create another" path.
@@ -92,6 +92,15 @@
   type PreviewStatus = 'empty' | 'loading' | 'ready' | 'incomplete' | 'error';
   let previewStatus = $state<PreviewStatus>('empty');
   let previewCards = $state<NotePreviewCard[] | null>(null);
+  // The preview shows one card at a time: a note type with many templates or a cloze with many numbers would otherwise
+  // stack every card into one long column. The index survives a re-render while typing and is clamped when the
+  // number of cards shrinks, so the author keeps looking at the card they picked.
+  let previewIndex = $state(0);
+  const previewCount = $derived(previewCards?.length ?? 0);
+  const shownIndex = $derived(Math.min(previewIndex, Math.max(previewCount - 1, 0)));
+  const shownCard = $derived(previewCards?.[shownIndex] ?? null);
+  const pagerButton =
+    'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-40';
   let previewReady = $state(false);
 
   // Non-reactive control slots: no state may be written after unmount; generation guarantees only the latest request can land.
@@ -367,6 +376,18 @@
     // form a save stores, so the inserted reference shows at once and is not rewritten later.
     const name = uploaded.name ?? uploaded.sha256;
     return { url: name, name, mime: uploaded.mime };
+  }
+
+  /** The name the preview gives one card: its template, and for a cloze card also its cloze number. */
+  function previewCardName(card: NotePreviewCard): string {
+    return card.cloze_ordinal > 0
+      ? $t('note_preview.cloze_name', { template: card.template, ordinal: card.cloze_ordinal })
+      : card.template;
+  }
+
+  /** Steps the preview by one card; the buttons are disabled at both ends, so the index never wraps. */
+  function stepPreview(delta: number): void {
+    previewIndex = Math.min(Math.max(shownIndex + delta, 0), Math.max(previewCount - 1, 0));
   }
 
   /** Opens the preview drawer below the desktop breakpoint, leaving focus where the author was typing. */
@@ -768,18 +789,54 @@
               </button>
             </div>
 
+            <!-- One card at a time: the bar names the shown card and steps through the cards. A single card needs neither. -->
+            {#if shownCard && previewCount > 1}
+              <div class="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1.5" data-testid="note-preview-pager">
+                <button
+                  type="button"
+                  data-testid="note-preview-prev"
+                  class="{pagerButton}"
+                  aria-label={$t('note_preview.prev')}
+                  title={$t('note_preview.prev')}
+                  disabled={shownIndex === 0}
+                  onclick={() => stepPreview(-1)}
+                >
+                  <ChevronLeft class="size-4" aria-hidden="true" />
+                </button>
+                <p class="min-w-0 flex-1 truncate text-center text-xs" aria-live="polite">
+                  <span data-testid="note-preview-position" class="font-medium text-foreground tabular-nums">
+                    {$t('note_preview.position', { current: shownIndex + 1, total: previewCount })}
+                  </span>
+                  <span class="text-muted-foreground" aria-hidden="true"> · </span>
+                  <span data-testid="note-preview-card-name" class="text-muted-foreground">{previewCardName(shownCard)}</span>
+                </p>
+                <button
+                  type="button"
+                  data-testid="note-preview-next"
+                  class="{pagerButton}"
+                  aria-label={$t('note_preview.next')}
+                  title={$t('note_preview.next')}
+                  disabled={shownIndex >= previewCount - 1}
+                  onclick={() => stepPreview(1)}
+                >
+                  <ChevronRight class="size-4" aria-hidden="true" />
+                </button>
+              </div>
+            {/if}
+
             <div class="min-h-0 flex-1 overflow-y-auto p-4">
               {#if previewStatus === 'empty'}
                 <p data-testid="note-preview-empty" class="py-8 text-center text-sm text-muted-foreground">{$t('note_preview.empty')}</p>
               {/if}
-              {#if previewCards}
+              {#if shownCard}
+                {@const card = shownCard}
+                {@const index = shownIndex}
                 <!-- When the previous result is kept it is dimmed and aria-busy is set, making "stale but still rescheduling" visible instead of a blank flash. -->
                 <div
                   data-testid="note-preview-result"
                   aria-busy={previewStatus === 'loading'}
                   class="space-y-4 transition-opacity duration-150 {previewStatus === 'loading' ? 'opacity-60' : ''}"
                 >
-                  {#each previewCards as card, index}
                     <div class="divide-y divide-border overflow-hidden rounded-md border border-border bg-background">
                       <div data-testid="note-preview-front-{index}" class="space-y-2 p-4">
                         <h3 class="text-xs font-medium text-muted-foreground">{$t('note_preview.front')}</h3>
@@ -810,7 +867,6 @@
                         />
                       </div>
                     </div>
-                  {/each}
                 </div>
               {/if}
             </div>
