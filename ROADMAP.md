@@ -193,30 +193,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   *Acceptance:* the ledger table holds a row naming each of the four IDs. Evidence is the output of
   `grep -n -E 'M18-(1|2|3|9)\b' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-24 An undecodable deck configuration falls back to the preset defaults, not to another
-  deck's configuration** — since `M18-13`, `readModernDeckConfigs` in `internal/anki/scheduling.go`
-  skips a `deck_config` row whose `config` does not decode, and `readLegacyDeckConfigs` keeps no
-  configuration when `col.dconf` does not decode. `ankiTopConfig` in `internal/store/anki_import.go`
-  first looks for the configuration whose id equals the top deck's `ConfigID`; when none matches and the
-  package holds exactly one configuration, it returns that one. Take a schema-18 package with two
-  `deck_config` rows, where the row the top deck uses does not decode and the other row does: the new
-  deck's preset is built from the other deck's configuration, with its steps, retention, maximum
-  interval and, with `apply_weights` on, its FSRS weights. `M18-13` required the preset defaults in that
-  case; before `M18-13` the same package failed the import. The fix: `Package` in
-  `internal/anki/model.go` gains `DeckConfigsSkipped bool`, which the reader sets to true when it skips
-  at least one deck configuration (an undecodable `deck_config` row, or a `col.dconf` that does not
-  decode). `ankiTopConfig` returns the single remaining configuration only when `DeckConfigsSkipped` is
-  false, and returns nil when it is true, so `createAnkiPreset` keeps the values of `NewPreset`.
-  *Acceptance:* a table test in `internal/anki/scheduling_test.go` shows `DeckConfigsSkipped` true for
-  an undecodable `deck_config` row and for an undecodable `col.dconf`, and false for a package whose
-  configurations all decode. A table test in `internal/store` imports, through `ImportPackage` with
-  `apply_weights` on: (a) the two-row package above, whose new preset holds the values of `NewPreset`
-  and no weights; (b) the same package with only the other row undecodable, whose preset holds the top
-  deck's configuration; (c) the same package with both rows decodable, whose preset holds the top deck's
-  configuration; (d) a package with one decodable configuration whose id differs from the top deck's
-  `ConfigID`, whose preset still holds that configuration. Evidence is the raw scoped `go test` and
-  `go vet` output.
-
 - [ ] **M18-25 One malformed `col.dconf` entry no longer drops every deck configuration** —
   `readLegacyDeckConfigs` in `internal/anki/scheduling.go` decodes the whole of `col.dconf` with one
   `json.Unmarshal` into a map of structs, and since `M18-13` it keeps no configuration when that call
