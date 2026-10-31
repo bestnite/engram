@@ -3,13 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * Playwright configuration for the browser-isolation suite (M17-4).
+ * Playwright configuration for the real-browser suite.
  *
- * The suite proves the sandbox of the card frame in a real browser, because the browser is the only place where CSP,
- * sandbox and origin rules are enforced; a DOM implementation in a unit test cannot prove them. The Go server is not
+ * The suite holds what only a real browser can prove. `browser-isolation.spec.ts` proves the sandbox of the card frame,
+ * because the browser is the only place where CSP, sandbox and origin rules are enforced. `note-types.spec.ts` opens a
+ * page whose failure depends on the browser's own structuredClone, which the DOM implementation of the client tests does
+ * not reproduce. The Go server is not
  * configured here: Playwright loads this file in its worker processes as well, so a top-level side effect would pick a
  * different port and database in every process. `e2e/global-setup.ts` runs once, starts the server on a free port with a
- * throwaway SQLite database and exports `ENGRAM_E2E_BASE_URL`, which the test file uses as its `baseURL`.
+ * throwaway SQLite database and exports `ENGRAM_E2E_BASE_URL`, which each test file uses as its `baseURL`.
  */
 export default defineConfig({
   testDir: './e2e',

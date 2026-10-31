@@ -74,7 +74,7 @@
   // svelte-ignore state_referenced_locally
   let draft = $state<Draft | null>(
     initialEntry
-      ? { id: initialEntry.id, name: initialEntry.name, version: initialEntry.version, config: structuredClone(initialEntry.config) }
+      ? { id: initialEntry.id, name: initialEntry.name, version: initialEntry.version, config: cloneConfig(initialEntry.config) }
       : null,
   );
   // svelte-ignore state_referenced_locally
@@ -212,8 +212,12 @@
   const kindLabel = $derived(draft ? $t(`notetype.kind.${draft.config.kind}`) : '');
   const stockLabel = $derived(fromStock ? $t(`notetype.stock.anki.${fromStock}`) : '');
 
+  /**
+   * A deep copy the editor can change without touching the stored entry. The entries live in `$state`, so they are
+   * proxies, and a browser's structuredClone refuses a proxy (DataCloneError); `$state.snapshot` copies the plain value.
+   */
   function cloneConfig(config: NoteTypeConfig): NoteTypeConfig {
-    return structuredClone(config);
+    return $state.snapshot(config) as NoteTypeConfig;
   }
 
   /** Select a stored type into the editor. The stored list entry is never mutated. */
