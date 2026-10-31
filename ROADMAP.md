@@ -71,6 +71,12 @@ file format, the package export route and the `export_deck` MCP tool. The parent
 section 2.7 with the maintainer present (`M18-1` moved `.apkg` export into it and `M18-2` moved
 `.apkg` progress import into it); a subagent must not edit that file.
 
+`M18-7` to `M18-16` fix defects that a review of the landed `M18-1` and `M18-2` found. They land
+before `M18-5`, because `M18-5` makes `.apkg` the only format. Every one of them that changes
+`internal/store/anki_import.go` runs alone: `M18-7`, `M18-8`, `M18-9`, `M18-10`, `M18-11`, `M18-12`,
+`M18-14`, `M18-15` and `M18-16`. `M18-13` changes only `internal/anki` and may run beside one of
+them. `M18-9` lands before `M18-4`, because both change how an `.apkg` import builds its preset.
+
 - [ ] **M18-4 Preset choice on import: new, reuse or copy** — the import request takes
   `preset_mode` (`new`, `reuse`, `copy`) plus `preset_id` for the last two. `new` builds a preset
   from the package's deck configuration, taking its FSRS weights only when `apply_weights` is on;
@@ -108,10 +114,156 @@ section 2.7 with the maintainer present (`M18-1` moved `.apkg` export into it an
   only for new. The picker lists the caller's presets and sends `preset_id`; a refusal (another
   user's preset, or weights with reuse or copy) appears as a localised error next to the control and
   writes nothing. User-facing text comes from the catalog, with identical key sets in
-  `frontend/src/lib/i18n/locales/en.ts` and `zh-CN.ts`. *Acceptance:* the three modes are
+  `frontend/src/lib/i18n/locales/en.ts` and `zh-CN.ts`. The same page gains the `include_progress`
+  checkbox, off by default, which no page offers today although every other transport accepts it,
+  and the report lists `states_skipped`, `states_discarded`, `reviews_applied`, `reviews_skipped` and
+  `reviews_discarded`, which the page does not show today. *Acceptance:* the three modes are
   selectable; reuse and copy reveal the picker and hide the weight checkbox; a refused combination
-  shows a localised error and leaves the server write count at zero; a captured state of each mode
-  is reported. Evidence is the component test output and the captured states.
+  shows a localised error and leaves the server write count at zero; the progress checkbox sends
+  `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
+  each mode is reported. Evidence is the component test output and the captured states.
+
+- [ ] **M18-7 `.apkg` progress import: derive the memory state a package does not carry** — today
+  `importAnkiProgress` in `internal/store/anki_import.go` reads stability and difficulty only from
+  the `s` and `d` keys of `cards.data`. Anki writes those keys only when FSRS is enabled (a collection
+  created with `anki==26.9.3` and reviewed with its defaults writes `{"pos":1,"lrt":…}`), so a learning,
+  review or relearning card from such a package is stored with no memory state. go-fsrs rejects a
+  non-new card whose stability is below 0.001 (`validateCard`), so the review page's preview and the
+  review submission both fail for every such card. The fix: when `s` or `d` is missing on a non-new
+  card, compute the state with `fsrs.MemoryState` over that card's kept revlog rows (type 0–3, ease
+  1–4, in revlog order; `DeltaT` is the whole number of review days between consecutive rows, using
+  the importing user's review-day boundaries), with the weights of the preset the importer studies
+  the target deck with. When the card has no kept revlog row, use `MemoryStateFromSM2(factor/1000,
+  ivl, 0.9)`. A non-new card for which neither computation succeeds is not written and is counted in
+  `states_skipped`, so it stays new for the importer. *Acceptance:* table tests import a review card
+  and a learning card with `data` = `{}` and two kept revlog rows each, a review card with `{}`, no
+  revlog row and factor 2500, and a learning card with `{}`, no revlog row and factor 0; the first
+  three get a stability of at least 0.001 and a difficulty between 1 and 10, the fourth is counted in
+  `states_skipped` and has no state row; a test outside the store package calls the scheduler's
+  preview on each written state and gets no error. Evidence is the raw scoped `go test` and `go vet`
+  output.
+
+- [ ] **M18-8 `.apkg` progress import is idempotent on PostgreSQL** — `importAnkiProgress` decides
+  "unchanged" with `reflect.DeepEqual` on two `CardState` values. PostgreSQL returns `time.Time`
+  values with a different location than the freshly built row, so a repeated import counts every state
+  as changed, bumps `version` and adds to `progress_applied`. With `TEST_PG_DSN` set,
+  `TestAnkiProgressImport` and `TestExportAnkiPackageRoundTrip` fail today on their repeat-import
+  assertions, although the `M18-2` acceptance required the PostgreSQL cases. The fix compares the
+  state columns one by one, time columns with `time.Time.Equal` and nullable columns by presence and
+  value. *Acceptance:* both named tests pass on SQLite and with `TEST_PG_DSN` set; a repeated import
+  leaves `version` unchanged on both drivers. Evidence is the raw `go test` output of both runs, the
+  PostgreSQL one with `TEST_PG_DSN` set.
+
+- [ ] **M18-9 `.apkg` import honours `apply_weights` and validates package weights** —
+  `createAnkiPreset` in `internal/store/anki_import.go` copies the package's FSRS weights into the new
+  preset whether or not `apply_weights` is on, and never sets `weights_applied` or
+  `weights_discarded`; the `.edeck` path applies weights only when the option is on. The import page
+  shows the weight checkbox for an `.apkg` although ticking it changes nothing. The weights are not
+  validated either: `TestAnkiProgressImport` stores `[1,2,3]`, which `fsrs.MigrateWeights` rejects,
+  so every review in a deck with that preset would fail. The fix: write package weights only when
+  `apply_weights` is on and the target is `new_deck`; write them only when `fsrs.MigrateWeights`
+  accepts them; set `weights_applied` when they are written and `weights_discarded` when the package
+  carried weights that were not written. Desired retention, steps and maximum interval keep travelling
+  as they do now. *Acceptance:* table tests cover weights with the option off (default weights,
+  `weights_discarded` true), on (weights written, `weights_applied` true), on with a weight set
+  `fsrs.MigrateWeights` rejects (default weights, `weights_discarded` true), and a package with no
+  weights (both flags false). Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-10 `.apkg` review rows: fill `interval_days`, `duration_days` and the memory state with
+  their real meanings** — `M18-2` wrote `revlog.ivl` into `duration_days`, as its entry specified,
+  but that mapping was wrong: in engram `duration_days` is the number of days since the card's
+  previous review (`reviewFromOutcome` in `internal/schedule/submit.go`), while `revlog.ivl` is the
+  interval chosen by the rating, which is `interval_days`. Imported rows also leave `interval_days`,
+  `stability` and `difficulty` NULL, so undoing the first review made after an import rebuilds the
+  card from a previous row with no memory state (`rebuildReviewLog` in
+  `internal/schedule/actions.go`) and restores a stability of 0. The fix: `interval_days` is `ivl`
+  when it is positive or zero, and `-ivl / 86400` when it is negative, because a negative `ivl` counts
+  seconds; `duration_days` is the fractional number of days between the revlog ids of this row and the
+  card's previous kept row, and NULL on the card's first kept row; the card's last kept row carries the
+  stability and difficulty written to the card's state; an earlier row carries the state that
+  `fsrs.HistoricalMemoryStates` gives for it when `M18-7` replays the history, and NULL otherwise.
+  This task needs `M18-7`. *Acceptance:* a table test checks the four columns on a card with a
+  learning row (negative `ivl`), a review row and a relearning row; the round trip in
+  `TestExportAnkiPackageRoundTrip` also compares `interval_days` and `duration_days`; a test imports a
+  review card, submits one review, undoes it, and gets back the imported stability, difficulty and due
+  date. Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-11 Last review time survives an `.apkg` round trip** — the importer sets
+  `last_review_at` only from the `lrt` key of `cards.data`, and the exporter (`internal/anki/write.go`,
+  `internal/store/anki_export.go`) never writes `lrt`, so an engram export imported back has no last
+  review time; `TestExportAnkiPackageRoundTrip` does not compare it. go-fsrs counts zero elapsed days
+  when the last review time is unset, so the first review after the import is scheduled as a same-day
+  repeat and the interval barely grows. The fix: the exporter writes `lrt` in seconds next to `s` and
+  `d` for every card with a last review time; when a package carries no `lrt`, the importer uses the
+  card's last kept revlog row; when it has neither, a review or relearning card uses its due date
+  minus `ivl` days, and a learning card keeps NULL. *Acceptance:* the round trip compares
+  `last_review_at`; table tests cover a card with `lrt`, a card with only revlog rows, and a review
+  card with neither; `tools/anki-oracle/verify_package.py` still opens the produced package with
+  `anki==26.9.3`. Evidence is the raw scoped `go test` and `go vet` output and the script's output.
+
+- [ ] **M18-12 `.apkg` due dates for interday learning and filtered decks** — the importer reads the
+  `due` of every learning (type 1) and relearning (type 3) card as Unix seconds. For queue 3, Anki's
+  interday learning queue, `due` counts days from collection creation instead: a card reviewed with
+  `anki==26.9.3` under the steps `1 10 60 1440 2880` reports `type 1 queue 3 due 1`, which the
+  importer stores as a due date in January 1970. A card in a filtered deck (`odid` ≠ 0) keeps its real
+  due date in `odue`, which the reader decodes but the importer ignores. The fix: queue 3 uses
+  collection creation plus `due` days; a card with `odid` ≠ 0 uses `odue` in place of `due`, with the
+  same type and queue rules. The filtered-deck layout is verified against a package that
+  `tools/anki-oracle` produces with `anki==26.9.3`, not assumed. *Acceptance:* table tests cover
+  queue 1, queue 3 and a filtered-deck card of each type that has a due date; the oracle package
+  imports with the due dates Anki shows for it. Evidence is the raw scoped `go test` and `go vet`
+  output and the oracle script's output.
+
+- [ ] **M18-13 A scheduling column Anki can hold does not block a content import** — since `M18-2`,
+  `internal/anki` reads the whole revlog, every scheduling column of `cards`, and the deck
+  configurations on every import, even with `include_progress` off, and scans them into Go integers. A
+  single REAL value in one of those columns rejects the whole package: a revlog `ivl` of `7.5` fails
+  with `converting driver.Value type float64 ("7.5") to a int`. A package that imported before
+  `M18-2` can now fail. The fix: numeric scheduling columns are read so that a REAL value is rounded to
+  the nearest integer instead of failing (`CAST(ROUND(x) AS INTEGER)` in the query, or a float scan);
+  an undecodable deck configuration falls back to the preset defaults instead of failing the import;
+  an unreadable revlog fails the import only when `include_progress` is on. Files:
+  `internal/anki/scheduling.go`, `internal/anki/sqlite.go`. *Acceptance:* table tests cover a REAL
+  value in revlog `ivl`, in `cards.due` and in `cards.factor`, a `col.dconf` that is not valid JSON,
+  and a malformed `deck_config.config`; each one imports its content with `include_progress` off.
+  Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-14 `.apkg` progress report counts and transport tests** — with `include_progress` off,
+  `importAnkiProgress` sets `states_discarded` to the number of all package cards and
+  `progress_discarded` to true for every package that has a card, including a package whose cards are
+  all new and carry no progress. The fix: `states_discarded` counts only the cards whose type or queue
+  is not 0, and `progress_discarded` is true only when `states_discarded` or `reviews_discarded` is
+  greater than 0. `M18-2` added `include_progress` to the multipart route, the URL import, the upload
+  ticket, the MCP `import_deck` and `create_import_upload` tools and the CLI without a test for any of
+  them. *Acceptance:* a table test shows an all-new package reporting no discarded progress and a
+  package with one review card reporting one discarded state; a handler test for each HTTP transport
+  and each MCP tool shows that `include_progress` reaches the import and that leaving it out writes no
+  `card_states` row; a negative test shows that a user with the reader role on the target deck gets
+  403 on `into_deck` with `include_progress` on. Evidence is the raw scoped `go test` and `go vet`
+  output.
+
+- [ ] **M18-15 `.apkg` re-import with progress must not overwrite newer progress** — a repeated
+  import with `include_progress` on overwrites the importer's `card_states` row with the package's
+  state even when the importer has reviewed the card in engram since the package was made, and
+  appends the package's review rows after the importer's newer rows, so an undo takes an old imported
+  row as the latest grade (`Rollback` in `internal/schedule/actions.go` orders by `id`). *Do not start
+  until the maintainer decides the rule: which side wins when both have progress for one card, and
+  whether imported review rows older than the importer's latest review are written at all.*
+  *Acceptance:* table tests cover the chosen rule for a card the importer reviewed after the export
+  and for a card the importer never reviewed; an undo after such an import removes the importer's own
+  latest review. Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-16 `.apkg` progress import without a query per row** — `importAnkiProgress` loads each
+  existing card state with its own query and checks each review row for a duplicate with its own
+  `COUNT` query, all inside the import transaction, and the card loop looks up each skipped note's
+  card with its own query; a package with 100 000 revlog rows therefore runs more than 100 000
+  queries in one transaction. The fix loads the existing states, the existing
+  `(card_id, reviewed_at, rating)` keys and the skipped notes' cards with one query per batch of at
+  most 500 ids, and inserts review rows in batches. The results and the report counts stay the same.
+  *Acceptance:* the existing progress tests pass unchanged on SQLite and with `TEST_PG_DSN` set; a test
+  imports a package with 5 000 revlog rows and asserts, through a GORM callback that counts statements,
+  that the progress step runs fewer than 100 statements. Evidence is the raw `go test` output of both
+  runs.
 
 ---
 
