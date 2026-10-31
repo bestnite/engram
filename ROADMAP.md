@@ -465,23 +465,6 @@ adds a test in `internal/schedule` beside the one `M18-41` moves there.
   names `M18-2` also names `M18-13`. Evidence is the output of `grep -n 'M18-13' ROADMAP.md` limited to
   the ledger section.
 
-- [ ] **M18-32 `M18-4` transport tests cover the refusals and PostgreSQL** — the refusal cases of
-  `M18-4` (unknown mode, missing `preset_id`, another user's `preset_id`, `apply_weights` with `reuse`
-  or `copy`, a non-`new_deck` target) are tested only in `internal/store` and on the upload-ticket
-  route. The multipart route (`handleImportPackage` in `internal/api/package.go`), the MCP
-  `import_deck` and `create_import_upload` tools and the CLI `import` command have positive tests only
-  (`TestImportPresetReuseResponse`, `TestImportToolsPresetSelection`, `TestCLIImportReusePreset`), so
-  nothing shows that each of them reaches the refusal; `AGENTS.md` section 2.5 requires the negative
-  cases. The commit that closed `M18-4` (`5ff830d`) also records that the PostgreSQL cases of
-  `TestImportPresetModes` and `TestAnkiImportPresetModes` were never run, although the copy path writes
-  a preset inside the import transaction. The fix adds tests only. *Acceptance:* a table test for the
-  multipart route sends each refusal case and gets 400 `invalid_request` with no new deck and no new
-  preset; a test in `internal/mcp` calls `import_deck` and `create_import_upload` with another user's
-  `preset_id` and with `apply_weights` plus `copy`, and each call returns an error and writes nothing; a
-  test in `cmd/engram` runs `import` with `--preset-mode copy --apply-weights` and gets an error with no
-  new deck; `TestImportPresetModes` and `TestAnkiImportPresetModes` pass with `TEST_PG_DSN` set.
-  Evidence is the raw scoped `go test` and `go vet` output, including the run with `TEST_PG_DSN` set.
-
 - [ ] **M18-34 README states that the package's deck configuration is used only for `preset_mode`
   `new`** — line 47 of `README.md` says "An `.apkg` import carries its deck configuration into the new
   deck's preset". Since `M18-4` that holds only for `preset_mode` `new`: `reuse` points the new deck at
