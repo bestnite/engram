@@ -177,29 +177,6 @@ func (s *MediaStore) SaveBytesTracked(ctx context.Context, root, mime string, ra
 	})
 }
 
-// SaveStreamTracked writes one stream through a temporary file and Put, hashing it on the way.
-// The reader is not closed here: the caller owns it. The same temporary-file + rename rule as
-// SaveBytesTracked applies, so an imported media file is never held in memory.
-func (s *MediaStore) SaveStreamTracked(ctx context.Context, root, mime string, r io.Reader, createdBy *uint64) (*Media, string, error) {
-	sum := sha256.New()
-	tmpName, err := s.stageBytes(root, io.TeeReader(r, sum))
-	if err != nil {
-		return nil, "", err
-	}
-	defer func() { _ = os.Remove(tmpName) }()
-	info, err := os.Stat(tmpName)
-	if err != nil {
-		return nil, "", fmt.Errorf("media: stat temporary file: %w", err)
-	}
-	return s.Put(ctx, root, MediaPut{
-		Sha256:    hex.EncodeToString(sum.Sum(nil)),
-		Mime:      mime,
-		Bytes:     info.Size(),
-		TempPath:  tmpName,
-		CreatedBy: createdBy,
-	})
-}
-
 // mediaFileWrite is one stream this process placed at its content address before a database
 // transaction opened.
 //
