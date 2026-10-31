@@ -479,6 +479,7 @@ func (c *ankiWriteConfig) writeCards(states map[uint64]CardState) []anki.WriteCa
 // Anki measures a review due date in days from collection creation and a learning due
 // date in seconds; the two columns share one field, so the type decides the meaning.
 func ankiCardWithState(row anki.WriteCard, state CardState, createdAt int64) anki.WriteCard {
+	row.Stability, row.Difficulty = state.Stability, state.Difficulty
 	switch state.State {
 	case "new":
 		row.Type, row.Queue = 0, 0

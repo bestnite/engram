@@ -115,14 +115,16 @@ type WriteCard struct {
 	Modified int64
 	// Scheduling state. A content-only card is new: Type and Queue zero, Due is its
 	// new-card position, and every scheduling column is zero.
-	Type   int
-	Queue  int
-	Due    int64
-	Ivl    int
-	Factor int
-	Reps   int
-	Lapses int
-	Left   int
+	Type       int
+	Queue      int
+	Due        int64
+	Ivl        int
+	Factor     int
+	Reps       int
+	Lapses     int
+	Left       int
+	Stability  *float64
+	Difficulty *float64
 }
 
 // WriteReview is one revlog row. CID must name a card written in the same archive;
@@ -307,15 +309,24 @@ VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, 0, '')`)
 	}
 
 	cardStmt, err := tx.Prepare(`INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
-VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, '{}')`)
+VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)`)
 	if err != nil {
 		return nil, fmt.Errorf("anki package: prepare cards: %w", err)
 	}
 	defer cardStmt.Close()
 	for i := range c.Cards {
 		card := &c.Cards[i]
+		// Anki discards this column on import; an Engram round trip uses it to retain memory state.
+		data := "{}"
+		if card.Stability != nil && card.Difficulty != nil {
+			encoded, err := json.Marshal(map[string]float64{"s": *card.Stability, "d": *card.Difficulty})
+			if err != nil {
+				return nil, fmt.Errorf("anki package: encode card %d memory state: %w", card.ID, err)
+			}
+			data = string(encoded)
+		}
 		if _, err := cardStmt.Exec(card.ID, card.NoteID, card.DeckID, card.Ordinal, card.Modified,
-			card.Type, card.Queue, card.Due, card.Ivl, card.Factor, card.Reps, card.Lapses, card.Left); err != nil {
+			card.Type, card.Queue, card.Due, card.Ivl, card.Factor, card.Reps, card.Lapses, card.Left, data); err != nil {
 			return nil, fmt.Errorf("anki package: write card %d: %w", card.ID, err)
 		}
 	}
