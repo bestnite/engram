@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -204,6 +205,84 @@ func TestAnkiProgressMissingMemory(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestAnkiProgressCarriedMemoryValidation(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		for _, tc := range []struct {
+			name, data string
+			valid      bool
+		}{
+			{"zero_stability", `{"s":0,"d":5}`, false},
+			{"zero_difficulty", `{"s":5,"d":0}`, false},
+			{"negative_stability", `{"s":-1,"d":5}`, false},
+			{"high_difficulty", `{"s":5,"d":11}`, false},
+			{"valid", `{"s":5,"d":5}`, true},
+		} {
+			for _, history := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/history_%t", driver, tc.name, history), func(t *testing.T) {
+					user := seedUsers(t, db, fmt.Sprintf("carried_%s_%s_%t", driver, tc.name, history))[0]
+					pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					pkg.Notes, pkg.Cards = pkg.Notes[:1], pkg.Cards[:1]
+					card := &pkg.Cards[0]
+					card.Type, card.Queue, card.Factor, card.Interval, card.Data = 2, 2, 0, 7, tc.data
+					pkg.Reviews = nil
+					if history {
+						pkg.Reviews = []anki.Review{{ID: 1600000000000, CardID: card.ID, Ease: 3, Type: 0}, {ID: 1600086400000, CardID: card.ID, Ease: 4, Type: 1}}
+					}
+					plan, report := planAnkiDecks(pkg), &PackageImportReport{}
+					if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: true, Now: time.Now}, report); err != nil {
+						t.Fatal(err)
+					}
+					var states []CardState
+					if err := db.Where("user_id = ?", user).Find(&states).Error; err != nil {
+						t.Fatal(err)
+					}
+					if !tc.valid && !history {
+						if len(states) != 0 || report.StatesSkipped != 1 || report.ProgressApplied != 0 {
+							t.Fatalf("states=%+v report=%+v", states, report)
+						}
+						return
+					}
+					wantS, wantD := 5.0, 5.0
+					if !tc.valid {
+						memory, err := fsrs.NewFSRS(fsrs.DefaultParam()).MemoryState(fsrs.ReviewEntries{{Rating: fsrs.Good}, {Rating: fsrs.Easy, DeltaT: 1}}, nil)
+						if err != nil {
+							t.Fatal(err)
+						}
+						wantS, wantD = memory.Stability, memory.Difficulty
+					}
+					if len(states) != 1 || states[0].Stability == nil || states[0].Difficulty == nil || *states[0].Stability != wantS || *states[0].Difficulty != wantD || report.ProgressApplied != 1 || report.StatesSkipped != 0 {
+						t.Fatalf("states=%+v report=%+v want s=%g d=%g", states, report, wantS, wantD)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestUsableAnkiMemory(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		s, d float64
+		want bool
+	}{
+		{"minimum", .001, 1, true}, {"maximum_difficulty", 5, 10, true},
+		{"nan_stability", math.NaN(), 5, false}, {"infinite_stability", math.Inf(1), 5, false},
+		{"nan_difficulty", 5, math.NaN(), false}, {"infinite_difficulty", 5, math.Inf(-1), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := usableAnkiMemory(&tc.s, &tc.d); got != tc.want {
+				t.Fatalf("usable = %t, want %t", got, tc.want)
+			}
+		})
+	}
+	if usableAnkiMemory(nil, nil) {
+		t.Fatal("missing memory is usable")
 	}
 }
 

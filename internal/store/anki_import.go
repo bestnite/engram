@@ -1448,6 +1448,12 @@ func ankiSteps(steps []float64) string {
 	return strings.Join(parts, ",")
 }
 
+func usableAnkiMemory(stability, difficulty *float64) bool {
+	return stability != nil && difficulty != nil &&
+		!math.IsNaN(*stability) && !math.IsInf(*stability, 0) && *stability >= 0.001 &&
+		!math.IsNaN(*difficulty) && !math.IsInf(*difficulty, 0) && *difficulty >= 1 && *difficulty <= 10
+}
+
 // importAnkiProgress keeps the per-user state separate from shared card content.
 func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64, pkg *anki.Package, cardIDs map[int64]uint64, opts PackageImportOptions, report *PackageImportReport, now time.Time) error {
 	if !opts.IncludeProgress {
@@ -1532,7 +1538,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			}
 		}
 		state.Stability, state.Difficulty = data.Stability, data.Difficulty
-		if card.Type != 0 && (state.Stability == nil || state.Difficulty == nil) {
+		if card.Type != 0 && !usableAnkiMemory(state.Stability, state.Difficulty) {
 			var memory *fsrs.MemoryState
 			var computeErr error
 			if history := histories[card.ID]; len(history) > 0 {
@@ -1544,7 +1550,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 				}
 				memory, computeErr = engine.MemoryStateFromSM2(float64(card.Factor)/1000, interval, 0.9)
 			}
-			if computeErr != nil || memory == nil || math.IsNaN(memory.Stability) || math.IsInf(memory.Stability, 0) || memory.Stability < 0.001 || math.IsNaN(memory.Difficulty) || math.IsInf(memory.Difficulty, 0) || memory.Difficulty < 1 || memory.Difficulty > 10 {
+			if computeErr != nil || memory == nil || !usableAnkiMemory(&memory.Stability, &memory.Difficulty) {
 				report.StatesSkipped++
 				continue
 			}
