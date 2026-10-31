@@ -103,13 +103,17 @@ file.
   `req` may be omitted because the importer recomputes it; `sfld` and `csum` are recomputed on
   import, so approximate values are allowed and the writer's doc comment must say so; `flds` holds
   exactly one value per declared field; and note and card ids must not be later than about a day from
-  now, because Anki silently replaces later ones. The id mapping is verified with Engram's small
-  autoincrement ids, not only with timestamp-shaped ones. *Acceptance:* a unit test asserts the
-  archive's entries and the collection's tables, columns and required rows; two exports of one deck
-  are byte-identical; a round trip through `ImportPackage` into a fresh user reproduces notes, cards,
-  note types (answer specs included), media, card states and reviews; a new
-  `tools/anki-oracle/verify_package.py` opens the produced file with `anki==26.9.3` and prints its
-  note, card, note type, media, deck-config and answer-spec counts. Evidence is the raw output of
+  now, because Anki silently replaces later ones; Anki remaps note and card ids that collide
+  with rows already in the target collection, verified against `anki==26.9.3`, so small sequential
+  ids are safe. The id mapping is verified with Engram's small autoincrement ids, not only with
+  timestamp-shaped ones. *Acceptance:* a unit test asserts the archive's entries and the collection's
+  tables, columns and required rows; two exports of one deck are byte-identical; a round trip through
+  `ImportPackage` into a fresh user reproduces notes, cards, note types (answer specs included) and
+  media, while card states and reviews are compared against the exported collection and by a real
+  Anki import (their import-side comparison lands with `M18-2`, which teaches the importer to read
+  them); a new `tools/anki-oracle/verify_package.py` opens the produced file with `anki==26.9.3` and
+  prints its note, card, note type, media, deck-config and answer-spec counts. Evidence is the raw
+  output of
   `go test ./internal/anki/... ./internal/store/... && go vet ./internal/anki/... ./internal/store/...`
   plus that script's output. `ARCHITECTURE.md`'s `internal/anki` row is updated in the same commit,
   because the package stops being a reader only.
