@@ -1660,5 +1660,5 @@ export const zhCN: LocaleCatalog = {
   'notetype.syntax.tts': '朗读字段内容。zh_CN 换成语言代码，如 ja_JP、en_US。',
   'notetype.syntax.text': '去掉字段的格式，只保留纯文本。',
   'notetype.syntax.special': '笔记的标签、所在卡组、子卡组、笔记类型名、模板名。',
-  'notetype.syntax.frontside': '在背面插入正面的内容。复习页会在答案上方保留问题，所以一般不需要；写了问题会显示两遍。',
+  'notetype.syntax.frontside': '在背面插入正面的内容。背面包含问题时（用了它，或再次引用了正面的全部字段），翻面后只显示背面，和 Anki 一致；否则问题保留在答案上方。',
 };

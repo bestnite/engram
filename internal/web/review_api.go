@@ -319,13 +319,15 @@ func (s *Server) reviewRender(c *gin.Context) {
 		intervals = []api.RatingInterval{}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"card_id":   card.PublicID,
-		"ordinal":   view.Ordinal,
-		"front":     view.Front,
-		"back":      view.Back,
-		"type_in":   view.TypeIn,
-		"edit_href": view.EditHref,
-		"intervals": intervals,
+		"card_id": card.PublicID,
+		"ordinal": view.Ordinal,
+		"front":   view.Front,
+		"back":    view.Back,
+		"type_in": view.TypeIn,
+		// Whether the answer face already shows the question: the page then shows it alone on reveal.
+		"answer_includes_question": view.AnswerIncludesQuestion,
+		"edit_href":                view.EditHref,
+		"intervals":                intervals,
 	})
 }
 

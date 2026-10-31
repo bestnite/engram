@@ -139,6 +139,10 @@ type ReviewCardView struct {
 	// TypeIn is true when the front template carries a type placeholder without an answer spec. The frame draws the
 	// type-in input, and the answer side compares the typed value with the field it names.
 	TypeIn bool
+	// AnswerIncludesQuestion is true when the card's answer face already shows the question (notetype.
+	// AnswerIncludesQuestion). The review page then shows the answer face alone on reveal, as Anki's reviewer does,
+	// instead of keeping the question face above it.
+	AnswerIncludesQuestion bool
 	// EditHref points at the edit page of that note, for the e-key jump.
 	EditHref string
 }
@@ -603,16 +607,17 @@ func (s *Server) cardViewWithAnswer(ctx context.Context, user *store.User, item 
 		front.AVTags = nil
 	}
 	return &ReviewCardView{
-		CardID:          card.PublicID,
-		NoteID:          rendered.note.PublicID,
-		DeckID:          rendered.deck.PublicID,
-		ExpectedVersion: strconv.Itoa(version),
-		Template:        card.Template,
-		Ordinal:         card.Ordinal,
-		Front:           front,
-		Back:            back,
-		TypeIn:          rendered.spec == nil && typeMarkerPattern.MatchString(rendered.frontRaw),
-		EditHref:        "/decks/" + rendered.deck.PublicID + "/notes/" + rendered.note.PublicID,
+		CardID:                 card.PublicID,
+		NoteID:                 rendered.note.PublicID,
+		DeckID:                 rendered.deck.PublicID,
+		ExpectedVersion:        strconv.Itoa(version),
+		Template:               card.Template,
+		Ordinal:                card.Ordinal,
+		Front:                  front,
+		Back:                   back,
+		TypeIn:                 rendered.spec == nil && typeMarkerPattern.MatchString(rendered.frontRaw),
+		AnswerIncludesQuestion: notetype.AnswerIncludesQuestion(rendered.config, rendered.template),
+		EditHref:               "/decks/" + rendered.deck.PublicID + "/notes/" + rendered.note.PublicID,
 	}, nil
 }
 

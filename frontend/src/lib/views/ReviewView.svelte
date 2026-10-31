@@ -31,6 +31,8 @@
     // can pin "the face HTML reaches the frame and never the parent DOM".
     initialFrontFace?: CardFace | null;
     initialBackFace?: CardFace | null;
+    /** Test injection: whether the answer face already shows the question (the render response's answer_includes_question). */
+    initialAnswerIncludesQuestion?: boolean;
     initialEditHref?: string;
     /** Whether the self-graded card is already flipped (flipped by reveal() in production; the initial value overrides it in tests). */
     initialRevealed?: boolean;
@@ -47,6 +49,7 @@
     initialRevealedAnswerHTML = '',
     initialFrontFace = null,
     initialBackFace = null,
+    initialAnswerIncludesQuestion = false,
     initialEditHref = '',
     initialRevealed = false,
     initialLastUndo = null,
@@ -124,6 +127,10 @@
   // but its answer face compares the typed value, which only the server can do, so the reveal fetches that face again.
   // svelte-ignore state_referenced_locally
   let typeIn = $state(false);
+  // Whether the answer face already shows the question. Anki's reviewer shows the answer side alone, so for such a card
+  // the reveal hides the question face instead of keeping it above an answer that repeats it.
+  // svelte-ignore state_referenced_locally
+  let answerIncludesQuestion = $state(initialAnswerIncludesQuestion);
   // svelte-ignore state_referenced_locally
   let editHref = $state(initialEditHref);
   let renderToken = 0;
@@ -157,6 +164,8 @@
   const machineGraded = $derived(current?.machine_graded ?? false);
   const answerControl = $derived(current?.answer_control ?? null);
   const essay = $derived(answerControl === SHORT_ANSWER_CONTROL);
+  // The question face is hidden, not unmounted, so the next card reuses its loaded frame.
+  const questionHidden = $derived(revealed && !essay && answerIncludesQuestion);
   const frontFallback = $derived(current ? fieldValues(current).slice(0, 1) : []);
   const answerFallback = $derived(current ? fieldValues(current).slice(1) : []);
   // Edit entry: prefer the edit_href returned by the server's render; when it has not been fetched, join it per the canonical path.
@@ -236,6 +245,7 @@
       backFace = response.back;
       cardOrdinal = response.ordinal ?? 0;
       typeIn = response.type_in ?? false;
+      answerIncludesQuestion = response.answer_includes_question ?? false;
       editHref = response.edit_href;
     } catch {
       if (token !== renderToken) return;
@@ -244,6 +254,7 @@
       backFace = null;
       cardOrdinal = 0;
       typeIn = false;
+      answerIncludesQuestion = false;
       editHref = '';
     }
   }
@@ -257,6 +268,7 @@
     backFace = null;
     cardOrdinal = 0;
     typeIn = false;
+    answerIncludesQuestion = false;
     editHref = '';
     essayText = '';
     frameAnswer = undefined;
@@ -938,7 +950,7 @@
         </div>
 
         {#if !machineGraded}
-          <div class="min-h-28" data-testid="review-front">
+          <div class={questionHidden ? 'hidden' : 'min-h-28'} data-testid="review-front">
             {#if frontInFrame}
               <CardFrame
                 html={frontFace?.html ?? ''}
@@ -963,7 +975,10 @@
             <!-- The answer frame is mounted with the question and stays hidden and empty until the reveal: its document and
                  runtime are then already loaded, so the answer appears at once instead of after a frame load. The face is
                  sent only on reveal, so its audio does not start early. -->
-            <div class={revealed ? 'border-t border-input pt-6' : 'hidden'} data-testid={revealed ? 'review-answer' : undefined}>
+            <div
+              class={!revealed ? 'hidden' : questionHidden ? '' : 'border-t border-input pt-6'}
+              data-testid={revealed ? 'review-answer' : undefined}
+            >
               {#if backInFrame}
                 <CardFrame
                   html={revealed ? (backFace?.html ?? '') : ''}

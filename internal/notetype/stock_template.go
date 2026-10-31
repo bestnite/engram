@@ -11,8 +11,9 @@ import "strconv"
 // Field ids are f<index> and template ids t<index> in declaration order, as for Anki's stock types. Those ids are what
 // a note type is created with, and a later rename or reorder does not change them.
 //
-// No answer template starts with {{FrontSide}}: the review page keeps the question on screen above the answer, so
-// repeating it would show the question twice. engram's own stock types follow the same rule.
+// No answer template starts with {{FrontSide}}. An answer side that adds only the answer keeps the question above it
+// in review, as engram's own stock types do; one that repeats the question's fields (furigana, listening) is shown
+// alone on reveal, as Anki shows every answer side (notetype.AnswerIncludesQuestion).
 
 // TemplateStock is one common template: a stable kind that names it in the stock id, the canonical English name a
 // created note type takes when the caller sends none, and the configuration it creates.

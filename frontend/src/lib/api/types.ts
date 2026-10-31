@@ -898,6 +898,11 @@ export interface ReviewRenderResponse {
    * the answer face compares the typed value with the field the placeholder names; the rating stays self-chosen.
    */
   type_in?: boolean;
+  /**
+   * True when the answer face already shows the question: its template inserts {{FrontSide}} or repeats every field the
+   * question inserts. The review page then shows the answer face alone on reveal, as Anki's reviewer does.
+   */
+  answer_includes_question?: boolean;
   edit_href: string;
   /** Next interval (seconds) for each of the four grades, ordered Again/Hard/Good/Easy; empty array when the preview fails. */
   intervals?: RatingInterval[];

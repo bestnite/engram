@@ -152,3 +152,58 @@ func TestListeningTemplateEmptiness(t *testing.T) {
 		t.Error("listening card without text is not reported empty")
 	}
 }
+
+// TestAnswerIncludesQuestion: an answer side shows the question when it inserts {{FrontSide}} (at any depth, with any
+// spacing) or inserts again every field the question inserts. Every Anki stock type does; an answer that only adds
+// new fields does not.
+func TestAnswerIncludesQuestion(t *testing.T) {
+	cfg := Config{Fields: []Field{{ID: "f0", Name: "Front"}, {ID: "f1", Name: "Back"}}}
+	cases := []struct {
+		name string
+		qfmt string
+		afmt string
+		want bool
+	}{
+		{"Anki basic", "{{Front}}", "{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}", true},
+		{"spaced tag", "{{Front}}", "{{ FrontSide }}<hr>{{Back}}", true},
+		{"inside a conditional", "{{Front}}", "{{#Back}}{{FrontSide}}{{/Back}}", true},
+		{"question fields repeated", "{{Front}}{{type:Back}}", "{{Front}}<hr id=answer>{{type:Back}}", true},
+		{"repeated through another filter", "{{kanji:Front}}", "{{furigana:Front}}{{Back}}", true},
+		{"answer only", "{{Front}}", "{{Back}}", false},
+		{"one question field missing", "{{Front}}{{Back}}", "{{Back}}", false},
+		{"field named like it", "{{Front}}", "{{FrontSideNote}}", false},
+		{"no field on the question", "Static", "{{Back}}", false},
+		{"unparsable", "{{Front}}", "{{#Back}}{{FrontSide}}", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := Template{Name: "Card 1", QFormat: tc.qfmt, AFormat: tc.afmt}
+			if got := AnswerIncludesQuestion(cfg, tmpl); got != tc.want {
+				t.Errorf("AnswerIncludesQuestion(%q, %q) = %v, want %v", tc.qfmt, tc.afmt, got, tc.want)
+			}
+		})
+	}
+	for _, stock := range StockConfigs() {
+		for _, tmpl := range stock.Templates {
+			if !AnswerIncludesQuestion(stock, tmpl) {
+				t.Errorf("Anki stock %v template %q is not a whole answer screen", *stock.OriginalStockKind, tmpl.Name)
+			}
+		}
+	}
+	// The common templates: those whose answer repeats the question text show it alone, the others keep the question.
+	want := map[string]bool{"vocabulary": false, "japanese_furigana": true, "listening": true, "basic_extra": false}
+	for _, stock := range TemplateStockConfigs() {
+		if got := AnswerIncludesQuestion(stock.Config, stock.Config.Templates[0]); got != want[stock.Kind] {
+			t.Errorf("common template %q: AnswerIncludesQuestion = %v, want %v", stock.Kind, got, want[stock.Kind])
+		}
+	}
+	// engram's own basic types keep the question on screen: their answer side adds only the answer.
+	for _, kind := range []string{"basic", "basic_both"} {
+		stock, _ := EngramStockByKind(kind)
+		for _, tmpl := range stock.Config.Templates {
+			if AnswerIncludesQuestion(stock.Config, tmpl) {
+				t.Errorf("engram %q template %q reported as a whole answer screen", kind, tmpl.ID)
+			}
+		}
+	}
+}

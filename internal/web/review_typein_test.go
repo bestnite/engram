@@ -246,7 +246,8 @@ type typeInRenderBody struct {
 	Back struct {
 		HTML string `json:"html"`
 	} `json:"back"`
-	TypeIn bool `json:"type_in"`
+	TypeIn                 bool `json:"type_in"`
+	AnswerIncludesQuestion bool `json:"answer_includes_question"`
 }
 
 // typeAnswerGolden is the part of the type-in oracle fixture these cases read.

@@ -69,7 +69,7 @@ describe('NoteTypesView', () => {
     expect(html).toContain('data-testid="notetype-syntax"');
     expect(html).toContain('{{Front}}');
     expect(html).toContain('{{tts zh_CN:Text}}');
-    expect(html).toContain('写了问题会显示两遍');
+    expect(html).toContain('翻面后只显示背面，和 Anki 一致');
     // The styling hint names the rule behind the centred default.
     expect(html).toContain('text-align: center');
   });

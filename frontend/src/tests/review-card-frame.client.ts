@@ -83,6 +83,43 @@ describe('ReviewView card faces in the frame', () => {
     expect(target.textContent).not.toContain('RAW-BACK-TEXT');
   });
 
+  it('hides the question on reveal when the response says the answer already shows it', async () => {
+    const card: DueCard = {
+      card_id: 'a1',
+      note_id: 'n1',
+      deck_id: 'd1',
+      state: 'new',
+      due_at: '',
+      retrievability: 0,
+      fields: { Front: 'Q', Back: 'A' },
+      tags: [],
+      template: 't0',
+      version: 0,
+      answer_control: null,
+      machine_graded: false,
+      field_order: ['Front', 'Back'],
+    };
+    const renderReviewCard = vi.fn().mockResolvedValue({
+      card_id: 'a1',
+      ...faces('<p>Q</p>', '<p>Q</p><hr id=answer><p>A</p>', '/fm/token/'),
+      answer_includes_question: true,
+      edit_href: '/decks/d1/notes/n1',
+    });
+    const target = await mountView(card, { renderReviewCard });
+    const front = () => target.querySelector('[data-testid="review-front"]') as HTMLElement;
+    expect(front().classList.contains('hidden')).toBe(false);
+
+    (target.querySelector('[data-testid="review-reveal"]') as HTMLElement).click();
+    await flush();
+
+    // The question frame is hidden, not removed, and the answer face is shown on its own.
+    expect(front().classList.contains('hidden')).toBe(true);
+    expect(front().querySelector('iframe[data-card-frame]')).not.toBeNull();
+    const shown = await shownFaces(target);
+    expect(shown[1]).toMatchObject({ html: '<p>Q</p><hr id=answer><p>A</p>', side: 'answer' });
+    expect(target.querySelector('[data-testid="review-answer"]')?.classList.contains('border-t')).toBe(false);
+  });
+
   it('hands a graded result answer to the frame and keeps the parent free of the answer HTML', async () => {
     const card: DueCard = {
       card_id: 'g1',

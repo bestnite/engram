@@ -522,6 +522,66 @@ type templateNode struct {
 	children []templateNode
 }
 
+// AnswerIncludesQuestion reports whether a template's answer side already shows the question: it inserts
+// {{FrontSide}}, or it inserts again every field the question side inserts (Anki's "Basic (type in the answer)" repeats
+// {{Front}}, and its cloze type renders the whole text again). Anki's reviewer shows the answer side alone, so such a
+// template is a whole answer screen; a reviewer that also kept the question on screen would show it twice. An answer
+// side that adds only new fields, as engram's own types do, relies on the question staying above it. A template that
+// does not parse, or a question that inserts no field, reports false.
+func AnswerIncludesQuestion(cfg Config, tmpl Template) bool {
+	back, err := parseTemplate(tmpl.AFormat, tmpl.Name, SideBack)
+	if err != nil {
+		return false
+	}
+	if nodesReplace(back, "FrontSide") {
+		return true
+	}
+	front, err := parseTemplate(tmpl.QFormat, tmpl.Name, SideFront)
+	if err != nil {
+		return false
+	}
+	fields := make(map[string]bool, len(cfg.Fields))
+	for _, field := range cfg.Fields {
+		fields[field.Name] = true
+	}
+	asked := replacedFields(front, fields, map[string]bool{})
+	if len(asked) == 0 {
+		return false
+	}
+	answered := replacedFields(back, fields, map[string]bool{})
+	for name := range asked {
+		if !answered[name] {
+			return false
+		}
+	}
+	return true
+}
+
+// replacedFields adds to out the note type fields that a replacement among nodes inserts, conditional children
+// included, and returns out.
+func replacedFields(nodes []templateNode, fields, out map[string]bool) map[string]bool {
+	for _, node := range nodes {
+		if node.kind == tokenReplacement && fields[node.key] {
+			out[node.key] = true
+		}
+		replacedFields(node.children, fields, out)
+	}
+	return out
+}
+
+// nodesReplace reports whether any replacement among nodes, conditional children included, inserts key.
+func nodesReplace(nodes []templateNode, key string) bool {
+	for _, node := range nodes {
+		if node.kind == tokenReplacement && node.key == key {
+			return true
+		}
+		if nodesReplace(node.children, key) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseTemplate(template, tmplName string, side Side) ([]templateNode, error) {
 	parser := templateParser{tokens: lexTemplate(template), tmplName: tmplName, side: side}
 	nodes, err := parser.parse("", false, false)

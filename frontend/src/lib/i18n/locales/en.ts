@@ -1661,5 +1661,5 @@ export const en: LocaleCatalog = {
   'notetype.syntax.tts': 'Speaks the field. Replace zh_CN with a language code such as ja_JP or en_US.',
   'notetype.syntax.text': 'Strips the field’s formatting and keeps the plain text.',
   'notetype.syntax.special': 'The note’s tags, its deck, its subdeck, the note type name and the template name.',
-  'notetype.syntax.frontside': 'Inserts the front on the back. The review page keeps the question above the answer, so it is rarely needed; with it the question shows twice.',
+  'notetype.syntax.frontside': 'Inserts the front on the back. When the back shows the question (with this, or by repeating every field of the front), the reveal shows the back alone, as Anki does; otherwise the question stays above the answer.',
 };

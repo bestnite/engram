@@ -169,6 +169,39 @@ describe('ReviewView face HTML in the frame, edit, and bury parity', () => {
     expect(html).toContain('data-rating="4"');
   });
 
+  it('shows an answer that already holds the question alone on reveal, as Anki does', () => {
+    const basic = gradedCard('basic', { front: 'Q', back: 'A' });
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [basic],
+        initialRevealed: true,
+        initialFrontFace: face('<p>Q</p>'),
+        initialBackFace: face('<p>Q</p><hr id=answer><p>A</p>'),
+        initialAnswerIncludesQuestion: true,
+      },
+    });
+    // The question frame stays mounted for the next card, but hidden; the answer has no divider above it.
+    expect(html).toMatch(/class="hidden" data-testid="review-front"/);
+    expect(html).toMatch(/<div data-testid="review-answer"/);
+    expect((html.match(/data-card-frame/g) ?? [])).toHaveLength(2);
+  });
+
+  it('keeps the question above an answer that does not repeat it', () => {
+    const basic = gradedCard('basic', { front: 'Q', back: 'A' });
+    const { html } = render(ReviewView, {
+      props: {
+        initialLoading: false,
+        initialCards: [basic],
+        initialRevealed: true,
+        initialFrontFace: face('<p>Q</p>'),
+        initialBackFace: face('<p>A</p>'),
+      },
+    });
+    expect(html).toMatch(/class="min-h-28" data-testid="review-front"/);
+    expect(html).toMatch(/class="border-t border-input pt-6" data-testid="review-answer"/);
+  });
+
   it('keeps both frames mounted and prints no field text while the faces are loading', () => {
     const basic = gradedCard('basic', { front: 'Loading front', back: 'Loading back' });
     const { html } = render(ReviewView, { props: { initialLoading: false, initialCards: [basic] } });
