@@ -1545,6 +1545,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	}
 	oldStates := map[uint64]CardState{}
 	reviewKeys := map[reviewKey]bool{}
+	latestReview := map[uint64]time.Time{}
 	for start := 0; start < len(ids); start += 500 {
 		end := min(start+500, len(ids))
 		var states []CardState
@@ -1560,6 +1561,9 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		}
 		for _, review := range reviews {
 			reviewKeys[reviewKey{review.CardID, review.ReviewedAt.UTC(), review.Rating}] = true
+			if review.ReviewedAt.After(latestReview[review.CardID]) {
+				latestReview[review.CardID] = review.ReviewedAt
+			}
 		}
 	}
 	last := make(map[int64]int64)
@@ -1695,7 +1699,20 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		}
 		if exists {
 			state.Version = old.Version
-			if equalAnkiState(old, state) {
+			var packageTime, localTime time.Time
+			if state.LastReviewAt != nil {
+				packageTime = *state.LastReviewAt
+			} else if state.DueAt != nil {
+				interval := time.Duration(card.Interval) * 24 * time.Hour
+				if card.Interval < 0 {
+					interval = -time.Duration(card.Interval) * time.Second
+				}
+				packageTime = state.DueAt.Add(-interval)
+			}
+			if old.LastReviewAt != nil {
+				localTime = *old.LastReviewAt
+			}
+			if !packageTime.After(localTime) {
 				report.StatesSkipped++
 				continue
 			}
@@ -1735,6 +1752,12 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			continue
 		}
 		at := time.UnixMilli(r.ID).UTC()
+		// Undo orders reviews by auto-increment ID, so appending older history
+		// would make an old review appear to be the latest grade.
+		if latest, ok := latestReview[id]; ok && !at.After(latest) {
+			report.ReviewsSkipped++
+			continue
+		}
 		key := reviewKey{id, at, r.Ease}
 		if reviewKeys[key] {
 			report.ReviewsSkipped++

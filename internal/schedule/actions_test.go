@@ -34,7 +34,7 @@ func TestUndoImportedReviewMemory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.NewDeckStore(db).ImportPackage(ctx, 2, bytes.NewReader(raw), store.PackageImportOptions{Target: store.PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
+	importReport, err := store.NewDeckStore(db).ImportPackage(ctx, 2, bytes.NewReader(raw), store.PackageImportOptions{Target: store.PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,6 +45,13 @@ func TestUndoImportedReviewMemory(t *testing.T) {
 	s := mustScheduler(t, testPreset(t))
 	now := due.Add(24 * time.Hour)
 	result := mustSubmit(t, db, SubmitInput{CardID: imported.CardID, UserID: 2, Rating: Good, ExpectedVersion: imported.Version, Scheduler: s, Now: now, Location: time.UTC})
+	reimport, err := store.NewDeckStore(db).ImportPackage(ctx, 2, bytes.NewReader(raw), store.PackageImportOptions{Target: store.FormatPackageTarget("into_deck", importReport.DeckID), OnConflict: "update", IncludeProgress: true, MediaRoot: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reimport.StatesSkipped != 1 || reimport.ReviewsSkipped != 1 || reimport.ProgressApplied != 0 || reimport.ReviewsApplied != 0 {
+		t.Fatalf("reimport report: %+v", reimport)
+	}
 	tx := db.Begin()
 	restored, err := Rollback(ctx, tx, UndoInput{CardID: imported.CardID, UserID: 2, ExpectedVersion: result.State.Version, Scheduler: s, Now: now})
 	if err != nil {
@@ -53,6 +60,17 @@ func TestUndoImportedReviewMemory(t *testing.T) {
 	if err := tx.Commit().Error; err != nil {
 		t.Fatal(err)
 	}
+	var ownCount, importedCount int64
+	if err := db.Model(&store.Review{}).Where("id = ?", result.ReviewID).Count(&ownCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&store.Review{}).Where("card_id = ? AND user_id = ?", imported.CardID, 2).Count(&importedCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if ownCount != 0 || importedCount != 1 {
+		t.Fatalf("undo: own reviews=%d imported reviews=%d", ownCount, importedCount)
+	}
+	t.Logf("reimport: state kept, reviews skipped=%d; undo removed own review and kept imported review", reimport.ReviewsSkipped)
 	if restored.Stability == nil || restored.Difficulty == nil || restored.DueAt == nil || imported.Stability == nil || imported.Difficulty == nil || imported.DueAt == nil || *restored.Stability != *imported.Stability || *restored.Difficulty != *imported.Difficulty || !restored.DueAt.Equal(*imported.DueAt) {
 		t.Fatalf("restored=%+v imported=%+v", restored, imported)
 	}
