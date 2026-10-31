@@ -77,6 +77,13 @@ before `M18-5`, because `M18-5` makes `.apkg` the only format. Every one of them
 `M18-14`, `M18-15` and `M18-16`. `M18-13` changes only `internal/anki` and may run beside one of
 them. `M18-9` lands before `M18-4`, because both change how an `.apkg` import builds its preset.
 
+`M18-17` to `M18-22` fix defects that a review of the landed `M18-9` (commit `6a7beb8`) found. They
+also land before `M18-5`. `M18-17` and `M18-18` change `internal/store/anki_import.go`, so each runs
+alone like the entries above. `M18-18` and `M18-19` both change `internal/store/package_import.go`,
+so they never run at the same time. `M18-20` changes only tests and the oracle fixtures and lands
+after `M18-17`. `M18-21` changes only `README.md` and may run beside any other task. `M18-22` edits
+this file, so only the parent does it, with the maintainer present.
+
 - [ ] **M18-4 Preset choice on import: new, reuse or copy** — the import request takes
   `preset_mode` (`new`, `reuse`, `copy`) plus `preset_id` for the last two. `new` builds a preset
   from the package's deck configuration, taking its FSRS weights only when `apply_weights` is on;
@@ -249,6 +256,119 @@ them. `M18-9` lands before `M18-4`, because both change how an `.apkg` import bu
   imports a package with 5 000 revlog rows and asserts, through a GORM callback that counts statements,
   that the progress step runs fewer than 100 statements. Evidence is the raw `go test` output of both
   runs.
+
+- [ ] **M18-17 `.apkg` deck configuration values the scheduler cannot use** — `M18-9` checks the
+  package's FSRS weights, but `createAnkiPreset` in `internal/store/anki_import.go` still copies the
+  learning steps, the relearning steps and the maximum interval without checking them against what
+  the scheduler accepts. Two failures follow. First: a schema-18 package stores the steps as protobuf
+  floats (`internal/anki/protobuf.go`), which can be NaN or infinite; `ankiSteps` formats such a step
+  as `NaNm` or `+Infm`, `parseSteps` in `internal/schedule/scheduler.go` refuses that string, and
+  `schedule.NewScheduler` returns an error for the deck's preset, so every preview and every review
+  submission in the deck fails — the failure `M18-9` removed for weights. Second: a maximum interval
+  above 36 500 days, or a negative step, passes `parseSteps`, but go-fsrs v4.0.0 `NewFSRS` then sees
+  `Parameters.Validate` fail and replaces every parameter with `fsrs.DefaultParam()`. The deck is
+  then scheduled with the default weights, retention, steps and maximum interval, while the report
+  says `weights_applied` and the preset page shows the imported values. The preset write path has the
+  second gap as well: `validatePresetForWrite` in `internal/store/preset.go` and `parsePresetRequest`
+  in `internal/web/presets_api.go` accept every maximum interval above 0. The fix:
+  `validatePresetForWrite` refuses a maximum interval above 36 500 with `ErrInvalidMaximumInterval`;
+  `createAnkiPreset` stores 36 500 when the package's maximum interval is above 36 500; and
+  `createAnkiPreset` keeps the preset's default learning steps when the package's learning step list
+  holds a step that is NaN, infinite or negative, and applies the same rule to the relearning steps.
+  *Acceptance:* table tests in `internal/store` call `createAnkiPreset` with a maximum interval of
+  50 000, a learning step of −1, a NaN learning step and an infinite relearning step, and check the
+  stored preset; a test in `internal/schedule` imports, through `ImportPackage`, legacy packages
+  carrying the maximum interval of 50 000 and the step of −1, builds the scheduler from each resulting
+  preset, and asserts that its go-fsrs parameters hold the preset's weights, retention, steps and
+  maximum interval, which shows that `NewFSRS` did not reset them; a handler test in `internal/web`
+  shows that creating a preset and updating a preset with `maximum_interval_days` 36 501 each return
+  400 `preset_max_interval_invalid`. Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-18 `.apkg` import says why requested weights were not used** — with `apply_weights` on
+  and the target `new_deck`, `createAnkiPreset` drops weights that `fsrs.MigrateWeights` refuses and
+  throws the error away. The report then carries `weights_applied` false and `weights_discarded`
+  true, which is the same pair as with `apply_weights` off, and no log line records the refusal. A
+  user who ticked the checkbox reads "Package weights not used" and cannot tell that the package's
+  weights were faulty. The fix: `PackageImportReport` in `internal/store/package_import.go` gains
+  `WeightsInvalid` (JSON `weights_invalid`), which is true only when all four of these hold:
+  `apply_weights` is on, the target is `new_deck`, the package carries weights, and
+  `fsrs.MigrateWeights` refuses them. The importer writes one English `slog.Warn` line carrying the
+  importing user's id and the `MigrateWeights` error. `frontend/src/lib/api/types.ts` gains the
+  field, and `frontend/src/lib/views/ImportView.svelte` shows one catalog line when it is true; the
+  key `package.report.weights_invalid` is appended at the end of
+  `frontend/src/lib/i18n/locales/en.ts` and `zh-CN.ts`, and the two key sets stay identical. This
+  entry changes `frontend/src/lib/views/`, so it never runs beside `M18-6`. *Acceptance:* the weights
+  table test reports `weights_invalid` true for the refused set, and false for the option off, the
+  accepted set, the package without weights and the existing-deck target; a component test shows the
+  line when `weights_invalid` is true and hides it when it is false. Evidence is the raw scoped
+  `go test` and `go vet` output and the component test output.
+
+- [ ] **M18-19 `.edeck` import checks package weights the way `.apkg` does** —
+  `createPresetFromPackage` in `internal/store/package_import.go` writes the `weights` of
+  `preset.json` into the new preset whenever `apply_weights` is on and the list is not empty, and
+  `importInTx` sets `weights_applied` from the option and the target alone. Nothing checks the list
+  at import time: `schema/deck-package.schema.json` declares 21 values, but no import path validates a
+  package against the schema. An `.edeck` whose `weights` is `[1,2,3]`, imported with
+  `apply_weights` on, therefore yields a preset for which `schedule.NewScheduler` returns an error, so
+  every preview and every review submission in the deck fails while the report says
+  `weights_applied` — the defect `M18-9` fixed for `.apkg` only. The fix: the weights,
+  `weights_review_count` and `weights_optimized_at` are written only when `fsrs.MigrateWeights`
+  accepts the list; `weights_applied` is true only when they were written; `weights_discarded` is
+  true when the package carried weights that were not written; once `M18-18` has landed,
+  `weights_invalid` follows the rule that entry defines. If `M18-5` lands first, this entry is
+  deleted with a commit message that names `M18-5`. *Acceptance:* the table of
+  `TestImportPackageApplyWeights` in `internal/store/package_weights_test.go` gains a `[1,2,3]` case
+  with `apply_weights` on, which stores no weights and no weight metadata and reports
+  `weights_applied` false and `weights_discarded` true; every existing case keeps its result.
+  Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-20 Weight import tests: older Anki weight sets, schema-18 packages and the scheduler's
+  use of the weights** — `TestAnkiImportWeightsSchedule` in `internal/api/anki_weights_import_test.go`
+  imports one 21-value set and one 3-value set, both through a schema-11 package written by
+  `anki.WriteArchive`. Three inputs are not covered: a 17-value set under the `fsrsWeights` key and a
+  19-value set under the `fsrsParams5` key of `col.dconf`, which older Anki releases write and which
+  `fsrs.MigrateWeights` converts (`anki.WriteArchive` writes only `fsrsParams6`, so the test writes
+  those keys itself); a schema-18 (`collection.anki21b`) package, whose weights
+  `internal/anki/protobuf.go` decodes from protobuf floats; and a weight that is NaN or infinite,
+  which only the protobuf path can carry. The test also does not show that the scheduler uses the
+  adopted weights: it checks only that `Preview` returns no error, and that holds for the default
+  weights as well. The file lives in `internal/api` although it calls no handler. The fix: move the
+  test to `internal/schedule`, which can import `internal/store` and `internal/anki` without a cycle;
+  add the 17-value and 19-value cases; assert that the scheduler built from each imported preset holds
+  the result of `fsrs.MigrateWeights` on the package's set when the set was adopted, and the default
+  weights when it was not; add a schema-18 package that `tools/anki-oracle` produces with
+  `anki==26.9.3` and that carries FSRS parameters; cover the non-finite weight with a test in
+  `internal/store` that calls `createAnkiPreset` directly. *Acceptance:* each case named above passes;
+  `internal/api/anki_weights_import_test.go` no longer exists. Evidence is the raw scoped `go test`
+  and `go vet` output and the output of the oracle script that produced the fixture.
+
+- [ ] **M18-21 README describes what an `.apkg` import carries** — the "Anki `.apkg` packages"
+  section of `README.md` lists "Scheduling state and review history" and "Anki's deck options and
+  FSRS parameters" under the parts that are not imported, and says that a new deck starts from the
+  default preset. The code does otherwise: `createAnkiPreset` builds the new deck's preset from the
+  package's deck configuration; `importAnkiProgress` applies the card states and the review log when
+  `include_progress` is on; and since `M18-9` the package's FSRS weights are adopted when
+  `apply_weights` is on, the target is `new_deck` and `fsrs.MigrateWeights` accepts them. The
+  paragraph just above that section already describes the deck configuration and `include_progress`,
+  so the README contradicts itself. The fix rewrites the two list items to state the current
+  behaviour, names `apply_weights` (off by default, `new_deck` only) and the report's
+  `weights_applied` and `weights_discarded`, and leaves no statement that disagrees with the paragraph
+  above. `M18-5` rewrites the format paragraphs later; this entry removes the contradiction now.
+  *Acceptance:* the section no longer lists scheduling state, review history, deck options or FSRS
+  parameters as parts that are not imported, and each of its statements matches `createAnkiPreset`,
+  `importAnkiProgress` and `PackageImportOptions` in `internal/store`. Evidence is the `README.md`
+  diff.
+
+- [ ] **M18-22 Release ledger records the landed `M18` work** — the release ledger in section 2 of
+  this file holds no row for `M18-1`, `M18-2`, `M18-3` or `M18-9`, although all four landed after
+  v0.2.0 and change what an import or export does through the HTTP API, the MCP tools and the CLI.
+  For `M18-9` the row states that an `.apkg` import writes the package's FSRS weights only when
+  `apply_weights` is on, the target is `new_deck` and `fsrs.MigrateWeights` accepts them, and that
+  the report's `weights_applied` and `weights_discarded` now describe an `.apkg` import too. Each row
+  is written from the commits whose messages name that ID, and marks a breaking change as section 7
+  of `AGENTS.md` requires. Only the parent edits this file, with the maintainer present.
+  *Acceptance:* the ledger table holds a row naming each of the four IDs. Evidence is the output of
+  `grep -n -E 'M18-(1|2|3|9)\b' ROADMAP.md` limited to the ledger section.
 
 ---
 
