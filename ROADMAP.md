@@ -220,25 +220,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   naming `M18-4`; the sentence in `AGENTS.md` section 2.7 names `reuse` and `copy`. Evidence is the
   output of `grep -n 'M18-4\b' ROADMAP.md` limited to the ledger section and the `AGENTS.md` diff.
 
-- [ ] **M18-38 One function decodes a preset's weights** — `M18-7` added a second copy of
-  `presetWeights` from `internal/schedule/scheduler.go` to `importAnkiProgress` in
-  `internal/store/anki_import.go`: both treat NULL, an empty string and `null` as the default weights,
-  decode the JSON array and pass it through `fsrs.MigrateWeights`. The comment on
-  `schedule.Parameters` calls that function the single source of where the scheduling parameters come
-  from, and the import's memory state is only correct while the two copies agree, because the
-  scheduler later continues from that state with its own weights. `internal/schedule` imports
-  `internal/store`, so the import cannot call the scheduler's copy. The fix: `internal/store` gains one
-  exported function that takes a preset's `weights_json` value and returns `fsrs.Weights` with
-  exactly the rule `presetWeights` has today; `schedule.Parameters` and `importAnkiProgress` both call
-  it; `presetWeights` and the inline copy in `importAnkiProgress` are deleted. The error texts keep
-  their English wording. *Acceptance:* `grep -rn 'func presetWeights' internal/` prints nothing;
-  `grep -n 'MigrateWeights' internal/store/anki_import.go` prints only the line in
-  `createAnkiPreset`; a table test in `internal/store` calls the new function with NULL, `""`,
-  `" null "`, a 21-value set, a 17-value set, a 19-value set, `[1,2,3]` and `not json`, and checks the
-  default weights for the first three, the `fsrs.MigrateWeights` result for the next three and an
-  error for the last two; the existing `internal/schedule` tests pass unchanged. Evidence is the grep
-  output and the raw scoped `go test` and `go vet` output of `internal/store` and `internal/schedule`.
-
 - [ ] **M18-39 The `ankiWeights` comment states what the function does** — found while reviewing
   `M18-7`; the code comes from `M18-1`. The comment on `ankiWeights` in
   `internal/store/anki_export.go` says that an undecodable weights value means "use the defaults", so
