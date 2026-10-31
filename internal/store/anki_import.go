@@ -1853,10 +1853,14 @@ func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName s
 		if cfg.DesiredRetention > 0 && cfg.DesiredRetention <= 1 {
 			preset.DesiredRetention = cfg.DesiredRetention
 		}
-		preset.LearningSteps = ankiSteps(cfg.LearnSteps)
-		preset.RelearningSteps = ankiSteps(cfg.RelearnSteps)
+		if validAnkiSteps(cfg.LearnSteps) {
+			preset.LearningSteps = ankiSteps(cfg.LearnSteps)
+		}
+		if validAnkiSteps(cfg.RelearnSteps) {
+			preset.RelearningSteps = ankiSteps(cfg.RelearnSteps)
+		}
 		if cfg.MaximumReviewInterval > 0 {
-			preset.MaximumIntervalDays = cfg.MaximumReviewInterval
+			preset.MaximumIntervalDays = min(cfg.MaximumReviewInterval, DefaultMaximumIntervalDays)
 		}
 		if len(cfg.Weights) > 0 && applyWeights {
 			if _, err := fsrs.MigrateWeights(cfg.Weights); err == nil {
@@ -1877,6 +1881,15 @@ func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName s
 		report.WeightsDiscarded = false
 	}
 	return preset, nil
+}
+
+func validAnkiSteps(steps []float64) bool {
+	for _, step := range steps {
+		if math.IsNaN(step) || math.IsInf(step, 0) || step < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // registerAnkiMediaNames records every media name the package provides for the target deck.

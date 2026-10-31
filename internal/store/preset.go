@@ -38,8 +38,8 @@ var (
 	ErrPresetNameRequired = errors.New("preset name is required")
 	// ErrInvalidDesiredRetention means the desired retention is outside (0, 1].
 	ErrInvalidDesiredRetention = errors.New("desired retention must be in (0, 1]")
-	// ErrInvalidMaximumInterval means the maximum interval in days is not positive.
-	ErrInvalidMaximumInterval = errors.New("maximum interval days must be positive")
+	// ErrInvalidMaximumInterval means the maximum interval is outside the scheduler's supported range.
+	ErrInvalidMaximumInterval = errors.New("maximum interval days must be between 1 and 36500")
 	// ErrPresetInUse means the preset is used by one or more decks and cannot be deleted.
 	ErrPresetInUse = errors.New("preset is in use by one or more decks")
 	// ErrDefaultPresetCannotDelete means the default preset cannot be deleted.
@@ -87,7 +87,7 @@ func validatePresetForWrite(p *Preset, create bool) error {
 	if p.DesiredRetention <= 0 || p.DesiredRetention > 1 {
 		return fmt.Errorf("%w: %v", ErrInvalidDesiredRetention, p.DesiredRetention)
 	}
-	if p.MaximumIntervalDays <= 0 {
+	if p.MaximumIntervalDays <= 0 || p.MaximumIntervalDays > DefaultMaximumIntervalDays {
 		return fmt.Errorf("%w: %d", ErrInvalidMaximumInterval, p.MaximumIntervalDays)
 	}
 	if create && p.OwnerUserID == 0 {

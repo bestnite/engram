@@ -187,6 +187,24 @@ func TestPresetWriteRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestPresetWriteRejectsExcessiveMaximumInterval(t *testing.T) {
+	srv, db, owner, cookies, csrf, _ := newPresetsServer(t)
+	p := seedPreset(t, db, owner)
+	body := `{"name":"x","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":36501,"enable_fuzz":true}`
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/presets"},
+		{http.MethodPatch, "/api/v1/presets/" + p.PublicID},
+	} {
+		t.Run(tc.method, func(t *testing.T) {
+			rec := jsonRequest(t, srv, tc.method, tc.path, body, cookies, csrf)
+			code, _ := decodePresetError(t, rec)
+			if rec.Code != http.StatusBadRequest || code != "preset_max_interval_invalid" {
+				t.Fatalf("status=%d code=%q body=%s", rec.Code, code, rec.Body.String())
+			}
+		})
+	}
+}
+
 // TestPresetUpdateOtherUsersPresetIsNotFound is a mandatory negative case: another user's preset returns 404 (leaking no existence),
 // and the column values are unchanged.
 func TestPresetUpdateOtherUsersPresetIsNotFound(t *testing.T) {
