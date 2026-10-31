@@ -85,10 +85,11 @@ Decision rule: code, comments, logs and commit messages â†’ English; end user â†
    a zero-valued field when the column carries a `default` tag, so the database default
    silently overwrites an explicit `false` (measured on `presets.enable_fuzz`). Use `*bool`
    for such columns; never work around it at the call site more than once.
-10. **Unsanitised HTML is shown only inside the sandboxed frame.** Card faces, deck
-    descriptions, mail previews and the rich-text editing area are the only surfaces that
-    display stored HTML. The server sanitises nothing, so the sandboxed iframe and its CSP
-    are the security boundary: never inject stored HTML into the parent page.
+10. **Unsanitised HTML is shown only inside the sandboxed frame.** Card faces, mail previews
+    and the rich-text editing area are the only surfaces that display stored HTML; a deck
+    description is plain text and is printed as text. The server sanitises nothing, so the
+    sandboxed iframe and its CSP are the security boundary: never inject stored HTML into the
+    parent page.
 
 ### 2.4 Go style in this repo
 
