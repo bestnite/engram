@@ -90,21 +90,6 @@ alone like the entries above. `M18-24`, `M18-25`, `M18-26` and `M18-27` all chan
 so no two of them run at the same time. `M18-26` waits for a maintainer decision. `M18-28` edits this
 file, so only the parent does it, with the maintainer present.
 
-- [ ] **M18-4 Preset choice on import: new, reuse or copy** — the import request takes
-  `preset_mode` (`new`, `reuse`, `copy`) plus `preset_id` for the last two. `new` builds a preset
-  from the package's deck configuration, taking its FSRS weights only when `apply_weights` is on;
-  `reuse` points the new deck at the caller's chosen preset and writes nothing to it; `copy`
-  duplicates the chosen preset into an independent row, which must never be named `Default` because
-  that name identifies the account's own default. `preset_id` must be one of the caller's presets
-  (400 otherwise), and `reuse` or `copy` together with `apply_weights` is refused with 400 instead of
-  silently ignored, because writing package weights into a shared preset would change the scheduling
-  of every other deck that points at it. The report gains `preset_mode` and `preset_name`. The import
-  page UI is `M18-6`; this entry is transport and store only. *Acceptance:*
-  table tests cover the three modes, a missing `preset_id`, a `preset_id` of another user, and
-  `apply_weights` with reuse and with copy; a copy of `Default` gets another name and exactly one
-  preset remains the default; the report names the preset used or created. Evidence is the raw test
-  output and a captured import response.
-
 - [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
   half of `internal/store/package_import.go`, `internal/store/package_document.go`,
   `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
