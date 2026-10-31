@@ -47,6 +47,8 @@
   let noteTypeId = $state('');
   let fields = $state<Record<string, unknown>>({});
   let tagsText = $state('');
+  // The note's origin link. It is not a field of the note type: the server keeps it in its own column.
+  let sourceURL = $state('');
 
   let loading = $state(true);
   let saving = $state(false);
@@ -82,6 +84,8 @@
 
   /** The selected type's fields in manifest order; the form and the save payload follow this order. */
   const fieldDefs = $derived(selectedType?.config.fields ?? []);
+  // A note type that declares a field called source_url edits it as that field; the separate input would write the same key.
+  const typeDeclaresSource = $derived(fieldDefs.some((field) => field.id === 'source_url' || field.name === 'source_url'));
 
   /**
    * Whether the type is Anki's image-occlusion type. The template of the stock type carries the canvas
@@ -154,7 +158,7 @@
   // Draft signature: a change to the note type, the submitted fields or the tags yields a new string (tags use the parsed array, so changing only whitespace
   // does not count as a new change either). Saving is only responsible for the snapshot at the moment of submission, so it is used to tell whether the draft was already changed when the response lands.
   const draftSignature = $derived(
-    JSON.stringify({ type: noteTypeId, fields: collectFields(), tags: parseTags() })
+    JSON.stringify({ type: noteTypeId, fields: collectFields(), tags: parseTags(), source: sourceURL.trim() })
   );
 
   /**
@@ -195,6 +199,17 @@
   }
 
   /**
+   * The fields a save submits: the form's fields plus the origin link, which the note write moves into its own column.
+   * An update always sends the link, so clearing the input clears it; a create sends it only when there is one.
+   */
+  function submittedFields(update: boolean): Record<string, string> {
+    const out = collectFields();
+    const source = sourceURL.trim();
+    if (!typeDeclaresSource && (update || source !== '')) out.source_url = source;
+    return out;
+  }
+
+  /**
    * Whether there is already previewable content: at least one field of the selected note type holds something.
    * An empty form sends no preview request; an incomplete one reaches the server and is reported as incomplete.
    */
@@ -218,6 +233,7 @@
     }
     fields = next;
     tagsText = loaded.tags.join(', ');
+    sourceURL = loaded.source_url ?? '';
   }
 
   async function load(): Promise<void> {
@@ -398,7 +414,7 @@
     try {
       const updated = await apiClient.updateNote(note.id, {
         note_type: noteTypeId,
-        fields: collectFields(),
+        fields: submittedFields(true),
         tags: parseTags(),
       });
       if (disposed) return;
@@ -458,7 +474,7 @@
     saving = true;
     try {
       const result = await apiClient.createNotes(deckId, {
-        notes: [{ note_type: noteTypeId, fields: collectFields(), tags: parseTags() }],
+        notes: [{ note_type: noteTypeId, fields: submittedFields(false), tags: parseTags() }],
       });
       // The user left while the request was in flight (route change/unmount): no more state writes, and do not pull them to the return page either.
       if (disposed) return;
@@ -580,6 +596,21 @@
             <label class="block text-sm font-medium text-foreground">{$t('note_edit.tags')}
               <input data-testid="note-tags-editor" bind:value={tagsText} class="field-input text-sm mt-1.5 w-full" />
             </label>
+
+            {#if !typeDeclaresSource}
+              <label class="block text-sm font-medium text-foreground">{$t('note.fields.source_url')}
+                <input
+                  data-testid="note-source-url"
+                  type="text"
+                  inputmode="url"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="https://"
+                  bind:value={sourceURL}
+                  class="field-input text-sm mt-1.5 w-full"
+                />
+              </label>
+            {/if}
           </div>
         </div>
 

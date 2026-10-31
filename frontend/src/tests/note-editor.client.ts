@@ -766,14 +766,56 @@ describe('unified note editor — edit mode', () => {
     await flush();
 
     // The identity is the original note id; the payload names the note type and keys fields by field name, with no kind.
+    // An update always carries the origin link, so an emptied input clears it on the server.
     expect(updateNote).toHaveBeenCalledWith('9', {
       note_type: 'nt-basic',
-      fields: { Front: 'Q2', Back: 'A' },
+      fields: { Front: 'Q2', Back: 'A', source_url: '' },
       tags: ['a', 'b'],
     });
     expect(Object.keys(updateNote.mock.calls[0]![1])).not.toContain('kind');
     expect(get(routeStore).path).not.toBe('/decks/5');
     expect(toast.success).toHaveBeenCalledWith('卡片已保存。');
+  });
+
+  it('shows the stored origin link and saves the edited one', async () => {
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture({ source_url: 'https://example.com/old' }));
+    const previewNote = vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    const updateNote = vi
+      .spyOn(apiClient, 'updateNote')
+      .mockResolvedValue(noteFixture({ source_url: 'https://example.com/new' }));
+
+    mountEditor({ id: '5', noteId: '9' });
+    await flush();
+    const input = target.querySelector<HTMLInputElement>('[data-testid="note-source-url"]')!;
+    expect(input.value).toBe('https://example.com/old');
+
+    setInput('note-source-url', '  https://example.com/new ');
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+    submitForm();
+    await flush();
+
+    expect(updateNote.mock.calls[0]![1].fields).toEqual({ Front: 'Q', Back: 'A', source_url: 'https://example.com/new' });
+    expect(target.querySelector<HTMLInputElement>('[data-testid="note-source-url"]')!.value).toBe('https://example.com/new');
+    // The preview renders fields only: the link is not part of the note type, and the preview refuses unknown keys.
+    expect(previewNote).toHaveBeenCalled();
+    for (const call of previewNote.mock.calls) expect(call[2]).not.toHaveProperty('source_url');
+  });
+
+  it('leaves the origin link to a note type that declares it as a field', async () => {
+    const types = defaultNoteTypes();
+    const basic = types[0]!;
+    const withSource = {
+      ...basic,
+      config: { ...basic.config, fields: [...basic.config.fields, { ...basic.config.fields[0]!, id: 'source_url', name: 'source_url' }] },
+    };
+    vi.spyOn(apiClient, 'getNote').mockResolvedValue(noteFixture({ source_url: 'https://example.com/old' }));
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+
+    mountEditor({ id: '5', noteId: '9' }, {}, [withSource, ...types.slice(1)]);
+    await flush();
+    expect(target.querySelector('[data-testid="note-source-url"]')).toBeNull();
   });
 
   it('loads, edits and saves a note of a note type that matches no stock kind', async () => {
@@ -816,6 +858,7 @@ describe('unified note editor — edit mode', () => {
     expect(payload.fields).toEqual({
       Question: '<p>NEW QUESTION</p>',
       Answer: '<p>OLD ANSWER</p>',
+      source_url: '',
     });
     expect(payload).not.toHaveProperty('kind');
     // The preview used the same type, so the stored template rendered its faces.
@@ -855,7 +898,7 @@ describe('unified note editor — edit mode', () => {
 
     expect(updateNote).toHaveBeenCalledWith('9', {
       note_type: choice.id,
-      fields: { Question: 'Which one?', Options: optionHTML, Answer: '0' },
+      fields: { Question: 'Which one?', Options: optionHTML, Answer: '0', source_url: '' },
       tags: [],
     });
   });

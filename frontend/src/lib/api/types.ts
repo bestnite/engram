@@ -177,6 +177,8 @@ export interface Note {
   created_at: string;
   updated_at: string;
   external_ref: string;
+  /** The note's origin link, kept in its own column rather than as a field; null when it has none. */
+  source_url?: string | null;
   /** Whether the caller suspended the cards under this note (suspension applies to you only). */
   suspended: boolean;
 }
