@@ -106,6 +106,14 @@ maintainer decision. `M18-39` changes only `internal/store/anki_export.go` and m
 entry that does not touch that file. `M18-41` changes only tests and lands after `M18-36`, which
 adds a test in `internal/schedule` beside the one `M18-41` moves there.
 
+`M18-42` to `M18-46` fix defects that a review of the landed `M18-29` to `M18-34` (commits `e229080`,
+`51697a1`, `a31c634`, `d3938d5`, `a89a9b1` and `9791bf9`) found. They also land before `M18-5`.
+`M18-42` and `M18-44` both change `internal/store/package_import.go`, so they never run at the same
+time, and `M18-44` lands after `M18-42`. `M18-43` runs tests and changes no file, so it may run beside
+any entry. `M18-45` edits this file, so only the parent does it, with the maintainer present, in the
+same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`, and never runs beside
+`M18-21`, which edits the same file.
+
 - [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
   half of `internal/store/package_import.go`, `internal/store/package_document.go`,
   `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
@@ -602,6 +610,117 @@ adds a test in `internal/schedule` beside the one `M18-41` moves there.
   `TestAnkiProgressMissingMemory` and `TestAnkiProgressReplayUsesStudyWeightsAndReviewDays` pass with
   `TEST_PG_DSN` set. Evidence is the raw scoped `go test` and `go vet` output, including the run with
   `TEST_PG_DSN` set.
+
+- [ ] **M18-42 `preset_id` is refused for `into_deck` and `replace_deck` too** — `M18-30` made a
+  `preset_id` without `reuse` or `copy` a refusal, but only for `new_deck`. `e229080` (`M18-29`) added
+  an early return to `ValidateImportPreset` in `internal/store/package_import.go`: when `PresetMode` is
+  empty and the target is not `new_deck`, the function returns nil before any check, so the
+  `PresetID != 0` check that `51697a1` added for mode `new` never runs for that request. Reproduced on
+  `main` with `ImportPackage` on SQLite: target `into_deck:<id>` and target `replace_deck:<id>`, each
+  with the caller's own `PresetID` and no `PresetMode`, succeeded, wrote no preset and returned neither
+  `preset_mode` nor `preset_name`; the same two targets with `PresetMode` `new` and the same `PresetID`
+  were refused with `invalid preset selection`. The outcome therefore depends on the transport. The
+  CLI's `--preset-mode` defaults to `new` (`cmd/engram/package.go`), so
+  `engram import --target into_deck:<id> --preset-id <own>` is refused. The multipart route, the URL
+  import, the upload ticket and both MCP tools pass an empty mode when the caller omits it, so the same
+  request through them succeeds and drops the `preset_id`. The outcome also depends on whose preset the
+  dropped id names: `ImportPresetID` in `internal/api/publicid_resolver.go` refuses another user's id
+  with 400 before the store is reached, so only an id of the caller's own preset is silently dropped.
+  The fix: in `ValidateImportPreset`, a non-zero `PresetID` with a target other than `new_deck` returns
+  the same `PackageError` (`invalid_request`, 400) whatever the mode is. For those targets an empty mode
+  without a `PresetID` stays accepted, and so does mode `new` without a `PresetID`, because the CLI
+  sends `new` by default. The comment of `ValidateImportPreset` and the comment on
+  `PackageImportOptions.PresetMode` state the rule for `new_deck` and the rule for the other two
+  targets separately; the phrase "empty defaults to new" applies only to `new_deck`. *Acceptance:* the
+  refusal table of `TestImportPresetModes` in `internal/store/package_preset_mode_test.go` gains
+  `{PresetID: <own>}` and `{PresetMode: "new", PresetID: <own>}`, each once with target
+  `into_deck:<id>` and once with target `replace_deck:<id>` of an existing deck the caller owns; each of
+  the four is refused with no deck and no preset written. A positive case imports with target
+  `into_deck:<id>`, once with no `PresetMode` and once with `PresetMode` `new`, both without a
+  `PresetID`; both succeed and the report carries neither `preset_mode` nor `preset_name`. The refusal
+  table of `TestImportMultipartRejectsPresetOptions` in `internal/api/package_preset_mode_test.go` gains
+  `target=into_deck:<id>` with the caller's own `preset_id` and no `preset_mode`, answered with 400
+  `invalid_request`. The refusal list of `TestImportUploadPresetModes` in the same file gains
+  `{"target":"into_deck:<id>","preset_id":<own>}`, answered with 400 `invalid_request` and no new
+  `action_tokens` row. Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-43 The `M18-4` preset tests pass on PostgreSQL** — the acceptance of `M18-32` required
+  `TestImportPresetModes` and `TestAnkiImportPresetModes` to pass with `TEST_PG_DSN` set, because the
+  `copy` mode writes a preset inside the import transaction. The commit that closed `M18-32`
+  (`55b5da7`) records that clause as not verified, and section 7 of `AGENTS.md` lets an entry leave the
+  backlog only when its acceptance criteria pass with evidence. The commits that closed `M18-29`,
+  `M18-30`, `M18-31` and `M18-33` record the same gap. `M18-29` added `TestImportReportPresetByTarget`,
+  which imports into all three targets on both drivers and has never run on PostgreSQL either. This
+  task runs tests and changes no file. A PostgreSQL case that fails is recorded as a new entry that
+  names the failure; it is not fixed under this ID. *Acceptance:*
+  `go test -count=1 -v -run 'TestImportPresetModes|TestAnkiImportPresetModes|TestImportReportPresetByTarget' ./internal/store/`
+  with `TEST_PG_DSN` set passes, and its output shows the `postgres` subtests of all three tests as
+  `PASS`, none as `SKIP`. Evidence is that raw output.
+
+- [ ] **M18-44 Preset-choice comments state what the code does** — the `M18-33` fix asked for a comment
+  on every preset field and function that states its rule and why. The landed code leaves five comment
+  gaps and one unwrapped error. First, the comment on `PackageImportOptions.PresetID` in
+  `internal/store/package_import.go` says the field is "preventing cross-owner selection"; a field
+  prevents nothing, and the owner is checked by `ValidateImportPreset` and again by
+  `selectImportPreset`. Second, the comment on `selectImportPreset` says the second owner check stops a
+  preset "removed or transferred after validation"; no code changes `presets.owner_user_id`, so only
+  removal can happen. Third, `PresetMode` and `PresetID` of `importDeckIn` and of `createImportUploadIn`
+  in `internal/mcp/tools.go` still carry no Go comment, although the `M18-33` fix named both structs and
+  their neighbouring fields carry one. Their `jsonschema` texts also omit two rules: the choice applies
+  to `new_deck` only, as the `apply_weights` text states for itself, and `preset_id` is required by
+  `reuse` and `copy` and refused with any other mode. Fourth, `validateImportPreset` in
+  `internal/api/package_upload.go`, the helper `M18-31` added, carries no comment, although it is the
+  check that the URL import and the upload ticket run before authorization, the rate limiter and the
+  download. Fifth, the comment on `ImportDeckPackageURL` in `internal/api/package_url.go` says to
+  "resolve the target deck and authorize first", but since `d3938d5` the preset check runs before
+  authorization. The unwrapped error: `ImportPresetID` in `internal/api/publicid_resolver.go` returns the error of
+  `presets.ByPublicID` unwrapped, while section 2.4 of `AGENTS.md` requires wrapping with `%w`. The
+  fix: the `PresetID` comment says which functions check the owner; the `selectImportPreset` comment
+  names removal only; the four MCP fields gain a Go comment, and their `jsonschema` texts state both
+  rules; `validateImportPreset` gains a comment that states why it runs first; the
+  `ImportDeckPackageURL` comment lists the steps in the order the code runs them: preset check,
+  authorization, rate limiter, import slot, download; `ImportPresetID` wraps the store error with `%w`
+  and an English context. The status codes stay unchanged. This entry lands after `M18-42`, because
+  the `jsonschema` texts state the refusal rule that `M18-42` settles. *Acceptance:* each statement of
+  each changed comment and `jsonschema` text matches the code it describes; `TestImportPresetID` still
+  gets a `ServiceError` with status 500 and code `internal` for the closed database, and its message
+  contains the added context. Evidence is the diff and the raw scoped `go test` and `go vet` output of
+  `internal/store`, `internal/api` and `internal/mcp`.
+
+- [ ] **M18-45 The `M18-4` ledger row states what `M18-29` to `M18-33` changed** — `M18-35` was
+  written before `M18-29` to `M18-33` landed. It describes the import report as gaining
+  `preset_mode` and `preset_name`, it names only `M18-29` to `M18-31`, and it names no refusal. Since
+  then four behaviours have changed. First, the report carries both fields only for `new_deck` and omits
+  them for `into_deck` and `replace_deck` (`M18-29`). Second, a `preset_id` sent with `preset_mode`
+  `new` or with no `preset_mode` is refused with 400 `invalid_request` for `new_deck` (`M18-30`), and
+  for every target once `M18-42` lands. Third, `POST /api/v1/decks/import-url` takes `preset_mode` and
+  `preset_id` and refuses an invalid selection before the rate limiter and before the download
+  (`M18-31`). Fourth, a store failure while resolving `preset_id` answers 500 `internal` instead of 400
+  `invalid_request` (`M18-33`). None of the four is breaking, because `preset_mode` and `preset_id`
+  exist in no release yet. The fix: the `M18-4` ledger row that `M18-35` adds states each of the four
+  points and names `M18-29`, `M18-30`, `M18-31` and `M18-33`, and also `M18-42` if it has landed by
+  then. Only the parent edits this file, with the maintainer present, in the same change as `M18-35`.
+  *Acceptance:* the ledger row that names `M18-4` also names `M18-29`, `M18-30`, `M18-31` and `M18-33`.
+  Evidence is the output of `grep -n -E 'M18-(29|30|31|33)\b' ROADMAP.md` limited to the ledger
+  section.
+
+- [ ] **M18-46 README says where the preset choice is taken and for which target** — the sentence that
+  `M18-34` wrote on line 47 of `README.md` describes `preset_mode`, `preset_id` and `apply_weights`
+  without saying which import entries take the first two, while line 43 names the Import page first.
+  The Import page sends neither `preset_mode` nor `preset_id`: `importDeckPackage` and
+  `importDeckPackageURL` in `frontend/src/lib/api/client.ts` do not send them, and `M18-6` adds them.
+  The CLI takes them as `--preset-mode` and `--preset-id`. The sentence also omits two refusals that
+  `ValidateImportPreset` makes: `reuse` and `copy` are refused with a target other than `new_deck`, and
+  a `preset_id` is refused unless the mode is `reuse` or `copy` (for `new_deck` today, and for every
+  target once `M18-42` lands). The fix rewrites that sentence only. It names the entries that take the
+  choice: `POST /api/v1/decks/import`, `POST /api/v1/decks/import-url`, `POST /api/v1/decks/import-uploads`,
+  the CLI flags and the `import_deck` and `create_import_upload` MCP tools. It states that the choice
+  applies to `new_deck` only, and it states both refusals. This entry lands after `M18-42` and never
+  runs beside `M18-21`, which edits the same file. The commit that lands `M18-6` adds the Import page
+  to the sentence. *Acceptance:* each statement of the rewritten sentence matches `ValidateImportPreset`
+  in `internal/store/package_import.go`, the flags in `cmd/engram/package.go`, the two tool inputs in
+  `internal/mcp/tools.go` and the two request functions in `frontend/src/lib/api/client.ts`. Evidence
+  is the `README.md` diff.
 
 ---
 
