@@ -182,6 +182,110 @@ These tasks fix what the P3 merge left wrong or unfinished. They land on `main` 
 
   *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
 
+**Phase 9 follow-up — defects found in the review of M17-28, M17-31, M17-39 and M17-52 to M17-59 (on `main`)**
+
+These tasks land on `main` directly.
+
+- [ ] **M17-60 Changing the note type generates cards and allows template swaps** — match Anki's
+  "Change Note Type" card rules.
+  *Files:* `internal/store/note_type_change.go` (`ChangeNoteType`, `moveNoteCards`);
+  `internal/api/note_type_change.go`; `frontend/src/lib/views/NoteTypesView.svelte` (single-writer
+  hotspot); `frontend/src/lib/api/types.ts`; the tests beside them.
+  *Problem:*
+  - `ChangeNoteType` moves cards and generates none ("Cards are moved, not regenerated"). Anki
+    `26.09.3` (`rslib/src/notetype/notetypechange.rs`) updates each changed note with
+    `update_note_inner_generating_cards`, so a target template that no source card maps to still gets
+    a card when its front is not empty. Changing a note from a basic type to a basic-and-reversed type
+    therefore yields no reverse card in engram.
+  - `moveNoteCards` refuses a move when another live card of the same note already holds the target
+    template id. Two note types created from the same stock definition share template ids
+    (`forward`, `reverse`), so a swap mapping `forward → reverse`, `reverse → forward` between them is
+    refused. Anki remaps each card from its own original ordinal, so a swap succeeds.
+
+  *Work:*
+  - After a note's cards are moved, the change creates every card that `notetype.GenerateCards`
+    produces for the note under the target config and that the note lacks. It soft-deletes no card
+    beyond the unmapped ones it already removes.
+  - A mapping that permutes template ids among a note's live cards succeeds. The moves are written so
+    that the `(note_id, template)` unique index never holds two rows with the same template after any
+    single statement.
+  - A soft-deleted card that holds a target template id still makes the change fail with
+    `ErrNoteTypeMappingInvalid` naming the note, as today.
+  - The impact gains `cards_added`. A dry run reports it and writes nothing. The note type view shows it
+    in the confirmation.
+
+  *Acceptance:* store tests:
+  - changing a note from a basic type to a basic-and-reversed type, mapping only the forward template,
+    keeps the forward card's id and `card_states`, and creates the reverse card;
+  - a swap mapping between two types with the template ids `forward` and `reverse` succeeds, and each
+    card keeps its id and `card_states` under its new template;
+  - a dry run reports `cards_added` and writes nothing.
+
+  *Verify:* `go test ./internal/store/... ./internal/api/...`; `npm --prefix frontend run check && npm --prefix frontend run test:client`.
+- [ ] **M17-61 Write imported media outside the database transaction, and limit concurrent imports** —
+  a large import must not hold the database write lock or fill the disk.
+  *Files:* `internal/store/anki_import.go` (`importAnkiPackage`, `importAnkiInTx`);
+  `internal/store/package_import.go`; `internal/api/package.go`, `package_upload.go` and
+  `package_url.go`; `internal/api/errors.go` (the code and its default message);
+  `frontend/src/lib/views/ImportView.svelte` and the frontend locale catalogs (append a block with the
+  prefix `import.busy.`), so the Import page explains the refusal; `ARCHITECTURE.md`; the tests beside
+  them.
+  *Problem:*
+  - `importAnkiInTx` streams every new media file into the content-addressed store inside the one
+    database transaction of the import. Since M17-53 an `.apkg` may decompress to 4 GiB, so the
+    transaction can last minutes. On SQLite the write lock is held for that whole time, and every other
+    user's review submission waits or fails.
+  - Nothing bounds how many imports run at once. Each import may first spool a body of up to
+    `package_max_bytes` (2 GiB) to a temporary file, so a few simultaneous imports can fill the
+    temporary disk.
+
+  *Work:*
+  - The `.apkg` import writes every new media file to the content-addressed store after the hash pass
+    and before the database transaction opens. The transaction writes only rows. When the transaction
+    fails or is a dry run, the files this import created are removed through the existing
+    `writtenMedia` cleanup. A file that existed before the import is never removed.
+  - A dry run writes no media file.
+  - A new setting `package_max_concurrent_imports` / `PACKAGE_MAX_CONCURRENT_IMPORTS`, resolved as
+    environment variable, then settings table, then the default `2`, the way the other `package_*`
+    settings are resolved. It caps the number of package imports that run at the same time in one
+    server process.
+  - The multipart handler takes an import slot before it parses the multipart body. The URL import
+    takes a slot before it downloads. The upload-ticket import takes a slot before it reads the body.
+    Each slot is released when its import ends, on every path.
+  - When no slot is free, the request is refused at once with 429 and the new code `deck_import_busy`,
+    and nothing is read or spooled. The MCP import tool reports the same code.
+  - The CLI `import` subcommand takes no slot.
+
+  *Acceptance:*
+  - A store test: while the media of a large generated package is written, another connection can
+    commit a write to the same SQLite database.
+  - A store test: a failed import and a dry run leave no media file that the import created, and keep
+    every file that existed before.
+  - A handler test with the setting at `1`: a second import that starts while the first is running gets
+    429 `deck_import_busy`; after the first ends, a new import succeeds.
+  - The existing import tests and goldens pass.
+
+  *Verify:* `go test ./internal/store/... ./internal/api/... ./internal/mcp/...`.
+- [ ] **M17-62 Compare every image occlusion shape with Anki** — the editor's output must match Anki
+  for all shape kinds, not only rectangles.
+  *Files:* `tools/anki-oracle/generate.py`; `internal/notetype/testdata/anki/` (a new fixture and its
+  golden); `frontend/src/tests/image-occlusion-editor.client.ts`;
+  `frontend/src/tests/image-occlusion-markup.test.ts`.
+  *Problem:* M17-31's acceptance asks that a note created in the editor renders the same as an
+  Anki-created fixture with the same shapes. The only image occlusion note in the fixtures
+  (`stock.golden.json`) holds one rectangle, so ellipses, polygons, text, several shapes under one cloze
+  number, and the hide-one mode were never compared with Anki's output.
+  *Work:*
+  - The oracle generates a fixture of image occlusion notes made with Anki `26.09.3`: one note per shape
+    kind (rect, ellipse, polygon, text); one note with two shapes under one cloze number; and one note in
+    the hide-one, guess-one mode (`oi=1`). The golden records each field and each rendered face.
+  - The tests rebuild every fixture note with the editor's shape model, and compare the field it writes
+    and the faces it renders with the golden.
+
+  *Acceptance:* the fixture and its golden are committed, and every comparison passes. A test that
+  edits nothing and saves gets each golden field back byte for byte.
+  *Verify:* `npm --prefix frontend test -- --run && npm --prefix frontend run test:client`.
+
 ### M10 — Future work (not part of the current release)
 
 These tasks are recorded so the design keeps room for them. They are not part of the current
