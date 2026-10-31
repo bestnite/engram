@@ -113,7 +113,12 @@ change.
   (`internal/web/card_frame.go`). The version segment only busts the iframe cache and is otherwise
   ignored. The route replaces the site headers with the frame's own sandbox CSP, sends
   `Referrer-Policy: no-referrer`, and drops `X-Frame-Options`; the parent page embeds the document
-  in a sandboxed iframe and communicates with it only through `postMessage`.
+  in a sandboxed iframe and communicates with it only through `postMessage`. The CSP
+  (`cardFrameCSP`) sets the content policy for card faces: a face may run inline and evaluated
+  script and inline styles, and may load https images, audio, video and fonts as well as same-origin
+  media from `/fm/`. External scripts and external stylesheets are blocked, `fetch`, XHR and
+  WebSocket connections may reach only `/fm/`, and forms cannot submit. The iframe element carries `sandbox="allow-scripts"`
+  and `allow="autoplay"`, and the site-wide `Permissions-Policy` grants `autoplay=(self)` for it.
 - **Editing frame.** `GET /edit-frame/<build-version>` serves the note editor's rich-text iframe
   document (`internal/web/edit_frame.go`). It carries the card frame's sandbox isolation, headers and
   every CSP directive except `script-src`, which names only the origin: the runtime is a same-origin
@@ -237,7 +242,12 @@ change.
   typed value is not rejected; every note response returns each field's stored HTML string
   unchanged, keyed by field id, so an editor round-trips content without interpreting it. The deck
   package format 2 writes the HTML-string shape only: `note_types.json` plus notes whose `fields`
-  map a field id to HTML.
+  map a field id to HTML. Format 2 is the only `.edeck` format the importer reads: a package of
+  another `format_version` is rejected with `package_format_obsolete`. Dropping format 1 without
+  an N-1 overlap was a one-time exception to the version policy in `schema/README.md`.
+- **Cloze answers.** In the `cloze_blanks` answer control each blank has exactly one accepted
+  answer: the text of its deletion. `|` and `\alt` are ordinary content in a cloze, and neither
+  separates alternative accepted answers. The `list` control keeps its own `|` alternative rule.
 - **Cards and subdecks.** `cards.deck_path` is a nullable TEXT path relative to the imported root
   deck (for example `Lesson 1::Verbs`); a card without it sits directly in the note's deck. A
   subdeck is stored only as this path and never as a deck row.
@@ -327,7 +337,18 @@ change.
   `change`, `height` and upload requests back to the parent.
 - `frontend/src/lib/components/CardFrame.svelte` is the only way a view embeds a card face: it owns
   the sandboxed iframe, sends `show` (with the card ordinal, side and media base) and `theme`, and
-  forwards the frame's key presses and `answer {value}` messages to the view.
+  forwards the frame's key presses and `answer {value}` messages to the view. The message contract
+  between the two documents is:
+  - parent to frame: `show {html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal}`,
+    `theme {dark}` and `replay`;
+  - frame to parent: `ready`, `height {px}`, `key {key, code, ctrl, alt, shift, meta}`,
+    `answer {value}` and `link {href}`.
+
+  The frame sends no `key` for a key typed into an input, a textarea or a contenteditable element.
+  Two exceptions forward Enter: Enter in the type-in input `#typeans` (after an `answer` carrying
+  the typed text), and Enter in a single-line answer input. The parent accepts a message only when
+  `event.source` is its own iframe's `contentWindow`, and validates every field before it acts. It
+  opens a `link` target only when it is an `http` or `https` URL, in a new tab with `noopener`.
   `frontend/src/lib/components/RichTextField.svelte` is the only way a note field is edited: it owns
   the editing iframe and the toolbar, sends `load` and `command`, and writes the frame's `change`
   back into the form. Card-face and field HTML therefore never enter the parent DOM.

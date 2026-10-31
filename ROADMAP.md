@@ -9,6 +9,51 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 
 ## 1. Task backlog
 
+### M17 — Anki-compatible deck content
+
+The compatibility rules live in `AGENTS.md` section 2.7, and the structure in `ARCHITECTURE.md`.
+These tasks land on `main` directly.
+
+- [ ] **M17-63 An unmapped template that the target declares keeps its card** — changing the note type
+  must not remove and restore the same card.
+  *Files:* `internal/store/note_type_change.go` (`buildTemplatePlan`, `moveNoteCards`);
+  `internal/store/note_type_change_test.go`; `internal/api/note_type_change_test.go`.
+  *Problem:* when the template mapping leaves a source template unmapped, and the target config
+  declares the same template id (two note types created from one stock definition share `forward`
+  and `reverse`), the change soft-deletes the card and the card sync then restores the same row with
+  its progress. The impact counts the card in both `cards_removed` and `cards_added`, so the request
+  is refused with `card_removal_unconfirmed`, and the user is asked to confirm a removal that removes
+  nothing.
+  *Work:*
+  - An unmapped source template whose id the target config also declares is treated as mapped to that
+    same id. Its cards keep their ids, templates and `card_states`.
+  - Such a card counts in `cards_moved`. It counts in neither `cards_removed` nor `cards_added`, and
+    it never makes the change require `confirm_card_removal`.
+  - An unmapped source template whose id the target config does not declare is removed as today.
+
+  *Acceptance:* a store test changes a note between two types that both declare `forward` and
+  `reverse`, with a mapping that names only `forward`. The change succeeds without confirmation, both
+  cards keep their ids and `card_states`, and the impact reports `cards_moved = 2`,
+  `cards_removed = 0` and `cards_added = 0`.
+  *Verify:* `go test ./internal/store/... ./internal/api/...`.
+- [ ] **M17-64 Media garbage collection cannot remove media an import is about to reuse** — a long
+  `.apkg` import must not fail because an orphaned medium was collected meanwhile.
+  *Files:* `internal/store/anki_import.go` (`placeAnkiMedia`); `internal/store/media_gc.go`;
+  `internal/store/package_concurrency_test.go`.
+  *Problem:* `placeAnkiMedia` writes no file for a sha that already has a media row, and the import
+  transaction later reuses that row. When the row is orphaned and older than the garbage collection
+  grace (`retention.MediaOrphanGrace`, seven days), a collection run during the import deletes the row
+  and the file. The transaction then fails with "media was not written before the transaction". This
+  happens, for example, when a deck deleted more than seven days ago is imported again.
+  *Work:* before the import transaction opens, `placeAnkiMedia` clears `orphaned_at` on every existing
+  media row it will reuse, so a collection run cannot select that row until it is marked orphaned
+  again and its grace has passed. A dry run clears nothing.
+  *Acceptance:* a store test marks a media row orphaned eight days ago, starts an import of a package
+  that carries the same bytes, runs `DeleteOrphanedMedia` between the media placement and the
+  transaction, and gets a successful import with the row and the file still present. A dry run of the
+  same package leaves `orphaned_at` unchanged.
+  *Verify:* `go test ./internal/store/... && go vet ./internal/store/...`.
+
 ### M10 — Future work (not part of the current release)
 
 These tasks are recorded so the design keeps room for them. They are not part of the current
@@ -72,8 +117,8 @@ bluemonday-sanitised `internal/render` are gone.
 - **HTTP API.** A note is written as `{"note_type": "<public id>", "fields": {"<field name>":
   "<HTML>"}}`; a card-face response carries `front`/`back` objects `{html, css, body_class, side,
   media_base}` plus the template ordinal; note types have list/get/create/update/delete endpoints
-  under a deck (update is versioned, `409` on a stale version); the `card-types` catalog is
-  transitional. New routes: `/card-frame/<version>`, `/edit-frame/<version>`, `/fm/<token>/<name>`.
+  under a deck (update is versioned, `409` on a stale version); the `card-types` catalog was
+  removed later by M17-36. New routes: `/card-frame/<version>`, `/edit-frame/<version>`, `/fm/<token>/<name>`.
   New stable codes: `note_type_in_use`, `package_format_obsolete`.
 - **MCP.** `list_card_types` is replaced by `list_note_types` (deck-scoped) and `get_note_type`;
   `create_notes` and `update_note` take `note_type`, and field values are HTML.
@@ -112,7 +157,7 @@ bluemonday-sanitised `internal/render` are gone.
 | Media by file name and by any type (M17-22) | Media is classified (image, audio, video, font, script, style, other) instead of allowlisted; upload and import accept every class within the quota. `/fm/<token>/<name>` resolves a deck-scoped name through `media_names`, so CSS-only `_` assets are served. Every media response carries `Content-Security-Policy: sandbox` and everything not image/audio/video is an attachment. Note-type `_`-prefixed references are kept by garbage collection (migration 0015 backfills them) and travel with an export. An import whose name holds different bytes renames the new file as Anki does. A note write turns the editor's `/media/<sha256>` and `[sound:<sha256>]` into deck media names, so the frame, references, garbage collection and export resolve them. | Yes — the `media_allowed_mimes` configuration key and its environment variable are removed; every `/media/` and `/fm/` response gains a sandbox CSP and a download disposition for non-inline classes |
 | Note type styles and deck special fields in review (M17-33, M17-44) | Every card frame in the review page and the note preview now takes its HTML, body class and media base from the server's per-side face object, and its style is the engram face sheet followed by the note type's CSS, so a note type rule overrides the default typography. `{{Deck}}` renders the deck name joined with the card's subdeck path (`Lesson 1::Verbs`) and `{{Subdeck}}` its last component; a card outside a subdeck renders the deck name for both. | No — response shapes are unchanged |
 | Review of any note type (M17-34, M17-41) | The due-card payload carries `answer_control`, `machine_graded` and `field_order`, and the review page chooses the self-rating, essay or machine-graded flow from them instead of the card-kind catalog, so a note type that matches no stock kind reviews normally. A note type write (REST create/update, package import, stock creation, migration) now validates every template's answer spec: the control must be registered, every required role bound, and every binding must name a declared field; a bad REST write returns 400 naming the template and role, and a bad package is `package_bad_format` with no rows written. | No — three fields added to the due-card response; previously accepted invalid note types are now rejected |
-| Anki `.apkg` import (M17-23, M17-24) | `internal/anki` reads all three Anki package layouts (legacy `collection.anki2`, `collection.anki21`, and zstd-compressed `collection.anki21b` with protobuf note type/deck configuration) under the deck package's entry, per-file and total caps. The import page, `POST` package import, upload tickets and the MCP `import_deck` accept `.apkg`: the top-level package deck becomes one engram deck, subdecks fill `cards.deck_path`, note types arrive unchanged with no answer spec, notes carry `external_ref = "anki:<guid>"`, media is registered by name, and the package's cards are created as they exist. Re-importing into the same deck matches notes by guid and note types by `anki_origin.notetype_id`, keeping cards and progress; an equal field/template structure is overwritten in place, a changed one creates a new note type and moves the notes. The report lists missing media, unplayable video, external scripts/stylesheets and missing LaTeX images. | No — a new input format is accepted and the import report gains four lists |
+| Anki `.apkg` import (M17-23, M17-24) | `internal/anki` reads all three Anki package layouts (legacy `collection.anki2`, `collection.anki21`, and zstd-compressed `collection.anki21b` with protobuf note type/deck configuration) under its own caps; M17-53 later made those caps the three `package_*` settings and streamed the archive. The import page, `POST` package import, upload tickets and the MCP `import_deck` accept `.apkg`: the top-level package deck becomes one engram deck, subdecks fill `cards.deck_path`, note types arrive unchanged with no answer spec, notes carry `external_ref = "anki:<guid>"`, media is registered by name, and the package's cards are created as they exist. Re-importing into the same deck matches notes by guid and note types by `anki_origin.notetype_id`, keeping cards and progress; an equal field/template structure is overwritten in place, a changed one creates a new note type and moves the notes. The report lists missing media, unplayable video, external scripts/stylesheets and missing LaTeX images. | No — a new input format is accepted and the import report gains four lists |
 | Anki import deck choice (M17-47) | An `.apkg` is named after its real deck tree, not Anki's usually empty `Default` deck: only decks that hold package cards take part, the top name is the longest `::` component prefix they share (or the largest branch when they share none), cards in it get no subdeck path, and the package description is adopted only when the deck rules accept it. | No |
 | Note field HTML in responses and note type card removal (M17-49, M17-50) | Every note response (REST get/list/search, MCP note tools, due-card fields) returns each field's stored HTML string unchanged instead of reshaping stock-kind fields into arrays, booleans and numbers, so opening and saving a choice note no longer deletes the formatting of its options. A note type update soft-deletes only the cards of templates the new config no longer declares; a declared template whose front is now empty keeps its cards, and a cloze update removes none. | Yes — note response field values are HTML strings for every note type where some stock kinds used to return arrays, booleans or numbers |
 | Type-in in the frame (M17-26) | A template with `{{type:F}}` and no answer spec draws `input#typeans` in the frame, in the field's font and size, and posts the typed value on Enter or input; revealing renders the back through Anki's comparison (good/bad/missed) while the rating stays one of the four self-ratings. The render request takes an optional `answer` and the response reports `type_in`. | No — two optional fields on the review render request/response |
