@@ -37,6 +37,10 @@ type NoteType struct {
 	LaTeXSVG          bool
 	OriginalID        int64
 	OriginalStockKind int
+	// AnswerSpecs maps a template name to the answer control engram stored under the
+	// note type's "engram" key. Bindings name fields, not field ids. It is empty for a
+	// note type that carries no answer control.
+	AnswerSpecs map[string]AnswerSpec
 }
 
 // Field is one note type field, in field order.

@@ -592,6 +592,36 @@ func ankiConfigFor(nt *anki.NoteType) (notetype.Config, []string, []string, erro
 		}
 	}
 
+	// An answer spec travels in the note type's "engram" key with binding values taken
+	// from field names, because a package import assigns new field ids. The names are
+	// resolved here against the field order just built; a name the note type does not
+	// declare means the package contradicts itself.
+	if len(nt.AnswerSpecs) > 0 {
+		fieldIDByName := make(map[string]string, len(nt.Fields))
+		for i, f := range nt.Fields {
+			fieldIDByName[f.Name] = fieldIDs[i]
+		}
+		for i := range templates {
+			spec, ok := nt.AnswerSpecs[templates[i].Name]
+			if !ok {
+				continue
+			}
+			bindings := make(map[string]string, len(spec.Bindings))
+			for role, name := range spec.Bindings {
+				id, ok := fieldIDByName[name]
+				if !ok {
+					return notetype.Config{}, nil, nil, &PackageError{
+						Code:    CodePackageBadFormat,
+						Message: "Anki note type answer spec names an unknown field",
+						Entries: []string{fmt.Sprintf("note_type %d (%s): template %q binds %q to %q", nt.ID, nt.Name, templates[i].Name, role, name)},
+					}
+				}
+				bindings[role] = id
+			}
+			templates[i].Answer = &notetype.AnswerSpec{Control: spec.Control, Bindings: bindings}
+		}
+	}
+
 	sortFieldID := fieldIDs[0]
 	if nt.SortFieldIndex >= 0 && nt.SortFieldIndex < len(fieldIDs) {
 		sortFieldID = fieldIDs[nt.SortFieldIndex]

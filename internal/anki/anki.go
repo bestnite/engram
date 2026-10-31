@@ -1,4 +1,7 @@
-// Package anki reads Anki deck packages (.apkg) into an in-memory model.
+// Package anki reads Anki deck packages (.apkg) into an in-memory model and writes one
+// legacy-2 package from a model. WriteArchive builds a schema-11 collection.anki21 with
+// its meta, media index and numbered media entries; the output is deterministic because
+// every value comes from the caller's model.
 //
 // Anki has shipped three package layouts. The reader recognises the layout
 // from the archive entries, never from the file suffix:

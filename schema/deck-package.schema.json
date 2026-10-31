@@ -63,7 +63,7 @@
         },
         "include_progress": {
           "type": "boolean",
-          "description": "Whether progress.json is present. Defaults to false on export."
+          "description": "Whether progress.json carries card states. Defaults to false on export; progress.json may still be present for a review log exported without card states."
         },
         "include_media": {
           "type": "boolean",
@@ -71,7 +71,7 @@
         },
         "include_reviews": {
           "type": "boolean",
-          "description": "Whether the optional review log in progress.json is present. Requires include_progress."
+          "description": "Whether the optional review log in progress.json is present. It is independent of include_progress."
         },
         "include_weights": {
           "type": "boolean",

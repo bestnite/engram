@@ -82,7 +82,7 @@ type exportDeckIn struct {
 	IncludeProgress bool   `json:"include_progress,omitempty" jsonschema:"include the caller's own review progress"`
 	// IncludeMedia defaults to true (media is inlined by default).
 	IncludeMedia   *bool `json:"include_media,omitempty" jsonschema:"inline media bytes; default true"`
-	IncludeReviews bool  `json:"include_reviews,omitempty" jsonschema:"include review logs (requires include_progress)"`
+	IncludeReviews bool  `json:"include_reviews,omitempty" jsonschema:"include the caller's own review log, independent of include_progress"`
 	// IncludeWeights defaults to false: FSRS weights are the exporter's personal memory curve and are not carried along with deck content by default.
 	IncludeWeights bool `json:"include_weights,omitempty" jsonschema:"include the caller's FSRS weights in preset.json; default false"`
 }

@@ -76,10 +76,17 @@ func (e *PackageError) Error() string {
 type PackageOptions struct {
 	// IncludeProgress defaults to off: the main use of a deck package is giving content to someone else or moving it to another instance.
 	IncludeProgress bool
-	// IncludeMedia defaults to on.
+	// IncludeMedia defaults to on for the transports; the zero value writes none.
 	IncludeMedia bool
-	// IncludeReviews depends on IncludeProgress; the review log is written only when both are true.
+	// IncludeReviews is independent of IncludeProgress: the review log is written whenever
+	// it is on, including when the cards themselves stay new.
 	IncludeReviews bool
+	// IncludeDeckConfigs defaults to on: nil means the package carries the caller's
+	// effective deck configuration. An explicit false leaves dconf empty.
+	//
+	// It is a pointer because its default is on while the zero value of a bool is off;
+	// the .edeck format has no deck configuration and ignores it.
+	IncludeDeckConfigs *bool
 	// IncludeWeights defaults to off: FSRS weights are fitted from the exporter's own review log and describe that person's
 	// memory curve, which is not part of the deck content. When off, the weights, weights_optimized_at and
 	// weights_review_count fields of preset.json are all written as null; otherwise the import side keeps a preset claiming "optimized from N reviews" whose
@@ -91,6 +98,11 @@ type PackageOptions struct {
 	AppVersion string
 	// Now is an injectable clock; the zero value uses the system UTC time.
 	Now func() time.Time
+}
+
+// DeckConfigsEnabled reports the effective IncludeDeckConfigs switch: nil means on.
+func (o PackageOptions) DeckConfigsEnabled() bool {
+	return o.IncludeDeckConfigs == nil || *o.IncludeDeckConfigs
 }
 
 // PackageManifest is the in-package manifest.json (field names are frozen).
@@ -244,8 +256,6 @@ type DeckPackage struct {
 var (
 	// ErrPackageDeckRequired means the export named no deck.
 	ErrPackageDeckRequired = errors.New("deck package: deck id is required")
-	// ErrPackageProgressRequiresReviews means the review log was requested without progress enabled.
-	ErrPackageProgressRequiresReviews = errors.New("deck package: include_reviews requires include_progress")
 	// ErrPackageMediaMissing means the package references media whose bytes are unavailable.
 	ErrPackageMediaMissing = errors.New("deck package: media bytes are unavailable")
 )
@@ -259,9 +269,6 @@ var (
 func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint64, opts PackageOptions) (*DeckPackage, error) {
 	if deckID == 0 {
 		return nil, ErrPackageDeckRequired
-	}
-	if opts.IncludeReviews && !opts.IncludeProgress {
-		return nil, ErrPackageProgressRequiresReviews
 	}
 	if opts.Now == nil {
 		opts.Now = func() time.Time { return time.Now().UTC() }
@@ -435,8 +442,8 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 		Counts:          PackageCount{Notes: len(pkg.Notes), Cards: len(pkg.Cards), Media: len(pkg.Media)},
 	}
 
-	if opts.IncludeProgress {
-		prog, err := s.exportProgress(ctx, actorUserID, noteIDByIndex, opts.IncludeReviews)
+	if opts.IncludeProgress || opts.IncludeReviews {
+		prog, err := s.exportProgress(ctx, actorUserID, noteIDByIndex, opts.IncludeProgress, opts.IncludeReviews)
 		if err != nil {
 			return nil, err
 		}
@@ -448,37 +455,52 @@ func (s *DeckStore) ExportPackage(ctx context.Context, actorUserID, deckID uint6
 	return pkg, nil
 }
 
-// exportProgress exports only actorUserID's own card_states (+ optional reviews).
+// exportProgress exports only actorUserID's own card_states and reviews. The two switches
+// are independent: withStates off and withReviews on, the package carries the review log
+// and no card states, which is a legal package.
 // This is where "never include someone else's progress" is implemented: the query hard-codes user_id = actorUserID.
-func (s *DeckStore) exportProgress(ctx context.Context, actorUserID uint64, noteIDs []uint64, withReviews bool) (*PackageProgress, error) {
+func (s *DeckStore) exportProgress(ctx context.Context, actorUserID uint64, noteIDs []uint64, withStates, withReviews bool) (*PackageProgress, error) {
 	indexByNoteID := make(map[uint64]int, len(noteIDs))
 	for i, id := range noteIDs {
 		indexByNoteID[id] = i
 	}
 	prog := &PackageProgress{CardStates: []PackageCardState{}}
 
-	// The cards join restricts it to this note's deck.
-	type row struct {
-		CardState
+	// The cards of the exported notes are the frame for both switches: a card state and a
+	// review row are located through the note they belong to.
+	type cardRow struct {
+		ID       uint64
 		NoteID   uint64
 		Template string
 	}
-	var rows []row
-	if err := s.db.WithContext(ctx).Table("card_states").
-		Select("card_states.*, cards.note_id AS note_id, cards.template AS template").
-		Joins("JOIN cards ON cards.id = card_states.card_id AND cards.deleted_at IS NULL").
-		Where("card_states.user_id = ? AND cards.note_id IN ?", actorUserID, noteIDs).
-		Order("card_states.card_id ASC").Scan(&rows).Error; err != nil {
-		return nil, fmt.Errorf("export package: list progress: %w", err)
+	var cards []cardRow
+	if len(noteIDs) > 0 {
+		if err := s.db.WithContext(ctx).Table("cards").
+			Select("id, note_id, template").
+			Where("note_id IN ? AND deleted_at IS NULL", noteIDs).
+			Order("id ASC").Scan(&cards).Error; err != nil {
+			return nil, fmt.Errorf("export package: list cards: %w", err)
+		}
 	}
-	cardIDs := make([]uint64, 0, len(rows))
-	stateByCardID := make(map[uint64]PackageCardState, len(rows))
-	for _, r := range rows {
-		idx := indexByNoteID[r.NoteID]
-		ps := cardStateToPackage(r.CardState, &idx, r.Template)
-		prog.CardStates = append(prog.CardStates, ps)
-		cardIDs = append(cardIDs, r.CardID)
-		stateByCardID[r.CardID] = ps
+	cardIDs := make([]uint64, 0, len(cards))
+	cardIndex := make(map[uint64]int, len(cards))
+	cardTemplate := make(map[uint64]string, len(cards))
+	for _, row := range cards {
+		cardIDs = append(cardIDs, row.ID)
+		cardIndex[row.ID] = indexByNoteID[row.NoteID]
+		cardTemplate[row.ID] = row.Template
+	}
+
+	if withStates && len(cardIDs) > 0 {
+		var states []CardState
+		if err := s.db.WithContext(ctx).Where("user_id = ? AND card_id IN ?", actorUserID, cardIDs).
+			Order("card_id ASC").Find(&states).Error; err != nil {
+			return nil, fmt.Errorf("export package: list progress: %w", err)
+		}
+		for _, state := range states {
+			idx := cardIndex[state.CardID]
+			prog.CardStates = append(prog.CardStates, cardStateToPackage(state, &idx, cardTemplate[state.CardID]))
+		}
 	}
 
 	if withReviews && len(cardIDs) > 0 {
@@ -486,13 +508,6 @@ func (s *DeckStore) exportProgress(ctx context.Context, actorUserID uint64, note
 		if err := s.db.WithContext(ctx).Where("user_id = ? AND card_id IN ?", actorUserID, cardIDs).
 			Order("id ASC").Find(&reviews).Error; err != nil {
 			return nil, fmt.Errorf("export package: list reviews: %w", err)
-		}
-		// card_id -> note_index/template (reusing the state mapping above).
-		cardIndex := map[uint64]int{}
-		cardTemplate := map[uint64]string{}
-		for _, r := range rows {
-			cardIndex[r.CardID] = indexByNoteID[r.NoteID]
-			cardTemplate[r.CardID] = r.Template
 		}
 		prog.Reviews = make([]PackageReview, 0, len(reviews))
 		for i := range reviews {
@@ -558,7 +573,7 @@ func (p *DeckPackage) WriteZip(w io.Writer) error {
 	if err := write("preset.json", p.Preset); err != nil {
 		return err
 	}
-	if p.Manifest.IncludeProgress && p.Progress != nil {
+	if p.Progress != nil {
 		if err := write("progress.json", p.Progress); err != nil {
 			return err
 		}
@@ -596,7 +611,7 @@ func (p *DeckPackage) Document() map[string]any {
 		"cards.json":      p.Cards,
 		"preset.json":     p.Preset,
 	}
-	if p.Manifest.IncludeProgress && p.Progress != nil {
+	if p.Progress != nil {
 		doc["progress.json"] = p.Progress
 	}
 	if p.Manifest.IncludeMedia && len(p.MediaBytes) > 0 {

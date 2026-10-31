@@ -1181,11 +1181,13 @@ func (s *DeckStore) importInTx(ctx context.Context, tx *gorm.DB, actorUserID uin
 	}
 
 	// Progress rule: importing is only allowed into one's own account; when the package's exported_by differs from the current user, it is discarded by default and reported.
-	if pkg.Progress != nil && len(pkg.Progress.CardStates) > 0 {
+	// The two switches are independent, so a package may carry the review log without any
+	// card state; it is still progress and follows the same ownership rule.
+	if pkg.Progress != nil && (len(pkg.Progress.CardStates) > 0 || len(pkg.Progress.Reviews) > 0) {
 		sameOwner := pkg.Manifest.ExportedBy == "" || pkg.Manifest.ExportedBy == username
 		if !sameOwner && !opts.AllowOthersProgress {
 			report.ProgressDiscarded = true
-			report.ProgressSkipped = len(pkg.Progress.CardStates)
+			report.ProgressSkipped = len(pkg.Progress.CardStates) + len(pkg.Progress.Reviews)
 		} else {
 			if err := s.applyProgress(ctx, tx, actorUserID, pkg, noteIDByIndex, cardIDByNote, createdNote, report); err != nil {
 				return err

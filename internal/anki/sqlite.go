@@ -93,6 +93,14 @@ type legacyModel struct {
 	LaTeXPost         string           `json:"latexPost"`
 	LaTeXSVG          bool             `json:"latexsvg"`
 	OriginalStockKind int              `json:"originalStockKind"`
+	// Engram is the one unknown top-level key engram writes. Anki carries an unknown
+	// model key through import and export, so the answer controls survive a round trip.
+	Engram *legacyEngram `json:"engram"`
+}
+
+type legacyEngram struct {
+	V           int                   `json:"v"`
+	AnswerSpecs map[string]AnswerSpec `json:"answer_specs"`
 }
 
 type legacyField struct {
@@ -182,6 +190,10 @@ func legacyNoteTypes(models map[string]legacyModel) ([]NoteType, error) {
 			templates = append(templates, template)
 		}
 		sortTemplates(templates)
+		var answers map[string]AnswerSpec
+		if model.Engram != nil && model.Engram.V == 1 {
+			answers = model.Engram.AnswerSpecs
+		}
 		noteTypes = append(noteTypes, NoteType{
 			ID:                model.ID,
 			Name:              model.Name,
@@ -195,6 +207,7 @@ func legacyNoteTypes(models map[string]legacyModel) ([]NoteType, error) {
 			LaTeXSVG:          model.LaTeXSVG,
 			OriginalID:        model.ID,
 			OriginalStockKind: model.OriginalStockKind,
+			AnswerSpecs:       answers,
 		})
 	}
 	return noteTypes, nil
