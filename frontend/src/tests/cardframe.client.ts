@@ -262,3 +262,25 @@ describe('card frame outbound messages', () => {
     expect(posted().some((message) => message.key === 'b')).toBe(false);
   });
 });
+
+describe('card frame height report', () => {
+  it('adds the body padding and margin to the content height, so the frame never scrolls', () => {
+    let callback: ResizeObserverCallback | null = null;
+    class FakeObserver {
+      constructor(cb: ResizeObserverCallback) {
+        callback = cb;
+      }
+      observe(): void {}
+      disconnect(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', FakeObserver);
+    document.body.style.padding = '2px 4px 3px';
+    document.body.style.margin = '1px 0 0';
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    const root = document.getElementById('qa')!;
+    callback!([{ target: root, contentRect: { height: 100 } } as unknown as ResizeObserverEntry], {} as ResizeObserver);
+    expect(posted()).toContainEqual({ type: 'height', px: 106 });
+    vi.unstubAllGlobals();
+    document.body.removeAttribute('style');
+  });
+});

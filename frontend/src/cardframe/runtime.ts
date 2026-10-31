@@ -417,6 +417,20 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     void handleMessage(event);
   }
 
+  /**
+   * The vertical space the body adds around the content root: its padding and margin. The parent sizes the iframe to
+   * the reported height, so a report of the root alone leaves the document a few pixels taller than its viewport and
+   * the frame draws a scrollbar.
+   */
+  function bodyInset(): number {
+    const body = doc.body;
+    if (!body) return 0;
+    const style = win.getComputedStyle(body);
+    return [style.paddingTop, style.paddingBottom, style.marginTop, style.marginBottom]
+      .map((value) => Number.parseFloat(value) || 0)
+      .reduce((total, value) => total + value, 0);
+  }
+
   win.addEventListener('keydown', onKeyDown);
   doc.addEventListener('click', onClick);
   win.addEventListener('message', onMessage);
@@ -425,7 +439,7 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   if (root && typeof ResizeObserverCtor === 'function') {
     observer = new ResizeObserverCtor((entries) => {
       for (const entry of entries) {
-        const px = Math.round(entry.contentRect.height);
+        const px = Math.ceil(entry.contentRect.height + bodyInset());
         if (px === lastHeight) continue;
         lastHeight = px;
         post({ type: 'height', px });

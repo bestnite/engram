@@ -19,6 +19,12 @@ body {
   color: var(--foreground);
 }
 
+/* The content root is what the runtime measures for the frame height. As a block formatting context it contains the
+   margins of its first and last children, which would otherwise collapse through it and fall outside the measurement. */
+#qa {
+  display: flow-root;
+}
+
 body.nightMode,
 body.night_mode {
   background: var(--background);
