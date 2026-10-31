@@ -80,12 +80,55 @@ describe('CardFrame outbound messages', () => {
       autoplay: false,
       avTags: [],
       ordinal: 0,
+      seq: 1,
     });
 
     (target.querySelector('[data-testid="harness-next"]') as HTMLButtonElement).click();
     await flush();
     const shows = posted(win).filter((message) => message.type === 'show');
     expect(shows[shows.length - 1]?.html).toBe('<p>two</p>');
+  });
+
+  it('reports shown only for the latest show the frame finished', async () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(Harness, { target, props: { html: '<p>one</p>' } });
+    flushSync();
+    const win = frame(target).contentWindow!;
+    vi.spyOn(win, 'postMessage').mockImplementation(() => {});
+    const shownText = () => target.querySelector('[data-testid="harness-shown"]')?.textContent;
+
+    receive(win, { type: 'ready' });
+    await flush();
+    expect(shownText()).toBe('false');
+    receive(win, { type: 'shown', seq: 1 });
+    await flush();
+    expect(shownText()).toBe('true');
+
+    // A new face resets the flag, and the late report of the previous show does not set it.
+    (target.querySelector('[data-testid="harness-next"]') as HTMLButtonElement).click();
+    await flush();
+    expect(shownText()).toBe('false');
+    receive(win, { type: 'shown', seq: 1 });
+    await flush();
+    expect(shownText()).toBe('false');
+    receive(win, { type: 'shown', seq: 2 });
+    await flush();
+    expect(shownText()).toBe('true');
+  });
+
+  it('ignores a shown report from another window', async () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(Harness, { target, props: { html: '<p>one</p>' } });
+    flushSync();
+    const win = frame(target).contentWindow!;
+    vi.spyOn(win, 'postMessage').mockImplementation(() => {});
+    receive(win, { type: 'ready' });
+    await flush();
+    receive(window, { type: 'shown', seq: 1 });
+    await flush();
+    expect(target.querySelector('[data-testid="harness-shown"]')?.textContent).toBe('false');
   });
 
   it('sends the current theme once after ready and again when the html class changes', async () => {

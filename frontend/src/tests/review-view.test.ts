@@ -198,7 +198,7 @@ describe('ReviewView face HTML in the frame, edit, and bury parity', () => {
         initialBackFace: face('<p>A</p>'),
       },
     });
-    expect(html).toMatch(/class="min-h-28" data-testid="review-front"/);
+    expect(html).toMatch(/class="relative min-h-28" data-testid="review-front"/);
     expect(html).toMatch(/class="border-t border-input pt-6" data-testid="review-answer"/);
   });
 

@@ -6,7 +6,9 @@
   // svelte-ignore state_referenced_locally
   let current = $state(html);
   const faceCss = '#qa{font-size:1rem}';
+  let shown = $state(false);
 </script>
 
-<CardFrame html={current} css={faceCss} bodyClass="card" side="question" mediaBase="/fm/token/" title="Card face" />
+<CardFrame html={current} css={faceCss} bodyClass="card" side="question" mediaBase="/fm/token/" title="Card face" bind:shown />
+<span data-testid="harness-shown">{shown}</span>
 <button type="button" data-testid="harness-next" onclick={() => (current = '<p>two</p>')}>next</button>

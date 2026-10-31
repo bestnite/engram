@@ -46,6 +46,11 @@ export interface ShowMessage {
   avTags: AVTag[];
   /** The card's zero-based template ordinal; the body class is `card` + ordinal + 1, as Anki writes it. */
   ordinal: number;
+  /**
+   * The parent's number for this show, echoed in the `shown` report so the parent can tell which face finished. Zero when
+   * the parent sent none.
+   */
+  seq: number;
 }
 
 export interface FrameRuntime {
@@ -91,7 +96,8 @@ function parseShow(data: Record<string, unknown>): ShowMessage | null {
   }
   // A face from an older server carries no tag list; the literal [sound:] fallback still finds those tags.
   const avTags = Array.isArray(data.avTags) ? data.avTags.filter(isAVTag) : [];
-  return { type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal };
+  const seq = typeof data.seq === 'number' && Number.isFinite(data.seq) ? data.seq : 0;
+  return { type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags, ordinal, seq };
 }
 
 function containsMath(html: string): boolean {
@@ -336,7 +342,15 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     switch (data.type) {
       case 'show': {
         const message = parseShow(data);
-        if (message) await show(message);
+        if (!message) return;
+        try {
+          await show(message);
+        } finally {
+          // The face is on screen with its scripts run and its math typeset; the parent waits for this to drop its
+          // loading placeholder, so a face never appears half-rendered. A show that failed part-way reports too:
+          // the placeholder must not outlive the attempt.
+          post({ type: 'shown', seq: message.seq });
+        }
         return;
       }
       case 'theme':

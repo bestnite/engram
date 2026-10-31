@@ -125,6 +125,11 @@
   // across cards keeps its document and runtime loaded, so the next card appears in one step.
   const frontInFrame = $derived(renderFailed ? false : frontFace === null || frontFace.html !== '');
   const backInFrame = $derived(renderFailed ? false : backFace === null || backFace.html !== '');
+  // Whether the question frame has finished showing the current face (bound to CardFrame). Until the faces arrive and the
+  // frame has run the face's scripts and typeset its math, a placeholder covers the question area and the frame stays
+  // transparent, so the learner sees one transition instead of an empty box filling in piece by piece.
+  let frontShown = $state(false);
+  const frontPending = $derived(frontInFrame && (frontFace === null || !frontShown));
   // The current card's zero-based template ordinal, used for the frame body class `cardN` (N = ordinal + 1).
   let cardOrdinal = $state(0);
   // Whether the front template is a type-in placeholder without an answer spec. Such a card is self-rated like any other,
@@ -827,6 +832,15 @@
 </script>
 
 <svelte:head><title>{$t('review.title')} · {$t('app.name')}</title></svelte:head>
+<!-- Covers the question area while its face is on the way; laid over the frame so the swap does not move the layout. -->
+{#snippet facePlaceholder()}
+  {#if frontPending}
+    <div class="pointer-events-none absolute inset-x-0 top-0">
+      <Skeleton testId="review-face-loading" label={$t('review.loading')} lines={3} />
+    </div>
+  {/if}
+{/snippet}
+
 <Page as="section">
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
     <div class="min-w-0">
@@ -979,21 +993,25 @@
         {/if}
 
         {#if !machineGraded}
-          <div class={questionHidden ? 'hidden' : 'min-h-28'} data-testid="review-front">
+          <div class={questionHidden ? 'hidden' : 'relative min-h-28'} data-testid="review-front">
             {#if frontInFrame}
-              <CardFrame
-                html={frontFace?.html ?? ''}
-                css={faceStyle(REVIEW_FRONT_CSS, frontFace?.css)}
-                bodyClass={frontFace?.body_class ?? 'card'}
-                side="question"
-                mediaBase={frontFace?.media_base ?? ''}
-                autoplay={frontFace?.autoplay ?? false}
-                avTags={frontFace?.av_tags ?? []}
-                ordinal={cardOrdinal}
-                title={$t('note_preview.front')}
-                onkey={onFrameKey}
-                onanswer={onFrameAnswer}
-              />
+              {@render facePlaceholder()}
+              <div class="transition-opacity duration-200 {frontPending ? 'opacity-0' : 'opacity-100'}">
+                <CardFrame
+                  html={frontFace?.html ?? ''}
+                  css={faceStyle(REVIEW_FRONT_CSS, frontFace?.css)}
+                  bodyClass={frontFace?.body_class ?? 'card'}
+                  side="question"
+                  mediaBase={frontFace?.media_base ?? ''}
+                  autoplay={frontFace?.autoplay ?? false}
+                  avTags={frontFace?.av_tags ?? []}
+                  ordinal={cardOrdinal}
+                  title={$t('note_preview.front')}
+                  onkey={onFrameKey}
+                  onanswer={onFrameAnswer}
+                  bind:shown={frontShown}
+                />
+              </div>
             {:else}
               <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">
                 {#each frontFallback as value, index (index)}<div>{value}</div>{/each}
@@ -1094,21 +1112,25 @@
           <!-- The answer card's prompt stays on top in all three states — answering, answer revealed, grading result — with the answer below
                behind a divider, so the learner does not have to recall the original question while reading the answer. -->
           <div class="space-y-5">
-            <div class="min-h-28" data-testid="review-graded-prompt">
+            <div class="relative min-h-28" data-testid="review-graded-prompt">
               {#if frontInFrame}
-                <CardFrame
-                  html={frontFace?.html ?? ''}
-                  css={faceStyle(REVIEW_FRONT_CSS, frontFace?.css)}
-                  bodyClass={frontFace?.body_class ?? 'card'}
-                  ordinal={cardOrdinal}
-                  side="question"
-                  mediaBase={frontFace?.media_base ?? ''}
-                  autoplay={frontFace?.autoplay ?? false}
-                  avTags={frontFace?.av_tags ?? []}
-                  title={$t('note_preview.front')}
-                  onkey={onFrameKey}
-                  onanswer={onFrameAnswer}
-                />
+                {@render facePlaceholder()}
+                <div class="transition-opacity duration-200 {frontPending ? 'opacity-0' : 'opacity-100'}">
+                  <CardFrame
+                    html={frontFace?.html ?? ''}
+                    css={faceStyle(REVIEW_FRONT_CSS, frontFace?.css)}
+                    bodyClass={frontFace?.body_class ?? 'card'}
+                    ordinal={cardOrdinal}
+                    side="question"
+                    mediaBase={frontFace?.media_base ?? ''}
+                    autoplay={frontFace?.autoplay ?? false}
+                    avTags={frontFace?.av_tags ?? []}
+                    title={$t('note_preview.front')}
+                    onkey={onFrameKey}
+                    onanswer={onFrameAnswer}
+                    bind:shown={frontShown}
+                  />
+                </div>
               {:else}
                 <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">
                   {#each frontFallback as value, index (index)}<div>{value}</div>{/each}

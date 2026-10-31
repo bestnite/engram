@@ -54,6 +54,11 @@
     onanswer?: (value: FrameAnswerValue) => void;
     /** Accessible name of the iframe. */
     title?: string;
+    /**
+     * Whether the frame has finished showing the current props: true once it reports `shown` for the latest show, false from
+     * every new show until then. A caller binds it to cover the face with a loading placeholder while it renders.
+     */
+    shown?: boolean;
   }
 
   let {
@@ -68,6 +73,7 @@
     onkey,
     onanswer,
     title = '',
+    shown = $bindable(false),
   }: Props = $props();
 
   // The version segment only busts the iframe cache; a build without an injected version uses a fixed placeholder.
@@ -76,14 +82,21 @@
   let iframe = $state<HTMLIFrameElement | null>(null);
   let ready = $state(false);
   let height = $state(0);
+  // The number of the latest show sent. Not state: only the `shown` report compares against it.
+  let showSeq = 0;
 
   /** Sends the whole face again: `show` replaces the document's content, so a single changed prop is a new show. */
   function sendShow(): void {
     const win = iframe?.contentWindow;
     if (!win || !ready) return;
+    showSeq += 1;
+    shown = false;
     // The tag list usually comes from Svelte state, which is a proxy, and postMessage cannot clone a proxy
     // (DataCloneError): the show would never arrive. A snapshot is the plain value of the same list.
-    win.postMessage({ type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags: $state.snapshot(avTags), ordinal }, '*');
+    win.postMessage(
+      { type: 'show', html, css, bodyClass, side, mediaBase, autoplay, avTags: $state.snapshot(avTags), ordinal, seq: showSeq },
+      '*',
+    );
   }
 
   /** Sends the current theme; the frame owns its own `<html>` element, so it cannot inherit the parent's class. */
@@ -145,6 +158,10 @@
         sendTheme();
         return;
       }
+      case 'shown':
+        // A report for an older show means a newer face is still rendering.
+        if (data.seq === showSeq) shown = true;
+        return;
       case 'height':
         if (typeof data.px === 'number' && Number.isFinite(data.px) && data.px >= 0 && data.px <= 100000) {
           height = Math.round(data.px);

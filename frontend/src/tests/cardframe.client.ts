@@ -284,3 +284,33 @@ describe('card frame height report', () => {
     document.body.removeAttribute('style');
   });
 });
+
+describe('card frame shown report', () => {
+  it('reports shown with the parent seq after the face is in the document', async () => {
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    await runtime.handleMessage(showMessage({ html: '<p id="face">face</p>', seq: 7 }));
+    expect(document.getElementById('face')).not.toBeNull();
+    expect(posted()).toContainEqual({ type: 'shown', seq: 7 });
+  });
+
+  it('reports seq 0 for a show without one', async () => {
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    await runtime.handleMessage(showMessage({ html: '<p>face</p>' }));
+    expect(posted()).toContainEqual({ type: 'shown', seq: 0 });
+  });
+
+  it('still reports shown when a face hook throws', async () => {
+    (window as unknown as { onShownHook?: () => void }).onShownHook = () => {
+      throw new Error('card script failed');
+    };
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    await runtime.handleMessage(showMessage({ html: '<p>face</p>', seq: 3 })).catch(() => {});
+    expect(posted()).toContainEqual({ type: 'shown', seq: 3 });
+  });
+
+  it('does not report shown for a show from a foreign source', async () => {
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    await runtime.handleMessage(fromParent({ type: 'show', html: '<p>x</p>', css: '', bodyClass: '', side: 'question', mediaBase: '', autoplay: false, ordinal: 0, seq: 1 }, window));
+    expect(posted().some((message) => message.type === 'shown')).toBe(false);
+  });
+});

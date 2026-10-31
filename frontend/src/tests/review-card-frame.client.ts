@@ -4,7 +4,7 @@ import ReviewView from '../lib/views/ReviewView.svelte';
 import type { ApiClient, DueCard } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { face, faces } from './card-face-fixture';
-import { shownFaces, postAnswerFromFrame, frameDocument } from './card-frame-fixture';
+import { shownFaces, postAnswerFromFrame, frameDocument, reportShown } from './card-frame-fixture';
 import { REVIEW_BACK_CSS, REVIEW_FRONT_CSS } from '../lib/card-frame';
 
 /**
@@ -264,5 +264,93 @@ describe('ReviewView card faces in the frame', () => {
     expect(renderReviewCard.mock.calls[1]![0]).toMatchObject({ card_id: 'r1' });
     expect(target.querySelector('[data-testid="review-render-notice"]')).toBeNull();
     expect((await shownFaces(target))[0]).toMatchObject({ html: '<p>你好</p>', side: 'question' });
+  });
+});
+
+describe('ReviewView question placeholder', () => {
+  let instance: ReturnType<typeof mount> | null = null;
+
+  afterEach(() => {
+    if (instance) unmount(instance);
+    instance = null;
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+  });
+
+  async function flush(): Promise<void> {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    flushSync();
+  }
+
+  const card: DueCard = {
+    card_id: 'p1',
+    note_id: 'n1',
+    deck_id: 'd1',
+    state: 'new',
+    due_at: '',
+    retrievability: 0,
+    fields: { front: 'RAW-FRONT', back: 'RAW-BACK' },
+    tags: [],
+    template: 'forward',
+    version: 0,
+    answer_control: null,
+    machine_graded: false,
+    field_order: ['front', 'back'],
+  };
+
+  async function mountView(renderReviewCard: ReturnType<typeof vi.fn>): Promise<HTMLElement> {
+    setLocale('zh-CN');
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(ReviewView, {
+      target,
+      props: {
+        client: {
+          getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),
+          renderReviewCard,
+        } as unknown as ApiClient,
+      },
+    });
+    await flush();
+    return target;
+  }
+
+  function placeholder(target: HTMLElement): Element | null {
+    return target.querySelector('[data-testid="review-face-loading"]');
+  }
+
+  function questionFrameWrapper(target: HTMLElement): HTMLElement {
+    const frame = target.querySelector('[data-testid="review-front"] iframe[data-card-frame]');
+    if (!frame?.parentElement) throw new Error('no question frame');
+    return frame.parentElement;
+  }
+
+  it('covers the question until the faces arrive', async () => {
+    const renderReviewCard = vi.fn().mockReturnValue(new Promise(() => {}));
+    const target = await mountView(renderReviewCard);
+    expect(placeholder(target)).not.toBeNull();
+    expect(questionFrameWrapper(target).className).toContain('opacity-0');
+  });
+
+  it('keeps the placeholder while the frame renders and drops it once the frame reports shown', async () => {
+    const renderReviewCard = vi.fn().mockResolvedValue({
+      card_id: 'p1',
+      ...faces('<p>Stored front</p>', '<p>Stored back</p>', '/fm/token/'),
+      edit_href: '/decks/d1/notes/n1',
+    });
+    const target = await mountView(renderReviewCard);
+    await shownFaces(target);
+    expect(placeholder(target)).not.toBeNull();
+
+    await reportShown(target, 'question');
+    expect(placeholder(target)).toBeNull();
+    expect(questionFrameWrapper(target).className).toContain('opacity-100');
+  });
+
+  it('shows no placeholder over the plain-text fallback when the faces fail to load', async () => {
+    const renderReviewCard = vi.fn().mockRejectedValue(new Error('render failed'));
+    const target = await mountView(renderReviewCard);
+    expect(target.querySelector('[data-testid="review-render-notice"]')).not.toBeNull();
+    expect(placeholder(target)).toBeNull();
   });
 });
