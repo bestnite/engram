@@ -465,28 +465,6 @@ adds a test in `internal/schedule` beside the one `M18-41` moves there.
   names `M18-2` also names `M18-13`. Evidence is the output of `grep -n 'M18-13' ROADMAP.md` limited to
   the ledger section.
 
-- [ ] **M18-31 The REST URL import takes the preset choice and checks it before downloading** —
-  `M18-4` added `preset_mode` and `preset_id` to the multipart route, the upload ticket, both MCP tools
-  and the CLI, but not to `POST /api/v1/decks/import-url`: `importURLRequest` in
-  `internal/api/package_url.go` has no such fields, JSON binding drops them, and the import silently
-  builds a new preset. Reproduced on `main`: `{"url":…,"preset_mode":"reuse","preset_id":<own>}` and
-  `{"url":…,"preset_mode":"bogus"}` both returned 200 with `"preset_mode":"new"`. The MCP `import_deck`
-  tool does pass the fields on its `url` branch, but `ImportDeckPackageURL` checks the selection only
-  inside `ImportPackage`, after the download: a request with `reuse` and `apply_weights` was refused
-  only after the stub fetcher had been called, so a refused request still spends the caller's
-  direct-link rate limit and starts an outbound request. `253a2bb` moved the same check in front of
-  ticket issuance, but not in front of the download. The fix: `importURLRequest` gains `preset_mode`
-  and `preset_id` (public id), and `handleImportPackageURL` resolves the id with `ImportPresetID` and
-  passes both into the options; one unexported helper in `internal/api` runs
-  `store.ParsePackageTargetRef` and `ValidateImportPreset`, and both `CreateImportUpload` and
-  `ImportDeckPackageURL` call it; `ImportDeckPackageURL` calls it before the rate limiter and before
-  the download. *Acceptance:* a handler test in `internal/api` imports through
-  `POST /api/v1/decks/import-url` with `reuse` and with `copy` and shows that the new deck points at the
-  chosen preset or at a new copy of it; the same route with `preset_mode` `bogus`, and with `reuse` plus
-  `apply_weights`, answers 400 `invalid_request` with the stub fetcher's call count unchanged; a test in
-  `internal/mcp` calls `import_deck` with a `url`, `reuse` and `apply_weights` and shows an error with
-  the stub fetcher's call count unchanged. Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-32 `M18-4` transport tests cover the refusals and PostgreSQL** — the refusal cases of
   `M18-4` (unknown mode, missing `preset_id`, another user's `preset_id`, `apply_weights` with `reuse`
   or `copy`, a non-`new_deck` target) are tested only in `internal/store` and on the upload-ticket
