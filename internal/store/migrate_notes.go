@@ -239,7 +239,7 @@ func createEngramNoteTypes(tx *gorm.DB) (map[deckKind]noteTypeRef, error) {
 	}
 	out := make(map[deckKind]noteTypeRef, len(rows))
 	for _, row := range rows {
-		stock, ok := notetype.EngramStockByKind(row.Kind)
+		stock, ok := notetype.EngramMigrationStockByKind(row.Kind)
 		if !ok {
 			return nil, fmt.Errorf("convert notes to note types: deck %d uses unknown kind %q", row.DeckID, row.Kind)
 		}

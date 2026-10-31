@@ -14,20 +14,27 @@ func TestEngramStockConfigs(t *testing.T) {
 	type want struct {
 		templates []string
 		front     string
-		control   string
-		bindings  map[string]string
-		fields    []string
+		// backs are the answer templates in template order; nil leaves them unchecked.
+		backs    []string
+		control  string
+		bindings map[string]string
+		fields   []string
 	}
 	cases := map[string]want{
 		"basic": {
 			templates: []string{"forward"},
 			front:     "{{front}}",
+			backs:     []string{"{{FrontSide}}\n\n<hr id=answer>\n\n{{back}}"},
 			fields:    []string{"front", "back"},
 		},
 		"basic_both": {
 			templates: []string{"forward", "reverse"},
 			front:     "{{front}}",
-			fields:    []string{"front", "back"},
+			backs: []string{
+				"{{FrontSide}}\n\n<hr id=answer>\n\n{{back}}",
+				"{{FrontSide}}\n\n<hr id=answer>\n\n{{front}}",
+			},
+			fields: []string{"front", "back"},
 		},
 		"cloze": {
 			templates: []string{"cloze"},
@@ -137,6 +144,15 @@ func TestEngramStockConfigs(t *testing.T) {
 			if strings.Join(templateIDs, ",") != strings.Join(expected.templates, ",") {
 				t.Errorf("templates = %v, want %v", templateIDs, expected.templates)
 			}
+			if expected.backs != nil {
+				var backs []string
+				for _, template := range stock.Config.Templates {
+					backs = append(backs, template.AFormat)
+				}
+				if strings.Join(backs, "|") != strings.Join(expected.backs, "|") {
+					t.Errorf("backs = %q, want %q", backs, expected.backs)
+				}
+			}
 			front := stock.Config.Templates[0].QFormat
 			if front != expected.front {
 				t.Errorf("front = %q, want %q", front, expected.front)
@@ -232,5 +248,47 @@ func TestEngramStockByKind(t *testing.T) {
 	}
 	if _, ok := notetype.EngramStockByKind("unknown"); ok {
 		t.Error("EngramStockByKind(unknown) reported a match")
+	}
+}
+
+// TestEngramMigrationStockByKind pins the definitions the note migration converts old notes with. The basic kinds keep
+// the answer sides the old engine rendered, which differ from the creation definitions; every other kind is the
+// creation definition unchanged, and asking for a migration definition leaves the creation definition intact.
+func TestEngramMigrationStockByKind(t *testing.T) {
+	wantBacks := map[string][]string{
+		"basic":      {"{{back}}"},
+		"basic_both": {"{{back}}", "{{front}}"},
+	}
+	for _, created := range notetype.EngramStockConfigs() {
+		t.Run(created.Kind, func(t *testing.T) {
+			migrated, ok := notetype.EngramMigrationStockByKind(created.Kind)
+			if !ok {
+				t.Fatalf("EngramMigrationStockByKind(%q) not found", created.Kind)
+			}
+			if len(migrated.Config.Templates) != len(created.Config.Templates) {
+				t.Fatalf("templates = %d, want %d", len(migrated.Config.Templates), len(created.Config.Templates))
+			}
+			for i, tmpl := range migrated.Config.Templates {
+				want := created.Config.Templates[i].AFormat
+				if backs, frozen := wantBacks[created.Kind]; frozen {
+					want = backs[i]
+				}
+				if tmpl.AFormat != want {
+					t.Errorf("template %q back = %q, want %q", tmpl.ID, tmpl.AFormat, want)
+				}
+				if tmpl.QFormat != created.Config.Templates[i].QFormat {
+					t.Errorf("template %q front = %q, want the creation front %q", tmpl.ID, tmpl.QFormat, created.Config.Templates[i].QFormat)
+				}
+			}
+			again, _ := notetype.EngramStockByKind(created.Kind)
+			for i, tmpl := range again.Config.Templates {
+				if tmpl.AFormat != created.Config.Templates[i].AFormat {
+					t.Errorf("creation template %q back changed to %q after a migration lookup", tmpl.ID, tmpl.AFormat)
+				}
+			}
+		})
+	}
+	if _, ok := notetype.EngramMigrationStockByKind("no_such_kind"); ok {
+		t.Errorf("EngramMigrationStockByKind(no_such_kind) found a definition")
 	}
 }

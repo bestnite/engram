@@ -25,7 +25,7 @@ type reviewFaceAV struct {
 func TestReviewRenderExtractsFaceAudio(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Audio deck")
-	// The stock basic template answers with {{FrontSide}}, so the front sound appears in the answer HTML too. Only the
+	// The stock basic template answers with {{FrontSide}}, so the front sound appears in the answer face too. Only the
 	// back field's sound is the answer's own tag.
 	note := seedBasic(t, db, deck.ID, "listen [sound:front.mp3]", "answer [sound:back.mp3]")
 	cardPub := cardPublicIDOfNote(t, db, note.ID)
@@ -52,13 +52,20 @@ func TestReviewRenderExtractsFaceAudio(t *testing.T) {
 		t.Errorf("front av_tags = %+v, want the one question sound", body.Front.AVTags)
 	}
 
-	// The answer template of this stock type does not use {{FrontSide}}, so the answer adds exactly one tag. The
-	// FrontSide exclusion itself is pinned by TestRenderAnswerExcludesFrontSideAudio in internal/notetype.
-	if !strings.Contains(body.Back.HTML, "[anki:play:a:0]") {
-		t.Errorf("back html = %q, want the answer's a marker", body.Back.HTML)
+	// The answer face keeps the question's tag, side q, which the frame does not replay; the back field's sound is the
+	// answer's one own tag, side a. The FrontSide exclusion itself is pinned by TestRenderAnswerExcludesFrontSideAudio
+	// in internal/notetype.
+	if !strings.Contains(body.Back.HTML, "[anki:play:q:0]") || !strings.Contains(body.Back.HTML, "[anki:play:a:0]") {
+		t.Errorf("back html = %q, want the question's q marker and the answer's a marker", body.Back.HTML)
 	}
-	if len(body.Back.AVTags) != 1 || body.Back.AVTags[0].Side != "a" || body.Back.AVTags[0].Name != "back.mp3" {
-		t.Errorf("back av_tags = %+v, want only the answer's own sound", body.Back.AVTags)
+	var own []string
+	for _, tag := range body.Back.AVTags {
+		if tag.Side == "a" {
+			own = append(own, tag.Name)
+		}
+	}
+	if len(own) != 1 || own[0] != "back.mp3" {
+		t.Errorf("back av_tags = %+v, want back.mp3 as the answer's only own sound", body.Back.AVTags)
 	}
 
 	if !body.Front.Autoplay || !body.Back.Autoplay {

@@ -8,8 +8,9 @@ import (
 )
 
 // TestReviewRenderAnswerIncludesQuestion pins the flag the review page reads on reveal: an Anki-style answer template
-// that already shows the question reports true, so the page shows that face alone; engram's basic type, whose answer
-// adds only the answer, reports false, so the question stays above it.
+// that already shows the question reports true, so the page shows that face alone, and engram's basic type now answers
+// that way too; a template whose answer adds only the answer (the shape the note migration still writes) reports false,
+// so the question stays above it.
 func TestReviewRenderAnswerIncludesQuestion(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedReviewDeck(t, db, ownerID, "Answer screen deck")
@@ -20,20 +21,30 @@ func TestReviewRenderAnswerIncludesQuestion(t *testing.T) {
 		t.Error("a {{FrontSide}} answer reports answer_includes_question = false, want true")
 	}
 
-	stock, ok := notetype.EngramStockByKind("basic")
-	if !ok {
-		t.Fatal("engram basic stock is missing")
+	cases := []struct {
+		name   string
+		lookup func(string) (notetype.EngramStock, bool)
+		want   bool
+	}{
+		{"engram basic", notetype.EngramStockByKind, true},
+		{"answer-only migrated basic", notetype.EngramMigrationStockByKind, false},
 	}
-	noteType := &store.NoteType{DeckID: deck.ID, Name: stock.Name}
-	if err := store.NewNoteTypeStore(db).Create(t.Context(), noteType, stock.Config); err != nil {
-		t.Fatalf("create engram basic note type: %v", err)
-	}
-	note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID)}
-	if _, err := store.NewNoteStore(db).Create(t.Context(), note, map[string]any{"front": "Q", "back": "A"}); err != nil {
-		t.Fatalf("create engram basic note: %v", err)
-	}
-	engramCard := cardOfNoteTemplate(t, db, note.ID, "forward")
-	if got := renderTypeInCard(t, srv, cookies, csrf, engramCard.PublicID, deck.PublicID, ""); got.AnswerIncludesQuestion {
-		t.Error("an answer-only template reports answer_includes_question = true, want false")
+	for _, tc := range cases {
+		stock, ok := tc.lookup("basic")
+		if !ok {
+			t.Fatalf("%s: stock is missing", tc.name)
+		}
+		noteType := &store.NoteType{DeckID: deck.ID, Name: tc.name}
+		if err := store.NewNoteTypeStore(db).Create(t.Context(), noteType, stock.Config); err != nil {
+			t.Fatalf("%s: create note type: %v", tc.name, err)
+		}
+		note := &store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(noteType.ID)}
+		if _, err := store.NewNoteStore(db).Create(t.Context(), note, map[string]any{"front": "Q", "back": "A"}); err != nil {
+			t.Fatalf("%s: create note: %v", tc.name, err)
+		}
+		card := cardOfNoteTemplate(t, db, note.ID, "forward")
+		if got := renderTypeInCard(t, srv, cookies, csrf, card.PublicID, deck.PublicID, ""); got.AnswerIncludesQuestion != tc.want {
+			t.Errorf("%s: answer_includes_question = %v, want %v", tc.name, got.AnswerIncludesQuestion, tc.want)
+		}
 	}
 }

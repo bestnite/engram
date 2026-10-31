@@ -727,7 +727,7 @@ func TestMigrationPreservesCardPlainText(t *testing.T) {
 			}
 
 			for _, note := range notes {
-				stock, _ := notetype.EngramStockByKind(note.Kind)
+				stock, _ := notetype.EngramMigrationStockByKind(note.Kind)
 				fields := stringFields(converted[note.Kind])
 				for _, card := range note.Cards {
 					templateID := card.Template

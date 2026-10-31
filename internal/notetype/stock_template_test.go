@@ -197,12 +197,12 @@ func TestAnswerIncludesQuestion(t *testing.T) {
 			t.Errorf("common template %q: AnswerIncludesQuestion = %v, want %v", stock.Kind, got, want[stock.Kind])
 		}
 	}
-	// engram's own basic types keep the question on screen: their answer side adds only the answer.
+	// engram's own basic types repeat the question with {{FrontSide}}, as Anki's Basic does, so their answer side is shown alone.
 	for _, kind := range []string{"basic", "basic_both"} {
 		stock, _ := EngramStockByKind(kind)
 		for _, tmpl := range stock.Config.Templates {
-			if AnswerIncludesQuestion(stock.Config, tmpl) {
-				t.Errorf("engram %q template %q reported as a whole answer screen", kind, tmpl.ID)
+			if !AnswerIncludesQuestion(stock.Config, tmpl) {
+				t.Errorf("engram %q template %q not reported as a whole answer screen", kind, tmpl.ID)
 			}
 		}
 	}

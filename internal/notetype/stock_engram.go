@@ -117,6 +117,33 @@ func EngramStockByKind(kind string) (EngramStock, bool) {
 	return EngramStock{}, false
 }
 
+// migrationAnswerSides holds, per kind and template id, the answer template the
+// note migration writes instead of the creation definition's. These are the
+// answer sides the old engine rendered at the switch-over: the migration
+// promises that a converted card reads as it did before, so a later change to a
+// creation definition must not reach the data it converts.
+var migrationAnswerSides = map[string]map[string]string{
+	"basic":      {"forward": "{{back}}"},
+	"basic_both": {"forward": "{{back}}", "reverse": "{{front}}"},
+}
+
+// EngramMigrationStockByKind returns the stock definition the note migration
+// converts one of the old kinds with: the creation definition, with the answer
+// templates of migrationAnswerSides where it differs.
+func EngramMigrationStockByKind(kind string) (EngramStock, bool) {
+	stock, ok := EngramStockByKind(kind)
+	if !ok {
+		return stock, false
+	}
+	// Every call builds a fresh config, so rewriting its templates touches no other caller's value.
+	for i := range stock.Config.Templates {
+		if answer, frozen := migrationAnswerSides[kind][stock.Config.Templates[i].ID]; frozen {
+			stock.Config.Templates[i].AFormat = answer
+		}
+	}
+	return stock, true
+}
+
 // EngramStockKindFor reports which engram stock kind a config matches, or the
 // empty string when it matches none.
 //
@@ -153,10 +180,17 @@ func sameStockShape(a, b Config) bool {
 	return true
 }
 
+// engramAnswerSide is the answer template of the basic types: the question face
+// again, the divider and then the answer field. It is the answer side of Anki's
+// Basic, so a deck that uses engram's basic type renders like Anki's. The review
+// page shows such an answer side alone instead of below the question, and it
+// scrolls to the divider when the card is flipped.
+func engramAnswerSide(field string) string {
+	return "{{FrontSide}}\n\n<hr id=answer>\n\n{{" + field + "}}"
+}
+
 // engramBasicStock is today's basic card: front on the question side, back on
-// the answer side. The back template repeats only the answer because the review
-// view already shows the front above the back; adding {{FrontSide}} would show
-// the question twice.
+// the answer side.
 func engramBasicStock() EngramStock {
 	return EngramStock{
 		Kind: "basic",
@@ -167,7 +201,7 @@ func engramBasicStock() EngramStock {
 				ID:      "forward",
 				Name:    "Card 1",
 				QFormat: "{{front}}",
-				AFormat: "{{back}}",
+				AFormat: engramAnswerSide("back"),
 			}},
 		),
 	}
@@ -188,13 +222,13 @@ func engramBasicBothStock() EngramStock {
 					ID:      "forward",
 					Name:    "Card 1",
 					QFormat: "{{front}}",
-					AFormat: "{{back}}",
+					AFormat: engramAnswerSide("back"),
 				},
 				{
 					ID:      "reverse",
 					Name:    "Card 2",
 					QFormat: "{{back}}",
-					AFormat: "{{front}}",
+					AFormat: engramAnswerSide("front"),
 				},
 			},
 		),
