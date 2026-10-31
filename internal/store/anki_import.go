@@ -1494,6 +1494,9 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	last := make(map[int64]int64)
 	previous := make(map[int64]int64)
 	histories := make(map[int64]fsrs.ReviewEntries)
+	keptIDs := make(map[int64][]int64)
+	rowMemory := make(map[int64]fsrs.MemoryState)
+	rowDuration := make(map[int64]float64)
 	firstType := make(map[int64]int)
 	lastDay := make(map[int64]time.Time)
 	reset := make(map[int64]int64)
@@ -1511,6 +1514,11 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			if len(histories[r.CardID]) == 0 {
 				firstType[r.CardID] = r.Type
 			}
+			ids := keptIDs[r.CardID]
+			if len(ids) > 0 {
+				rowDuration[r.ID] = float64(r.ID-ids[len(ids)-1]) / 86400000
+			}
+			keptIDs[r.CardID] = append(ids, r.ID)
 			day, _ := time.Parse("2006-01-02", reviewday.Day(time.UnixMilli(r.ID), loc, cutoff))
 			var delta float64
 			if prev, ok := lastDay[r.CardID]; ok {
@@ -1556,6 +1564,13 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			var computeErr error
 			if history := histories[card.ID]; len(history) > 0 && firstType[card.ID] != 1 {
 				memory, computeErr = engine.MemoryState(history, nil)
+				if computeErr == nil {
+					if historical, err := engine.HistoricalMemoryStates(history, nil); err == nil {
+						for i, id := range keptIDs[card.ID] {
+							rowMemory[id] = historical[i]
+						}
+					}
+				}
 			} else {
 				interval := float64(card.Interval)
 				if interval < 0 {
@@ -1568,6 +1583,9 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 				continue
 			}
 			state.Stability, state.Difficulty = &memory.Stability, &memory.Difficulty
+		}
+		if ids := keptIDs[card.ID]; len(ids) > 0 && state.Stability != nil && state.Difficulty != nil {
+			rowMemory[ids[len(ids)-1]] = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}
 		}
 		if data.LastReview != nil {
 			// Anki writes lrt in seconds; also accept millisecond timestamps from packages
@@ -1644,13 +1662,18 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			continue
 		}
 		elapsed := r.Time
-		var duration *float64
-		// A negative interval encodes seconds until a learning step, not days.
-		if r.Interval >= 0 {
-			value := float64(r.Interval)
+		interval := float64(r.Interval)
+		if interval < 0 {
+			interval = -interval / 86400
+		}
+		var duration, stability, difficulty *float64
+		if value, ok := rowDuration[r.ID]; ok {
 			duration = &value
 		}
-		review := Review{CardID: id, UserID: userID, Rating: r.Ease, GradeSource: "self", ReviewedAt: at, ReviewDay: reviewday.Day(at, loc, cutoff), ElapsedMS: &elapsed, DurationDays: duration, StateBefore: before}
+		if memory, ok := rowMemory[r.ID]; ok {
+			stability, difficulty = &memory.Stability, &memory.Difficulty
+		}
+		review := Review{CardID: id, UserID: userID, Rating: r.Ease, GradeSource: "self", ReviewedAt: at, ReviewDay: reviewday.Day(at, loc, cutoff), ElapsedMS: &elapsed, IntervalDays: &interval, DurationDays: duration, Stability: stability, Difficulty: difficulty, StateBefore: before}
 		if err := tx.WithContext(ctx).Create(&review).Error; err != nil {
 			return fmt.Errorf("create Anki review: %w", err)
 		}

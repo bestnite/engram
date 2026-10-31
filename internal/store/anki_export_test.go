@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -115,7 +116,7 @@ func seedAnkiExportDeck(t *testing.T, db *gorm.DB, owner uint64) ankiExportFixtu
 	if err := db.Create(&Review{
 		CardID: basicCards[0].ID, UserID: owner, Rating: 3, GradeSource: "self",
 		ReviewedAt: reviewedAt, ReviewDay: "2026-10-01", ElapsedMS: Ptr(1200),
-		DurationDays: Ptr(24.0), StateBefore: 2, IntervalDays: Ptr(5.0),
+		StateBefore: 2, IntervalDays: Ptr(5.0),
 		Stability: Ptr(4.5), Difficulty: Ptr(6.2),
 	}).Error; err != nil {
 		t.Fatalf("create review: %v", err)
@@ -207,6 +208,9 @@ func TestExportAnkiPackageRoundTrip(t *testing.T) {
 			}
 			if review.Rating != sourceReview.Rating || !review.ReviewedAt.Equal(sourceReview.ReviewedAt) || review.ElapsedMS == nil || *review.ElapsedMS != *sourceReview.ElapsedMS || review.StateBefore != sourceReview.StateBefore {
 				t.Fatalf("review: got %+v want %+v", review, sourceReview)
+			}
+			if !reflect.DeepEqual(review.IntervalDays, sourceReview.IntervalDays) || !reflect.DeepEqual(review.DurationDays, sourceReview.DurationDays) {
+				t.Fatalf("review intervals: got %+v want %+v", review, sourceReview)
 			}
 			again, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(first), PackageImportOptions{Target: "into_deck:" + strconv.FormatUint(report.DeckID, 10), MediaRoot: dstRoot, IncludeProgress: true})
 			if err != nil {

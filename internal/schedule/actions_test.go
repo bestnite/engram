@@ -1,6 +1,7 @@
 package schedule
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -10,6 +11,52 @@ import (
 
 	"git.nite07.com/nite/engram/internal/store"
 )
+
+func TestUndoImportedReviewMemory(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	for _, name := range []string{"source", "importer"} {
+		if err := db.Create(&store.User{Username: name, Email: name + "@example.com", DisplayName: name, Role: store.RoleUser, Status: store.StatusActive, Locale: "en", Timezone: "UTC"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	reviewed := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	deckID := seedDeck(t, db, reviewed)
+	cardID := seedCard(t, db, deckID, "forward", reviewed)
+	due := reviewed.AddDate(0, 0, 5)
+	if err := db.Create(&store.CardState{CardID: cardID, UserID: 1, State: "review", DueAt: &due, Stability: store.Ptr(4.5), Difficulty: store.Ptr(6.2), Reps: 1, ScheduledDays: 5, LastReviewAt: &reviewed}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&store.Review{CardID: cardID, UserID: 1, Rating: 3, GradeSource: "self", ReviewedAt: reviewed, ReviewDay: "2026-10-01", StateBefore: 2, IntervalDays: store.Ptr(5.0)}).Error; err != nil {
+		t.Fatal(err)
+	}
+	raw, err := store.NewDeckStore(db).ExportAnkiPackage(ctx, 1, deckID, store.PackageOptions{IncludeProgress: true, IncludeReviews: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.NewDeckStore(db).ImportPackage(ctx, 2, bytes.NewReader(raw), store.PackageImportOptions{Target: store.PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var imported store.CardState
+	if err := db.Where("user_id = ?", 2).First(&imported).Error; err != nil {
+		t.Fatal(err)
+	}
+	s := mustScheduler(t, testPreset(t))
+	now := due.Add(24 * time.Hour)
+	result := mustSubmit(t, db, SubmitInput{CardID: imported.CardID, UserID: 2, Rating: Good, ExpectedVersion: imported.Version, Scheduler: s, Now: now, Location: time.UTC})
+	tx := db.Begin()
+	restored, err := Rollback(ctx, tx, UndoInput{CardID: imported.CardID, UserID: 2, ExpectedVersion: result.State.Version, Scheduler: s, Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit().Error; err != nil {
+		t.Fatal(err)
+	}
+	if restored.Stability == nil || restored.Difficulty == nil || restored.DueAt == nil || imported.Stability == nil || imported.Difficulty == nil || imported.DueAt == nil || *restored.Stability != *imported.Stability || *restored.Difficulty != *imported.Difficulty || !restored.DueAt.Equal(*imported.DueAt) {
+		t.Fatalf("restored=%+v imported=%+v", restored, imported)
+	}
+}
 
 // mustSubmit submits one grade in a self-opened transaction, commits it, and returns the result.
 func mustSubmit(t *testing.T, db *gorm.DB, in SubmitInput) SubmitResult {

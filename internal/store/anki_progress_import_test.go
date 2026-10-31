@@ -15,6 +15,60 @@ import (
 	"git.nite07.com/nite/engram/internal/anki"
 )
 
+func TestAnkiReviewColumns(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pkg.Notes, pkg.Cards = pkg.Notes[:1], pkg.Cards[:1]
+			card := &pkg.Cards[0]
+			card.Type, card.Queue, card.Data = 2, 2, `{}`
+			base := int64(1600000000000)
+			pkg.Reviews = []anki.Review{
+				{ID: base, CardID: card.ID, Ease: 3, Type: 0, Interval: -600},
+				{ID: base + 86400000, CardID: card.ID, Ease: 3, Type: 1, Interval: 4},
+				{ID: base + 86400000 + 43200000, CardID: card.ID, Ease: 1, Type: 2, Interval: 0},
+			}
+			user := seedUsers(t, db, "columns_"+driver)[0]
+			plan, report := planAnkiDecks(pkg), &PackageImportReport{}
+			if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: true, Now: time.Now}, report); err != nil {
+				t.Fatal(err)
+			}
+			var reviews []Review
+			if err := db.Where("user_id = ?", user).Order("reviewed_at").Find(&reviews).Error; err != nil {
+				t.Fatal(err)
+			}
+			if len(reviews) != 3 {
+				t.Fatalf("reviews: %+v", reviews)
+			}
+			var state CardState
+			if err := db.Where("user_id = ?", user).First(&state).Error; err != nil {
+				t.Fatal(err)
+			}
+			engine := fsrs.NewFSRS(fsrs.DefaultParam())
+			historical, err := engine.HistoricalMemoryStates(fsrs.ReviewEntries{{Rating: 3}, {Rating: 3, DeltaT: 1}, {Rating: 1, DeltaT: 1}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, tc := range []struct {
+				interval float64
+				duration *float64
+			}{{600.0 / 86400, nil}, {4, Ptr(1.0)}, {0, Ptr(.5)}} {
+				r := reviews[i]
+				want := historical[i]
+				if i == 2 {
+					want = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}
+				}
+				if r.IntervalDays == nil || *r.IntervalDays != tc.interval || (r.DurationDays == nil) != (tc.duration == nil) || (tc.duration != nil && *r.DurationDays != *tc.duration) || r.Stability == nil || r.Difficulty == nil || math.Abs(*r.Stability-want.Stability) > 1e-9 || math.Abs(*r.Difficulty-want.Difficulty) > 1e-9 {
+					t.Errorf("row %d: %+v want interval=%v duration=%v memory=%+v", i, r, tc.interval, tc.duration, want)
+				}
+			}
+		})
+	}
+}
+
 func TestAnkiProgressReplayStart(t *testing.T) {
 	var golden struct {
 		Cards map[string]struct {
@@ -202,7 +256,7 @@ func TestAnkiProgressImport(t *testing.T) {
 					if second.State != "new" || second.ScheduledDays != 0 || second.SuspendedAt == nil || !second.SuspendedAt.Equal(now) || second.LastReviewAt == nil || second.LastReviewAt.Unix() != 1600000000 {
 						t.Fatalf("suspended state: %+v", second)
 					}
-					if reviews[0].StateBefore != 2 || reviews[0].GradeSource != "self" || reviews[0].ElapsedMS == nil || *reviews[0].ElapsedMS != 1200 || reviews[0].DurationDays == nil || *reviews[0].DurationDays != 7 || reviews[0].PublicID == "" || reviews[1].StateBefore != 0 || reviews[1].DurationDays != nil || reviews[1].Rating != 4 || reviews[1].ElapsedMS == nil || *reviews[1].ElapsedMS != 500 || reviews[1].ReviewedAt.UnixMilli() != 1600000000002 || reviews[1].GradeSource != "self" {
+					if reviews[0].StateBefore != 2 || reviews[0].GradeSource != "self" || reviews[0].ElapsedMS == nil || *reviews[0].ElapsedMS != 1200 || reviews[0].DurationDays != nil || reviews[0].IntervalDays == nil || *reviews[0].IntervalDays != 7 || reviews[0].PublicID == "" || reviews[1].StateBefore != 0 || reviews[1].DurationDays != nil || reviews[1].Rating != 4 || reviews[1].ElapsedMS == nil || *reviews[1].ElapsedMS != 500 || reviews[1].ReviewedAt.UnixMilli() != 1600000000002 || reviews[1].GradeSource != "self" {
 						t.Fatalf("reviews: %+v", reviews)
 					}
 					again := &PackageImportReport{}
