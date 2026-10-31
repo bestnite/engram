@@ -117,6 +117,66 @@ describe('CardFrame outbound messages', () => {
     expect(shownText()).toBe('true');
   });
 
+  it('passes the answer position of the latest show to onshown, after the iframe takes the reported height', async () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    const reports: Array<{ height: string; answerTop: number | null }> = [];
+    instance = mount(CardFrame, {
+      target,
+      props: {
+        html: '<p>Q</p><hr id=answer><p>A</p>',
+        css: '',
+        bodyClass: 'card',
+        side: 'answer',
+        mediaBase: '/fm/token/',
+        onshown: ({ frame: element, answerTop }: { frame: HTMLIFrameElement; answerTop: number | null }) =>
+          reports.push({ height: element.style.height, answerTop }),
+      },
+    });
+    flushSync();
+    const win = frame(target).contentWindow!;
+    vi.spyOn(win, 'postMessage').mockImplementation(() => {});
+    receive(win, { type: 'ready' });
+    await flush();
+
+    // A report for an older show is not this face's.
+    receive(win, { type: 'shown', seq: 0, answerTop: 10 });
+    await flush();
+    expect(reports).toEqual([]);
+
+    receive(win, { type: 'height', px: 900 });
+    receive(win, { type: 'shown', seq: 1, answerTop: 412 });
+    await flush();
+    expect(reports).toEqual([{ height: '900px', answerTop: 412 }]);
+  });
+
+  it('turns an invalid answer position into null', async () => {
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+    const tops: Array<number | null> = [];
+    instance = mount(CardFrame, {
+      target,
+      props: {
+        html: '<p>A</p>',
+        css: '',
+        bodyClass: 'card',
+        side: 'answer',
+        mediaBase: '/fm/token/',
+        onshown: ({ answerTop }: { answerTop: number | null }) => tops.push(answerTop),
+      },
+    });
+    flushSync();
+    const win = frame(target).contentWindow!;
+    vi.spyOn(win, 'postMessage').mockImplementation(() => {});
+    receive(win, { type: 'ready' });
+    await flush();
+    for (const answerTop of ['412', -1, Number.NaN, 100001, undefined]) {
+      receive(win, { type: 'shown', seq: 1, answerTop });
+      await flush();
+    }
+    expect(tops).toEqual([null, null, null, null, null]);
+  });
+
   it('ignores a shown report from another window', async () => {
     const target = document.createElement('div');
     document.body.appendChild(target);

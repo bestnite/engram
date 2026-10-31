@@ -11,6 +11,7 @@
   import { reviewShortcut, reviewSwipe, type ReviewShortcut } from '../review-shortcuts';
   import CardFrame, { type CardFrameKey } from '../components/CardFrame.svelte';
   import { REVIEW_FRONT_CSS, REVIEW_BACK_CSS, REVIEW_ANSWER_CSS, faceStyle } from '../card-frame';
+  import { answerScrollTop } from '../review-scroll';
 
   import Skeleton from '../components/ui/Skeleton.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -146,6 +147,19 @@
 
   // The grading breakdown stays in the parent page: it is the only HTML container left here, so it is what gets typeset and enhanced.
   let feedbackSection = $state<HTMLElement | null>(null);
+  // The top of the answer area of the current flow (self-graded answer, short-answer comparison, graded reveal): where the
+  // page scrolls when the answer appears. The branches that bind it are exclusive, so one element holds it at a time.
+  let answerStart = $state<HTMLElement | null>(null);
+  // The action bar of the current step, pinned to the viewport's bottom edge; the scroll rule treats the strip it covers as hidden.
+  let actionBar = $state<HTMLElement | null>(null);
+
+  // The bar holding the current step's buttons sticks to the viewport's bottom edge while the card is taller than the screen,
+  // so a long face never pushes the buttons out of reach. A sticky element stays inside its parent, so each bar sits directly
+  // in the block that also holds the face it acts on. The negative margins stretch its background to the card's padding
+  // edges, and the gradient above it fades out the face scrolling underneath.
+  const ACTION_BAR =
+    'sticky bottom-0 z-10 -mx-6 px-6 sm:-mx-10 sm:px-10 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-background ' +
+    "before:pointer-events-none before:absolute before:inset-x-0 before:-top-4 before:h-4 before:bg-linear-to-t before:from-background before:to-transparent before:content-['']";
 
   // The `<base href>` prefix for the reveal and the graded-result answer frames. Those two responses carry the answer HTML but
   // no face object, so they bring their own base; the front and back frames read the base off the face the render sent.
@@ -293,7 +307,37 @@
     essayText = '';
     frameAnswer = undefined;
     if (card) void loadRender(card, token);
+    // A new card starts at the top of the page: its question is read from the beginning, and the previous card's scroll
+    // offset says nothing about where this face's content sits.
+    if (card) window.scrollTo({ top: 0 });
   });
+
+  /**
+   * Brings a newly shown answer into view (see review-scroll.ts for the rule). `start` is the top of the answer area;
+   * `anchorTop` is the viewport y of the face's `#answer` element, or null when the flow has no anchor to jump to.
+   */
+  function scrollToAnswer(start: HTMLElement | null, anchorTop: number | null): void {
+    if (!start) return;
+    const top = answerScrollTop({
+      anchorTop,
+      startTop: start.getBoundingClientRect().top,
+      scrollY: window.scrollY,
+      viewportHeight: window.innerHeight,
+      barHeight: actionBar?.getBoundingClientRect().height ?? 0,
+    });
+    if (top !== null) window.scrollTo({ top });
+  }
+
+  /**
+   * The answer frame finished showing a face. The self-graded answer frame also shows an empty face while the answer is
+   * still hidden, so that report is ignored. `#answer` decides only when the frame is the first thing in the answer area;
+   * a short-answer card shows the learner's own answer above the reference, and jumping past it would hide it.
+   */
+  function onAnswerShown(report: { frame: HTMLIFrameElement; answerTop: number | null }, useAnchor: boolean): void {
+    if (!revealed && !gradedRevealed) return;
+    const anchorTop = useAnchor && report.answerTop !== null ? report.frame.getBoundingClientRect().top + report.answerTop : null;
+    scrollToAnswer(answerStart ?? report.frame, anchorTop);
+  }
 
   /** Returns the deck's public id when the review scope is exactly one deck; multiple decks and all decks return null ("one more round" works per single deck only). */
   function singleDeck(): string | null {
@@ -459,6 +503,8 @@
       await tick();
       await typeset([feedbackSection]);
       enhanceShortcodes([feedbackSection]);
+      // The verdict leads the result panel, so the panel's top is the target rather than an anchor inside the answer face.
+      scrollToAnswer(feedbackSection, null);
     } catch (cause) {
       error = cause;
     } finally {
@@ -1033,6 +1079,7 @@
                  runtime are then already loaded, so the answer appears at once instead of after a frame load. The face is
                  sent only on reveal, so its audio does not start early. -->
             <div
+              bind:this={answerStart}
               class={!revealed ? 'hidden' : questionHidden ? '' : 'border-t border-input pt-6'}
               data-testid={revealed ? 'review-answer' : undefined}
             >
@@ -1048,6 +1095,7 @@
                   avTags={revealed ? (backFace?.av_tags ?? []) : []}
                   title={$t('note_preview.back')}
                   onkey={onFrameKey}
+                  onshown={(report) => onAnswerShown(report, true)}
                 />
               {:else if revealed}
                 <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">
@@ -1059,64 +1107,72 @@
           {#if revealed}
             {#if essay}
               <!-- Short-answer card: first show the answer the learner wrote (plain text, not into the HTML sink), then the reference answer for comparison. -->
-              {#if essayText.trim() !== ''}
-                <div class="border-t border-input pt-5" data-testid="review-essay-given">
-                  <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.given')}</div>
-                  <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">{essayText}</div>
-                </div>
-              {/if}
-              <div class="border-t border-input pt-5" data-testid="review-answer">
-                <div class="text-xs text-zinc-500 mb-1">{$t('review.essay.reference')}</div>
-                {#if backFace && backFace.html}
-                  <CardFrame
-                    html={backFace.html}
-                    css={faceStyle(REVIEW_BACK_CSS, backFace.css)}
-                    bodyClass={backFace.body_class}
-                    ordinal={cardOrdinal}
-                    side="answer"
-                    mediaBase={backFace.media_base}
-                    autoplay={backFace.autoplay ?? false}
-                    avTags={backFace.av_tags ?? []}
-                    title={$t('note_preview.back')}
-                    onkey={onFrameKey}
-                  />
-                {:else if answerFallback.length}
-                  <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">
-                    {#each answerFallback as value, index (index)}<div>{value}</div>{/each}
+              <div bind:this={answerStart} class="space-y-6">
+                {#if essayText.trim() !== ''}
+                  <div class="border-t border-input pt-5" data-testid="review-essay-given">
+                    <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.given')}</div>
+                    <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">{essayText}</div>
                   </div>
-                {:else}
-                  <p class="text-sm text-muted-foreground" data-testid="review-essay-no-reference">{$t('review.essay.no_reference')}</p>
                 {/if}
+                <div class="border-t border-input pt-5" data-testid="review-answer">
+                  <div class="text-xs text-zinc-500 mb-1">{$t('review.essay.reference')}</div>
+                  {#if backFace && backFace.html}
+                    <CardFrame
+                      html={backFace.html}
+                      css={faceStyle(REVIEW_BACK_CSS, backFace.css)}
+                      bodyClass={backFace.body_class}
+                      ordinal={cardOrdinal}
+                      side="answer"
+                      mediaBase={backFace.media_base}
+                      autoplay={backFace.autoplay ?? false}
+                      avTags={backFace.av_tags ?? []}
+                      title={$t('note_preview.back')}
+                      onkey={onFrameKey}
+                      onshown={(report) => onAnswerShown(report, false)}
+                    />
+                  {:else if answerFallback.length}
+                    <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">
+                      {#each answerFallback as value, index (index)}<div>{value}</div>{/each}
+                    </div>
+                  {:else}
+                    <p class="text-sm text-muted-foreground" data-testid="review-essay-no-reference">{$t('review.essay.no_reference')}</p>
+                  {/if}
+                </div>
               </div>
             {/if}
-            <!-- How to choose among the four ratings goes into a popover: keeping four explanations on every card takes too much space, and one click when unsure is enough. -->
-            <div class="flex items-center gap-1 pt-2 text-xs text-muted-foreground">
-              <span>{$t('review.ratings')}</span>
-              <HelpTip testId="review-ratings-help" label={$t('help.review.ratings_label')} text={$t('help.review.ratings')} />
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label={$t('review.ratings')}>
-              {#each [1, 2, 3, 4] as rating}
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onclick={() => void rate(rating)}
-                  class="min-h-12 py-2 px-3 rounded-xl font-medium transition-all btn-press disabled:opacity-50 cursor-pointer text-center {ratingClass(rating)}"
-                  data-rating={rating}
-                >
-                  <span class="block text-sm font-semibold">{$t(`review.rating.${rating}`)}</span>
-                </button>
-              {/each}
+            <div bind:this={actionBar} class="{ACTION_BAR} space-y-2" data-testid="review-action-bar">
+              <!-- How to choose among the four ratings goes into a popover: keeping four explanations on every card takes too much space, and one click when unsure is enough. -->
+              <div class="flex items-center gap-1 text-xs text-muted-foreground">
+                <span>{$t('review.ratings')}</span>
+                <HelpTip testId="review-ratings-help" label={$t('help.review.ratings_label')} text={$t('help.review.ratings')} />
+              </div>
+              <!-- Four columns on every width: a pinned bar of two rows would cover twice the face on a phone. -->
+              <div class="grid grid-cols-4 gap-2 sm:gap-3" aria-label={$t('review.ratings')}>
+                {#each [1, 2, 3, 4] as rating}
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onclick={() => void rate(rating)}
+                    class="min-h-12 py-2 px-1 sm:px-3 rounded-xl font-medium transition-all btn-press disabled:opacity-50 cursor-pointer text-center {ratingClass(rating)}"
+                    data-rating={rating}
+                  >
+                    <span class="block text-sm font-semibold">{$t(`review.rating.${rating}`)}</span>
+                  </button>
+                {/each}
+              </div>
             </div>
           {:else}
-            <button
-              type="button"
-              data-testid="review-reveal"
-              class="w-full min-h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-semibold transition-all btn-press shadow-sm cursor-pointer"
-              onclick={() => void reveal()}
-            >
-              <Eye class="size-4" aria-hidden="true" />
-              <span>{$t('review.show_answer')}</span>
-            </button>
+            <div bind:this={actionBar} class={ACTION_BAR} data-testid="review-action-bar">
+              <button
+                type="button"
+                data-testid="review-reveal"
+                class="w-full min-h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-semibold transition-all btn-press shadow-sm cursor-pointer"
+                onclick={() => void reveal()}
+              >
+                <Eye class="size-4" aria-hidden="true" />
+                <span>{$t('review.show_answer')}</span>
+              </button>
+            </div>
           {/if}
         {:else}
           <!-- The answer card's prompt stays on top in all three states — answering, answer revealed, grading result — with the answer below
@@ -1206,13 +1262,13 @@
                   <div class="text-sm text-muted-foreground"><span class="text-xs text-zinc-500">{$t('review.graded.parsed')}</span> · {feedback.parsed}</div>
                 {/if}
                 <div class="text-sm text-zinc-500" data-testid="review-graded-rating">{$t('review.graded.rating')} · {$t(`review.rating.${feedback.rating}`)}</div>
-                <div class="flex flex-col sm:flex-row gap-3">
+                <div bind:this={actionBar} class="{ACTION_BAR} flex gap-3" data-testid="review-action-bar">
                   <button type="button" class="flex-1 min-h-12 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors btn-press cursor-pointer" onclick={continueNext} data-testid="review-graded-continue">{$t('review.graded.continue')}</button>
                   <button type="button" disabled={submitting} class="flex-1 min-h-12 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void undo()} data-testid="review-undo">{$t('review.undo')}</button>
                 </div>
               </div>
             {:else if gradedRevealed}
-              <div class="space-y-5 border-t border-input pt-5" data-testid="review-graded-revealed">
+              <div bind:this={answerStart} class="space-y-5 border-t border-input pt-5" data-testid="review-graded-revealed">
                 <div data-testid="review-graded-revealed-answer">
                   <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
                   <div data-testid="review-graded-answer">
@@ -1229,19 +1285,22 @@
                       avTags={revealedAVTags}
                       title={$t('note_preview.back')}
                       onkey={onFrameKey}
+                      onshown={(report) => onAnswerShown(report, true)}
                     />
                   </div>
                 </div>
-                <button type="button" disabled={submitting} class="w-full min-h-12 rounded-xl border border-rose-300 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-medium disabled:opacity-50 transition-colors cursor-pointer" onclick={() => void giveUp()} data-testid="review-graded-give-up">{$t('review.graded.give_up')}</button>
+                <div bind:this={actionBar} class={ACTION_BAR} data-testid="review-action-bar">
+                  <button type="button" disabled={submitting} class="w-full min-h-12 rounded-xl border border-rose-300 dark:border-rose-900 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-medium disabled:opacity-50 transition-colors cursor-pointer" onclick={() => void giveUp()} data-testid="review-graded-give-up">{$t('review.graded.give_up')}</button>
+                </div>
               </div>
             {:else}
-              <div class="space-y-5">
+              <div bind:this={actionBar} class="{ACTION_BAR} space-y-3" data-testid="review-action-bar">
                 <!-- The answer control itself is part of the frame's front face: its markup comes from the server and it posts `answer {value}`.
                      The submit and reveal buttons stay here so the graded flow and its shortcuts keep one owner. -->
                 {#if needAnswer}
                   <p class="text-sm text-rose-700 dark:text-rose-300" data-testid="review-graded-need-answer">{$t('review.graded.need_answer')}</p>
                 {/if}
-                <div class="flex flex-col sm:flex-row gap-3 pt-2">
+                <div class="flex gap-3">
                   <button type="button" disabled={submitting} class="flex-1 min-h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void submitGraded()} data-testid="review-graded-submit"><Check class="size-4" aria-hidden="true" /><span>{$t('review.graded.submit')}</span></button>
                   <button type="button" disabled={submitting} class="flex-1 min-h-12 inline-flex items-center justify-center gap-2 rounded-xl border border-input hover:bg-muted font-medium disabled:opacity-50 transition-colors btn-press cursor-pointer" onclick={() => void revealGraded()} data-testid="review-graded-reveal"><Eye class="size-4" aria-hidden="true" /><span>{$t('review.graded.show_answer')}</span></button>
                 </div>

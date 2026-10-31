@@ -234,14 +234,35 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     }
   }
 
-  function scrollToAnswer(): void {
+  /**
+   * The distance from the top of the frame document to the face's `#answer` element, or null when the face has none.
+   * Anki's reviewer scrolls the answer side to that element. The frame is as tall as its content and never scrolls, so
+   * scrolling inside it moves nothing: the parent page scrolls instead, and it needs the position to do so.
+   */
+  function answerOffset(): number | null {
     const target = doc.getElementById('answer');
-    if (!target || typeof target.scrollIntoView !== 'function') return;
-    try {
-      target.scrollIntoView({ block: 'start' });
-    } catch {
-      // A missing layout implementation must not break the show sequence.
-    }
+    if (!target) return null;
+    const top = target.getBoundingClientRect().top + win.scrollY;
+    return Number.isFinite(top) ? Math.max(0, Math.round(top)) : null;
+  }
+
+  /**
+   * The content-box height of an element, the same box a resize observer entry reports as `contentRect`, so a height
+   * measured here never disagrees with the observer's report for the same layout.
+   */
+  function contentBoxHeight(element: HTMLElement): number {
+    const style = win.getComputedStyle(element);
+    const edges = [style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth]
+      .map((value) => Number.parseFloat(value) || 0)
+      .reduce((total, value) => total + value, 0);
+    return Math.max(0, element.getBoundingClientRect().height - edges);
+  }
+
+  /** Posts a content height unless it equals the last one posted. */
+  function postHeight(px: number): void {
+    if (px === lastHeight) return;
+    lastHeight = px;
+    post({ type: 'height', px });
   }
 
   async function show(message: ShowMessage): Promise<void> {
@@ -279,8 +300,6 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
     // Autoplay follows the deck setting and starts only the tags this face adds: on the answer side the question's
     // tags, carried in by {{FrontSide}}, are already markers with side q and are not replayed.
     if (autoplay) playSide(sideCode);
-
-    if (message.side === 'answer') scrollToAnswer();
   }
 
   /** Elements of one marker side, in document order. */
@@ -349,7 +368,10 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
           // The face is on screen with its scripts run and its math typeset; the parent waits for this to drop its
           // loading placeholder, so a face never appears half-rendered. A show that failed part-way reports too:
           // the placeholder must not outlive the attempt.
-          post({ type: 'shown', seq: message.seq });
+          // The height goes out first, measured now: the resize observer may report only after this message, and the
+          // parent scrolls to `answerTop` on `shown`, which needs the frame already at its new height.
+          if (root) postHeight(Math.ceil(contentBoxHeight(root) + bodyInset()));
+          post({ type: 'shown', seq: message.seq, answerTop: message.side === 'answer' ? answerOffset() : null });
         }
         return;
       }
@@ -453,10 +475,7 @@ export function createRuntime(options: FrameRuntimeOptions = {}): FrameRuntime {
   if (root && typeof ResizeObserverCtor === 'function') {
     observer = new ResizeObserverCtor((entries) => {
       for (const entry of entries) {
-        const px = Math.ceil(entry.contentRect.height + bodyInset());
-        if (px === lastHeight) continue;
-        lastHeight = px;
-        post({ type: 'height', px });
+        postHeight(Math.ceil(entry.contentRect.height + bodyInset()));
       }
     });
     observer.observe(root);

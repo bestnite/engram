@@ -122,14 +122,15 @@ export async function postAnswerFromFrame(root: ParentNode, side: string, value:
 
 /**
  * Reports that the frame of the given side finished its latest show, the way the runtime posts `shown` after the face's
- * scripts and typesetting ran. The frames must have received `show` first, so this waits for the recording.
+ * scripts and typesetting ran. `extra` carries the report's other fields, such as `answerTop`. The frames must have
+ * received `show` first, so this waits for the recording.
  */
-export async function reportShown(root: ParentNode, side: string): Promise<void> {
+export async function reportShown(root: ParentNode, side: string, extra: Record<string, unknown> = {}): Promise<void> {
   await shownFaces(root);
   const frame = frames(root).find((candidate) => candidate.getAttribute('data-side') === side);
   if (!frame) throw new Error(`no card frame on side ${side}`);
   const recorder = recorderFor(frame);
   const seq = recorder.shows[recorder.shows.length - 1]?.seq;
-  window.dispatchEvent(new MessageEvent('message', { data: { type: 'shown', seq }, source: recorder.win }));
+  window.dispatchEvent(new MessageEvent('message', { data: { type: 'shown', seq, ...extra }, source: recorder.win }));
   await drain();
 }

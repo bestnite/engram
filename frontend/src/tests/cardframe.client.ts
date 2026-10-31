@@ -143,7 +143,7 @@ describe('card frame show sequence', () => {
     expect(calls).toEqual(['update', 'shown']);
   });
 
-  it('applies the head, classes, content base and answer scroll', async () => {
+  it('applies the head, classes and content base', async () => {
     runtime = createRuntime({ parent: parent as unknown as Window });
     await runtime.handleMessage(
       showMessage({
@@ -290,13 +290,13 @@ describe('card frame shown report', () => {
     runtime = createRuntime({ parent: parent as unknown as Window });
     await runtime.handleMessage(showMessage({ html: '<p id="face">face</p>', seq: 7 }));
     expect(document.getElementById('face')).not.toBeNull();
-    expect(posted()).toContainEqual({ type: 'shown', seq: 7 });
+    expect(posted()).toContainEqual({ type: 'shown', seq: 7, answerTop: null });
   });
 
   it('reports seq 0 for a show without one', async () => {
     runtime = createRuntime({ parent: parent as unknown as Window });
     await runtime.handleMessage(showMessage({ html: '<p>face</p>' }));
-    expect(posted()).toContainEqual({ type: 'shown', seq: 0 });
+    expect(posted()).toContainEqual({ type: 'shown', seq: 0, answerTop: null });
   });
 
   it('still reports shown when a face hook throws', async () => {
@@ -305,7 +305,37 @@ describe('card frame shown report', () => {
     };
     runtime = createRuntime({ parent: parent as unknown as Window });
     await runtime.handleMessage(showMessage({ html: '<p>face</p>', seq: 3 })).catch(() => {});
-    expect(posted()).toContainEqual({ type: 'shown', seq: 3 });
+    expect(posted()).toContainEqual({ type: 'shown', seq: 3, answerTop: null });
+  });
+
+  it('reports where #answer sits on an answer face, so the parent can scroll to it', async () => {
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      return { top: this.id === 'answer' ? 240.4 : 0, height: 0 } as DOMRect;
+    });
+    await runtime.handleMessage(showMessage({ html: '<p>Q</p><hr id=answer><p>A</p>', side: 'answer', seq: 2 }));
+    rect.mockRestore();
+    expect(posted()).toContainEqual({ type: 'shown', seq: 2, answerTop: 240 });
+  });
+
+  it('reports no answer position for an answer face without #answer or for a question face', async () => {
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    await runtime.handleMessage(showMessage({ html: '<p>A</p>', side: 'answer', seq: 1 }));
+    await runtime.handleMessage(showMessage({ html: '<p>Q</p><hr id=answer>', side: 'question', seq: 2 }));
+    expect(posted()).toContainEqual({ type: 'shown', seq: 1, answerTop: null });
+    expect(posted()).toContainEqual({ type: 'shown', seq: 2, answerTop: null });
+  });
+
+  it('posts the face height before shown, so the parent scrolls a frame that already has its size', async () => {
+    runtime = createRuntime({ parent: parent as unknown as Window });
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      return { top: 0, height: this.id === 'qa' ? 321 : 0 } as DOMRect;
+    });
+    await runtime.handleMessage(showMessage({ html: '<p>tall</p>', side: 'answer', seq: 4 }));
+    rect.mockRestore();
+    const types = posted().map((message) => message.type);
+    expect(posted()).toContainEqual({ type: 'height', px: 321 });
+    expect(types.lastIndexOf('height')).toBeLessThan(types.indexOf('shown'));
   });
 
   it('does not report shown for a show from a foreign source', async () => {

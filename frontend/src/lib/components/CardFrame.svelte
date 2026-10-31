@@ -27,6 +27,7 @@
    * Every incoming message is accepted only from this component's own iframe and every field is validated, because the
    * frame may report anything a card's script asks it to.
    */
+  import { tick } from 'svelte';
   import { appVersion } from '../version';
 
   interface Props {
@@ -39,7 +40,7 @@
     css: string;
     /** Class list written on the frame's `<body>`. */
     bodyClass: string;
-    /** `question` or `answer`; the frame scrolls to `#answer` on the answer side. */
+    /** `question` or `answer`; on the answer side the frame reports where `#answer` sits (see `onshown`). */
     side: string;
     /** `<base href>` prefix that relative media names resolve against, `/fm/<token>/`. */
     mediaBase: string;
@@ -59,6 +60,12 @@
      * every new show until then. A caller binds it to cover the face with a loading placeholder while it renders.
      */
     shown?: boolean;
+    /**
+     * Called once the frame has finished showing the latest face and the iframe carries that face's height. `answerTop` is
+     * the distance from the frame's top edge to the face's `#answer` element, or null when the face has none or is a
+     * question. The frame never scrolls itself, so a caller that wants Anki's jump to the answer scrolls its own page.
+     */
+    onshown?: (report: { frame: HTMLIFrameElement; answerTop: number | null }) => void;
   }
 
   let {
@@ -74,6 +81,7 @@
     onanswer,
     title = '',
     shown = $bindable(false),
+    onshown,
   }: Props = $props();
 
   // The version segment only busts the iframe cache; a build without an injected version uses a fixed placeholder.
@@ -158,10 +166,19 @@
         sendTheme();
         return;
       }
-      case 'shown':
+      case 'shown': {
         // A report for an older show means a newer face is still rendering.
-        if (data.seq === showSeq) shown = true;
+        if (data.seq !== showSeq) return;
+        shown = true;
+        const answerTop =
+          typeof data.answerTop === 'number' && Number.isFinite(data.answerTop) && data.answerTop >= 0 && data.answerTop <= 100000
+            ? data.answerTop
+            : null;
+        // The frame posts its height just before `shown`; the tick lets that height reach the iframe element first, so the
+        // caller measures the page with the face at its final size.
+        if (onshown) void tick().then(() => onshown({ frame, answerTop }));
         return;
+      }
       case 'height':
         if (typeof data.px === 'number' && Number.isFinite(data.px) && data.px >= 0 && data.px <= 100000) {
           height = Math.round(data.px);
