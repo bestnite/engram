@@ -130,26 +130,6 @@ lands after `M18-30` and `M18-31`, so that it tests their final behaviour. `M18-
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-7 `.apkg` progress import: derive the memory state a package does not carry** — today
-  `importAnkiProgress` in `internal/store/anki_import.go` reads stability and difficulty only from
-  the `s` and `d` keys of `cards.data`. Anki writes those keys only when FSRS is enabled (a collection
-  created with `anki==26.9.3` and reviewed with its defaults writes `{"pos":1,"lrt":…}`), so a learning,
-  review or relearning card from such a package is stored with no memory state. go-fsrs rejects a
-  non-new card whose stability is below 0.001 (`validateCard`), so the review page's preview and the
-  review submission both fail for every such card. The fix: when `s` or `d` is missing on a non-new
-  card, compute the state with `fsrs.MemoryState` over that card's kept revlog rows (type 0–3, ease
-  1–4, in revlog order; `DeltaT` is the whole number of review days between consecutive rows, using
-  the importing user's review-day boundaries), with the weights of the preset the importer studies
-  the target deck with. When the card has no kept revlog row, use `MemoryStateFromSM2(factor/1000,
-  ivl, 0.9)`. A non-new card for which neither computation succeeds is not written and is counted in
-  `states_skipped`, so it stays new for the importer. *Acceptance:* table tests import a review card
-  and a learning card with `data` = `{}` and two kept revlog rows each, a review card with `{}`, no
-  revlog row and factor 2500, and a learning card with `{}`, no revlog row and factor 0; the first
-  three get a stability of at least 0.001 and a difficulty between 1 and 10, the fourth is counted in
-  `states_skipped` and has no state row; a test outside the store package calls the scheduler's
-  preview on each written state and gets no error. Evidence is the raw scoped `go test` and `go vet`
-  output.
-
 - [ ] **M18-8 `.apkg` progress import is idempotent on PostgreSQL** — `importAnkiProgress` decides
   "unchanged" with `reflect.DeepEqual` on two `CardState` values. PostgreSQL returns `time.Time`
   values with a different location than the freshly built row, so a repeated import counts every state
