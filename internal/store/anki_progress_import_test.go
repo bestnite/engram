@@ -768,21 +768,26 @@ func TestAnkiProgressMissingMemory(t *testing.T) {
 			name                   string
 			kind, factor, interval int
 			history, skipped       bool
+			data                   string
 		}{
-			{"review history", 2, 2500, 7, true, false},
-			{"learning history", 1, 0, -600, true, false},
-			{"review SM2", 2, 2500, 7, false, false},
-			{"learning invalid SM2", 1, 0, -600, false, true},
+			{"review history", 2, 2500, 7, true, false, `{}`},
+			{"learning history", 1, 0, -600, true, false, `{}`},
+			{"review SM2", 2, 2500, 7, false, false, `{}`},
+			{"learning invalid SM2", 1, 0, -600, false, true, `{}`},
+			{"relearning history", 3, 2500, 7, true, false, `{}`},
+			{"relearning SM2", 3, 2500, 7, false, false, `{}`},
+			{"review stability only", 2, 2500, 7, true, false, `{"s":5}`},
+			{"review difficulty only", 2, 2500, 7, true, false, `{"d":5}`},
 		} {
 			t.Run(driver+"/"+tc.name, func(t *testing.T) {
-				user := seedUsers(t, db, fmt.Sprintf("memory_%s_%d_%d_%t", driver, tc.kind, tc.factor, tc.history))[0]
+				user := seedUsers(t, db, fmt.Sprintf("memory_%s_%s", driver, tc.name))[0]
 				pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
 				if err != nil {
 					t.Fatal(err)
 				}
 				pkg.Notes, pkg.Cards = pkg.Notes[:1], pkg.Cards[:1]
 				card := &pkg.Cards[0]
-				card.Type, card.Queue, card.Factor, card.Interval, card.Data = tc.kind, tc.kind, tc.factor, tc.interval, `{}`
+				card.Type, card.Queue, card.Factor, card.Interval, card.Data = tc.kind, tc.kind, tc.factor, tc.interval, tc.data
 				pkg.Reviews = nil
 				if tc.history {
 					pkg.Reviews = []anki.Review{{ID: 1600000000000, CardID: card.ID, Ease: 3, Type: 0}, {ID: 1600086400000, CardID: card.ID, Ease: 4, Type: 1}}
@@ -926,6 +931,78 @@ func TestAnkiProgressReplayUsesStudyWeightsAndReviewDays(t *testing.T) {
 			}
 			if got.Stability == nil || got.Difficulty == nil || *got.Stability != want.Stability || *got.Difficulty != want.Difficulty {
 				t.Fatalf("got %+v want %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestAnkiProgressReplayUsesEditorPreset(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			users := seedUsers(t, db, "replay_owner_"+driver, "replay_editor_"+driver)
+			owner, editor := users[0], users[1]
+			ownerPreset := NewPreset(owner, "owner")
+			if err := db.Create(&ownerPreset).Error; err != nil {
+				t.Fatal(err)
+			}
+			deck := Deck{OwnerUserID: owner, Name: "shared", PresetID: ownerPreset.ID}
+			if err := db.Create(&deck).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := NewGrantStore(db).Grant(ctx, deck.ID, editor, RoleEditor, &owner); err != nil {
+				t.Fatal(err)
+			}
+			weights := fsrs.DefaultWeights()
+			weights[2] += 2
+			encoded, err := json.Marshal(weights)
+			if err != nil {
+				t.Fatal(err)
+			}
+			memberPreset := NewPreset(editor, "member")
+			memberPreset.WeightsJSON = Ptr(string(encoded))
+			if err := db.Create(&memberPreset).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Model(&DeckMemberSetting{}).Where("deck_id = ? AND user_id = ?", deck.ID, editor).Update("preset_id", memberPreset.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			pkg := anki.WritePackage{Collection: anki.WriteCollection{
+				CreatedAt:   1600000000,
+				NoteTypes:   []anki.WriteNoteType{{ID: 10, Name: "Basic", Fields: []anki.Field{{Name: "Front"}}, Templates: []anki.Template{{Name: "Card", QFormat: "{{Front}}", AFormat: "{{Front}}"}}}},
+				Decks:       []anki.WriteDeck{{ID: 20, Name: "Imported", ConfigID: 30}},
+				DeckConfigs: []anki.WriteDeckConfig{{ID: 30, Name: "Default", DesiredRetention: .9, LearningSteps: []float64{1, 10}, RelearningSteps: []float64{10}, MaximumIntervalDays: 36500}},
+				Notes:       []anki.WriteNote{{ID: 40, GUID: "guid", NoteTypeID: 10, Fields: []string{"front"}}},
+				Cards:       []anki.WriteCard{{ID: 50, NoteID: 40, DeckID: 20, Type: 2, Queue: 2, Ivl: 7, Factor: 2500}},
+				Reviews:     []anki.WriteReview{{ID: 1600000000000, CardID: 50, Ease: 3, Type: 0}, {ID: 1600086400000, CardID: 50, Ease: 4, Type: 1}},
+			}}
+			var raw bytes.Buffer
+			if err := anki.WriteArchive(&raw, &pkg); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := NewDeckStore(db).ImportPackage(ctx, editor, &raw, PackageImportOptions{Target: fmt.Sprintf("into_deck:%d", deck.ID), IncludeProgress: true, MediaRoot: t.TempDir()}); err != nil {
+				t.Fatal(err)
+			}
+			entries := fsrs.ReviewEntries{{Rating: fsrs.Good}, {Rating: fsrs.Easy, DeltaT: 1}}
+			params := fsrs.DefaultParam()
+			ownerMemory, err := fsrs.NewFSRS(params).MemoryState(entries, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			params.W = weights
+			memberMemory, err := fsrs.NewFSRS(params).MemoryState(entries, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got CardState
+			if err := db.Where("user_id = ?", editor).First(&got).Error; err != nil {
+				t.Fatal(err)
+			}
+			if got.Stability == nil || got.Difficulty == nil || *got.Stability != memberMemory.Stability || *got.Difficulty != memberMemory.Difficulty {
+				t.Fatalf("got %+v, member memory %+v", got, memberMemory)
+			}
+			if *got.Stability == ownerMemory.Stability && *got.Difficulty == ownerMemory.Difficulty {
+				t.Fatalf("got owner memory %+v", ownerMemory)
 			}
 		})
 	}

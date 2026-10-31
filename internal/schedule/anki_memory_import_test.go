@@ -1,4 +1,4 @@
-package api
+package schedule
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"git.nite07.com/nite/engram/internal/anki"
-	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -33,26 +32,29 @@ func TestAnkiImportedMemoryPreview(t *testing.T) {
 	if err := anki.WriteArchive(&raw, &pkg); err != nil {
 		t.Fatal(err)
 	}
-	env := newTestEnv(t, 60, 60)
-	user := seedUser(t, env.db, "memory_preview", store.RoleUser)
-	report, err := store.NewDeckStore(env.db).ImportPackage(t.Context(), user.ID, bytes.NewReader(raw.Bytes()), store.PackageImportOptions{Target: store.PackageTargetNewDeck, IncludeProgress: true})
+	db := newTestDB(t)
+	user := store.User{Username: "memory_preview", Email: "memory_preview@example.com", DisplayName: "memory_preview", Role: store.RoleUser, Status: store.StatusActive, Locale: "en", Timezone: "UTC"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	report, err := store.NewDeckStore(db).ImportPackage(t.Context(), user.ID, bytes.NewReader(raw.Bytes()), store.PackageImportOptions{Target: store.PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var deck store.Deck
-	if err := env.db.First(&deck, report.DeckID).Error; err != nil {
+	if err := db.First(&deck, report.DeckID).Error; err != nil {
 		t.Fatal(err)
 	}
 	var preset store.Preset
-	if err := env.db.First(&preset, deck.PresetID).Error; err != nil {
+	if err := db.First(&preset, deck.PresetID).Error; err != nil {
 		t.Fatal(err)
 	}
-	scheduler, err := schedule.NewScheduler(&preset)
+	scheduler, err := NewScheduler(&preset)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var states []store.CardState
-	if err := env.db.Where("user_id = ?", user.ID).Find(&states).Error; err != nil {
+	if err := db.Where("user_id = ?", user.ID).Find(&states).Error; err != nil {
 		t.Fatal(err)
 	}
 	if len(states) != 3 || report.StatesSkipped != 1 {
