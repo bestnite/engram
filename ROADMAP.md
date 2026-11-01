@@ -114,7 +114,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   want 404`, with the second id belonging to the other account. `go test ./internal/api/ -count=1` and
   `go test ./internal/mcp/ -count=1` also pass.
 
-- [ ] **M19-2 Template media may be exportable by a caller who cannot read the deck** — the review
+- [x] **M19-2 Template media may be exportable by a caller who cannot read the deck** — the review
   reported that a deck export can carry media referenced only by a note type template, and that the
   export path does not apply the same media-readable check the single-card write path applies. The
   rewritten review **confirmed it by reading, without executing**: note-type create and update write
@@ -124,6 +124,34 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   access and as a caller without it, and shows the second is refused (`media_not_readable` or the code
   the rules name) while the first succeeds; the export of an unreadable media name must not appear in
   the archive. Evidence is the raw test output.
+  *Closed by `6e10423`.* The report is confirmed at the store layer and is reachable through the
+  transport: `ExportAnkiPackage` checks deck read access, but the media rule is narrower than deck
+  visibility, and a template reference is not covered by `media_notes`. `ankiMediaFiles`
+  (`internal/store/anki_export.go:682`) now receives the exporting user, checks every resolved sha
+  with `mediaReadableByUser` and refuses the whole export with `package_media_forbidden` listing the
+  unreadable shas before any file is read. That is the package chain's existing code for this rule
+  (`internal/store/package.go:27-30`), which `mapPackageError` answers as 403, so the REST and web
+  export paths need no change. Note the exploit did not need an `_`-prefixed name: `noteTypeMediaNames`
+  records only `_` names in `media_note_types`, while `ankiMediaFiles` collects every name a template
+  writes. `TestExportAnkiPackageRefusesUnreadableTemplateMedia`
+  (`internal/store/anki_export_media_access_test.go`) gives one user's `cover.png` to a deck, has a
+  co-editor's note type reference it in its question template with no note referencing it, and shows
+  the co-editor cannot read the sha. The co-editor's export is refused with that code; the uploader's
+  export succeeds and the archive carries `cover.png` with the same bytes. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestExportAnkiPackageRefusesUnreadableTemplateMedia -count=1 -v`:
+  ```
+  === RUN   TestExportAnkiPackageRefusesUnreadableTemplateMedia
+  === RUN   TestExportAnkiPackageRefusesUnreadableTemplateMedia/sqlite
+  === RUN   TestExportAnkiPackageRefusesUnreadableTemplateMedia/postgres
+  --- PASS: TestExportAnkiPackageRefusesUnreadableTemplateMedia (0.34s)
+  --- PASS: TestExportAnkiPackageRefusesUnreadableTemplateMedia/sqlite (0.01s)
+  --- PASS: TestExportAnkiPackageRefusesUnreadableTemplateMedia/postgres (0.04s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.348s
+  ```
+  The same test before the check failed on both drivers with `editor export succeeded, want the
+  unreadable template media refused`. `go test ./internal/store/ -run 'TestExportAnkiPackage|TestMedia|TestPackageImport|TestImportPackage|TestAnkiExport' -count=1`
+  and `go test ./internal/api/ -run 'Package|Export' -count=1` pass.
 
 - [x] **M19-3 An evicted MCP session answers with the identity of the account that created it** —
   *Blocker.* The first pass reported a stale identity; the rewritten review **confirmed and reproduced it,
