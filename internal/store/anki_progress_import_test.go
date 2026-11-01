@@ -718,6 +718,66 @@ func TestAnkiProgressBatchStatements(t *testing.T) {
 			}
 		})
 	}
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver+"/many_skipped_notes", func(t *testing.T) {
+			counts := make(map[int]map[string]int)
+			for _, size := range []int{10, 1000} {
+				pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				note, card := pkg.Notes[0], pkg.Cards[0]
+				pkg.Notes, pkg.Cards, pkg.Reviews = nil, nil, nil
+				for i := 0; i < size; i++ {
+					n := note
+					n.ID, n.GUID = int64(i+1), fmt.Sprintf("batch-%d", i)
+					c := card
+					c.ID, c.NoteID = int64(i+1), n.ID
+					c.Type, c.Queue, c.Data = 2, 2, `{"s":4.5,"d":6.2}`
+					pkg.Notes = append(pkg.Notes, n)
+					pkg.Cards = append(pkg.Cards, c)
+					pkg.Reviews = append(pkg.Reviews, anki.Review{ID: 1600000000000 + int64(i), CardID: c.ID, Ease: 3, Type: 1})
+				}
+				user := seedUsers(t, db, fmt.Sprintf("batch_many_%s_%d", driver, size))[0]
+				plan, initial := planAnkiDecks(pkg), &PackageImportReport{}
+				store := NewDeckStore(db)
+				opts := PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: true, OnConflict: "skip", Now: time.Now}
+				if err := store.importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, opts, initial); err != nil {
+					t.Fatal(err)
+				}
+				if initial.NotesCreated != size || initial.CardsCreated != size || initial.ProgressApplied != size || initial.ReviewsApplied != size {
+					t.Fatalf("initial import size=%d report=%+v", size, initial)
+				}
+				counts[size] = make(map[string]int)
+				if err := db.Callback().Query().Before("gorm:query").Register("test:many_progress_query", func(tx *gorm.DB) {
+					switch tx.Statement.Table {
+					case "card_states", "reviews", "cards":
+						counts[size][tx.Statement.Table]++
+					}
+				}); err != nil {
+					t.Fatal(err)
+				}
+				report := &PackageImportReport{}
+				err = store.importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, "into_deck", initial.DeckID, opts, report)
+				if removeErr := db.Callback().Query().Remove("test:many_progress_query"); removeErr != nil {
+					t.Fatal(removeErr)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("cards=%d SELECT counts=%v report notes_skipped=%d states_skipped=%d reviews_skipped=%d", size, counts[size], report.NotesSkipped, report.StatesSkipped, report.ReviewsSkipped)
+				if report.NotesSkipped != size || report.NotesCreated != 0 || report.StatesSkipped != size || report.ReviewsSkipped != size {
+					t.Fatalf("repeat import size=%d report=%+v", size, report)
+				}
+				if counts[size]["card_states"]+counts[size]["reviews"] > 4 {
+					t.Errorf("size=%d card_states and reviews SELECTs=%d, want at most 4", size, counts[size]["card_states"]+counts[size]["reviews"])
+				}
+			}
+			if counts[1000]["cards"] > counts[10]["cards"]+2 {
+				t.Errorf("cards SELECTs: 1000 cards=%d, 10 cards=%d; want at most 2 more", counts[1000]["cards"], counts[10]["cards"])
+			}
+		})
+	}
 }
 
 func TestAnkiDiscardedProgressCounts(t *testing.T) {
