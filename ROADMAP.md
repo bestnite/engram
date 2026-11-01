@@ -421,7 +421,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   'TestExportAnkiPackage|TestAnkiExport|TestImportPackage|TestPackageImport' -count=1` passes on
   both drivers.
 
-- [ ] **M19-11 Clone fails on imported note types and drops custom styling** — *should-fix.* Clone
+- [x] **M19-11 Clone fails on imported note types and drops custom styling** — *should-fix.* Clone
   reverse-engineers the source type into an engram stock kind and creates the default stock type
   (`internal/store/clone.go:68-93`, esp. `:74-80`). Anki-imported types carry `f0`/`f1`/`t0` identifiers,
   so they do not match a stock shape and the clone fails; a stock-shaped type with custom CSS clones as
@@ -432,6 +432,32 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Acceptance:* copy the source type's config and content into a new ID instead of rebuilding a stock
   type; regressions clone a real imported type and a custom-CSS type and show the clone still renders
   after the source deck is deleted.
+  *Closed by this commit (`fix(store): copy the source note type when cloning a deck`).* `Clone`
+  (`internal/store/clone.go:72-90`) resolves each source note through `noteTypeFor` and copies that row
+  once per source note type id into the cloned deck (`cloneNoteType`, `:118`): the config is written
+  verbatim through `SetConfig`, so field ids, template ids, CSS and `anki_origin` survive, and the
+  type's media references are written in the same transaction. The stock-kind rebuild is gone, and its
+  two helpers `ensureStockNoteType` and `kindOfNote` (`internal/store/note.go`) had no other caller and
+  were removed. `TestCloneCopiesSourceNoteType` (`internal/store/clone_content_test.go`) clones a deck
+  whose type carries Anki `f0`/`f1`/`t0` ids and an `anki_origin`, and a stock-shaped type with custom
+  CSS, then asserts the clone's type is a new row in the cloned deck with the source CSS, ids and
+  origin, renders the cloned note's front, and renders it again after the source deck is deleted. Raw
+  output of `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestCloneCopiesSourceNoteType -count=1 -v`:
+  ```
+  --- PASS: TestCloneCopiesSourceNoteType (0.37s)
+      --- PASS: TestCloneCopiesSourceNoteType/sqlite (0.02s)
+          --- PASS: TestCloneCopiesSourceNoteType/sqlite/imported_note_type (0.00s)
+          --- PASS: TestCloneCopiesSourceNoteType/sqlite/stock_type_with_custom_styling (0.00s)
+      --- PASS: TestCloneCopiesSourceNoteType/postgres (0.30s)
+          --- PASS: TestCloneCopiesSourceNoteType/postgres/imported_note_type (0.03s)
+          --- PASS: TestCloneCopiesSourceNoteType/postgres/stock_type_with_custom_styling (0.02s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.384s
+  ```
+  With `clone.go` and `note.go` reverted, the same run failed on both drivers with
+  `Clone() error = clone note 1: its note type is not an engram stock type, want nil` and
+  `cloned CSS = ".card { ... color: black; ... }", want the source CSS ".card { color: rgb(7, 8, 9); } ..." kept`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestClone|TestDeckCopyName|TestCloneKeepsClonedMediaReadable' -count=1` passes on both drivers and `go build ./...` passes.
 
 - [x] **M19-12 A cloze→cloze change reports card removals that do not happen** — *should-fix.* Cloze
   produces an empty template plan, so every card is first listed as stale and soft-deleted, then the

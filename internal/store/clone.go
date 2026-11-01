@@ -7,12 +7,15 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"git.nite07.com/nite/engram/internal/notetype"
 )
 
 // Clone copies all content of a deck (notes and cards) into targetUserID's account ('clone/fork').
 //
 // Key semantics (content and progress kept separate):
-//   - only content columns are copied (kind / fields_json / tags_json / external_ref / source / reference_refs);
+//   - only content columns are copied (note type / fields_json / tags_json / external_ref / source / reference_refs);
+//   - each source note type is copied as a new row of the cloned deck, with the same config and styling;
 //   - new notes regenerate cards from the card type, yielding a set of cards with **brand-new ids and brand-new rows**;
 //   - no progress is ever copied: the new cards have no card_states rows, progress in the caller's account starts from zero;
 //   - grants are per-instance state and are not copied with the content — the cloned deck has the caller as its only owner.
@@ -63,21 +66,27 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 
 		// it reuses NoteStore's card-type validation and card generation pipeline, so cloning and manual card creation share one path.
 		notesStore := NewNoteStore(s.db)
+		// A note type belongs to exactly one deck, so the clone cannot reuse the source row. The config is copied
+		// verbatim into a new row instead: rebuilding a stock type from a recognised kind would lose the field and
+		// template ids of an imported type and every custom template or style the source deck carried.
+		clonedTypes := make(map[uint64]*NoteType)
 		for i := range notes {
 			original := notes[i]
 			fields, err := ParseFields(original.FieldsJSON)
 			if err != nil {
 				return fmt.Errorf("clone note %d: decode fields: %w", original.ID, err)
 			}
-			// The clone lives in another deck, so it needs that deck's note type for the same stock kind; the source
-			// note type is not reused, because a note type belongs to exactly one deck.
-			kind := kindOfNote(ctx, tx, &original)
-			if kind == "" {
-				return fmt.Errorf("clone note %d: its note type is not an engram stock type", original.ID)
-			}
-			noteType, err := ensureStockNoteType(ctx, tx, dst.ID, kind)
+			srcType, srcConfig, err := noteTypeFor(ctx, tx, &original)
 			if err != nil {
 				return fmt.Errorf("clone note %d: %w", original.ID, err)
+			}
+			noteType, ok := clonedTypes[srcType.ID]
+			if !ok {
+				noteType, err = cloneNoteType(ctx, tx, dst.ID, srcType, srcConfig)
+				if err != nil {
+					return fmt.Errorf("clone note %d: %w", original.ID, err)
+				}
+				clonedTypes[srcType.ID] = noteType
 			}
 			note := &Note{
 				DeckID:        dst.ID,
@@ -99,4 +108,24 @@ func (s *DeckStore) Clone(ctx context.Context, src *Deck, targetUserID uint64, n
 		return nil, err
 	}
 	return &out, nil
+}
+
+// cloneNoteType writes a copy of a source deck's note type into the cloned deck.
+//
+// The name and config are validated like every other note type write, so a stored config the store would reject cannot
+// enter the clone. The media reference set is written in the same transaction because the garbage collector resolves
+// `_`-prefixed assets through it: a copied type without its references would let the clone's own assets be reclaimed.
+func cloneNoteType(ctx context.Context, tx *gorm.DB, deckID uint64, src *NoteType, cfg notetype.Config) (*NoteType, error) {
+	now := time.Now().UTC()
+	nt := &NoteType{DeckID: deckID, CreatedAt: now, UpdatedAt: now}
+	if err := nt.SetConfig(src.Name, cfg); err != nil {
+		return nil, fmt.Errorf("copy note type %d: %w", src.ID, err)
+	}
+	if err := tx.WithContext(ctx).Create(nt).Error; err != nil {
+		return nil, fmt.Errorf("copy note type %d: %w", src.ID, err)
+	}
+	if err := NewMediaNoteTypeStore(tx).Replace(ctx, nt.ID, noteTypeMediaNames(cfg)); err != nil {
+		return nil, fmt.Errorf("copy media references of note type %d: %w", src.ID, err)
+	}
+	return nt, nil
 }

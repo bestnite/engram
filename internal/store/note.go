@@ -92,59 +92,9 @@ type NoteStore struct {
 // NewNoteStore builds the note store.
 func NewNoteStore(db *gorm.DB) *NoteStore { return &NoteStore{db: db} }
 
-// ensureStockNoteType returns the deck's note type for one engram stock kind, creating it when the deck has none.
-//
-// A deck keeps one note type per stock kind, so repeated writes resolve to the same row and their notes stay together.
-// The created note type is validated exactly like one created through the note type store, so an invalid stock definition
-// is rejected instead of stored. Cloning a deck uses it to give the copy's notes a note type of their own deck.
-func ensureStockNoteType(ctx context.Context, tx *gorm.DB, deckID uint64, kind string) (*NoteType, error) {
-	kind = strings.TrimSpace(kind)
-	stock, ok := notetype.EngramStockByKind(kind)
-	if !ok {
-		return nil, fmt.Errorf("unknown note type kind %q", kind)
-	}
-	var types []NoteType
-	if err := tx.WithContext(ctx).Where("deck_id = ?", deckID).Order("id ASC").Find(&types).Error; err != nil {
-		return nil, fmt.Errorf("list note types of deck %d: %w", deckID, err)
-	}
-	for i := range types {
-		cfg, err := types[i].Config()
-		if err != nil {
-			continue
-		}
-		if notetype.EngramStockKindFor(cfg) == kind {
-			return &types[i], nil
-		}
-	}
-	nt := NoteType{DeckID: deckID}
-	if err := nt.SetConfig(stock.Name, stock.Config); err != nil {
-		return nil, fmt.Errorf("create note type for kind %q: %w", kind, err)
-	}
-	now := time.Now().UTC()
-	nt.CreatedAt = now
-	nt.UpdatedAt = now
-	if err := tx.WithContext(ctx).Create(&nt).Error; err != nil {
-		return nil, fmt.Errorf("create note type for kind %q: %w", kind, err)
-	}
-	return &nt, nil
-}
-
 // NoteTypeFor resolves the note type of a note and decodes its config.
 func (s *NoteStore) NoteTypeFor(ctx context.Context, n *Note) (*NoteType, notetype.Config, error) {
 	return noteTypeFor(ctx, s.db, n)
-}
-
-// kindOfNote returns the engram stock kind a note's note type was created from, or the empty string for a note type
-// that is not one of the stock types.
-//
-// A note stores only its note type id, so this is where a kind is derived when one is needed. Cloning a deck uses it to
-// give a copied note the copy's own note type of the same shape.
-func kindOfNote(ctx context.Context, tx *gorm.DB, n *Note) string {
-	_, cfg, err := noteTypeFor(ctx, tx, n)
-	if err != nil {
-		return ""
-	}
-	return notetype.EngramStockKindFor(cfg)
 }
 
 // noteTypeFor resolves a note's note type inside the caller's transaction and checks that it belongs to the note's deck.
