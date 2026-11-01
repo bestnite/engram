@@ -313,10 +313,11 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   configuration instead of the home deck's. engram has no filtered decks. The fix: wherever the importer
   uses a card's deck, a card with `odid` ≠ 0 uses `odid`. That covers the card counts and the shared
   prefix in `planAnkiDecks`, the card's `deck_path`, and the deck whose configuration `ankiTopConfig`
-  reads. A deck that then holds no card takes no part, as today. The golden that `M18-47` adds also
-  records the deck Anki assigns each filtered card after import. If Anki keeps a card in the filtered
-  deck instead of its home deck, the task stops and reports that, because engram cannot represent a
-  filtered deck. *Acceptance:* a table test in `internal/store/anki_progress_import_test.go` covers four
+  reads. A deck that then holds no card takes no part, as today. The golden that `M18-47` adds records
+  the deck Anki assigns each filtered card after import, and it shows that Anki keeps such a card in
+  the filtered deck, which engram cannot represent; the maintainer therefore decided that a card with
+  `odid` ≠ 0 belongs to its home deck, and the filtered deck itself is not created.
+  *Acceptance:* a table test in `internal/store/anki_progress_import_test.go` covers four
   packages. A package whose only card sits in a filtered deck with `odid` naming `Home` imports as a
   deck named `Home`, and the card has no `deck_path`. A card whose home deck is `Home::Sub` and which
   sits in a filtered deck gets `deck_path` `Sub`, in a package where another card sits in `Home`. A
