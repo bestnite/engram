@@ -248,24 +248,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   Evidence is the output of `grep -n -E 'M18-(29|30|31|33)\b' ROADMAP.md` limited to the ledger
   section.
 
-- [ ] **M18-46 README says where the preset choice is taken and for which target** — the sentence that
-  `M18-34` wrote on line 47 of `README.md` describes `preset_mode`, `preset_id` and `apply_weights`
-  without saying which import entries take the first two, while line 43 names the Import page first.
-  The Import page sends neither `preset_mode` nor `preset_id`: `importDeckPackage` and
-  `importDeckPackageURL` in `frontend/src/lib/api/client.ts` do not send them, and `M18-6` adds them.
-  The CLI takes them as `--preset-mode` and `--preset-id`. The sentence also omits two refusals that
-  `ValidateImportPreset` makes: `reuse` and `copy` are refused with a target other than `new_deck`, and
-  a `preset_id` is refused unless the mode is `reuse` or `copy` (for `new_deck` today, and for every
-  target once `M18-42` lands). The fix rewrites that sentence only. It names the entries that take the
-  choice: `POST /api/v1/decks/import`, `POST /api/v1/decks/import-url`, `POST /api/v1/decks/import-uploads`,
-  the CLI flags and the `import_deck` and `create_import_upload` MCP tools. It states that the choice
-  applies to `new_deck` only, and it states both refusals. This entry lands after `M18-42` and never
-  runs beside `M18-21`, which edits the same file. The commit that lands `M18-6` adds the Import page
-  to the sentence. *Acceptance:* each statement of the rewritten sentence matches `ValidateImportPreset`
-  in `internal/store/package_import.go`, the flags in `cmd/engram/package.go`, the two tool inputs in
-  `internal/mcp/tools.go` and the two request functions in `frontend/src/lib/api/client.ts`. Evidence
-  is the `README.md` diff.
-
 - [ ] **M18-49 The replay selects the rows Anki selects** — `deriveAnkiMemory` in
   `internal/store/anki_import.go` replays the kept rows from an empty state, except when the first kept
   row is a review row (revlog type 1): then it builds SM-2 from the card's `factor` and `ivl` and
