@@ -204,7 +204,9 @@ oracle result, while changing its interval or factor did. `review-lapses` produc
 `1.0` and `8.215851783752441`: its first row has a negative interval and its second has interval
 1 and factor 2500. In the measured histories, `set-due` and `filtered-off` match
 `learning-reviews` at `63.200775146484375` and `2.1043312549591064`; `forget` produces
-`20.0` and `6.413895130157471`. These measurements do not establish full replay alignment.
+`20.0` and `6.413895130157471`. All 14 original golden states and 43 control measurements match
+the Go importer within `1e-4` on SQLite and PostgreSQL. This establishes alignment for these
+fixtures, not for every possible history or deck configuration.
 
 The `subday` rows have Unix millisecond timestamps `1699920000000` and `1700002800000`
 (2023-11-14 00:00 and 23:00 UTC). Anki returns `7.315299987792969` and

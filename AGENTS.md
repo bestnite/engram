@@ -167,9 +167,15 @@ this file, and commit messages.
   otherwise, and a re-import never overwrites progress newer than the package's (the importer's row
   wins; only review rows later than the importer's latest review are written). A revlog row that
   cannot be read fails an import with `include_progress` on; a card row that cannot be read is skipped,
-  counted in `cards_skipped`, and its review rows are counted and logged. Card memory states derived
-  from a package's review history are an approximation that is logged at import time: they are not yet
-  aligned with what Anki computes for the same history (`M18-49`, `M18-51`, `M18-79`).
+  counted in `cards_skipped`, and its review rows are counted and logged. Memory replay follows the
+  measured Anki 26.09.3 selection and second-truncated age differences relative to the target's next
+  rollover. The importing user's timezone offset at import time and `day_cutoff_hour` (default 4)
+  supply that target context; ordinary `reviews.review_day` boundaries do not change. The 14 original
+  memory-replay goldens and 43 boundary/configuration controls match within `1e-4` on both databases.
+  Historical retention remains 0.9, Anki's ignore-before setting is not modelled, and missing history
+  still requires an SM-2 estimate. Selected history is replayed for row-level memory even when the
+  card carries its final memory; undo refuses without writes when a non-new state cannot be restored
+  from usable previous memory. The measured rules and scope live in `tools/anki-oracle/README.md`.
 - **Export format.** engram writes an `.apkg` the reference release imports: the collection is legacy
   schema 11 in `collection.anki21`; note types, notes, cards, media and one deck configuration travel;
   the caller's own card states, review log and FSRS weights travel only when requested; and answer
