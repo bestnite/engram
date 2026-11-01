@@ -541,7 +541,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   removing an exported symbol.
 
 
-- [ ] **M19-27 A step the preset form accepts silently replaces every scheduling parameter with the
+- [x] **M19-27 A step the preset form accepts silently replaces every scheduling parameter with the
   library defaults** — *Blocker.* `Parameters`/`parametersWithWeights` build `fsrs.Parameters` and return
   them without validating (`internal/schedule/scheduler.go:151-160,172-192`); the only validation is inside
   `fsrs.NewFSRS`, whose failure mode is to swap in `DefaultParam()` — retention 0.9, maximum 36 500,
@@ -555,6 +555,48 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   letting the library substitute defaults; one step validator for the repository that checks finiteness
   and a bound **after** scaling by the unit, refusing `1e308d` with `preset_steps_invalid`; a table case
   asserting `NewScheduler` errors and a `internal/web` case asserting the PATCH is refused.
+  *Closed by this commit (`fix(schedule): refuse scheduling parameters the library would replace`).*
+  `parametersWithWeights` (`internal/schedule/scheduler.go:192`) now runs `validateParameters` (`:206`)
+  before returning, so `NewScheduler` and `CompareFit` both report an error for retention outside (0, 1], a
+  maximum interval outside (0, 36 500] days, a negative or non-finite step, or a non-finite weight, instead
+  of `fsrs.NewFSRS` substituting `DefaultParam()`. The check mirrors what the library still rejects after
+  its weight clipping, so a weight outside a clip range is still clamped rather than refused.
+  The step half of the acceptance was reached by `4a4f573` (M19-28), which applied the finiteness and
+  post-scaling bound to all four step validators; this commit does not merge them into one function,
+  because they live in three packages and a merge would rewrite unrelated call sites and import behaviour.
+  `1e308d` is refused with `preset_steps_invalid`.
+  `TestNewSchedulerRefusesParametersTheLibraryWouldReplace` (`internal/schedule/parameter_validation_test.go`)
+  is the table of six parameters plus a defaults control. Raw output of
+  `go test ./internal/schedule/ -run TestNewSchedulerRefusesParametersTheLibraryWouldReplace -count=1 -v`:
+  ```
+  === RUN   TestNewSchedulerRefusesParametersTheLibraryWouldReplace
+  === RUN   TestNewSchedulerRefusesParametersTheLibraryWouldReplace/retention_zero
+  === RUN   TestNewSchedulerRefusesParametersTheLibraryWouldReplace/retention_above_one
+  === RUN   TestNewSchedulerRefusesParametersTheLibraryWouldReplace/maximum_interval_zero
+  === RUN   TestNewSchedulerRefusesParametersTheLibraryWouldReplace/maximum_interval_above_the_library_ceiling
+  === RUN   TestNewSchedulerRefusesParametersTheLibraryWouldReplace/negative_learning_step
+  === RUN   TestNewSchedulerRefusesParametersTheLibraryWouldReplace/negative_relearning_step
+  --- PASS: TestNewSchedulerRefusesParametersTheLibraryWouldReplace (0.00s)
+      --- PASS: TestNewSchedulerRefusesParametersTheLibraryWouldReplace/retention_zero (0.00s)
+      --- PASS: TestNewSchedulerRefusesParametersTheLibraryWouldReplace/retention_above_one (0.00s)
+      --- PASS: TestNewSchedulerRefusesParametersTheLibraryWouldReplace/maximum_interval_zero (0.00s)
+      --- PASS: TestNewSchedulerRefusesParametersTheLibraryWouldReplace/maximum_interval_above_the_library_ceiling (0.00s)
+      --- PASS: TestNewSchedulerRefusesParametersTheLibraryWouldReplace/negative_learning_step (0.00s)
+      --- PASS: TestNewSchedulerRefusesParametersTheLibraryWouldReplace/negative_relearning_step (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/schedule	0.008s
+  ```
+  With the `validateParameters` call removed the same table failed on all six cases with
+  `NewScheduler() error = nil, want the parameter the library would replace refused`. The form half is
+  pinned by `TestPresetWriteRejectsInvalidInput` (`internal/web/presets_api_test.go:191`), whose
+  `steps_overflow_the_cap_after_scaling` case sends `learning_steps "1e308d"` and expects
+  `preset_steps_invalid`; it and the other preset cases pass:
+  `go test ./internal/web/ -run TestPresetWriteRejectsInvalidInput -count=1 -v` ends
+  `--- PASS: TestPresetWriteRejectsInvalidInput (0.33s)` / `ok git.nite07.com/nite/engram/internal/web 0.333s`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/schedule/ -count=1` passes in 9.819s, and
+  `./internal/store/ -run 'TestPreset|TestRepairPresetSchedulerLimits|TestMigratePreset|TestCreateAnkiPreset'`
+  and `./internal/jobs/` pass on both drivers.
+
 
 - [x] **M19-28 An accepted step overflows `time.Duration` and writes a due date in 1734 with an interval
   of 0 into the review log** — *Blocker.* `stepMinutes` bounds nothing (`internal/schedule/scheduler.go:

@@ -189,7 +189,48 @@ func parametersWithWeights(preset *store.Preset, weights fsrs.Weights) (fsrs.Par
 	p.RelearningSteps = relearning
 	// DefaultParam keeps EnableShortTerm=true, i.e. the "learning steps + short-term memory" behaviour.
 
+	if err := validateParameters(p); err != nil {
+		return fsrs.Parameters{}, fmt.Errorf("schedule: %w", err)
+	}
 	return p, nil
+}
+
+// validateParameters refuses parameters go-fsrs would silently replace with its own defaults.
+//
+// fsrs.NewFSRS clamps the weights into the library's ranges and, when Parameters.Validate still fails, swaps in
+// DefaultParam() — retention 0.9, a maximum of 36 500 days and steps 1m/10m — without returning an error. A preset
+// must never schedule from values its owner did not choose, so the assembled parameters are checked here and the
+// caller gets an error instead. Only what a preset supplies is checked, and the weight check is exactly what still
+// fails after the library's clipping (a non-finite weight); a weight outside a clip range is clamped by the library
+// just as it always was.
+func validateParameters(p fsrs.Parameters) error {
+	if math.IsNaN(p.RequestRetention) || math.IsInf(p.RequestRetention, 0) ||
+		p.RequestRetention <= 0 || p.RequestRetention > 1 {
+		return fmt.Errorf("desired retention %v is outside (0, 1]", p.RequestRetention)
+	}
+	if math.IsNaN(p.MaximumInterval) || math.IsInf(p.MaximumInterval, 0) ||
+		p.MaximumInterval <= 0 || p.MaximumInterval > 36500 {
+		return fmt.Errorf("maximum interval %v is outside (0, 36500] days", p.MaximumInterval)
+	}
+	for _, steps := range []struct {
+		name string
+		list []float64
+	}{{"learning", p.LearningSteps}, {"relearning", p.RelearningSteps}} {
+		for _, step := range steps.list {
+			if math.IsNaN(step) || math.IsInf(step, 0) || step < 0 {
+				return fmt.Errorf("%s step %v is not finite or is negative", steps.name, step)
+			}
+		}
+	}
+	if want := len(fsrs.DefaultWeights()); len(p.W) != want {
+		return fmt.Errorf("weights have %d values, want %d", len(p.W), want)
+	}
+	for i, weight := range p.W {
+		if math.IsNaN(weight) || math.IsInf(weight, 0) {
+			return fmt.Errorf("weight %d is not finite", i)
+		}
+	}
+	return nil
 }
 
 // parseSteps parses learning steps such as "1m,10m"; an empty string means learning steps are disabled (returns nil).
