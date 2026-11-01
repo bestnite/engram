@@ -261,29 +261,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
 
-- [ ] **M18-88 The ledger rows that later commits superseded are restated** — commits after `027bd6a`
-  changed behaviour that ledger rows written by `M18-22`, `M18-35`, `M18-45` and `M18-72` still describe.
-  First, the `M18-4` row says that a refused `preset_id` answers 400 `invalid_request`. Since `M18-82`
-  (`510b147`), every preset refusal carries the code `preset_selection_invalid`, still with status 400,
-  and no row names that code or `M18-82`. Second, no row records `M18-6` (`92830b1`): the Import page
-  offers `preset_mode` `new`, `reuse` and `copy`, the preset picker, the `include_progress` checkbox and
-  five more report counters. Third, the row "The `.edeck` deck package format is removed" (`M18-5`)
-  states that the `.edeck` reader and writer and the MCP export tool are gone, and
-  `internal/mcp/mcp.go` registers no `export_deck` tool. Yet the `M18-3` row says that the `export_deck`
-  MCP tool takes `format=apkg`; the `M18-19` row describes an `.edeck` import; the bold paragraph above
-  the table and the M17 "File format" item describe `.edeck` format 2; and the `M17-53` row says that the
-  `.edeck` reader keeps its in-memory caps. A release note built from these rows describes a format and
-  a tool that the release does not contain. The fix: the `M18-4` row states the
-  `preset_selection_invalid` code and names `M18-82`. A new row for `M18-6` states the page behaviour and
-  is marked not breaking. Each row or paragraph that describes `.edeck` behaviour or the `export_deck`
-  tool either states that `M18-5` removed it or is merged into the `M18-5` row, so no line of the ledger
-  describes an `.edeck` import, an `.edeck` export or `export_deck` as present in the release. Only the
-  parent edits this file, with the maintainer present, in the same change as `M18-87`. *Acceptance:* the
-  ledger section names `preset_selection_invalid`, `M18-82` and `M18-6`; every ledger line that contains
-  `.edeck` or `export_deck` also states the removal. Evidence is the output of
-  `grep -n -E 'preset_selection_invalid|M18-(6|82)\b|\.edeck|export_deck' ROADMAP.md`, limited to the
-  ledger section and quoted in the closing commit.
-
 - [ ] **M18-89 `AGENTS.md` section 2.7 states the preset modes and the re-import rule** — `M18-35` and
   `M18-63` were closed (`f937c04`, `91933ee`) with only their ledger half done. Both closing commits say
   that the `AGENTS.md` sentence "is proposed separately", but no commit changed `AGENTS.md`, and both
