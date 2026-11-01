@@ -52,13 +52,13 @@ func (a *API) ImportPresetID(ctx context.Context, owner uint64, publicID string)
 	}
 	p, err := a.presets.ByPublicID(ctx, publicID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, InvalidRequest("invalid preset selection")
+		return 0, mapPackageError(&store.PackageError{Code: store.CodePresetSelectionInvalid, Message: "invalid preset selection"})
 	}
 	if err != nil {
 		return 0, fmt.Errorf("resolve import preset: %w", err)
 	}
 	if p.OwnerUserID != owner {
-		return 0, InvalidRequest("invalid preset selection")
+		return 0, mapPackageError(&store.PackageError{Code: store.CodePresetSelectionInvalid, Message: "invalid preset selection"})
 	}
 	return p.ID, nil
 }

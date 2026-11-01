@@ -185,7 +185,7 @@ func TestImportPresetModes(t *testing.T) {
 					db.Model(&Deck{}).Count(&decks)
 					db.Model(&Preset{}).Count(&presets)
 					pe := importPackageRejected(t, db, users[0], raw, opts)
-					if pe.Code != "" {
+					if pe.Code != CodePresetSelectionInvalid {
 						t.Fatalf("code = %q", pe.Code)
 					}
 					db.Model(&Deck{}).Count(&decksAfter)

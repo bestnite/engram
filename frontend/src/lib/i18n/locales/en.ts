@@ -1826,4 +1826,5 @@ export const en: LocaleCatalog = {
   'package.error.preset_weights_conflict': 'Package weights cannot be used when reusing or copying a preset.',
   'package.error.preset_target_conflict': 'Presets can only be configured when creating a new deck.',
   'package.error.preset_invalid': 'Invalid preset selection.',
+  'error.preset_selection_invalid': 'Invalid preset selection.',
 };

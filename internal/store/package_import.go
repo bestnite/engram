@@ -613,7 +613,7 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 // For into_deck and replace_deck, only an empty mode or new is accepted, and PresetID must be zero.
 func (s *DeckStore) ValidateImportPreset(ctx context.Context, owner uint64, targetKind string, opts *PackageImportOptions) error {
 	if targetKind != PackageTargetNewDeck && opts.PresetID != 0 {
-		return &PackageError{Message: "invalid preset selection"}
+		return &PackageError{Code: CodePresetSelectionInvalid, Message: "invalid preset selection"}
 	}
 	if opts.PresetMode == "" {
 		if targetKind != PackageTargetNewDeck {
@@ -624,24 +624,24 @@ func (s *DeckStore) ValidateImportPreset(ctx context.Context, owner uint64, targ
 	switch opts.PresetMode {
 	case PackagePresetNew:
 		if opts.PresetID != 0 {
-			return &PackageError{Message: "invalid preset selection"}
+			return &PackageError{Code: CodePresetSelectionInvalid, Message: "invalid preset selection"}
 		}
 		return nil
 	case PackagePresetReuse, PackagePresetCopy:
 	default:
-		return &PackageError{Message: "invalid preset selection"}
+		return &PackageError{Code: CodePresetSelectionInvalid, Message: "invalid preset selection"}
 	}
 	// Reuse and copy need the caller's own preset, a new deck to attach it to, and no package
 	// weights: writing those into a preset would change every deck that already points at it.
 	if targetKind != PackageTargetNewDeck || opts.PresetID == 0 || opts.ApplyWeights {
-		return &PackageError{Message: "invalid preset selection"}
+		return &PackageError{Code: CodePresetSelectionInvalid, Message: "invalid preset selection"}
 	}
 	var count int64
 	if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ? AND owner_user_id = ?", opts.PresetID, owner).Count(&count).Error; err != nil {
 		return fmt.Errorf("count import presets: %w", err)
 	}
 	if count != 1 {
-		return &PackageError{Message: "invalid preset selection"}
+		return &PackageError{Code: CodePresetSelectionInvalid, Message: "invalid preset selection"}
 	}
 	return nil
 }
@@ -1334,7 +1334,7 @@ func selectImportPreset(ctx context.Context, tx *gorm.DB, owner uint64, opts Pac
 	var p Preset
 	if err := tx.WithContext(ctx).Where("id = ? AND owner_user_id = ?", opts.PresetID, owner).First(&p).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return Preset{}, &PackageError{Message: "invalid preset selection"}
+			return Preset{}, &PackageError{Code: CodePresetSelectionInvalid, Message: "invalid preset selection"}
 		}
 		return Preset{}, fmt.Errorf("look up import preset: %w", err)
 	}

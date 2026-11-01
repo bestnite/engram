@@ -1825,4 +1825,5 @@ export const zhCN: LocaleCatalog = {
   'package.error.preset_weights_conflict': '复用或复制预设时不能采用包内权重。',
   'package.error.preset_target_conflict': '只有导入到新卡组时才能指定预设。',
   'package.error.preset_invalid': '预设选择无效。',
+  'error.preset_selection_invalid': '预设选择无效。',
 };

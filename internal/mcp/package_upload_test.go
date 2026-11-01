@@ -98,8 +98,8 @@ func TestImportToolsRejectPresetOptions(t *testing.T) {
 					args["package"] = base64.StdEncoding.EncodeToString(mcpMinimalPackageZip(t))
 				}
 				_, isErr, text := callTool(t, cs, tool, args)
-				if !isErr || !strings.Contains(text, "invalid_request") {
-					t.Fatalf("%s = (isErr=%v, %q), want invalid_request", tool, isErr, text)
+				if !isErr || !strings.Contains(text, store.CodePresetSelectionInvalid) {
+					t.Fatalf("%s = (isErr=%v, %q), want %s", tool, isErr, text, store.CodePresetSelectionInvalid)
 				}
 				for i, model := range models {
 					var after int64
@@ -129,8 +129,8 @@ func TestImportURLRejectsReuseWithWeightsBeforeFetch(t *testing.T) {
 		"url": "https://example.com/deck.edeck", "preset_mode": "reuse",
 		"preset_id": preset.PublicID, "apply_weights": true,
 	})
-	if !isErr || !strings.Contains(text, "invalid_request") {
-		t.Fatalf("import_deck = (isErr=%v, %q), want invalid_request", isErr, text)
+	if !isErr || !strings.Contains(text, store.CodePresetSelectionInvalid) {
+		t.Fatalf("import_deck = (isErr=%v, %q), want %s", isErr, text, store.CodePresetSelectionInvalid)
 	}
 	if f.calls != 0 {
 		t.Fatalf("fetcher calls = %d, want 0", f.calls)

@@ -179,8 +179,8 @@
       notifyResult(result);
     } catch (err) {
       if (!mounted || revision !== requestRevision) return;
-      if (err instanceof ApiClientError && (err.code === 'invalid_request' || err.status === 400) && ((err.details as any)?.error?.message?.includes('preset') || err.message?.includes('preset'))) {
-        presetErrorKey = 'package.error.preset_invalid';
+      if (err instanceof ApiClientError && err.code === 'preset_selection_invalid') {
+        presetErrorKey = 'error.preset_selection_invalid';
         errorKey = presetErrorKey;
       } else {
         toast.error($t(importErrorKey(err)));

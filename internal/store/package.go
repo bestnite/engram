@@ -36,9 +36,10 @@ const PackageFormatVersion = 2
 
 // Stable import error codes (English identifiers so callers can branch programmatically; AGENTS.md §2.1).
 const (
-	CodePackageUnsafeEntry = "package_unsafe_entry"
-	CodePackageTooLarge    = "package_too_large"
-	CodePackageBadFormat   = "package_bad_format"
+	CodePackageUnsafeEntry     = "package_unsafe_entry"
+	CodePackageTooLarge        = "package_too_large"
+	CodePackageBadFormat       = "package_bad_format"
+	CodePresetSelectionInvalid = "preset_selection_invalid"
 	// CodePackageUnknownKind means a note names a note type reference that note_types.json does not declare;
 	// the package must error and list every offending note. The code value is kept for API compatibility.
 	CodePackageUnknownKind = "package_unknown_kind"

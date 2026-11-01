@@ -474,10 +474,10 @@ describe('ImportView — preset modes, progress and counters (M18-6)', () => {
     vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: [] });
     // Empty presets fallback to input, simulate entering a preset that backend rejects
     const importFile = vi.spyOn(apiClient, 'importDeckPackage').mockRejectedValue(
-      new ApiClientError('HTTP 400: invalid_request', {
+      new ApiClientError('unrelated message', {
         status: 400,
-        code: 'invalid_request',
-        details: { error: { code: 'invalid_request', message: 'invalid preset selection' } },
+        code: 'preset_selection_invalid',
+        details: { error: { code: 'preset_selection_invalid', message: 'unrelated message' } },
       })
     );
 
@@ -494,7 +494,7 @@ describe('ImportView — preset modes, progress and counters (M18-6)', () => {
     expect(importFile).toHaveBeenCalledTimes(1);
     const alert = target.querySelector('[data-testid="package-import-preset-error"]');
     expect(alert).toBeTruthy();
-    expect(alert?.textContent).toBe(formatMessage('zh-CN', 'package.error.preset_invalid'));
+    expect(alert?.textContent).toBe(formatMessage('zh-CN', 'error.preset_selection_invalid'));
   });
 
   it('sends include_progress only when ticked (off by default)', async () => {

@@ -244,7 +244,7 @@ func TestImportURLPresetSelection(t *testing.T) {
 			body := fmt.Sprintf(`{"url":"https://example.com/deck.edeck",%s}`, tc.options)
 			for i := 0; i < importURLRateLimit+1; i++ {
 				rec := postImportURL(t, env, k.Plaintext, body)
-				if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != CodeInvalidRequest {
+				if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != store.CodePresetSelectionInvalid {
 					t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 				}
 			}

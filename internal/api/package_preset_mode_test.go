@@ -106,7 +106,7 @@ func TestImportUploadPresetModes(t *testing.T) {
 		env.db.Model(&store.ActionToken{}).Count(&before)
 		rec := createUpload(t, env, key.Plaintext, body)
 		env.db.Model(&store.ActionToken{}).Count(&after)
-		if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != CodeInvalidRequest || before != after {
+		if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != store.CodePresetSelectionInvalid || before != after {
 			t.Fatalf("request %s response %d %s tokens %d -> %d", body, rec.Code, rec.Body.String(), before, after)
 		}
 	}
@@ -200,8 +200,8 @@ func TestImportMultipartRejectsPresetOptions(t *testing.T) {
 				t.Fatal(err)
 			}
 			rec := postImport(t, env, key.Plaintext, &body, w.FormDataContentType())
-			if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != CodeInvalidRequest {
-				t.Fatalf("response = %d %s, want 400 invalid_request", rec.Code, rec.Body.String())
+			if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != store.CodePresetSelectionInvalid {
+				t.Fatalf("response = %d %s, want 400 preset_selection_invalid", rec.Code, rec.Body.String())
 			}
 			if err := env.db.Model(&store.Deck{}).Count(&afterDecks).Error; err != nil {
 				t.Fatal(err)

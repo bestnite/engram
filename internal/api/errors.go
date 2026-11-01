@@ -134,6 +134,7 @@ var errorMessages = map[string]string{
 	store.CodePackageDeckMetaInvalid: "The deck name or description in the package is invalid.",
 	store.CodePackageQuotaExceeded:   "The imported media would exceed your media quota.",
 	store.CodePackageMediaForbidden:  "The package references media you cannot read.",
+	store.CodePresetSelectionInvalid: "invalid preset selection",
 
 	// Stable codes for the pre-write media readability check (store.MediaWriteError.Code).
 	CodeMediaNotReadable: "You referenced media you cannot read; upload it first or obtain access.",
