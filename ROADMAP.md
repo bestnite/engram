@@ -77,16 +77,42 @@ but never reproduced — and the domain is being reviewed again from a rewrite t
 contract violations instead of intrusion steps. Every entry says whether it was reproduced or only read:
 "unverified" means neither "probably fine" nor "confirmed broken".
 
-- [ ] **M19-1 A preset identifier is resolvable across accounts** — *Blocker.* The first pass reported
+- [x] **M19-1 A preset identifier is resolvable across accounts** — *Blocker.* The first pass reported
   that a request can name a preset belonging to another account and have it resolved instead of refused;
   the rewritten review **confirmed and reproduced** it. `POST /api/v1/decks` (and the MCP `create_deck`)
   resolves the other account's preset public id with no owner check and creates the deck on it, echoing
   that id back, while `ImportPresetID` refuses the same id with `invalid preset selection`
-  (`internal/api/decks.go:114`, `internal/api/tools.go:243`, `internal/store/publicid_resolver.go:53-62`).
+  (`internal/api/decks.go:114`, `internal/mcp/tools.go:243`, `internal/api/publicid_resolver.go:46-63`).
   *Acceptance:* a test in `internal/api` (or `internal/store` where the
   lookup lives) sends a write request naming another account's preset public id and shows that it is
   refused with the documented code and that no row is written; if the report turns out to be wrong, the
   test stays as the regression that pins the refusal. Evidence is the raw test output on both drivers.
+  *Closed by `084f684`.* `CreateDeck` (`internal/api/service.go:121-141`) now loads a non-zero preset
+  key and refuses one whose owner is not the caller, before any write; the transports' public-id
+  resolution is unchanged, so the refusal is the `not_found` 404 this endpoint already documents for a
+  preset it cannot resolve, and an unowned preset is indistinguishable from an unknown one. A
+  `preset_selection_invalid` 400 was not used because that code documents the package-import choice,
+  not deck create. `TestCreateDeckRefusesAnotherAccountsPreset`
+  (`internal/api/deck_preset_owner_test.go`) sends the foreign public id over REST, asserts 404,
+  `not_found`, no deck row and no `deck.create` audit row, and asserts the caller's own preset still
+  creates the deck; it then calls the same service method the MCP tool uses with the foreign numeric key
+  and expects the same refusal. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/api/ -run TestCreateDeckRefusesAnotherAccountsPreset -count=1 -v`:
+  ```
+  --- PASS: TestCreateDeckRefusesAnotherAccountsPreset (0.33s)
+      --- PASS: TestCreateDeckRefusesAnotherAccountsPreset/sqlite (0.01s)
+          --- PASS: TestCreateDeckRefusesAnotherAccountsPreset/sqlite/foreign_preset_is_refused_and_writes_nothing (0.00s)
+          --- PASS: TestCreateDeckRefusesAnotherAccountsPreset/sqlite/own_preset_still_creates_the_deck (0.00s)
+      --- PASS: TestCreateDeckRefusesAnotherAccountsPreset/postgres (0.32s)
+          --- PASS: TestCreateDeckRefusesAnotherAccountsPreset/postgres/foreign_preset_is_refused_and_writes_nothing (0.01s)
+          --- PASS: TestCreateDeckRefusesAnotherAccountsPreset/postgres/own_preset_still_creates_the_deck (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.348s
+  ```
+  The same run before the check reproduced the report: `POST /api/v1/decks with another account's
+  preset = 201 {"id":"01a19859-d7fd-7bd0-bea5-8960bb3f258a",...,"preset_id":"01a19859-d7fd-73a0-b72b-a649e39b79ca",...},
+  want 404`, with the second id belonging to the other account. `go test ./internal/api/ -count=1` and
+  `go test ./internal/mcp/ -count=1` also pass.
 
 - [ ] **M19-2 Template media may be exportable by a caller who cannot read the deck** — the review
   reported that a deck export can carry media referenced only by a note type template, and that the
