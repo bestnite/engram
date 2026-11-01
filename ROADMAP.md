@@ -66,13 +66,16 @@ release; a task moves into a release milestone when it is scheduled.
 
 ### M19 — Repository review findings
 
-A domain-by-domain review of the whole repository is being run with a second model. Two domains are
-finished: `internal/store` (155 files, 23 findings — 3 blocker, 19 should-fix, 1 nit, M19-4..M19-26) and
-`internal/schedule` + `internal/answer` + `internal/retention` + `internal/reviewday` (53 files, 10
-findings — 2 blocker, 4 should-fix, 4 nit, M19-27..M19-36). The API and MCP domain was stopped by the
-provider's content filter before it wrote a report, so M19-1..M19-3 are static analysis that was read out
-of the code but never reproduced. Every entry says which it is: "unverified" does not mean "probably
-fine", and it does not mean "confirmed broken".
+A domain-by-domain review of the whole repository is being run with a second model, one domain per
+session, the findings written straight into this section. Each entry names its domain by the packages
+and files it cites, so the section does not need a running scoreboard: the open entries below are the
+whole state.
+
+The API and MCP domain was stopped once by the provider's content filter before it wrote anything, so
+M19-1..M19-3 are the three leads it had already stated — static analysis that was read out of the code
+but never reproduced — and the domain is being reviewed again from a rewrite that frames findings as
+contract violations instead of intrusion steps. Every entry says whether it was reproduced or only read:
+"unverified" means neither "probably fine" nor "confirmed broken".
 
 - [ ] **M19-1 A preset identifier may be resolvable across accounts** — the review reported that a
   request can name a preset belonging to another account and have it resolved rather than refused,
@@ -961,6 +964,145 @@ fine", and it does not mean "confirmed broken".
   disclosure. Verified by reading the three exit paths; no command was needed. *Acceptance:* remove the job
   directory on every terminal path (a defer in `execute`, or a cleanup call in `fail`) and sweep the per-pid
   roots at startup; a regression runs a failing job and asserts no `review-log.jsonl` remains.
+
+- [ ] **M19-78 A note's `extra` can be written and preserved but never read back** — *should-fix.* The import
+  schema advertises `extra` as "Free-form metadata kept as-is for the caller and round-tripped on export"
+  (`schema/note-import.schema.json:71-74`), and the store does keep it: `extractNoteColumns` turns a field-map key
+  named `extra` into `notes.extra_json` (`internal/store/note.go:200-226`), the single-note update copies the
+  stored value forward (`internal/api/service.go:749-758`), and the update statement writes the column
+  (`internal/store/note.go:543`). No read path exposes it. `NotesJSON`, the one shape shared by the note list, `GET /notes/:id`, MCP
+  `search_notes` and `get_note`, emits id, deck_id, note_type, fields, tags, created_at, updated_at,
+  external_ref, source_url and suspended, and not `extra` (`internal/api/notes.go:75-113`, keys at `:106-107`).
+  The JSON/CSV deck export has no extra column either (`ExportRow`, `internal/api/service.go:1079-1091`; header
+  at `internal/api/export.go:115-121`), and `ARCHITECTURE.md:246-249` states that the `.apkg` deliberately drops
+  it. A caller therefore stores metadata it can never retrieve. *Unverified:* no request was sent; the evidence
+  is the complete list of `ExtraJSON` references outside tests, which contains no response mapping.
+  *Acceptance:* one read surface (the note list/get shape, MCP `get_note`, or the JSON/CSV export) returns the
+  stored value, with a test that writes `fields.extra` and reads the same JSON back; if the column is meant to
+  stay server-side, the schema description says so instead of promising a round trip.
+
+- [ ] **M19-79 The schema README documents a `kind` request alias the server rejects** — *should-fix.*
+  `schema/README.md:55-59` tells a client that `kind` "remains accepted as a transitional alias for `note_type`",
+  that the server "resolves it to the deck's stock note type for that kind, and creates that note type when the
+  deck has none", and that "when a note carries both, `note_type` wins". `ImportNote` has no such field
+  (`internal/api/service.go:470-481`); the first pass validates only `item.NoteType` and refuses an empty one with
+  the per-row reason "note_type is required" (`:551-556`), or the whole body with 409 under `on_conflict=fail`
+  (`:633`). The schema already rejects that body, and `internal/api/schema_test.go:44-45` pins the rejection with
+  the comment "The transitional card kind is gone from the contract", so the README is the only place that still
+  says otherwise. *Reproduced:* `uvx check-jsonschema --schemafile schema/note-import.schema.json` on
+  `{"notes":[{"kind":"basic","fields":{"front":"q","back":"a"}}]}` reports `'note_type' is a required property`;
+  the server-side refusal is read, not run. *Acceptance:* the paragraph is removed, or rewritten to say what is
+  true, and no committed document promises a request key the decoder does not have.
+
+- [ ] **M19-80 The documented local start command fails before the server opens the database** — *should-fix.*
+  `AGENTS.md:225-226` gives the only `go run` line in the repository: `DB_DRIVER=sqlite DB_DSN=data/engram.db
+  AUTO_MIGRATE=1 go run ./cmd/engram serve`. `SESSION_SECRET` and `ENCRYPTION_KEY` are declared `required: true`
+  with no default (`internal/config/config.go:56-59`), and `Load` returns an error naming every missing one
+  (`:83-100`), so the command exits before it serves. The two documents that should own the setup point at each
+  other: `README.md:186` sends the reader to `CONTRIBUTING.md` for "local development setup", and
+  `CONTRIBUTING.md:88-90` sends the reader back to the README quick start, which only runs the published Docker
+  image. *Reproduced:* `env -u SESSION_SECRET -u ENCRYPTION_KEY DB_DRIVER=sqlite DB_DSN=/tmp/engram.db
+  AUTO_MIGRATE=1 go run ./cmd/engram serve` printed `level=ERROR msg=fatal error="missing required environment
+  variable(s): ENCRYPTION_KEY, SESSION_SECRET"` and exited 1. *Acceptance:* one committed place shows a complete
+  local start (driver, DSN, both secrets, migration, first-admin step) that succeeds on a fresh checkout, and the
+  other document links to it.
+
+- [ ] **M19-81 CONTRIBUTING names a Go minimum the module refuses to build with** — *should-fix.*
+  `CONTRIBUTING.md:45` states "**Go 1.26 or newer** (the module declares `go 1.26` ...)", while `go.mod:3`
+  declares `go 1.27.0` and `README.md:4` advertises "Go 1.27+". Since Go 1.21 the toolchain refuses to build a
+  module whose `go` line is newer than the running toolchain, so a contributor who installs the documented
+  minimum cannot run any command in this file. *Reproduced:* `head -3 go.mod` prints `go 1.27.0`; no Go 1.26
+  toolchain was available to run the refusal, so the failure text is read from the toolchain rule.
+  *Acceptance:* the minimum in `CONTRIBUTING.md`, the `go` line in `go.mod` and the README badge name the same
+  version, and the paragraph states which one is authoritative.
+
+- [ ] **M19-82 CONTRIBUTING still documents the removed card-type system and names a package that does not
+  exist** — *should-fix.* `CONTRIBUTING.md:173-174` restates the registration rule as "**Card types are
+  registered, not hardcoded.** Adding a type means adding one file and registering it", and `:197` names
+  `internal/cardtype` as a core coverage target. That package was removed with the M17 content-model merge (the
+  row for that merge in `ROADMAP.md` section 2 records that `internal/cardtype` is gone), no directory of that
+  name exists, and the rule the
+  repository now keeps is "Note types are data. Answer controls are registered" (`AGENTS.md:74-75`), with
+  coverage targets `internal/schedule`, `internal/notetype` and `internal/answer` (`AGENTS.md:111-113`). A
+  contributor following this section looks for a card-type registry and a test package that are not there.
+  *Reproduced:* `ls internal` lists 24 packages and none is `cardtype`; the removal is also stated in the ledger.
+  *Acceptance:* CONTRIBUTING restates the note-type/answer-control rule and the three coverage targets in the
+  words `AGENTS.md` uses.
+
+- [ ] **M19-83 The optimiser README says the service does not run the adapter, which the service does** —
+  *should-fix.* `tools/optimizer/README.md:142-144`, under "Current limits (not yet verified)", says "The Go side
+  (`internal/jobs`) does not call the adapter at runtime yet; the command injection point is exercised by a Go
+  integration test that skips when the binary is absent." The production wiring exists: `cmd/engram/main.go:335`
+  passes `optimizer.CommandBuilder()` to the runner, that builder is `internal/jobs/optimizer.go:140`,
+  `internal/jobs/jobs.go:553-581` runs the process under a timeout, and `internal/jobs/optimize.go:65-74` writes
+  the weights back to the preset. `ARCHITECTURE.md:24-25` and `:315-316` describe the same runtime path, and four
+  open entries in this file (M19-70, M19-71, M19-73, M19-77) were reproduced against it. *Unverified:* no command
+  was run for this entry; the call chain is read at the lines above. *Acceptance:* the section lists only limits
+  that are still true (real-review-data correctness, no exit-4 fixture) and states that the job runner invokes
+  the adapter in production.
+
+- [ ] **M19-84 The README publishes a real host name and a demo account's password, and the sanitisation rule
+  admits neither** — *should-fix.* `README.md:12` (and `README.zh.md:12`) carries a live demo URL on a real
+  domain plus the credentials `test` / `testdemo`; `README.md:5,98,127` carries the Docker Hub repository name and
+  `:203` a community link on a real domain. `AGENTS.md:43-50` forbids real domain names, host names and passwords
+  in any committed file and names the Go module path as "the one deliberate exception"; `CONTRIBUTING.md:137-140`
+  repeats the rule with the same single exception. Nothing automated covers the rule any more
+  (`AGENTS.md:52-55`), so review by eye is the only check that can catch this. *Reproduced:* `git grep -n
+  "nite07\|linux.do"` lists the README and README.zh.md lines named above, `.github/workflows/release.yml:10`,
+  `.goreleaser.yaml:89` and `docker-compose.yaml:20`, and the module path in `go.mod`, the Go imports and
+  `CONTRIBUTING.md:299`, which the rule allows. *Acceptance:* either the publication exceptions (release image, live demo, community
+  link) are written into `AGENTS.md` §2.2 and `CONTRIBUTING.md`, naming exactly those cases, or the values are
+  replaced with placeholders and the demo credentials are no longer committed.
+
+- [ ] **M19-85 CONTRIBUTING states the review log is append-only and omits the one deletion the code performs** —
+  *should-fix.* `CONTRIBUTING.md:167-168` restates the invariant as "**`reviews` is append-only.** Every column is
+  written from the first commit — it is the only fuel for parameter optimisation and cannot be reconstructed
+  later", with no exception. The contract states the same rule with its single exception: undoing a review
+  deletes that one row and writes a `review.undo` audit row (`AGENTS.md:64-69`), and the code does exactly that
+  (`internal/schedule/actions.go:149` deletes the row). This is the section an external contributor is told to
+  follow, and it presents as a violation the one deletion the product is built around. *Unverified:* the undo
+  request was not run in this review; the deletion is read at the cited line and stated by the contract.
+  *Acceptance:* CONTRIBUTING restates the exception with the rule, in the words `AGENTS.md` uses, so a reviewer of
+  a review deletion does not have to guess which document wins.
+
+- [ ] **M19-86 The bulk schema promises it never accepts a body the server rejects, and a whitespace tag breaks
+  that** — *nit.* `schema/note-bulk.schema.json:5` says the schema "is therefore the stricter of the two for a
+  request carrying repeated or blank entries, and it never accepts a body the server would reject", and
+  `schema/README.md:38-40` repeats the claim. `tags.items.minLength: 1` does not reject a whitespace-only tag, but
+  the service normalises the list before applying the bound (`internal/api/service.go:864-873`) and
+  `NormalizeTags` trims and drops empty entries (`internal/store/note.go:750-759`), so `tags: [" "]` becomes an
+  empty list and the request is refused with `invalid_request`. The same gap exists in
+  `note-import.schema.json:38-42` for a whitespace-only `note_type`, which the service trims and then treats as
+  missing (`service.go:551-556`). *Reproduced:* `uvx check-jsonschema --schemafile schema/note-bulk.schema.json`
+  on `{"action":"add_tags","note_ids":["a"],"tags":[" "]}` prints `ok -- validation done`; the server side is
+  read, not run. *Acceptance:* the schema expresses the trim (a `pattern` such as `\S`) or the sentence is
+  replaced by "the server applies an additional trim the schema cannot express", so neither document claims an
+  invariant the pair does not hold.
+
+- [ ] **M19-87 ARCHITECTURE gives `schema/` a deck-package schema that no longer exists** — *nit.*
+  `ARCHITECTURE.md:39` describes the directory as "JSON Schemas for note import, bulk notes, and deck packages".
+  It contains `note-import.schema.json`, `note-bulk.schema.json`, `README.md` and two examples; the deck-package
+  schema left with the `.edeck` format that `M18-5` removed (`AGENTS.md:155-158`). *Reproduced:* `ls schema`
+  prints those four entries. *Acceptance:* the tree comment lists the two schemas the directory holds, or the
+  removed schema is restored together with the decision that restores it.
+
+- [ ] **M19-88 ARCHITECTURE's dependency table is not what its own regeneration command reports** — *nit.* The
+  table's heading says the rows are "Imports between internal packages, as reported by `go list`"
+  (`ARCHITECTURE.md:80`) and gives the command at `:100-102`, but the `web` and `api` rows (`:84`, `:86`) omit
+  `internal/answer`, which both packages import. *Reproduced:* the documented `go list -f ...` command prints
+  `internal/answer` in the import list of both `internal/api` and `internal/web`; neither documented row has it.
+  *Acceptance:* regenerating with the command in the file yields a table that equals the file.
+
+- [ ] **M19-89 No test validates the shipped note-import example against its schema** — *nit.* The bulk example
+  is validated against its schema by `internal/api/note_bulk_schema_test.go:58-68`, and the import side validates
+  only hand-written bodies (`internal/api/schema_test.go:27-58`); no test or CI step reads
+  `schema/examples/note-import.example.json`, which is the only complete payload the schema README points an
+  external tool at. The example has therefore already drifted from the server: it sends `source_url` at `:13`
+  and `extra` at `:32-35` as top-level note keys, which `ImportNote` does not decode (M19-9), while the schema
+  accepts them because both properties are declared. *Reproduced:* `grep -rn "note-import.example" --include=*.go
+  .` returns nothing, and `uvx check-jsonschema` still reports the file valid. *Acceptance:* one Go test
+  compiles both schema files and validates both shipped examples, so a schema change that invalidates an example
+  fails the build.
 
 ## 2. Release ledger
 
