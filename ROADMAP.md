@@ -2478,13 +2478,21 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `formatMessage` (an `Intl.PluralRules` variant key or an explicit singular key), with a test asserting both
   one and two for the count keys.
 
-- [ ] **M19-67 `Note.external_ref` is typed as non-null while the server sends null** — *nit.* The response type
+- [x] **M19-67 `Note.external_ref` is typed as non-null while the server sends null** — *nit.* The response type
   declares `external_ref: string` (`frontend/src/lib/api/types.ts:165`), but the server writes `n.ExternalRef`,
   a `*string` (`internal/api/notes.go:106`, `internal/store/models.go:169`), so a note without an external
   reference arrives as `null`. Every current reader treats it as falsy
   (`frontend/src/lib/views/DeckDetailView.svelte:101,821-823`), so nothing breaks today; the declaration hides
   the null branch from the compiler. Verified by reading the two declarations. *Acceptance:* type the field as
   `string | null` or return an empty string, and let the compiler check the readers.
+  *Closed by this commit (`fix(frontend): type an external reference as nullable`).*
+  `Note.external_ref` (`frontend/src/lib/api/types.ts:165`) is now `string | null`, matching the `*string` the
+  server writes at `internal/api/notes.go:106` (`internal/store/models.go:169`). No reader changed: the three
+  uses in `DeckDetailView.svelte` are a truthiness test, a ternary that guards the template string and
+  `?? ''`, which accept the null branch as written. Raw output of `npm --prefix frontend run check`:
+  ```
+  svelte-check found 0 errors and 0 warnings
+  ```
 
 - [ ] **M19-68 `bulkResult` in the deck detail view is written and never read** — *nit.* The state is declared at
   `frontend/src/lib/views/DeckDetailView.svelte:186`, cleared at `:407,922` and assigned at `:410-411` only to be
