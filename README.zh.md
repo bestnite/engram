@@ -40,27 +40,29 @@ Engram 是一个开源、自托管的渐进式间隔重复闪卡（Flashcard）�
 
 ## 导入卡组
 
-在**导入**页上传文件或粘贴文件的公开直链，或用 CLI（`engram import`）、MCP 的 `import_deck` 工具，都可以导入卡组。支持两种卡组包：Engram 自己的 `.edeck`（包含卡组内容，导出时若包含导出方的学习进度也会一并带入），以及 Anki 的 `.apkg`。
+在**导入**页上传文件或粘贴文件的公开直链，或用 CLI（`engram import`）、MCP 的 `import_deck` 工具，都可以导入卡组。Anki 的 `.apkg` 是导入和导出使用的唯一卡组包格式。
+
+卡组包不携带笔记的 `external_ref`、`extra` 或 `source_url`：Anki 在导入时丢弃 `notes.data`，因此这些值无法经过 Anki 导入导出往返而保留。
 
 导入时需要选择目标：`new_deck` 新建卡组，`into_deck:<id>` 合并到你有编辑权限的卡组；CLI 与 MCP 工具还接受 `replace_deck:<id>` 整体替换现有卡组，该操作仅卡组所有者可用。
 
+导入 `.apkg` 时，仅当 `preset_mode` 为 `new`（默认值）才读取包内的卡组配置，并且仅当同时设置 `apply_weights` 才采用包内的 FSRS 权重。当 `apply_weights` 已开启而包内权重被拒绝时，导入报告中的 `weights_invalid` 为 true。仅针对 `new_deck` 目标，`POST /api/v1/decks/import`、`POST /api/v1/decks/import-url`、`POST /api/v1/decks/import-uploads`、**导入**页、CLI 的 `--preset-mode` 和 `--preset-id` 标志以及 MCP 的 `import_deck` 和 `create_import_upload` 工具接受预设选择：`preset_mode` 为 `reuse` 时，新卡组指向 `preset_id` 指定的预设；为 `copy` 时，新卡组指向该预设的新副本。两种模式均不读取包内配置或权重，均拒绝 `apply_weights`；`reuse` 和 `copy` 对除 `new_deck` 以外的目标均被拒绝，而 `preset_id` 仅在模式为 `reuse` 或 `copy` 时被接受。`preset_id` 始终指定你自己的一个预设。学习进度仅在请求时带入：`include_progress`（默认关闭）将包内的卡片状态和复习日志应用到你自己的账户；未开启时，每张导入的卡片都从新卡开始。
+
 ### Anki `.apkg` 卡组包
 
-包内以下内容会原样带来：
+包内以下内容会带入：
 
 - **卡组树**：包内持有卡片的卡组共有的最长 `::` 名称前缀成为 Engram 卡组名；若它们没有共同前缀，则由卡片最多的分支命名卡组。更深层的卡组名保留为各张卡片的子卡组路径，例如 `A::B::C` 导入为卡组 `A::B`、路径 `C`。
-- **笔记类型**：字段、模板（正反面及浏览器预览变体）、CSS、LaTeX 前缀与后缀，以及 Anki 的笔记类型选项，均保持不变。
+- **笔记类型**：字段、模板（正反两面及其浏览器预览变体共四种）、CSS、LaTeX 前缀与后缀，以及 Anki 的笔记类型选项，均保持不变。
 - **笔记、标签与卡片**：笔记按包内内容创建并保留标签，卡片按包内已有的卡片创建。
 - **媒体**：图片、音频与视频按 Anki 中的文件名登记，并由包内的字段、模板与 CSS 引用。
 
-包内以下内容不会导入：
-
-- **调度状态与复习历史。** Anki 的到期时间、间隔与复习日志不会带入：导入的卡片一律是新卡，由 FSRS 依据你自己的复习重新排程。
-- **Anki 的卡组选项与 FSRS 参数。** 新卡组从默认预设开始，Engram 依据你记录的复习优化自身的参数。
+- **调度状态与复习历史**：`include_progress` 默认关闭，开启后将包内的卡片状态和复习日志应用到你自己的账户；否则导入的卡片从新卡开始。
+- **卡组配置与 FSRS 权重**：当 `preset_mode` 为 `new` 时，新卡组的预设采用包内卡组配置中受支持的设置。`apply_weights` 默认关闭；当目标为 `new_deck` 且 `preset_mode` 为 `new` 时，若包内的 FSRS 权重可以迁移，开启它即可采用这些权重。`preset_mode` 的 `reuse` 和 `copy` 模式拒绝 `apply_weights`。`into_deck` 和 `replace_deck` 目标接受但忽略 `apply_weights`，预设保持不变。导入报告中的 `weights_applied` 和 `weights_discarded` 字段记录结果。
 
 导入的笔记类型没有答案控件，因此在笔记类型编辑器中为它添加答案控件之前，其卡片只能自评。
 
-再次导入同一个包或它的更新版本时，按 Anki 的 GUID 匹配笔记、按包内的原始 id 匹配笔记类型。字段与模板结构未变的笔记和笔记类型就地更新，并保留已有卡片与进度；结构发生变化时会新建笔记类型，并把笔记迁到新类型上。
+再次导入同一个包或它的较新导出版本时，按 Anki 的 GUID 匹配笔记、按包的来源 id 匹配笔记类型。字段与模板结构未变的笔记和笔记类型就地更新，并保留已有卡片与进度；结构发生变化时会新建笔记类型，并把笔记迁到新类型上。再次导入进度时，如果卡片在 Engram 中的最后复习时间不早于包中的最后复习时间，则保留其 Engram 状态。仅当包内的复习记录晚于导入者在 Engram 中对该卡片的最新复习记录时，才写入该记录。
 
 导入报告会列出包中引用但未随包提供的内容：缺失的媒体文件、浏览器无法播放的视频、外部脚本或样式表，以及包中未内嵌的 LaTeX 图片。默认情况下缺失媒体会导致导入失败；勾选“媒体缺失时继续”即可照常导入。
 
@@ -95,14 +97,15 @@ Engram 暴露 23 个业务 MCP 工具：
 - `delete_deck`：连同笔记、卡片和学习进度一起删除卡组。仅所有者可以执行，且删除后不可恢复。
 - `bulk_decks`：一次删除多个卡组，逐行校验所有者；`dry_run` 只计数不写入。对应 REST `POST /decks/bulk`。
 - `list_note_types` / `get_note_type`：列出一个卡组的 note 类型或读取其中一个，返回字段 id 与名称、模板和 CSS。note 的字段值是 HTML 字符串，按字段名索引，agent 不必猜请求体的形状。
-- `search_notes` / `get_note` / `list_deck_tags`：按标签与关键词检索卡片、读取单条 note、列出卡组内用到的标签。
-- `create_notes` / `update_note` / `delete_note` / `bulk_notes`：批量建卡、就地更新、删除，以及批量打标签或删除；支持 Dry-Run 校验。note 用 `note_type` 指定类型，`fields` 按字段名提交 HTML 字符串。
-- `get_due_cards` / `submit_review`：拉取今日待复习卡片并提交复习结果、推动排程。自评题型提交评分（`Again`、`Hard`、`Good`、`Easy`），简答题还可以附带学习者写下的作答，随复习记录保存；作答类题型（填空、列表、输入作答、数值、选择、判断）提交作答，由服务端判分。
+- `search_notes` / `get_note` / `list_deck_tags`：按标签与关键词筛选笔记、读取单条笔记、列出卡组内用到的标签。
+- `create_notes` / `update_note` / `delete_note` / `bulk_notes`：创建、更新和删除所有笔记类型的笔记，支持试运行校验、批量插入，以及批量打标签或删除。笔记用 `note_type` 指定类型，`fields` 按字段名提交 HTML 字符串。
+- `get_due_cards` / `submit_review`：获取到期待复习的卡片并记录复习。自评卡片提交评分（`Again`、`Hard`、`Good`、`Easy`），简答卡片还可以附带学习者写下的作答，随复习记录保存；作答类卡片（填空、列表、输入作答、数值、选择、判断）提交作答，由服务端判分。
 - `add_extra_new_cards`：学完每日新卡上限后，为某个卡组追加今天的新卡额度，只对当前复习日生效；卡组设置不变，第二天回到每日上限。
 - `bury_card`：把一张卡推迟到你的下一个复习日开始时，不改动学习进度。对应 REST `POST /cards/{id}/bury`。
 - `set_deck_paused`：只为自己暂停或恢复一个卡组。暂停的卡组不进入默认复习队列、待复习数和提醒邮件，但学习进度保留，指定这个卡组时仍可复习。
-- `get_stats`：获取用户学习总览、各状态卡片数及留存率分析。
-- `export_deck` / `import_deck`：卡组包（`.edeck`）导出与导入；`import_deck` 也接受 Anki 的 `.apkg` 包，可导入为新卡组、合并进现有卡组，或整体替换一个卡组。
+- `get_stats`：获取学习摘要、队列数量和留存率。
+- `import_deck`：将 Anki `.apkg` 卡组包导入为新卡组、导入现有卡组或整体替换一个卡组。
+- `create_export_download`：获取卡组包的一次性下载地址，使大压缩包无需经过模型。
 - `create_import_upload`：为卡组包申请一次性上传地址，agent 用 `curl` 等 HTTP 客户端直接上传文件；大卡组不必经过模型输出，API Key 也不离开 MCP 客户端。
 
 ---
