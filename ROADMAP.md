@@ -580,7 +580,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Acceptance:* a ≥ 1-day step in the undo fixture plus a mutation check, explicit `Now` in the deck-count
   and budget tests with the comment corrected, and a `NewScheduler` error case for an unacceptable step.
 
-- [ ] **M19-37 The request log writes live frame-media bearer tokens to disk** — *Blocker.*
+- [x] **M19-37 The request log writes live frame-media bearer tokens to disk** — *Blocker.*
   `requestLogger` logs `c.Request.URL.Path` for every request (`internal/web/server.go:539-545`) and is
   mounted globally (`:317`). `/fm/<token>/<name>` puts the token in the path (`internal/web/frame_media.go:34`),
   and `frameMediaServe` accepts that token without any session: it re-checks the token's user and deck role,
@@ -595,6 +595,32 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   discarding logger, and no test covers `requestLogger`).
   *Acceptance:* log a redacted path (or the matched route pattern) for `/fm/` and the two ticket routes and
   add a test that drives `/fm` and asserts the token does not appear in the captured log line.
+  *Closed by `8a5de83`.* `requestLogger` (`internal/web/server.go:534`) now passes the path through
+  `redactedRequestPath` (`:552`), which replaces the first segment after `/fm/`,
+  `/api/v1/decks/import-uploads/` or `/api/v1/decks/export-downloads/` with `<token>`. The frame media
+  name and the rest of a normal path stay in the line, so the log still locates the request without
+  holding the credential. The frame-media file's "never logged" statement is now true.
+  `TestRequestLoggerDoesNotLogCredentials` (`internal/web/request_log_test.go`) mounts the real
+  middleware, registers the real `/fm/:token/:name` route and both ticket routes, sends one request to
+  each and asserts the token is absent from the captured line and `<token>` is present. Raw output of
+  `go test ./internal/web/ -run TestRequestLoggerDoesNotLogCredentials -count=1 -v`:
+  ```
+  === RUN   TestRequestLoggerDoesNotLogCredentials
+  === RUN   TestRequestLoggerDoesNotLogCredentials/frame_media
+  === RUN   TestRequestLoggerDoesNotLogCredentials/import_ticket
+  === RUN   TestRequestLoggerDoesNotLogCredentials/export_ticket
+  --- PASS: TestRequestLoggerDoesNotLogCredentials (0.00s)
+      --- PASS: TestRequestLoggerDoesNotLogCredentials/frame_media (0.00s)
+      --- PASS: TestRequestLoggerDoesNotLogCredentials/import_ticket (0.00s)
+      --- PASS: TestRequestLoggerDoesNotLogCredentials/export_ticket (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.010s
+  ```
+  The same test against the previous logger captured the raw path, for example
+  `path=/fm/frame-token-secret/_font.woff2`, and failed for all three routes. The test was not taken
+  on trust: it drives the middleware, and the failure output above is from the unmodified
+  `server.go`. `go test ./internal/web/ -run 'TestRequestLogger|TestFrameMedia|TestHealthz|TestNewRequires' -count=1`
+  passes.
 
 - [ ] **M19-38 A stolen session can change the account email and then reset the password, so the change
   outlives the session** — *should-fix.* `emailChangeSubmit` accepts a new address from any signed-in
