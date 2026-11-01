@@ -3,6 +3,8 @@ package api
 
 import (
 	"context"
+	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -181,8 +183,12 @@ func formatErrorMessage(ctx context.Context, code, detail string) string {
 
 // ErrorText renders any service error as "code: message", with message in stable English.
 // MCP tools have no HTTP error envelope; this keeps their code + English text consistent with REST.
+// A server-side failure is logged here with the underlying error, which is never sent to the caller.
 func ErrorText(ctx context.Context, err error) string {
 	se := asServiceError(err)
+	if se.Status >= http.StatusInternalServerError {
+		slog.ErrorContext(ctx, "internal error", "code", se.Code, "error", err)
+	}
 	return se.Code + ": " + formatErrorMessage(ctx, se.Code, se.Message)
 }
 
@@ -199,7 +205,12 @@ func abortError(c *gin.Context, status int, code, message string) {
 
 // writeServiceError maps a service-layer *ServiceError to the unified error envelope; unrecognized errors become 500.
 // REST handlers and MCP tools share the same service methods; this is the REST-side exit.
+// A server-side failure is logged with the underlying error, which never reaches the response body.
 func writeServiceError(c *gin.Context, err error) {
 	se := asServiceError(err)
+	if se.Status >= http.StatusInternalServerError {
+		slog.ErrorContext(c.Request.Context(), "internal error", "code", se.Code, "error", err,
+			"method", c.Request.Method, "path", c.Request.URL.Path)
+	}
 	abortError(c, se.Status, se.Code, se.Message)
 }

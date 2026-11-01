@@ -46,12 +46,16 @@ func InvalidRequest(message string) *ServiceError {
 }
 
 // asServiceError normalizes any error into a ServiceError; unrecognized errors become 500 internal.
+//
+// The fallback carries no message on purpose: an unrecognized error's text may hold a SQL statement,
+// a file path or a driver diagnostic, and a client has no use for it. The error itself is logged by
+// writeServiceError / ErrorText, and the caller receives the code's stable English text.
 func asServiceError(err error) *ServiceError {
 	var se *ServiceError
 	if errors.As(err, &se) {
 		return se
 	}
-	return newServiceError(http.StatusInternalServerError, CodeInternal, err.Error())
+	return newServiceError(http.StatusInternalServerError, CodeInternal, "")
 }
 
 // ---- Decks ----

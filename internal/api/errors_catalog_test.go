@@ -210,7 +210,7 @@ func TestMCPErrorTextUsesSameEnglishMappingAsREST(t *testing.T) {
 		{
 			err:      errors.New("plain internal failure"),
 			wantCode: CodeInternal,
-			wantText: "internal_error: An internal error occurred. — plain internal failure",
+			wantText: "internal_error: An internal error occurred.",
 		},
 	}
 

@@ -54,8 +54,11 @@ func TestImportPresetID(t *testing.T) {
 	if err == nil {
 		t.Fatal("closed database returned no error")
 	}
-	if se := asServiceError(err); se.Status != http.StatusInternalServerError || se.Code != CodeInternal || !strings.Contains(se.Message, "resolve import preset") {
-		t.Fatalf("closed database error = %+v, want 500 internal with resolve import preset context", se)
+	if se := asServiceError(err); se.Status != http.StatusInternalServerError || se.Code != CodeInternal {
+		t.Fatalf("closed database error = %+v, want 500 internal", se)
+	}
+	if body := ErrorText(context.Background(), err); strings.Contains(body, "resolve import preset") || strings.Contains(body, "closed") {
+		t.Fatalf("internal error text leaked to the caller: %q", body)
 	}
 }
 

@@ -154,7 +154,9 @@ func mapPackageError(err error) error {
 	if err == nil {
 		return nil
 	}
-	return newServiceError(http.StatusInternalServerError, CodeInternal, err.Error())
+	// An uncoded error here is a server-side failure; its text may carry a path or a driver
+	// diagnostic, so it is logged by writeServiceError and never reaches the response body.
+	return newServiceError(http.StatusInternalServerError, CodeInternal, "")
 }
 
 // asPackageError is a thin wrapper over errors.As, so the api package does not repeat its import of errors everywhere.
