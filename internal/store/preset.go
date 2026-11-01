@@ -207,7 +207,31 @@ func (s *PresetStore) ListByOwner(ctx context.Context, ownerUserID uint64) ([]Pr
 
 // Update changes a preset's scheduling parameters; only the owner can. The default preset's parameters may change but its name may not --
 // its identity is the DefaultPresetName literal, and renaming would make a later backfill create another preset under that name.
+//
+// Callers that read a snapshot and then write only one parameter group must use UpdateScheduling or
+// UpdateWeights instead: this method writes both groups, so a snapshot taken before a concurrent write
+// to the other group would restore its old value.
 func (s *PresetStore) Update(ctx context.Context, actorUserID uint64, p *Preset) error {
+	return s.update(ctx, actorUserID, p, true, true)
+}
+
+// UpdateScheduling writes the columns the preset settings form edits and leaves the optimisation
+// result columns alone. The form's snapshot was read before any optimiser write-back may land, so a
+// whole-row write here would restore weights a reset or a newer optimisation had already replaced.
+func (s *PresetStore) UpdateScheduling(ctx context.Context, actorUserID uint64, p *Preset) error {
+	return s.update(ctx, actorUserID, p, true, false)
+}
+
+// UpdateWeights writes the columns an optimisation writes back and leaves the scheduling columns
+// alone. The optimiser's snapshot was read before the settings form may have saved, so a whole-row
+// write here would roll the user's scheduling changes back.
+func (s *PresetStore) UpdateWeights(ctx context.Context, actorUserID uint64, p *Preset) error {
+	return s.update(ctx, actorUserID, p, false, true)
+}
+
+// update writes the selected column groups of one preset, checking ownership and the same validation
+// as a whole-row update.
+func (s *PresetStore) update(ctx context.Context, actorUserID uint64, p *Preset, scheduling, weights bool) error {
 	if p.ID == 0 {
 		return errors.New("update preset: id is required")
 	}
@@ -224,18 +248,20 @@ func (s *PresetStore) Update(ctx context.Context, actorUserID uint64, p *Preset)
 	if existing.Name == DefaultPresetName && p.Name != DefaultPresetName {
 		return ErrDefaultPresetCannotRename
 	}
-	updates := map[string]any{
-		"name":                  p.Name,
-		"desired_retention":     p.DesiredRetention,
-		"learning_steps":        p.LearningSteps,
-		"relearning_steps":      p.RelearningSteps,
-		"maximum_interval_days": p.MaximumIntervalDays,
-		"enable_fuzz":           p.FuzzEnabled(),
-		"weights_json":          p.WeightsJSON,
-		"weights_optimized_at":  p.WeightsOptimizedAt,
-		"weights_review_count":  p.WeightsReviewCount,
-		"grade_mapping_json":    p.GradeMappingJSON,
-		"updated_at":            time.Now().UTC(),
+	updates := map[string]any{"updated_at": time.Now().UTC()}
+	if scheduling {
+		updates["name"] = p.Name
+		updates["desired_retention"] = p.DesiredRetention
+		updates["learning_steps"] = p.LearningSteps
+		updates["relearning_steps"] = p.RelearningSteps
+		updates["maximum_interval_days"] = p.MaximumIntervalDays
+		updates["enable_fuzz"] = p.FuzzEnabled()
+		updates["grade_mapping_json"] = p.GradeMappingJSON
+	}
+	if weights {
+		updates["weights_json"] = p.WeightsJSON
+		updates["weights_optimized_at"] = p.WeightsOptimizedAt
+		updates["weights_review_count"] = p.WeightsReviewCount
 	}
 	if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ?", p.ID).Updates(updates).Error; err != nil {
 		return fmt.Errorf("update preset: %w", err)

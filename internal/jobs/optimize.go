@@ -107,7 +107,7 @@ func (r *Runner) applyOptimizedWeights(ctx context.Context, jobID uint64, result
 	preset.WeightsJSON = &encoded
 	preset.WeightsOptimizedAt = &optimizedAt
 	preset.WeightsReviewCount = &reviewCount
-	if err := presets.Update(ctx, preset.OwnerUserID, preset); err != nil {
+	if err := presets.UpdateWeights(ctx, preset.OwnerUserID, preset); err != nil {
 		return fmt.Errorf("store optimized weights on preset %d: %w", *job.TargetID, err)
 	}
 	return nil

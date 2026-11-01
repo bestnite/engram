@@ -550,7 +550,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   intact as expected. `TestAnkiImportKeepsFilesThatExistedBefore` passes, so the import path that calls the
   rewriter still runs.
 
-- [ ] **M19-20 A preset write-back lets the optimiser and the settings form overwrite each other** —
+- [x] **M19-20 A preset write-back lets the optimiser and the settings form overwrite each other** —
   *should-fix.* The settings PATCH changes scheduling fields but carries the stale weights, the
   optimiser changes weights but carries stale scheduling fields, and `Update` writes both groups with no
   compare-and-set (`internal/store/preset.go:227-240`; callers `internal/web/presets_api.go:193-204`,
@@ -561,6 +561,36 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   from the weight columns, or use an explicit field mask (a version check if edit conflicts must be
   surfaced); regressions show a settings save after a reset does not restore weights, and an optimiser
   write from a stale snapshot does not roll settings back.
+  *Closed by this commit (`fix(store): write only the preset columns each caller owns`).*
+  `PresetStore` now exposes two scoped writers beside the whole-row `Update` (`internal/store/preset.go:214`):
+  `UpdateScheduling` (`:221`) writes `name`, the three scheduling fields, `enable_fuzz` and
+  `grade_mapping_json`, and `UpdateWeights` (`:228`) writes `weights_json`, `weights_optimized_at` and
+  `weights_review_count`; both share one `update` that keeps the ownership check and validation
+  (`:235`). The settings PATCH calls `UpdateScheduling` (`internal/web/presets_api.go:204`) and the
+  optimiser write-back calls `UpdateWeights` (`internal/jobs/optimize.go:110`), so neither writes the
+  snapshot it does not own. `Update` is unchanged as the whole-row writer for a fresh read; no schema
+  or version check was needed because the two callers' column groups are disjoint.
+  `TestPresetScopedUpdatesDoNotOverwriteEachOther` (`internal/store/preset_test.go`) takes a settings
+  snapshot, resets the weights, saves the stale scheduling snapshot and asserts `weights_json` stays
+  NULL; it then takes a stale optimiser snapshot, saves a new retention through the settings writer,
+  writes the stale weights and asserts the new retention and the new weights both survive. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestPresetScopedUpdatesDoNotOverwriteEachOther -count=1 -v`:
+  ```
+  === RUN   TestPresetScopedUpdatesDoNotOverwriteEachOther
+  === RUN   TestPresetScopedUpdatesDoNotOverwriteEachOther/sqlite
+  === RUN   TestPresetScopedUpdatesDoNotOverwriteEachOther/postgres
+  --- PASS: TestPresetScopedUpdatesDoNotOverwriteEachOther (0.30s)
+      --- PASS: TestPresetScopedUpdatesDoNotOverwriteEachOther/sqlite (0.01s)
+      --- PASS: TestPresetScopedUpdatesDoNotOverwriteEachOther/postgres (0.23s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.305s
+  ```
+  With both scoped methods temporarily routed through the whole-row write, the same test failed on both
+  drivers with `weights_json after a settings save = "[0.4,0.6,2.4]", want nil: the reset must survive
+  it` and `desired_retention after a stale optimiser write = 0.9, want 0.85: the settings save must
+  survive it`. `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestPreset|TestOptimise|TestOptimize' -count=1`
+  passes in `3.543s`, `go test ./internal/web/ -run 'TestPreset|TestOptim|TestReview' -count=1` and
+  `go test ./internal/jobs/ -run 'TestOptim' -count=1` pass.
 
 - [x] **M19-21 Two concurrent `AddTags` both succeed and one addition is lost** — *should-fix.* Tags are
   read outside the transaction, merged in Go, and written unconditionally inside it

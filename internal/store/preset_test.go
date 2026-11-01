@@ -348,3 +348,92 @@ func TestPresetDefaultCannotBeRenamed(t *testing.T) {
 		})
 	}
 }
+
+// TestPresetScopedUpdatesDoNotOverwriteEachOther covers the two snapshots that write a preset from
+// different pages: the settings form edits the scheduling columns, the optimiser write-back edits the
+// weights. Each reads before the other writes, so a whole-row write would restore the value the other
+// page had already replaced.
+func TestPresetScopedUpdatesDoNotOverwriteEachOther(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			owner := seedUsers(t, db, "preset_scoped_"+driver)[0]
+			presets := NewPresetStore(db)
+
+			firstWeights := `[0.4,0.6,2.4]`
+			p := NewPreset(owner, "Scoped")
+			p.DesiredRetention = 0.8
+			p.WeightsJSON = Ptr(firstWeights)
+			p.WeightsReviewCount = Ptr(512)
+			if err := presets.Create(ctx, &p); err != nil {
+				t.Fatalf("Create() error = %v", err)
+			}
+
+			// The settings form read the preset before the optimiser result was reset; its save must
+			// not restore the weights the reset cleared.
+			staleSettings, err := presets.ByID(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("ByID() error = %v", err)
+			}
+			if err := presets.ResetPresetWeights(ctx, owner, p.ID); err != nil {
+				t.Fatalf("ResetPresetWeights() error = %v", err)
+			}
+			staleSettings.DesiredRetention = 0.9
+			staleSettings.LearningSteps = "2m,20m"
+			if err := presets.UpdateScheduling(ctx, owner, staleSettings); err != nil {
+				t.Fatalf("UpdateScheduling() error = %v", err)
+			}
+			afterSchedule, err := presets.ByID(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("ByID() after scheduling save error = %v", err)
+			}
+			if afterSchedule.WeightsJSON != nil {
+				t.Errorf("weights_json after a settings save = %q, want nil: the reset must survive it", *afterSchedule.WeightsJSON)
+			}
+			if afterSchedule.DesiredRetention != 0.9 || afterSchedule.LearningSteps != "2m,20m" {
+				t.Errorf("scheduling columns after save = retention %v steps %q, want 0.9 and \"2m,20m\"",
+					afterSchedule.DesiredRetention, afterSchedule.LearningSteps)
+			}
+
+			// The optimiser read the preset before the settings save above; its write-back must keep
+			// the new scheduling value and write only its own columns.
+			staleOptimizer, err := presets.ByID(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("ByID() error = %v", err)
+			}
+			secondWeights := `[0.3,0.7,3.1]`
+			staleOptimizer.WeightsJSON = Ptr(secondWeights)
+			staleOptimizer.WeightsReviewCount = Ptr(700)
+
+			settings, err := presets.ByID(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("ByID() error = %v", err)
+			}
+			settings.DesiredRetention = 0.85
+			if err := presets.UpdateScheduling(ctx, owner, settings); err != nil {
+				t.Fatalf("UpdateScheduling() error = %v", err)
+			}
+			if err := presets.UpdateWeights(ctx, owner, staleOptimizer); err != nil {
+				t.Fatalf("UpdateWeights() error = %v", err)
+			}
+
+			afterWeights, err := presets.ByID(ctx, p.ID)
+			if err != nil {
+				t.Fatalf("ByID() after weights write error = %v", err)
+			}
+			if afterWeights.DesiredRetention != 0.85 {
+				t.Errorf("desired_retention after a stale optimiser write = %v, want 0.85: the settings save must survive it",
+					afterWeights.DesiredRetention)
+			}
+			if afterWeights.WeightsJSON == nil || *afterWeights.WeightsJSON != secondWeights {
+				t.Errorf("weights_json after optimiser write = %v, want %q", afterWeights.WeightsJSON, secondWeights)
+			}
+			if afterWeights.WeightsReviewCount == nil || *afterWeights.WeightsReviewCount != 700 {
+				t.Errorf("weights_review_count after optimiser write = %v, want 700", afterWeights.WeightsReviewCount)
+			}
+		})
+	}
+}

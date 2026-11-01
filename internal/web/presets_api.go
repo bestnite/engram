@@ -201,7 +201,7 @@ func (s *Server) presetUpdate(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	applyPresetRequest(p, req)
-	if err := s.presets.Update(ctx, user.ID, p); err != nil {
+	if err := s.presets.UpdateScheduling(ctx, user.ID, p); err != nil {
 		s.logger.Info("update preset via SPA rejected", "user_id", user.ID, "preset_id", p.ID, "error", err)
 		presetError(c, http.StatusBadRequest, presetStoreCode(err))
 		return
