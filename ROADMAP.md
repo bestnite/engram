@@ -891,7 +891,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   (fetch up to `BatchSize`, compute retrievability, apply each deck's allowance to the ranked list); a
   regression keeps a low-R card that is not the earliest due.
 
-- [ ] **M19-31 A `choice_single`/`choice_multi` back face panics on a large numeric field value** —
+- [x] **M19-31 A `choice_single`/`choice_multi` back face panics on a large numeric field value** —
   *should-fix.* `optionIndex` rejects negatives and fractions but has no upper bound
   (`internal/answer/context.go:261-268`); `1e100` parses, truncates to itself, and `int(1e100)` yields
   `math.MinInt64` on amd64, which passes the `index >= len(options)` guard and indexes the slice
@@ -902,6 +902,33 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   test would miss it. *Acceptance:* bound the index in `optionIndex` (`> math.MaxInt32` is an error) and
   have both `RenderBack` implementations treat an out-of-range stored index as an error; a regression
   asserts an error and no panic.
+  *Closed by this commit (`fix(answer): refuse an option index past the int32 range`).*
+  `optionIndex` (`internal/answer/context.go:263`) refuses a value above `math.MaxInt32` before the `int`
+  conversion, so a float past the int range can no longer turn into a negative index; the doc comment
+  states why. `choiceSingleParts` and `choiceMultiParts` already refuse an index at or past the option
+  count and are the only path both `RenderBack` implementations take to `options[index]`, so both now
+  return that error instead of indexing, and no second bounds check was added. `1e100` is refused at the
+  parse step, so `RenderFront` refuses it too.
+  `TestChoiceControlsRefuseHugeNumericIndex` (`internal/answer/choice_index_range_test.go`) drives both
+  controls with a stored index of `1e100`, calls `RenderBack` first and then `RenderFront`, and requires an
+  error and no panic from each, plus an error from the grade path. Raw output of
+  `go test ./internal/answer/ -run TestChoiceControlsRefuseHugeNumericIndex -count=1 -v`:
+  ```
+  === RUN   TestChoiceControlsRefuseHugeNumericIndex
+  === RUN   TestChoiceControlsRefuseHugeNumericIndex/choice_single
+  === RUN   TestChoiceControlsRefuseHugeNumericIndex/choice_multi
+  --- PASS: TestChoiceControlsRefuseHugeNumericIndex (0.00s)
+      --- PASS: TestChoiceControlsRefuseHugeNumericIndex/choice_single (0.00s)
+      --- PASS: TestChoiceControlsRefuseHugeNumericIndex/choice_multi (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/answer	0.002s
+  ```
+  Before the change the same test panicked inside `choiceSingleControl.RenderBack`
+  (`internal/answer/choice_single.go:38`) with
+  `panic: runtime error: index out of range [-9223372036854775808] [recovered, repanicked]`.
+  `go test ./internal/answer/ -count=1` passes, and
+  `go test ./internal/web/ -run 'TestReview|TestGrade|TestChoice|TestCard' -count=1` and
+  `go test ./internal/api/ -run 'TestReview|TestAnswer|TestCard' -count=1` pass.
 
 - [x] **M19-32 `choice_multi` halves the score when the correct-index list repeats an index** —
   *should-fix.* `correct` is built as a set but the denominator is `len(answers)`

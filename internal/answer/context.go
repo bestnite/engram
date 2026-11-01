@@ -259,10 +259,15 @@ func parseValue(kind Kind, html string) (any, error) {
 }
 
 // optionIndex converts a parsed number to a zero-based option index. A
-// fraction or a negative value is not an index.
+// fraction, a negative value or a value past the int32 range is not an index:
+// converting a float past the int range to int yields a negative value on amd64,
+// which would pass a lower-bound check and panic as a slice index.
 func optionIndex(value float64, role string) (int, error) {
 	if value < 0 || value != math.Trunc(value) {
 		return 0, fmt.Errorf("role %q must be a non-negative whole number", role)
+	}
+	if value > math.MaxInt32 {
+		return 0, fmt.Errorf("role %q is too large to be an option index", role)
 	}
 	return int(value), nil
 }
