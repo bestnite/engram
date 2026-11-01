@@ -2152,7 +2152,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   compiles both schema files and validates both shipped examples, so a schema change that invalidates an example
   fails the build.
 
-- [ ] **M19-100 A failed export is reported as an empty or truncated success** — *should-fix.* `internal/api/export.go:89-94`
+- [x] **M19-100 A failed export is reported as an empty or truncated success** — *should-fix.* `internal/api/export.go:89-94`
   logs the `ExportCards` error and then closes the JSON body with the rows written so far and `"count":<written>`;
   `:106-112` does the same for CSV. The status is 200 either way, so a database failure, a page-scan failure and a
   genuinely empty deck produce the same response, and no field says the export was cut short. *Reproduced:* with the
@@ -2160,6 +2160,36 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   for a deck that holds one card. *Acceptance:* a failure before the first row returns the 5xx `internal_error`
   envelope, a failure after it marks the truncation in the body, and a test forces a page read to fail and asserts
   each of the two outcomes.
+  *Closed by this commit (`fix(api): report a failed export instead of a short success`).*
+  `streamJSON` and `streamCSV` (`internal/api/export.go:74,126`) now write their fixed prefix (JSON) or header (CSV)
+  from the first emit callback, not before the export starts, so a page read that fails before any row leaves nothing
+  written and the handler answers 500 `internal_error` through `abortError`; a successful export of an empty deck
+  still writes the prefix afterwards. A failure after at least one row keeps the 200 body but marks it: JSON closes
+  the array and adds `"truncated":true` next to `"count"`, and the CSV file ends with a `#export_truncated` record
+  (the field is additive, so a complete export's body is unchanged). The error still goes only to the log.
+  `TestExportFailureBeforeFirstRowIsAnError` (`internal/api/export_failure_test.go`) closes the SQLite handle and
+  calls each streamer directly, asserting 500, the `internal_error` envelope and no export content;
+  `TestExportFailureAfterFirstRowIsMarked` sets `exportPageSize = 1`, closes the handle on the response's first
+  write (the page in hand was already read, so its row still lands) and asserts the JSON parses with one card and
+  `truncated:true`, and that the CSV keeps header plus row and ends with the marker. Raw output of
+  `go test ./internal/api/ -run 'TestExportFailure' -count=1 -v`:
+  ```
+  --- PASS: TestExportFailureBeforeFirstRowIsAnError (0.02s)
+      --- PASS: TestExportFailureBeforeFirstRowIsAnError/json (0.01s)
+      --- PASS: TestExportFailureBeforeFirstRowIsAnError/csv (0.01s)
+  --- PASS: TestExportFailureAfterFirstRowIsMarked (0.03s)
+      --- PASS: TestExportFailureAfterFirstRowIsMarked/json (0.01s)
+      --- PASS: TestExportFailureAfterFirstRowIsMarked/csv (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.056s
+  ```
+  With only `internal/api/export.go` reverted, the same run failed with
+  `status = 200, want 500 (body "{\"deck_ids\":[\"…\"],\"cards\":[],\"count\":0}")` and
+  `status = 200, want 500 (body "card_id,note_id,deck_id,template,fields_json,tags_json,external_ref\n")` for the
+  first-row cases, `cards = 0, count = 0, want 1/1: the row already read must survive` and
+  `truncated = false, want true: the export stopped before the last page`, and
+  `lines = 2, want header, one row and the truncation marker`. `go test ./internal/api/ -run 'TestExport' -count=1`
+  passes.
 
 - [ ] **M19-101 An unrecognised store failure on a write is answered 400 `invalid_request` with the driver's text** —
   *should-fix.* `internal/api/service.go:764-772` (note update), `internal/api/note_types.go:322-335` (note type
