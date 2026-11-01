@@ -181,7 +181,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   The same test before the fix reproduced the report: `evicted session served another account
   (status=200); raw={"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"decks\":[{\"id\":\"01a1985c-4164-7e30-ad97-82feb7a6984a\",\"name\":\"deck\",...`. `go test ./internal/mcp/ -count=1` passes.
 
-- [ ] **M19-4 Concurrent migration applies one step twice and drops note metadata** — *Blocker.* `Apply`
+- [x] **M19-4 Concurrent migration applies one step twice and drops note metadata** — *Blocker.* `Apply`
   reads the schema version once outside the migration transaction and takes no database-level lock
   (`internal/store/migrate.go:747-761`), so two processes that both read version 11 both run `0012`.
   The second pass reads fields the first pass already moved out, nulls them and creates a second note
@@ -191,6 +191,28 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   interleaving is unverified. *Acceptance:* a database-level lock held across `Up` and the version
   write, with the version re-read inside it; a regression with two connections migrating at once shows
   metadata intact and exactly one note type. A process mutex alone is not a fix.
+  *Closed by the `fix(store): serialise migration steps with a database lock` commit on `main`.*
+  `Apply` (`internal/store/migrate.go:731`) now opens each due step in a transaction, takes a
+  transaction-level advisory lock on PostgreSQL (`lockMigrationStep`, `:807`; key `migrationLockKey`,
+  `:799`), re-reads `CurrentVersion` inside the lock and only then runs `Up` and writes the version. A step the
+  outer read already put behind the stored version is still skipped, which is safe because the
+  version only moves forward. SQLite keeps its single write connection. `TestConcurrentMigrationKeepsNoteMetadata`
+  (`internal/store/migrate_test.go`) opens a second PostgreSQL connection to the same schema, seeds a
+  note whose field map carries `source_url`/`extra` and a stored version of 1, and runs the next step,
+  which moves those fields into columns exactly as `0012` does, on both connections at once. Raw output
+  of `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestConcurrentMigrationKeepsNoteMetadata -count=1 -v`:
+  ```
+  === RUN   TestConcurrentMigrationKeepsNoteMetadata
+  --- PASS: TestConcurrentMigrationKeepsNoteMetadata (0.52s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.530s
+  ```
+  The same test with only `migrate.go` reverted failed with
+  `applied = 2, runs = 2 across two migrators; want 1 and 1`,
+  `source_url after concurrent migration = <nil>, want "https://example.com/source"`,
+  `extra_json after concurrent migration = <nil>, want "{\"licence\":\"example\"}"` and
+  `note types after concurrent migration = 2 created (3 total), want 1 created (2 total)`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -count=1` passes in `92.932s`.
 
 - [x] **M19-5 A cancelled import deletes a media file another import committed** — *Blocker.*
   `cleanupMediaWrites` treats "the lookup failed" as "no metadata row"

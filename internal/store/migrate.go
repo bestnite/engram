@@ -726,7 +726,8 @@ func storedVersion(ctx context.Context, db *gorm.DB) (int, error) {
 }
 
 // Apply validates the migration list and runs the entries not yet applied. Each migration commits together with its version number in one transaction,
-// so a successful migration can never end up in the state of \"ran, but the version was not recorded\".
+// so a successful migration can never end up in the state of \"ran, but the version was not recorded\". Each such transaction also holds a
+// database-level lock and re-reads the version inside it, so two processes starting against the same database cannot both run one step.
 func Apply(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error) {
 	seen := make(map[string]int, len(migrations))
 	for i, m := range migrations {
@@ -751,22 +752,66 @@ func Apply(ctx context.Context, db *gorm.DB, migrations []Migration) (int, error
 	applied := 0
 	for i, m := range migrations {
 		version := i + 1
+		// The value read before the loop can only lag behind: another process may have applied steps since it
+		// was read, never removed them. A step that value puts behind us is therefore safe to skip; every step
+		// it says is due is re-checked below.
 		if version <= current {
 			continue
 		}
+		reached := version
+		ran := false
 		err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := lockMigrationStep(tx); err != nil {
+				return err
+			}
+			// Re-read under the lock: the value read before the transaction may belong to another process's
+			// schema state, and running Up against that state applies the step twice (see lockMigrationStep).
+			stored, err := CurrentVersion(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if version <= stored {
+				reached = stored
+				return nil
+			}
 			if err := m.Up(tx); err != nil {
 				return fmt.Errorf("migration %q failed: %w", m.Name, err)
 			}
-			return setVersion(tx, version)
+			if err := setVersion(tx, version); err != nil {
+				return err
+			}
+			ran = true
+			return nil
 		})
 		if err != nil {
 			return applied, err
 		}
-		current = version
-		applied++
+		current = reached
+		if ran {
+			applied++
+		}
 	}
 	return applied, nil
+}
+
+// migrationLockKey is the key of the PostgreSQL transaction-level advisory lock that serialises migration
+// steps across processes; any fixed value that does not collide with the admin gate.
+const migrationLockKey = 7_301_942_119
+
+// lockMigrationStep takes the migration lock for the current transaction, so the version re-read, the step's
+// Up and the version write cannot interleave with another process running the same step.
+//
+// Mutual exclusion is per driver: PostgreSQL uses a transaction-level advisory lock (released automatically on
+// commit or rollback); SQLite serialises writers through its database write lock, and store.Open caps the pool
+// at one connection, so the whole transaction owns the only writer.
+func lockMigrationStep(tx *gorm.DB) error {
+	if tx.Dialector.Name() != "postgres" {
+		return nil
+	}
+	if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", migrationLockKey).Error; err != nil {
+		return fmt.Errorf("acquire migration lock: %w", err)
+	}
+	return nil
 }
 
 // CurrentVersion returns the applied schema version; 0 when there is no record at all.

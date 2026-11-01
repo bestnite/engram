@@ -2,14 +2,19 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"git.nite07.com/nite/engram/internal/pgtest"
 )
 
 func newSQLite(t *testing.T) *gorm.DB {
@@ -84,6 +89,148 @@ func TestApplyRunsRegisteredMigrationExactlyOnce(t *testing.T) {
 	}
 	if applied != 0 || runs != 1 {
 		t.Errorf("second Apply(): applied = %d, runs = %d; want 0 and 1", applied, runs)
+	}
+}
+
+// TestConcurrentMigrationKeepsNoteMetadata covers two processes that both read the same schema version and
+// then race to run the next step. The step moves note fields out of the field map into columns, the way the
+// note-type migration does: a second pass over the same rows reads values the first pass already moved,
+// nulls the columns and creates another note type. PostgreSQL at READ COMMITTED is where both passes can
+// interleave; the migration must serialise them and re-read the version under the lock.
+func TestConcurrentMigrationKeepsNoteMetadata(t *testing.T) {
+	ctx := context.Background()
+	db, ok := pgtest.Open(t)
+	if !ok {
+		t.Skip("TEST_PG_DSN not set: the interleaving needs two PostgreSQL connections")
+	}
+
+	if err := db.AutoMigrate(AllModels()...); err != nil {
+		t.Fatalf("AutoMigrate() error = %v", err)
+	}
+	now := time.Now().UTC()
+	seedType := NoteType{PublicID: "seed-type", DeckID: 1, Name: "seed", ConfigJSON: "{}", CreatedAt: now, UpdatedAt: now}
+	if err := db.Create(&seedType).Error; err != nil {
+		t.Fatalf("create seed note type: %v", err)
+	}
+	sourceURL, extraJSON := "https://example.com/source", `{"licence":"example"}`
+	note := Note{PublicID: "seed-note", DeckID: 1, NoteTypeID: &seedType.ID,
+		FieldsJSON: `{"front":"capital?","source_url":"https://example.com/source","extra":{"licence":"example"}}`,
+		TagsJSON:   "[]", CreatedAt: now, UpdatedAt: now}
+	if err := db.Create(&note).Error; err != nil {
+		t.Fatalf("create seed note: %v", err)
+	}
+	if err := db.AutoMigrate(&SchemaVersion{}); err != nil {
+		t.Fatalf("auto migrate schema_version: %v", err)
+	}
+	if err := setVersion(db, 1); err != nil {
+		t.Fatalf("set schema version: %v", err)
+	}
+
+	var runs atomic.Int32
+	migrations := []Migration{
+		{Name: "0001_noop", Up: func(tx *gorm.DB) error { return nil }},
+		{Name: "0002_move_note_metadata", Up: func(tx *gorm.DB) error {
+			n := runs.Add(1)
+			// Keep the step open long enough that a second migrator which read the same version is still
+			// running when this one commits; the fixed Apply makes it wait on the lock instead.
+			time.Sleep(200 * time.Millisecond)
+			// Move source_url and extra out of the field map into their columns, the way the note-type
+			// migration does. A second pass over the same row no longer finds them in the map, so it writes
+			// NULL over the columns the first pass filled.
+			var row struct {
+				FieldsJSON string `gorm:"column:fields_json"`
+			}
+			if err := tx.Table("notes").Select("fields_json").Where("id = ?", note.ID).Scan(&row).Error; err != nil {
+				return err
+			}
+			fields := make(map[string]any)
+			if err := json.Unmarshal([]byte(row.FieldsJSON), &fields); err != nil {
+				return err
+			}
+			var movedSource, movedExtra *string
+			if text, ok := fields["source_url"].(string); ok && text != "" {
+				movedSource = &text
+				delete(fields, "source_url")
+			}
+			if value, ok := fields["extra"]; ok {
+				raw, err := json.Marshal(value)
+				if err != nil {
+					return err
+				}
+				text := string(raw)
+				movedExtra = &text
+				delete(fields, "extra")
+			}
+			raw, err := json.Marshal(fields)
+			if err != nil {
+				return err
+			}
+			if err := tx.Table("notes").Where("id = ?", note.ID).Updates(map[string]any{
+				"fields_json": string(raw), "source_url": movedSource, "extra_json": movedExtra,
+			}).Error; err != nil {
+				return err
+			}
+			return tx.Create(&NoteType{PublicID: fmt.Sprintf("step-type-%d", n), DeckID: 1, Name: "step",
+				ConfigJSON: "{}", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}).Error
+		}},
+	}
+
+	// A second connection to the same database, as a second engram process would open.
+	dialector, ok := db.Dialector.(*postgres.Dialector)
+	if !ok {
+		t.Fatalf("pgtest.Open returned dialector %T, want *postgres.Dialector", db.Dialector)
+	}
+	second, err := gorm.Open(postgres.Open(dialector.DSN), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open second postgres connection: %v", err)
+	}
+	t.Cleanup(func() {
+		if sqlDB, err := second.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+
+	type result struct {
+		applied int
+		err     error
+	}
+	results := make(chan result, 2)
+	start := make(chan struct{})
+	for _, conn := range []*gorm.DB{db, second} {
+		go func(conn *gorm.DB) {
+			<-start
+			applied, err := Apply(ctx, conn, migrations)
+			results <- result{applied: applied, err: err}
+		}(conn)
+	}
+	close(start)
+	total := 0
+	for i := 0; i < 2; i++ {
+		r := <-results
+		if r.err != nil {
+			t.Errorf("concurrent Apply() error = %v", r.err)
+		}
+		total += r.applied
+	}
+
+	if total != 1 || runs.Load() != 1 {
+		t.Errorf("applied = %d, runs = %d across two migrators; want 1 and 1", total, runs.Load())
+	}
+	var got Note
+	if err := db.Unscoped().First(&got, note.ID).Error; err != nil {
+		t.Fatalf("read note after migration: %v", err)
+	}
+	if got.SourceURL == nil || *got.SourceURL != sourceURL {
+		t.Errorf("source_url after concurrent migration = %v, want %q", got.SourceURL, sourceURL)
+	}
+	if got.ExtraJSON == nil || *got.ExtraJSON != extraJSON {
+		t.Errorf("extra_json after concurrent migration = %v, want %q", got.ExtraJSON, extraJSON)
+	}
+	var stepTypes, allTypes int64
+	db.Model(&NoteType{}).Where("name = ?", "step").Count(&stepTypes)
+	db.Model(&NoteType{}).Count(&allTypes)
+	if stepTypes != 1 || allTypes != 2 {
+		t.Errorf("note types after concurrent migration = %d created (%d total), want 1 created (2 total)", stepTypes, allTypes)
 	}
 }
 
