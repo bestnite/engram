@@ -276,19 +276,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   present. *Acceptance:* section 2.7 of `AGENTS.md` names `reuse`, `copy` and `last_review_at`. Evidence
   is the `AGENTS.md` diff.
 
-- [ ] **M18-91 `README.zh.md` describes the same import as `README.md`** — `M18-21`, `M18-46` and `M18-64`
-  changed only `README.md`. The import section of `README.zh.md` still says the opposite of the code. Line
-  43 offers two package formats, Engram's `.edeck` and Anki's `.apkg`, although `M18-5` removed `.edeck`.
-  Line 56 lists, under the parts of a package that are not imported, "调度状态与复习历史" ("imported cards
-  are always new"), which `M18-21` removed from `README.md` because `include_progress` imports them. The
-  section names no `preset_mode`, `preset_id`, `apply_weights`, `weights_invalid` or re-import progress
-  rule. Line 105 says that `export_deck` exports `.edeck`. A Chinese reader is therefore told that an
-  `.apkg` import never carries progress or deck options. The fix: the "导入卡组" section and the MCP tool
-  list of `README.zh.md` state, in Chinese, every rule that the matching parts of `README.md` state after
-  `M18-90` lands, and nothing that `README.md` does not state. *Acceptance:* each paragraph and list item
-  of the two sections matches its `README.md` counterpart statement for statement; `grep -n -E
-  'edeck|export_deck' README.zh.md` prints nothing. Evidence is the diff and the grep output.
-
 - [ ] **M18-93 Decide what `progress_discarded` means with `include_progress` on** — the comment on
   `PackageImportReport.ProgressDiscarded` in `internal/store/package_import.go` says that the flag means
   "the package's card states or reviews were discarded during import". The only code that sets it is the
