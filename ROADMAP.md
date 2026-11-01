@@ -2026,7 +2026,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   by reading the fixture's three consumers. *Acceptance:* add `typeanswer` to `TestRenderGolden`'s fixture
   list, or drop the two fields from the golden so it no longer claims coverage it lacks.
 
-- [ ] **M19-53 Three archive-hardening branches have no hostile-input test** — *nit.* `indexEntries`
+- [x] **M19-53 Three archive-hardening branches have no hostile-input test** — *nit.* `indexEntries`
   rejects a symlink entry (`internal/anki/archive.go:99-101`) and a duplicate entry name (`:102-104`), and
   `safeEntryName` rejects a Windows drive-letter name (`:146-148`); none of the three is exercised. The
   reader's tests build a `../evil` entry, a `../evil.png` media name, corrupt meta, corrupt zstd and the
@@ -2035,6 +2035,34 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   refactor that dropped one branch would fail no test. Verified with `go test ./internal/anki/ -cover`
   (77.9 % of statements) and by reading the tests. *Acceptance:* add one archive per branch, each asserting
   `ErrUnsafeEntry` or `ErrBadArchive`.
+  *Closed by the `test(anki): pin the archive hardening branches with hostile archives` commit.*
+  Each branch now has one archive of its own: `TestUnsafeEntrySymlink`
+  (`internal/anki/anki_test.go:259`) writes a `collection.anki2` entry whose Unix mode is a symlink,
+  `TestDuplicateEntryName` (`:283`) writes that name twice with different bytes, and
+  `TestUnsafeWindowsDriveEntry` (`:307`) writes one entry named `C:evil.png` and one named `c:evil.png`.
+  The first and third require `ErrUnsafeEntry`, the second `ErrBadArchive`; the symlink and duplicate
+  archives are built with `zip.Writer.CreateHeader` because `zipBytes` cannot set a mode or repeat a
+  name. Raw output of
+  `go test ./internal/anki/ -run 'TestUnsafeEntrySymlink|TestDuplicateEntryName|TestUnsafeWindowsDriveEntry' -count=1 -v`:
+  ```
+  === RUN   TestUnsafeEntrySymlink
+  --- PASS: TestUnsafeEntrySymlink (0.00s)
+  === RUN   TestDuplicateEntryName
+  --- PASS: TestDuplicateEntryName (0.00s)
+  === RUN   TestUnsafeWindowsDriveEntry
+  === RUN   TestUnsafeWindowsDriveEntry/C:evil.png
+  === RUN   TestUnsafeWindowsDriveEntry/c:evil.png
+  --- PASS: TestUnsafeWindowsDriveEntry (0.00s)
+      --- PASS: TestUnsafeWindowsDriveEntry/C:evil.png (0.00s)
+      --- PASS: TestUnsafeWindowsDriveEntry/c:evil.png (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/anki	0.006s
+  ```
+  The tests were not taken on trust: dropping each branch from `archive.go` in turn made its own case
+  fail with `anki package: cannot decode collection: col table: file is not a database (26), want
+  ErrUnsafeEntry` for the symlink archive and for the duplicate archive `..., want ErrBadArchive`, and
+  `anki package: no collection entry: neither "collection.anki2" nor "collection.anki21", want
+  ErrUnsafeEntry` for both drive-letter names. `go test ./internal/anki/ -count=1` passes in `0.067s`.
 
 - [x] **M19-54 Garbage collection aborts a batch after deleting the rows, leaking the rest of its files** —
   *nit.* `CollectGarbage` asks `store.DeleteOrphanedMedia` for a batch of 200 and removes the files only

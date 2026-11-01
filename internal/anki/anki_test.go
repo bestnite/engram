@@ -254,6 +254,68 @@ func TestUnsafeMediaName(t *testing.T) {
 	}
 }
 
+// TestUnsafeEntrySymlink covers the symlink branch: an entry whose Unix mode marks it a symlink is
+// refused before its name is indexed, so a package built to plant a link cannot get further.
+func TestUnsafeEntrySymlink(t *testing.T) {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	header := &zip.FileHeader{Name: "collection.anki2", Method: zip.Store}
+	header.SetMode(os.ModeSymlink | 0o777)
+	fw, err := w.CreateHeader(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte("not opened")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archive := buf.Bytes()
+	_, err = anki.Read(bytes.NewReader(archive), int64(len(archive)))
+	if !errors.Is(err, anki.ErrUnsafeEntry) {
+		t.Fatalf("err = %v, want ErrUnsafeEntry", err)
+	}
+}
+
+// TestDuplicateEntryName covers the duplicate branch: two entries with the same name would leave a
+// reader guessing which bytes the name resolves to, so the archive is refused as bad.
+func TestDuplicateEntryName(t *testing.T) {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for _, data := range [][]byte{[]byte("first"), []byte("second")} {
+		fw, err := w.CreateHeader(&zip.FileHeader{Name: "collection.anki2", Method: zip.Store})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archive := buf.Bytes()
+	_, err := anki.Read(bytes.NewReader(archive), int64(len(archive)))
+	if !errors.Is(err, anki.ErrBadArchive) {
+		t.Fatalf("err = %v, want ErrBadArchive", err)
+	}
+}
+
+// TestUnsafeWindowsDriveEntry covers the drive-letter branch: a name such as "C:evil.png" is a path
+// on Windows even without a separator, so both letter cases are refused.
+func TestUnsafeWindowsDriveEntry(t *testing.T) {
+	for _, name := range []string{"C:evil.png", "c:evil.png"} {
+		t.Run(name, func(t *testing.T) {
+			archive := zipBytes(t, map[string][]byte{name: []byte("x")})
+			_, err := anki.Read(bytes.NewReader(archive), int64(len(archive)))
+			if !errors.Is(err, anki.ErrUnsafeEntry) {
+				t.Fatalf("err = %v, want ErrUnsafeEntry", err)
+			}
+		})
+	}
+}
+
 func TestCorruptMeta(t *testing.T) {
 	archive := zipBytes(t, map[string][]byte{
 		"meta":             {0xff},
