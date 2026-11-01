@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"git.nite07.com/nite/engram/internal/answer"
 	"git.nite07.com/nite/engram/internal/notetype"
@@ -286,13 +287,18 @@ type NoteTypePurgeImpact struct {
 // re-import of the same guid; they are purged only when opts.ConfirmPurge is set, and an unconfirmed delete
 // returns ErrNoteTypePurgeUnconfirmed with the impact and writes nothing.
 //
-// The reference counts and every write share one transaction, so a note inserted mid-delete cannot slip past the
-// check within the transaction's isolation on either database. A confirmed purge hard-deletes the notes, their
-// cards, card_states and media_notes rows through the shared cascade; the reviews rows stay, as they do when a
-// deck is deleted.
+// The reference counts and every write share one transaction and the type's row lock (lockNoteTypeRow), so a
+// note write running concurrently is ordered before or after the delete instead of slipping between the count and
+// the delete. A confirmed purge hard-deletes the notes, their cards, card_states and media_notes rows through the
+// shared cascade; the reviews rows stay, as they do when a deck is deleted.
 func (s *NoteTypeStore) Delete(ctx context.Context, id uint64, opts NoteTypeDeleteOptions) (NoteTypePurgeImpact, error) {
 	var impact NoteTypePurgeImpact
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// The exclusive lock comes first: a note write that already holds the shared lock blocks here, and a note
+		// write that starts afterwards blocks on its own shared lock until this transaction commits.
+		if err := lockNoteTypeRow(ctx, tx, id, "UPDATE"); err != nil {
+			return err
+		}
 		var live int64
 		if err := tx.Model(&Note{}).Where("note_type_id = ?", id).Count(&live).Error; err != nil {
 			return fmt.Errorf("check note type %d usage: %w", id, err)
@@ -343,4 +349,24 @@ func (s *NoteTypeStore) Delete(ctx context.Context, id uint64, opts NoteTypeDele
 		return impact, err
 	}
 	return impact, nil
+}
+
+// lockNoteTypeRow orders a note type's delete against note writes that reference it.
+//
+// PostgreSQL at READ COMMITTED does not make "count the referencing notes, then delete" atomic: a note write can
+// commit between the count and the delete, so both succeed and notes.note_type_id points at a row that is gone.
+// The delete takes the row's exclusive lock and every note write its shared lock, so one waits for the other: the
+// delete either runs first and the write finds no type, or waits for the write and counts its note. SQLite is left
+// unlocked because it holds a single write connection, which already serialises the two, and its parser does not
+// accept a locking clause.
+func lockNoteTypeRow(ctx context.Context, tx *gorm.DB, id uint64, strength string) error {
+	q := tx.WithContext(ctx)
+	if tx.Dialector.Name() == "postgres" {
+		q = q.Clauses(clause.Locking{Strength: strength})
+	}
+	var nt NoteType
+	if err := q.Select("id").First(&nt, "id = ?", id).Error; err != nil {
+		return fmt.Errorf("lock note type %d: %w", id, err)
+	}
+	return nil
 }

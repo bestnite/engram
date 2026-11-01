@@ -250,7 +250,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   stat ...: no such file or directory`. The package/Anki/media store tests also pass with
   `go test ./internal/store/ -run 'TestAnkiImport|TestMedia|TestPackage|TestResolvePackageMaxConcurrentImports' -count=1`.
 
-- [ ] **M19-6 Deleting a note type can succeed while a note is created against it** — *Blocker.* The
+- [x] **M19-6 Deleting a note type can succeed while a note is created against it** — *Blocker.* The
   delete counts referencing notes and then deletes in the same transaction
   (`internal/store/notetype.go:293-340`, count at `:297,305`, delete at `:329`), but a transaction is
   not serialisation on PostgreSQL at READ COMMITTED: another session can still read the type and create
@@ -260,6 +260,31 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   single connection, so this is a PostgreSQL-path defect. *Acceptance:* a foreign key with `RESTRICT`,
   or a shared lock on the type for note writes and an exclusive one re-checked under the delete;
   a regression must show the two operations cannot both succeed leaving an orphan.
+  *Closed by this commit (`fix(store): serialise a note type delete against note writes`).*
+  `Delete` (`internal/store/notetype.go:294`) now takes the note type's exclusive row lock before it counts
+  referencing notes (`:299`), and every note write takes that row's shared lock in `prepareNoteFields`
+  (`internal/store/note.go:353`); `lockNoteTypeRow` (`notetype.go:362`) emits the clause on PostgreSQL only,
+  because SQLite holds one write connection and its parser rejects the clause. The two operations are
+  therefore ordered: either the delete waits for the write and counts its note, or the write's lock re-read
+  finds the row gone and fails with `record not found`. The delete's own doc comment said a note could not
+  slip past the check "within the transaction's isolation on either database"; that was the false premise and
+  now states the lock.
+  `TestConcurrentNoteTypeDeleteAndNoteCreate` (`internal/store/notetype_delete_race_test.go`) is PostgreSQL
+  only: a `BEFORE DELETE` trigger parks the delete after its count returned zero, a second connection writes
+  a note in that window, and the test asserts the two did not both succeed and that no note survives its
+  type. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestConcurrentNoteTypeDeleteAndNoteCreate -count=1 -v`:
+  ```
+  === RUN   TestConcurrentNoteTypeDeleteAndNoteCreate
+  --- PASS: TestConcurrentNoteTypeDeleteAndNoteCreate (1.78s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	1.792s
+  ```
+  The same test with only the two lock calls removed failed with
+  `delete and note create both succeeded: notes=1 note_types=0, want the two ordered`, which is the reported
+  orphan. `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestNoteType|TestNote' -count=1`
+  passes on both drivers.
+
 
 - [x] **M19-7 Saving your own profile writes back a stale role or status** — *should-fix.*
   `UserStore.Update` omits only `PasswordHash` and saves the whole row (`internal/store/user.go:65-73`),

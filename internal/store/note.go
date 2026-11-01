@@ -347,6 +347,12 @@ func (s *NoteStore) prepareNoteFields(ctx context.Context, tx *gorm.DB, n *Note,
 	if err != nil {
 		return nil, nil, err
 	}
+	// A note write shares the type's row so a delete cannot commit between this read and the note insert
+	// (lockNoteTypeRow explains the ordering). A type the delete already removed fails this lock instead of
+	// being resolved from a stale read.
+	if err := lockNoteTypeRow(ctx, tx, nt.ID, "SHARE"); err != nil {
+		return nil, nil, err
+	}
 	fields = extractNoteColumns(fields, n, cfg)
 	values, err := noteFieldValues(cfg, fields)
 	if err != nil {
