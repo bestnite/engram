@@ -526,7 +526,13 @@ func (s *Server) getDueCards(ctx context.Context, id Identity, in getDueCardsIn)
 			resolved = append(resolved, d.ID)
 		}
 	}
-	cards, err := s.api.DueCards(ctx, id.User, resolved, in.Tags, in.Limit)
+	limit := in.Limit
+	if limit == 0 {
+		// An omitted argument decodes as 0. The REST handler substitutes api.DefaultDueLimit, so the tool must
+		// use the same default or one request returns a different queue through the two transports.
+		limit = api.DefaultDueLimit
+	}
+	cards, err := s.api.DueCards(ctx, id.User, resolved, in.Tags, limit)
 	if err != nil {
 		return nil, err
 	}

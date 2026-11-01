@@ -2600,13 +2600,32 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `/home/nite/.hermes/cache/scratch/pgtest ./internal/api/ -run 'TestBulkImport|TestRESTBulkImport|TestImport' -count=1`
   passes on both drivers (`1.151s`).
 
-- [ ] **M19-103 The `get_due_cards` tool returns one card when `limit` is omitted** — *should-fix.*
+- [x] **M19-103 The `get_due_cards` tool returns one card when `limit` is omitted** — *should-fix.*
   `internal/mcp/tools.go:529` passes `in.Limit` unchanged, so an omitted argument is 0 and `DueCards`
   (`internal/api/service.go:1130-1132`) clamps it to 1, while the REST handler substitutes 50
   (`internal/api/review.go:53`). The same service call reached through two transports returns a different queue
   length for the same request. *Reproduced:* five new cards in one deck gave one card through the tool and five
   through `GET /api/v1/review/due?deck=…` with no `limit`. *Acceptance:* the tool applies the REST default, and a test
   calls both transports without `limit` and asserts the same card set.
+  *Closed by this commit (`fix(mcp): apply the REST due-card default to get_due_cards`).*
+  `api.DefaultDueLimit` (`internal/api/review.go:36`) is the one value both transports read: the REST handler passes
+  it to `queryInt` (`:57`), and `getDueCards` substitutes it when the decoded argument is 0
+  (`internal/mcp/tools.go:529-535`), which is what an omitted argument decodes to. `DueCards` still clamps the
+  supplied value, so the service contract is unchanged.
+  `TestGetDueCardsDefaultLimitMatchesREST` (`internal/mcp/due_limit_test.go`) seeds five new cards in one deck,
+  calls `get_due_cards` with only `deck_id`, calls `GET /api/v1/review/due?deck=<id>` with no `limit`, and requires
+  five cards from each and the same card-id set. Raw output of
+  `go test ./internal/mcp/ -run TestGetDueCardsDefaultLimitMatchesREST -count=1 -v`:
+  ```
+  === RUN   TestGetDueCardsDefaultLimitMatchesREST
+  --- PASS: TestGetDueCardsDefaultLimitMatchesREST (0.05s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/mcp	0.061s
+  ```
+  With only the default restored to `in.Limit`, the same run failed with
+  `get_due_cards without limit returned 1 cards, want 5 (the REST default)`, the reported defect.
+  `go vet ./internal/mcp/ ./internal/api/`, `go test ./internal/mcp/ -count=1` (`3.086s`) and
+  `go test ./internal/api/ -run 'TestReview|TestDue' -count=1` pass.
 
 - [x] **M19-104 An MCP session keeps the account row it read at the handshake** — *should-fix.*
   `internal/mcp/mcp.go:244-254` answers every tool call with `handshake.User`, which `build` fixed once per session

@@ -31,6 +31,10 @@ func (a *API) presetForDeck(ctx context.Context, userID uint64, deck *store.Deck
 	return a.presets.ByID(ctx, settings.PresetID)
 }
 
+// DefaultDueLimit is the number of cards a due request returns when it names no limit. Both transports use
+// it, so the same request returns the same queue through REST and MCP.
+const DefaultDueLimit = 50
+
 // dueCards returns the due cards (with raw field text), scope: review (the logic lives in the service layer's DueCards).
 // deck is repeatable: absent means all decks; each value is a deck's external id, unknown or malformed -> 404.
 // tag is repeatable: only cards carrying any one of these tags are taken; when tags are given there must be exactly one deck, otherwise 400.
@@ -50,7 +54,7 @@ func (a *API) dueCards(c *gin.Context) {
 		}
 		deckIDs = append(deckIDs, d.ID)
 	}
-	cards, err := a.DueCards(ctx, u, deckIDs, c.QueryArray("tag"), queryInt(c, "limit", 50))
+	cards, err := a.DueCards(ctx, u, deckIDs, c.QueryArray("tag"), queryInt(c, "limit", DefaultDueLimit))
 	if err != nil {
 		writeServiceError(c, err)
 		return
