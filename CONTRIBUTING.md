@@ -54,6 +54,14 @@ subagents as much as to external contributors.
 - Tests run on SQLite only — neither a local run nor CI starts a database service. The
   PostgreSQL cases gated by `internal/pgtest` skip themselves; set `TEST_PG_DSN` to run
   them by hand when you touch driver-sensitive code.
+- A PostgreSQL run is much slower than a SQLite one and needs its own timeout. Measured on
+  `main`: `internal/store` 747 s and `internal/web` 818 s when the packages run together
+  (`internal/web` alone takes 408 s), so the default 600 s per package is not enough and the
+  gate dies with `panic: test timed out after 10m0s`, which reads like a hang. Give it room:
+
+  ```bash
+  TEST_PG_DSN='postgres://…' go test ./... -count=1 -timeout 1800s
+  ```
 
 ## Build, test, and check
 

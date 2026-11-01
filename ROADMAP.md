@@ -262,17 +262,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
 
-- [ ] **M18-104 The PostgreSQL gate names its timeout budget** — `CONTRIBUTING.md` tells a reader to
-  run the suite with `TEST_PG_DSN` set, but `go test ./...` keeps Go's default 600 s per package, and
-  under PostgreSQL `internal/web` alone takes 408 s (`go test ./internal/web/ -timeout 1500s
-  -count=1` → `ok ... 408.475s`); run beside the other packages it exceeds 600 s and the gate fails
-  with `panic: test timed out after 10m0s`, which reads as a hang rather than a budget. The fix: state
-  the measured cost in `CONTRIBUTING.md` next to the `TEST_PG_DSN` instruction and give the command
-  the timeout it needs (`go test ./... -count=1 -timeout 1800s`), so a slow run is not mistaken for a
-  broken one. *Acceptance:* the paragraph names the measured per-package cost and the timeout the
-  command needs, and one run of that command on `main` with a local PostgreSQL answers `ok` for every
-  package. Evidence is that run.
-
 - [ ] **M18-89 `AGENTS.md` section 2.7 states the preset modes and the re-import rule** — `M18-35` and
   `M18-63` were closed (`f937c04`, `91933ee`) with only their ledger half done. Both closing commits say
   that the `AGENTS.md` sentence "is proposed separately", but no commit changed `AGENTS.md`, and both
