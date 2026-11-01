@@ -22,7 +22,7 @@ import (
 
 // seedAnkiExportDeck builds the source deck the export cases use: two note types (one
 // with an answer spec), notes with tags and an external guid, a subdeck path, one media
-// file, one card state and one review.
+// file, one card state and two reviews.
 type ankiExportFixture struct {
 	owner        uint64
 	deckID       uint64
@@ -121,6 +121,15 @@ func seedAnkiExportDeck(t *testing.T, db *gorm.DB, owner uint64) ankiExportFixtu
 	}).Error; err != nil {
 		t.Fatalf("create review: %v", err)
 	}
+	secondReviewedAt := reviewedAt.Add(12 * time.Hour)
+	if err := db.Create(&Review{
+		CardID: basicCards[0].ID, UserID: owner, Rating: 3, GradeSource: "self",
+		ReviewedAt: secondReviewedAt, ReviewDay: "2026-10-02", ElapsedMS: Ptr(1200),
+		StateBefore: 2, IntervalDays: Ptr(5.0), DurationDays: Ptr(secondReviewedAt.Sub(reviewedAt).Hours() / 24),
+		Stability: Ptr(4.5), Difficulty: Ptr(6.2),
+	}).Error; err != nil {
+		t.Fatalf("create second review: %v", err)
+	}
 
 	return ankiExportFixture{
 		owner: owner, deckID: deck.ID, basicTypeID: basicTypeID, answerTypeID: answerType.ID,
@@ -202,18 +211,27 @@ func TestExportAnkiPackageRoundTrip(t *testing.T) {
 			if got.LastReviewAt == nil || source.LastReviewAt == nil || !got.LastReviewAt.Equal(*source.LastReviewAt) {
 				t.Fatalf("last review: got %v want %v", got.LastReviewAt, source.LastReviewAt)
 			}
-			var sourceReview, review Review
-			if err := db.Where("user_id = ?", owner).First(&sourceReview).Error; err != nil {
+			var sourceReviews, reviews []Review
+			if err := db.Where("user_id = ?", owner).Order("reviewed_at").Find(&sourceReviews).Error; err != nil {
 				t.Fatal(err)
 			}
-			if err := dst.Where("user_id = ?", importer).First(&review).Error; err != nil {
+			if err := dst.Where("user_id = ?", importer).Order("reviewed_at").Find(&reviews).Error; err != nil {
 				t.Fatal(err)
 			}
-			if review.Rating != sourceReview.Rating || !review.ReviewedAt.Equal(sourceReview.ReviewedAt) || review.ElapsedMS == nil || *review.ElapsedMS != *sourceReview.ElapsedMS || review.StateBefore != sourceReview.StateBefore {
-				t.Fatalf("review: got %+v want %+v", review, sourceReview)
+			if len(sourceReviews) != 2 || len(reviews) != 2 {
+				t.Fatalf("review counts: got %d want 2; source has %d", len(reviews), len(sourceReviews))
 			}
-			if !reflect.DeepEqual(review.IntervalDays, sourceReview.IntervalDays) || !reflect.DeepEqual(review.DurationDays, sourceReview.DurationDays) {
-				t.Fatalf("review intervals: got %+v want %+v", review, sourceReview)
+			if sourceReviews[1].DurationDays == nil || reviews[1].DurationDays == nil {
+				t.Fatalf("second review duration: got %v want non-NULL source %v", reviews[1].DurationDays, sourceReviews[1].DurationDays)
+			}
+			for i, review := range reviews {
+				sourceReview := sourceReviews[i]
+				if review.Rating != sourceReview.Rating || !review.ReviewedAt.Equal(sourceReview.ReviewedAt) || review.ElapsedMS == nil || *review.ElapsedMS != *sourceReview.ElapsedMS || review.StateBefore != sourceReview.StateBefore {
+					t.Fatalf("review %d: got %+v want %+v", i, review, sourceReview)
+				}
+				if !reflect.DeepEqual(review.IntervalDays, sourceReview.IntervalDays) || !reflect.DeepEqual(review.DurationDays, sourceReview.DurationDays) {
+					t.Fatalf("review %d intervals: got %+v want %+v", i, review, sourceReview)
+				}
 			}
 			again, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(first), PackageImportOptions{Target: "into_deck:" + strconv.FormatUint(report.DeckID, 10), MediaRoot: dstRoot, IncludeProgress: true})
 			if err != nil {
@@ -222,7 +240,7 @@ func TestExportAnkiPackageRoundTrip(t *testing.T) {
 			var stateCount, reviewCount int64
 			dst.Model(&CardState{}).Where("user_id = ?", importer).Count(&stateCount)
 			dst.Model(&Review{}).Where("user_id = ?", importer).Count(&reviewCount)
-			if stateCount != 2 || reviewCount != 1 || again.ProgressApplied != 0 || again.ReviewsApplied != 0 {
+			if stateCount != 2 || reviewCount != 2 || again.ProgressApplied != 0 || again.ReviewsApplied != 0 {
 				t.Fatalf("repeat: states=%d reviews=%d report=%+v", stateCount, reviewCount, again)
 			}
 			offUser := seedUsers(t, dst, "anki_progress_off")[0]
@@ -273,8 +291,8 @@ func TestExportAnkiPackageSwitchesAreIndependent(t *testing.T) {
 			if err := col.QueryRow(`SELECT count(*) FROM revlog`).Scan(&reviews); err != nil {
 				t.Fatalf("count revlog: %v", err)
 			}
-			if reviews != 1 {
-				t.Fatalf("revlog rows = %d, want 1", reviews)
+			if reviews != 2 {
+				t.Fatalf("revlog rows = %d, want 2", reviews)
 			}
 			var reviewState int
 			if err := col.QueryRow(`SELECT type FROM cards WHERE id = (SELECT cid FROM revlog)`).Scan(&reviewState); err != nil {
