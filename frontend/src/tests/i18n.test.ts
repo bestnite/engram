@@ -66,6 +66,16 @@ describe('i18n language resolution and formatting', () => {
     expect(formatMessage('zh-CN', 'nonexistent.key')).toBe('nonexistent.key');
   });
 
+  it('inserts a parameter literally instead of expanding replacement patterns', () => {
+    // `String.replace` interprets these in a *string* replacement, so a deck name or tag carrying
+    // them would corrupt the sentence: `$&` re-inserts the match, `$'` appends the rest of the text,
+    // `` $` `` prepends the text before the match, and `$$` becomes one `$`.
+    const cases = ['A$&B', "$'", '$`', 'A$$B'];
+    for (const name of cases) {
+      expect(formatMessage('zh-CN', 'decks.select_deck', { name })).toBe(`选择卡组 ${name}`);
+    }
+  });
+
   it('updates reactive localeStore correctly', () => {
     let observed: string | undefined;
     const unsub = localeStore.subscribe((val) => {

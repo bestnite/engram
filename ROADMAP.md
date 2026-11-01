@@ -2217,13 +2217,27 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   the preset and deck views end `Test Files 8 passed (8)` / `Tests 22 passed (22)`, and `npm run check` ends
   `svelte-check found 0 errors and 0 warnings`.
 
-- [ ] **M19-65 `$&`, `$'` and `$$` in a parameter corrupt the interpolated message** — *nit.* `formatMessage`
+- [x] **M19-65 `$&`, `$'` and `$$` in a parameter corrupt the interpolated message** — *nit.* `formatMessage`
   passes the value as the replacement argument of `String.replace` (`frontend/src/lib/i18n/index.ts:131`), so
   replacement patterns contained in user data are expanded instead of inserted. *Reproduced* with the real
   function: a deck named `A$&B` produced `Paused "A{name}B". ...`, a name of `$'` repeated the rest of the
   sentence, and `A$$B` produced `A$B`. The same class of bug was fixed for field renames in Go (the `M17-58`
   ledger row). *Acceptance:* pass a function as the replacement, and add a unit test with `$&`, `$'`, `` $` ``
   and `$$` in the parameter.
+  *Closed by this commit (`fix(frontend): insert parameters literally into messages`).*
+  `formatMessage` (`frontend/src/lib/i18n/index.ts:131`) passes `() => String(v)` as the replacement, so the
+  value is inserted verbatim and no replacement pattern in user data is expanded.
+  The new case in `frontend/src/tests/i18n.test.ts` renders `decks.select_deck` with `A$&B`, `$'`, `` $` ``
+  and `A$$B` and expects each to appear unchanged. Raw output of
+  `npx vitest run src/tests/i18n.test.ts`:
+  ```
+   Test Files  1 passed (1)
+        Tests  4 passed (4)
+  ```
+  With only `index.ts` reverted, the same case failed with
+  `AssertionError: expected '选择卡组 A{name}B' to be '选择卡组 A$&B' // Object.is equality`.
+  `npx vitest run` passes 593 tests in 58 files, and `npm run check` reports
+  `svelte-check found 0 errors and 0 warnings`.
 
 - [ ] **M19-66 English has no singular form, so counts of one read "1 decks" and "1 days"** — *nit.*
   `formatMessage` only substitutes placeholders (`frontend/src/lib/i18n/index.ts:121-136`) and the catalogs hold

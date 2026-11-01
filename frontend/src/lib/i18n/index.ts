@@ -128,7 +128,9 @@ export function formatMessage(
 
   if (params) {
     for (const [k, v] of Object.entries(params)) {
-      text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+      // A function replacement keeps `$&`, `$'`, `` $` `` and `$$` in the value literal: a string
+      // replacement would expand them as replacement patterns and corrupt the message.
+      text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), () => String(v));
     }
   }
 
