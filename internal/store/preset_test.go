@@ -160,6 +160,19 @@ func TestPresetValidationRejectsZeroValues(t *testing.T) {
 			if err := presets.Create(ctx, &noInterval); !errors.Is(err, ErrInvalidMaximumInterval) {
 				t.Errorf("Create(interval 0) error = %v, want ErrInvalidMaximumInterval", err)
 			}
+
+			// A name carrying a C0 control character (CR/LF) is refused, and nothing is written.
+			controlName := NewPreset(owner, "Bad\r\nName")
+			if err := presets.Create(ctx, &controlName); !errors.Is(err, ErrPresetNameControlCharacter) {
+				t.Errorf("Create(name with CRLF) error = %v, want ErrPresetNameControlCharacter", err)
+			}
+			var written int64
+			if err := db.Model(&Preset{}).Where("owner_user_id = ?", owner).Count(&written).Error; err != nil {
+				t.Fatalf("count presets: %v", err)
+			}
+			if written != 0 {
+				t.Errorf("presets = %d after rejected writes, want 0", written)
+			}
 		})
 	}
 }

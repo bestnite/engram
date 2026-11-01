@@ -3,7 +3,9 @@ package mail
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"mime"
 	"net"
@@ -210,8 +212,8 @@ func (s SMTPSender) authenticate(client *smtp.Client, cfg SMTPConfig) error {
 }
 
 // buildMessage assembles the RFC 5322 message bytes. When TextBody and HTMLBody are both present it
-// uses multipart/alternative. Extra headers are emitted sorted by name, so the same input produces the
-// same bytes (which makes test assertions easy).
+// uses multipart/alternative. Extra headers are emitted sorted by name, so apart from the date and
+// the multipart boundary the same input produces the same bytes (which makes test assertions easy).
 func buildMessage(cfg SMTPConfig, m Message) []byte {
 	var b bytes.Buffer
 	// Headers are encoded per RFC 2047: a non-ASCII subject/display name sent as is gets squashed into
@@ -226,7 +228,7 @@ func buildMessage(cfg SMTPConfig, m Message) []byte {
 	hasHTML := strings.TrimSpace(m.HTMLBody) != ""
 	switch {
 	case hasText && hasHTML:
-		const boundary = "engram-mail-boundary"
+		boundary := multipartBoundary(m.TextBody, m.HTMLBody)
 		writeHeader(&b, "Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
 		for _, k := range sortedHeaderKeys(m.Headers) {
 			writeHeader(&b, k, encodeHeaderValue(m.Headers[k]))
@@ -259,6 +261,48 @@ func buildMessage(cfg SMTPConfig, m Message) []byte {
 		b.WriteString(m.TextBody)
 	}
 	return b.Bytes()
+}
+
+// multipartBoundary returns a per-message multipart boundary that occurs in none of the given part
+// bodies.
+//
+// A boundary that is the same for every message lets a body containing its literal line split the
+// message: the reader sees an extra part whose payload the body authored ("--engram-mail-boundary"
+// followed by "Content-Type: ..."). The boundary is therefore 16 random bytes per message, and the
+// candidate is rejected while any body contains it, so a body cannot forge a separator even when it
+// deliberately quotes a previous boundary.
+func multipartBoundary(bodies ...string) string {
+	var raw [16]byte
+	prefix := "engram-mail-"
+	if _, err := rand.Read(raw[:]); err != nil {
+		// crypto/rand fails only when the platform entropy source is broken. A clock-derived candidate
+		// still differs between messages; uniqueness against the bodies is enforced below either way.
+		prefix += strconv.FormatInt(time.Now().UnixNano(), 16)
+	} else {
+		prefix += hex.EncodeToString(raw[:])
+	}
+	return boundaryAbsentFrom(prefix, bodies)
+}
+
+// boundaryAbsentFrom appends a numeric suffix to candidate until it occurs in none of bodies.
+// Each step is a strictly longer candidate, and the bodies are finite, so the loop terminates.
+func boundaryAbsentFrom(candidate string, bodies []string) string {
+	for suffix := 0; ; suffix++ {
+		probe := candidate
+		if suffix > 0 {
+			probe += "-" + strconv.Itoa(suffix)
+		}
+		conflict := false
+		for _, body := range bodies {
+			if strings.Contains(body, probe) {
+				conflict = true
+				break
+			}
+		}
+		if !conflict {
+			return probe
+		}
+	}
 }
 
 // encodeHeaderValue encodes header values that need it per RFC 2047.

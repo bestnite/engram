@@ -36,6 +36,13 @@ const (
 var (
 	// ErrPresetNameRequired means the preset name is empty.
 	ErrPresetNameRequired = errors.New("preset name is required")
+	// ErrPresetNameControlCharacter means the preset name contains a C0 control character
+	// (U+0000–U+001F).
+	//
+	// A preset name is a single line of text, and the same name is copied into logs, audit details
+	// and JSON responses. A carriage return or line feed in the name would break the line it is
+	// written into, so such a name is refused at the write boundary.
+	ErrPresetNameControlCharacter = errors.New("preset name contains a control character")
 	// ErrInvalidDesiredRetention means the desired retention is outside (0, 1].
 	ErrInvalidDesiredRetention = errors.New("desired retention must be in (0, 1]")
 	// ErrInvalidMaximumInterval means the maximum interval is outside the scheduler's supported range.
@@ -83,6 +90,9 @@ func requirePresetOwner(p *Preset, actorUserID uint64) error {
 func validatePresetForWrite(p *Preset, create bool) error {
 	if p.Name == "" {
 		return ErrPresetNameRequired
+	}
+	if r, ok := firstControlRune(p.Name); ok {
+		return fmt.Errorf("%w: U+%04X", ErrPresetNameControlCharacter, r)
 	}
 	if p.DesiredRetention <= 0 || p.DesiredRetention > 1 {
 		return fmt.Errorf("%w: %v", ErrInvalidDesiredRetention, p.DesiredRetention)

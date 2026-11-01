@@ -2255,7 +2255,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `Test() did not return within 2s of the context being cancelled`. `go vet ./internal/mail/` and
   `go test ./internal/mail/ -count=1` pass.
 
-- [ ] **M19-75 The multipart boundary is a constant, so a value containing that line splits the message** —
+- [x] **M19-75 The multipart boundary is a constant, so a value containing that line splits the message** —
   *nit.* `buildMessage` hard-codes `const boundary = "engram-mail-boundary"` (`internal/mail/smtp.go:177-193`),
   while variable values are only HTML-escaped (`template.go:231-240`), which leaves CR and LF intact; a value
   therefore appears verbatim in both the HTML body and the derived text part. *Reproduced*: `Render` with the
@@ -2270,6 +2270,36 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   assert it does not occur in either body, and give preset names the control-character rule deck names have; a
   regression sends a value containing a literal `--engram-mail-boundary` line and parses the result back into
   its two parts.
+  *Closed by this commit (`fix(mail): use a per-message boundary and reject control characters in preset names`).*
+  `buildMessage` (`internal/mail/smtp.go:215`) now calls `multipartBoundary`, which takes 16 bytes from
+  `crypto/rand`, hex-encodes them under the `engram-mail-` prefix, and `boundaryAbsentFrom` extends the candidate
+  until it occurs in neither the text nor the HTML part. The boundary is therefore different for every message and
+  cannot be forged by a substituted value. Preset names now get the deck-name rule: `validatePresetForWrite`
+  (`internal/store/preset.go:91`) rejects a C0 control rune with the new `ErrPresetNameControlCharacter`, and the SPA
+  preset API refuses the same name in `parsePresetRequest` / `presetStoreCode` (`internal/web/presets_api.go:542,582`)
+  as 400 `invalid_request`.
+  `TestBuildMessageBoundaryCannotBeInjected` (`internal/mail/smtp_test.go:183`) renders a password-reset mail whose
+  `{{site}}` value carries the reported CRLF payload, assembles it with `buildMessage`, parses the headers and the
+  multipart body back and asserts exactly two parts with the payload inside the text part and not as a third part,
+  that the boundary is not the old constant, does not occur in either body, and differs between two builds. Raw output
+  of `go test ./internal/mail/ -count=1` is `ok  	git.nite07.com/nite/engram/internal/mail	0.997s`; the regression on
+  its own:
+  ```
+  === RUN   TestBuildMessageBoundaryCannotBeInjected
+  --- PASS: TestBuildMessageBoundaryCannotBeInjected (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/mail	0.011s
+  ```
+  With only `internal/mail/smtp.go` reverted the same test failed with
+  `boundary = "engram-mail-boundary", want a per-message value rather than the old constant`,
+  `text body contains the chosen boundary`, `third part error = <nil>, want io.EOF (exactly two parts)` and
+  `two builds chose the same boundary`. The store test gained the CRLF name and a nothing-written count in
+  `TestPresetValidationRejectsZeroValues`; `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run
+  'TestPresetValidationRejectsZeroValues|TestPreset' -count=1` ends
+  `ok  	git.nite07.com/nite/engram/internal/store	3.300s` on both drivers. With the validation block removed, the
+  same run failed with `Create(name with CRLF) error = <nil>, want ErrPresetNameControlCharacter` and
+  `presets = 1 after rejected writes, want 0`. The SPA case `name with CRLF` in
+  `TestPresetWriteRejectsInvalidInput` passes: `ok  	git.nite07.com/nite/engram/internal/web	0.343s`.
 
 - [ ] **M19-76 The outbox's `LookupEnv` seam is accepted and silently ignored** — *nit.* `Deps.LookupEnv` is
   documented as the environment stand-in for tests (`internal/mail/outbox.go:77-78`), but `NewOutbox` builds

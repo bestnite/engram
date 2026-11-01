@@ -542,6 +542,10 @@ func parsePresetRequest(c *gin.Context) (presetRequest, string) {
 	switch {
 	case req.Name == "":
 		return req, "preset_name_required"
+	// The name is a single line of text; a C0 control character would let it break that line in logs,
+	// audit details and JSON output, so it is refused before the store is asked to write.
+	case strings.ContainsFunc(req.Name, func(r rune) bool { return r <= 0x1f }):
+		return req, "invalid_request"
 	case req.DesiredRetention <= 0 || req.DesiredRetention >= 1:
 		return req, "preset_retention_invalid"
 	case req.MaximumIntervalDays <= 0 || req.MaximumIntervalDays > 36500:
@@ -575,6 +579,8 @@ func presetStoreCode(err error) string {
 	switch {
 	case errors.Is(err, store.ErrPresetNameRequired):
 		return "preset_name_required"
+	case errors.Is(err, store.ErrPresetNameControlCharacter):
+		return "invalid_request"
 	case errors.Is(err, store.ErrInvalidDesiredRetention):
 		return "preset_retention_invalid"
 	case errors.Is(err, store.ErrInvalidMaximumInterval):

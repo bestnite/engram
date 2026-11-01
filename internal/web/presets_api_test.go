@@ -191,6 +191,7 @@ func TestPresetWriteRejectsInvalidInput(t *testing.T) {
 		{"steps overflow the cap after scaling", `{"name":"x","desired_retention":0.9,"learning_steps":"1e308d","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true}`, "preset_steps_invalid"},
 		{"relearning steps over the cap", `{"name":"x","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"200000d","maximum_interval_days":100,"enable_fuzz":true}`, "preset_steps_invalid"},
 		{"missing enable_fuzz", `{"name":"x","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100}`, "invalid_request"},
+		{"name with CRLF", `{"name":"A\r\nB","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true}`, "invalid_request"},
 		{"bad json", `{`, "invalid_request"},
 	}
 	for _, tc := range cases {
