@@ -179,13 +179,18 @@ func runServe(ctx context.Context) error {
 		logger.Info("schema synchronized", "migrations_applied", applied)
 	}
 
-	srv, err := newWebServer(cfg, db, logger)
+	// The signal context is created before the web service is assembled, because the job runner started inside
+	// newWebServer runs a subprocess and has to be cancelled and joined on shutdown.
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	srv, err := newWebServer(ctx, cfg, db, logger)
 	if err != nil {
 		return err
 	}
-
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	// Stop the job worker before the process (and the database it writes to) goes away, so a shutdown in the middle
+	// of an optimisation leaves a terminal row instead of one still marked running.
+	defer srv.StopJobs()
 	// History row reclamation: sessions, one-time tokens, expired invites and login fingerprints are judged expired only on the
 	// read path and their rows are never deleted; media nobody references is never deleted either. So there has to be a periodic
 	// reclamation layer (retention periods are in that package's comment).
@@ -252,7 +257,8 @@ func runServe(ctx context.Context) error {
 
 // newWebServer assembles the web service from the configuration and injects the auth dependencies into web.Deps.
 // runServe and the integration tests share this single assembly path, so test dependencies do not drift from production.
-func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Server, error) {
+// ctx is the process context: the job runner started here runs on it, so a signal cancels the running subprocess.
+func newWebServer(ctx context.Context, cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Server, error) {
 	// Trusted proxy list: parsed and validated at startup, and an invalid entry refuses startup outright.
 	// Empty by default = trust no proxy, so ClientIP() falls back to RemoteAddr.
 	trustedProxies, err := cfg.TrustedProxies()
@@ -315,7 +321,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 		return nil, err
 	}
 	// Parameter optimization job executor: single-concurrency worker + subprocess. Start is called before the web service starts
-	// and the worker lives as long as the process; on startup it reclaims unfinished jobs left behind by the previous process.
+	// with the process context, and runServe calls Stop on shutdown; on startup it reclaims unfinished jobs left behind by the previous process.
 	//
 	// Production wiring: Command calls the Rust adapter directly (export the review log first, then exec), and Complete parses
 	// the 21-dimensional weights the adapter writes and hands them to FinishOptimize to write back to the job and preset. The adapter
@@ -380,7 +386,7 @@ func newWebServer(cfg *config.Config, db *gorm.DB, logger *slog.Logger) (*web.Se
 	// Notify the administrator after a job failure (D-class). The hook is attached before Start to avoid racing the worker.
 	jobRunner.SetOnFailure(webSrv.NotifyJobFailed)
 	jobRunner.SetOnSuccess(webSrv.NotifyOptimizeDone)
-	jobRunner.Start(context.Background())
+	jobRunner.Start(ctx)
 	return webSrv, nil
 }
 

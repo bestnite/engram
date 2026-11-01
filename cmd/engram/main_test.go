@@ -50,7 +50,7 @@ func newWiredServer(t *testing.T) (*web.Server, *store.UserStore) {
 		t.Fatalf("store.AutoMigrate() error = %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	srv, err := newWebServer(cfg, db, logger)
+	srv, err := newWebServer(context.Background(), cfg, db, logger)
 	if err != nil {
 		t.Fatalf("newWebServer() error = %v", err)
 	}

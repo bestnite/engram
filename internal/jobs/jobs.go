@@ -177,6 +177,10 @@ type Runner struct {
 	mu      sync.Mutex
 	started bool
 	queue   chan *store.Job
+	// cancelRun cancels the worker's own context derived in Start; Stop uses it, and wg makes Stop
+	// wait until the worker has finished its current job (including the terminal write).
+	cancelRun context.CancelFunc
+	wg        sync.WaitGroup
 
 	// Cancel handle for the running job. It is separate from mu so that Cancel does not contend with Enqueue's lock
 	// while execute is running; currentDone is closed before execute returns, and Cancel uses it to wait for the persist to finish.
@@ -230,8 +234,9 @@ func New(deps Deps) (*Runner, error) {
 	}, nil
 }
 
-// Start starts the single worker goroutine; repeated calls are idempotent. When ctx is cancelled the worker exits
-// and the subprocess currently executing is killed (runProcess watches ctx.Done).
+// Start starts the single worker goroutine; repeated calls are idempotent. The worker runs on a context derived
+// from ctx, so Stop can cancel it as well. When that context is cancelled the worker exits and the subprocess
+// currently executing is killed (runProcess watches ctx.Done).
 //
 // Before starting it calls RecoverStale to reclaim unfinished jobs left by the previous process (running and queued):
 // otherwise those leftover rows would make Store.Active believe "a job is running" forever and every later Enqueue would keep returning 409. A recovery failure is only logged
@@ -243,9 +248,32 @@ func (r *Runner) Start(ctx context.Context) {
 		return
 	}
 	r.started = true
+	runCtx, cancel := context.WithCancel(ctx)
+	r.cancelRun = cancel
+	r.wg.Add(1)
 	r.mu.Unlock()
-	_, _ = r.RecoverStale(ctx)
-	go r.loop(ctx)
+
+	_, _ = r.RecoverStale(runCtx)
+	go func() {
+		defer r.wg.Done()
+		r.loop(runCtx)
+	}()
+}
+
+// Stop cancels the worker's context and waits for the worker to return, which includes the job currently executing
+// reaching a terminal state. It is idempotent and safe when Start was never called.
+//
+// Waiting is what distinguishes shutdown from process exit: without it the process exits while the subprocess is
+// still being killed and the terminal row has not been written, which leaves jobs.status at running until the next
+// start reclaims it as interrupted by restart.
+func (r *Runner) Stop() {
+	r.mu.Lock()
+	cancel := r.cancelRun
+	r.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	r.wg.Wait()
 }
 
 // RecoverStale is an explicit entry point: it reclaims the unfinished jobs left over from a restart/crash as failed,
@@ -381,11 +409,16 @@ func (r *Runner) loop(ctx context.Context) {
 // execute runs one job and drives the state machine queued -> running -> succeeded | failed.
 // Any failing step must end in failed, so a job never stays in running forever.
 func (r *Runner) execute(ctx context.Context, job *store.Job) {
+	// Terminal writes must not use the worker's ctx: Stop cancels it to kill the subprocess, and the job row must
+	// still end in failed instead of staying running. context.WithoutCancel keeps the values and detaches the
+	// cancellation, so the write that follows the kill is not itself rejected as context canceled.
+	persistCtx := context.WithoutCancel(ctx)
+
 	// The worker must not exit as a whole because a single job panicked; log it and mark that job failed.
 	defer func() {
 		if rec := recover(); rec != nil {
 			r.logger.Error("job worker panicked", "job_id", job.ID, "panic", rec)
-			r.fail(ctx, job.ID, fmt.Sprintf("job worker panicked: %v", rec), "")
+			r.fail(persistCtx, job.ID, fmt.Sprintf("job worker panicked: %v", rec), "")
 		}
 	}()
 
@@ -415,18 +448,18 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 		// making every later Enqueue return 409 forever until the process restarts and RecoverStale reclaims it (same root symptom).
 		// The error text names the failing step, so jobs.error pinpoints it at a glance.
 		r.logger.Error("mark job running failed", "job_id", job.ID, "error", err)
-		r.fail(ctx, job.ID, fmt.Sprintf("mark job running: %v", err), "")
+		r.fail(persistCtx, job.ID, fmt.Sprintf("mark job running: %v", err), "")
 		return
 	}
 	r.setStage(ctx, job.ID, StageReadLogs)
 
 	cmd, err := r.command(ctx, job, jobReporter{ctx: ctx, runner: r, id: job.ID})
 	if err != nil {
-		r.fail(ctx, job.ID, fmt.Sprintf("build command: %v", err), "")
+		r.fail(persistCtx, job.ID, fmt.Sprintf("build command: %v", err), "")
 		return
 	}
 	if strings.TrimSpace(cmd.Name) == "" {
-		r.fail(ctx, job.ID, ErrNoCommand.Error(), "")
+		r.fail(persistCtx, job.ID, ErrNoCommand.Error(), "")
 		return
 	}
 
@@ -439,7 +472,7 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 		if !errors.Is(runErr, ErrTimedOut) && runCtx.Err() != nil && ctx.Err() == nil {
 			msg = CancelReason
 		}
-		r.fail(ctx, job.ID, msg, tail)
+		r.fail(persistCtx, job.ID, msg, tail)
 		return
 	}
 
@@ -449,25 +482,25 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 	if r.complete != nil {
 		result, err := r.complete(runCtx, job, cmd, tail)
 		if err != nil {
-			r.fail(ctx, job.ID, fmt.Sprintf("parse job output: %v", err), tail)
+			r.fail(persistCtx, job.ID, fmt.Sprintf("parse job output: %v", err), tail)
 			return
 		}
-		if err := r.FinishOptimize(ctx, job.ID, result, tail); err != nil {
+		if err := r.FinishOptimize(persistCtx, job.ID, result, tail); err != nil {
 			r.logger.Error("finish optimize failed", "job_id", job.ID, "error", err)
-			r.fail(ctx, job.ID, fmt.Sprintf("finish optimize: %v", err), tail)
+			r.fail(persistCtx, job.ID, fmt.Sprintf("finish optimize: %v", err), tail)
 			return
 		}
-		r.notifySuccess(ctx, job.ID)
+		r.notifySuccess(persistCtx, job.ID)
 		return
 	}
-	if err := r.store.FinishSucceeded(ctx, job.ID, r.now(), "", tail); err != nil {
+	if err := r.store.FinishSucceeded(persistCtx, job.ID, r.now(), "", tail); err != nil {
 		r.logger.Error("finish job succeeded failed", "job_id", job.ID, "error", err)
 		// A terminal write that never lands leaves the row running forever, which makes Store.Active
 		// refuse every later enqueue; end it as failed with the failing step in the message.
-		r.fail(ctx, job.ID, fmt.Sprintf("finish job succeeded: %v", err), tail)
+		r.fail(persistCtx, job.ID, fmt.Sprintf("finish job succeeded: %v", err), tail)
 		return
 	}
-	r.notifySuccess(ctx, job.ID)
+	r.notifySuccess(persistCtx, job.ID)
 }
 
 // notifySuccess calls the OnSuccess hook after the job is persisted as succeeded; it returns immediately when not configured.

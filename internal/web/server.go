@@ -440,6 +440,15 @@ func (s *Server) setMailOutbox(ob *mail.Outbox, baseURL string) {
 // Mailer returns the process's single mail.Mailer, for cmd/engram to hand to the review reminder and weekly digest workers.
 func (s *Server) Mailer() *mail.Mailer { return s.mailer }
 
+// StopJobs cancels the job worker and waits for the job currently executing to reach a terminal state.
+// cmd/engram defers it during shutdown, so an optimisation interrupted by a signal is recorded as failed
+// instead of being left running until the next start reclaims it.
+func (s *Server) StopJobs() {
+	if s.jobRunner != nil {
+		s.jobRunner.Stop()
+	}
+}
+
 // Connection-level timeouts. Only request headers and idle connections are limited; there is no overall read/write timeout, because media uploads and deck package imports can have
 // very large request bodies and streaming export responses can be very long, and an overall timeout would cut off legitimate slow connections.
 const (

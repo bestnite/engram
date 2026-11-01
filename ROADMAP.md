@@ -1899,7 +1899,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `drain did not return after the status write failed; Send calls = 8842` after the two-second guard.
   `go test ./internal/mail/ -count=1` passes.
 
-- [ ] **M19-70 Shutdown abandons a running optimisation and leaves its row unfinished** — *should-fix.*
+- [x] **M19-70 Shutdown abandons a running optimisation and leaves its row unfinished** — *should-fix.*
   `runServe` builds the signal context at `cmd/engram/main.go:187` and hands it to every worker — retention,
   outbox, reminder, digest (`:211-248`) — but the job runner is started earlier, inside `newWebServer`, with
   `context.Background()` (`:383`). The runner has no `Stop`, nothing waits for it, and `srv.Run(ctx)` returns on
@@ -1919,6 +1919,34 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   that state with a context that is not cancelled (`context.WithoutCancel`), so shutdown leaves `failed` rather
   than `running`; a regression starts a long job, cancels the process context, and asserts the row is terminal,
   the process group is gone, and the next `Start` has nothing to reclaim.
+  *Closed by this commit (`fix(jobs): stop the runner on shutdown and persist a terminal job state`).*
+  `runServe` now creates the signal context before assembling the web service
+  (`cmd/engram/main.go:184`) and passes it to `newWebServer`, which calls `Runner.Start(ctx)`; `defer srv.StopJobs()`
+  runs before the database closes. `Runner.Start` (`internal/jobs/jobs.go:244`) derives the worker context and
+  tracks the worker goroutine, and `Runner.Stop` (`:269`) cancels that context and waits for the worker, so
+  `runProcess` kills the process group and `execute` finishes before the process exits. `execute` (`:415`) writes
+  every terminal state, including the failure that follows a cancelled run, through `context.WithoutCancel(ctx)`,
+  so the row ends `failed` with `finished_at` instead of staying `running`. `Stop` is idempotent and safe when
+  `Start` was never called.
+  `TestStopLeavesRunningJobTerminal` (`internal/jobs/shutdown_test.go`) starts a shell that writes its background
+  child's pid and waits, cancels the process context while the job is `running`, calls `Stop`, and asserts the row is
+  `failed` with `finished_at`, the child process is gone, and a fresh `RecoverStale` reclaims zero rows.
+  `TestStopWithoutStartIsSafe` covers the no-worker case. Raw output of
+  `go test ./internal/jobs/ -run 'TestStop' -count=1 -v`:
+  ```
+  === RUN   TestStopLeavesRunningJobTerminal
+      shutdown_test.go:117: job 1 status=failed finished=true error="job canceled: context canceled" child_pid=4025984 gone=true reclaimed=0
+  --- PASS: TestStopLeavesRunningJobTerminal (0.02s)
+  === RUN   TestStopWithoutStartIsSafe
+  --- PASS: TestStopWithoutStartIsSafe (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/jobs	0.027s
+  ```
+  With only the post-`runProcess` terminal write reverted from `persistCtx` to `ctx`, the same run failed with
+  `ERROR finish job failed failed job_id=1 error="update job 1: context canceled"` and
+  `job status after shutdown = "running", want "failed" (a cancelled shutdown must not leave it running)`.
+  `go test ./internal/jobs/ -count=1` passes in `4.010s`, `go test ./cmd/engram/ -count=1` in `0.328s`, and
+  `go vet ./internal/jobs/ ./cmd/engram/ ./internal/web/` passes.
 
 - [x] **M19-71 A job cancelled while it is still queued runs anyway and is reported succeeded** — *should-fix.*
   The worker reads the row at `internal/jobs/jobs.go:371-373` and only then registers the cancel handle that
