@@ -1950,13 +1950,34 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `/home/nite/.hermes/cache/scratch/pgtest ./internal/api/ -count=1` and
   `go test ./internal/web/ -run 'TestMcp|TestMCP' -count=1` pass.
 
-- [ ] **M19-105 `GET /notes/{id}` answers 403 although its contract promises 404** — *should-fix.*
+- [x] **M19-105 `GET /notes/{id}` answers 403 although its contract promises 404** — *should-fix.*
   `internal/api/service.go:454-467` states "An unknown id and a read without permission are both 404, never leaking
   'this id exists but you may not see it'", but `GetNote` returns `RequireDeckRole`'s 403 `forbidden` with the detail
   "insufficient role for this deck", so the two cases are distinguishable. *Reproduced:* a stranger reading an
   existing note got `403 {"code":"forbidden",…}` and an unknown id got 404; `internal/api/note_read_test.go:162-168`
   accepts either status while its own comment repeats the no-leak claim. *Acceptance:* an unreadable note answers the
   same 404 `not_found` as an unknown id, and that test asserts the one status instead of a 403-or-404 set.
+  *Closed by this commit (`fix(api): answer an unreadable note with the same 404 as an unknown id`).*
+  `GetNote` (`internal/api/service.go:471`) now maps a 403 from `RequireDeckRole` to the same
+  `404 not_found` / "note not found" it already returns for an unknown id; any other failure is returned unchanged.
+  The permission-denied audit row is still written by `RequireDeckRole` before the mapping, so the refusal remains
+  auditable without telling the caller which of the two cases it hit. `TestGetNoteAuthorization`
+  (`internal/api/note_read_test.go`) now asserts the one 404 and the `not_found` code for the outsider instead of
+  accepting 403-or-404. Raw output of `go test ./internal/api/ -run TestGetNote -count=1 -v`:
+  ```
+  === RUN   TestGetNoteReadsBeyondFirstPage
+  --- PASS: TestGetNoteReadsBeyondFirstPage (0.01s)
+  === RUN   TestGetNoteAuthorization
+  --- PASS: TestGetNoteAuthorization (0.01s)
+  === RUN   TestGetNoteAllowsReader
+  --- PASS: TestGetNoteAllowsReader (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.053s
+  ```
+  With only `internal/api/service.go` reverted, `TestGetNoteAuthorization` failed with
+  `outsider status = 403, want 404 (body {"error":{"code":"forbidden","message":"You do not have access to this
+  resource. — insufficient role for this deck"}})`. The MCP `get_note` tool calls the same method, so it now reports
+  the read refusal as `not_found` as well.
 
 - [ ] **M19-106 A multipart import spools the package before it validates the preset or the target role** —
   *should-fix.* `internal/api/package.go:217-252` takes the slot and the body cap, then `c.FormFile` reads the

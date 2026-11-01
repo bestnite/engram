@@ -160,12 +160,13 @@ func TestGetNoteAuthorization(t *testing.T) {
 		t.Fatalf("unknown id status = %d, want 404 (body %s)", status, raw)
 	}
 
-	// A non-member reading a card of someone else's deck -> 403/404 (no existence leak).
+	// A non-member reading a card of someone else's deck -> the same 404 as an unknown id (no existence leak).
 	outsiderKey := seedKey(t, env.keys, outsider.ID, []string{store.ScopeRead}, nil)
 	status, raw = doJSON(t, router, http.MethodGet, "/api/v1/notes/"+note.PublicID, outsiderKey.Plaintext, "")
-	if status != http.StatusForbidden && status != http.StatusNotFound {
-		t.Fatalf("outsider status = %d, want 403/404 (body %s)", status, raw)
+	if status != http.StatusNotFound {
+		t.Fatalf("outsider status = %d, want 404 (body %s)", status, raw)
 	}
+	assertErrorCode(t, raw, CodeNotFound)
 	if _, _, err := env.api.ListNotes(ctx, outsider.ID, deck.ID, store.NoteListOptions{}); err == nil {
 		t.Error("outsider ListNotes succeeded, want an error (fixture sanity)")
 	}

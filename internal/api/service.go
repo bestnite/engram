@@ -474,6 +474,11 @@ func (a *API) GetNote(ctx context.Context, userID uint64, notePublicID string) (
 		return nil, newServiceError(http.StatusNotFound, CodeNotFound, "note not found")
 	}
 	if _, err := a.RequireDeckRole(ctx, userID, n.DeckID, store.RoleReader); err != nil {
+		// The read contract collapses "exists but I may not see it" into the same 404 as an unknown id.
+		var se *ServiceError
+		if errors.As(err, &se) && se.Status == http.StatusForbidden {
+			return nil, newServiceError(http.StatusNotFound, CodeNotFound, "note not found")
+		}
 		return nil, err
 	}
 	return n, nil
