@@ -422,40 +422,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   Evidence is the output of `grep -n -E 'M18-(10|11|12|36|37)\b' ROADMAP.md` limited to the ledger
   section.
 
-- [ ] **M18-56 A progress import never overwrites a review committed during the import** — since
-  `M18-16`, `importAnkiProgress` in `internal/store/anki_import.go` loads the importer's `card_states`
-  rows once, in batches, before its card loop, and later updates a row with
-  `Where("card_id = ? AND user_id = ?")`, without a lock and without a version check. Since `M18-15`, the
-  decision whether the local row wins is also taken from that early copy. On PostgreSQL a review
-  submission for a card of the import can commit between the load and the update:
-  `loadStateForUpdate` in `internal/schedule/submit.go` finds the row unlocked. The import then writes
-  the package state over the review's state and stores `version` as the loaded version plus 1. That is
-  the same number the submission wrote, so a client holding it gets no `409`. The package's review rows
-  are also appended after the submission's row, so an undo removes an imported row instead of the
-  user's own review, the case `M18-15` excluded. A deployment on SQLite is not affected, because
-  `store.Open` gives SQLite one connection, so a submission cannot run inside an import. Reproduced on
-  `main` for the state, on both drivers, with `importAnkiProgress` called outside a transaction. A GORM
-  callback runs right after the batched `card_states` load and applies the update a submission makes
-  (reps 99, `version` 0 to 1, `last_review_at` now). The import of a review card with `lrt` 1600000000
-  then stores reps 7, `last_review_at` 2020-09-13 and `version` 1, with `progress_applied` 1. The fix
-  has two parts. First,
-  on PostgreSQL the batched load takes `clause.Locking{Strength: "UPDATE"}`, as `loadStateForUpdate`
-  does, so a submission for a loaded card waits for the import's commit and then fails its version
-  check with `409`. Second, the create of a state row that did not exist at the load uses
-  `clause.OnConflict{DoNothing: true}`. When that create inserts no row, the card counts in
-  `states_skipped`, and none of its package review rows is written. *Acceptance:* two tests in
-  `internal/store/anki_progress_import_test.go`. The first runs on PostgreSQL only, gated by
-  `internal/pgtest`. It runs `importAnkiProgress` inside `db.Transaction`, for a card whose package
-  `lrt` is later than the importer's `last_review_at`, so the import writes the package state. A
-  callback registered after the `card_states` load starts a goroutine. On a second connection, the
-  goroutine runs `UPDATE card_states SET version = version + 1 WHERE card_id = ? AND user_id = ? AND
-  version = ?` with the loaded version. The callback then waits 200 ms. After the import commits, that
-  update has affected 0 rows, and the stored row holds the package state. The second test
-  runs on both drivers. A callback inserts a state row, after the load, for a card that had none. The
-  import counts that card in `states_skipped`, keeps the inserted row and writes none of the card's
-  package review rows. Evidence is the raw scoped `go test` and `go vet` output, the PostgreSQL run with
-  `TEST_PG_DSN` set.
-
 - [ ] **M18-59 Stored presets the scheduler cannot use are repaired** — v0.2.0 and v0.2.1 accepted every
   positive `maximum_interval_days` on `POST` and `PATCH /api/v1/presets`, because
   `validatePresetForWrite` checked only `<= 0`. `.apkg` imports before `238ede0` copied the package's
