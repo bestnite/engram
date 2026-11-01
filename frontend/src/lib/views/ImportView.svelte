@@ -191,7 +191,7 @@
       ['package.report.media_missing', value.media_missing], ['package.report.progress_applied', value.progress_applied],
       ['package.report.progress_skipped', value.progress_skipped], ['package.report.progress_discarded', value.progress_discarded ? 1 : 0],
       ['package.report.weights_applied', value.weights_applied ? 1 : 0], ['package.report.weights_discarded', value.weights_discarded ? 1 : 0],
-      ...(value.weights_invalid ? [['package.report.weights_invalid', 1] as [string, number]] : []),
+      ['package.report.weights_invalid', value.weights_invalid ? 1 : 0],
       ...(value.cards_skipped > 0 ? [['package.report.cards_skipped', value.cards_skipped] as [string, number]] : []),
       ...(value.deck_config_skipped ? [['package.report.deck_config_skipped', 1] as [string, number]] : []),
       ['package.report.match_rule', value.match_rule || '—'],
@@ -283,7 +283,7 @@
     <section bind:this={reportSection} class="mt-10 scroll-mt-6 border-t border-border pt-6 animate-in fade-in-0 slide-in-from-bottom-1 duration-200" aria-live="polite">
       <h2 class="text-base font-semibold">{$t('package.report.heading')}</h2>
       <dl class="mt-4 grid gap-x-8 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-        {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border py-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium tabular-nums">{key.endsWith('dry_run') || key.endsWith('progress_discarded') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
+        {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border py-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium tabular-nums">{key.endsWith('dry_run') || key.endsWith('progress_discarded') || key.startsWith('package.report.weights_') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
       </dl>
       {#if report.errors.length}<h3 class="mt-5 text-sm font-semibold">{$t('package.report.errors')}</h3><ul class="mt-2 list-disc pl-5 text-sm">{#each report.errors as item}<li>{item.entry}: {item.reason}</li>{/each}</ul>{/if}
       {#if report.missing_media?.length}

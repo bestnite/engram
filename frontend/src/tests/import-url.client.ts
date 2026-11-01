@@ -233,18 +233,26 @@ describe('ImportView — package weights', () => {
     expect(reportSection()?.textContent?.includes(formatMessage('zh-CN', 'package.report.deck_config_skipped'))).toBe(skipped);
   });
 
-  it.each([true, false])('shows invalid weights only when reported: %s', async (invalid) => {
+  it.each(['zh-CN', 'en'] as const)('shows the progress label and boolean weight rows in %s', async (locale) => {
+    setLocale(locale);
     vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
-    vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(reportFixture({ weights_invalid: invalid }));
+    const importPackage = vi.spyOn(apiClient, 'importDeckPackage');
     mountView();
     await flush();
     setFile('import-file', new File(['x'], 'deck.apkg'));
     await flush();
-    submitForm();
-    await flush();
-    expect(reportSection()).toBeTruthy();
-    const text = reportSection()?.textContent ?? '';
-    expect(text.includes(formatMessage('zh-CN', 'package.report.weights_invalid'))).toBe(invalid);
+    for (const value of [true, false]) {
+      importPackage.mockResolvedValueOnce(reportFixture({ progress_discarded: true, weights_applied: value, weights_discarded: value, weights_invalid: value }));
+      submitForm();
+      await flush();
+      const rows = Array.from(reportSection()!.querySelectorAll('dt'));
+      const label = locale === 'en' ? 'Package progress not imported' : '未导入包内进度';
+      expect(rows.some((row) => row.textContent === label)).toBe(true);
+      for (const key of ['weights_applied', 'weights_discarded', 'weights_invalid']) {
+        const row = rows.find((el) => el.textContent === formatMessage(locale, `package.report.${key}`));
+        expect(row?.nextElementSibling?.textContent).toBe(formatMessage(locale, value ? 'package.value.yes' : 'package.value.no'));
+      }
+    }
   });
 
   it('offers apply_weights only for a new deck and sends it when ticked', async () => {

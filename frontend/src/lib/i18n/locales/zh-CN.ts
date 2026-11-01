@@ -313,7 +313,7 @@ export const zhCN: LocaleCatalog = {
   'package.report.media_missing': '缺失媒体',
   'package.report.progress_applied': '导入的进度',
   'package.report.progress_skipped': '跳过的进度',
-  'package.report.progress_discarded': '舍弃他人进度',
+  'package.report.progress_discarded': '未导入包内进度',
   'package.report.match_rule': '重复判定方式',
   'package.report.errors': '未能导入的条目',
   'package.report.preview_notice': '这是试导入的结果，数据还没有写入。取消「先试导入」后再导入一次即可生效。',

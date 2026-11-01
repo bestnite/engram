@@ -313,7 +313,7 @@ export const en: LocaleCatalog = {
   'package.report.media_missing': 'Missing media',
   'package.report.progress_applied': 'Progress imported',
   'package.report.progress_skipped': 'Progress skipped',
-  'package.report.progress_discarded': 'Other users’ progress dropped',
+  'package.report.progress_discarded': 'Package progress not imported',
   'package.report.match_rule': 'Duplicate rule',
   'package.report.errors': 'Entries not imported',
   'package.report.preview_notice': 'This was a dry run; nothing was written. Untick “Dry run first” and import again to apply it.',

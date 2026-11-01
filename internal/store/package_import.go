@@ -279,17 +279,19 @@ type PackageImportReport struct {
 	Target     string `json:"target"`
 	DryRun     bool   `json:"dry_run"`
 	// DeckID is the internal numeric primary key, for internal uses such as audit; what is exposed externally is DeckPublicID.
-	DeckID            uint64 `json:"-"`
-	DeckPublicID      string `json:"deck_id,omitempty"`
-	NotesCreated      int    `json:"notes_created"`
-	NotesUpdated      int    `json:"notes_updated"`
-	NotesSkipped      int    `json:"notes_skipped"`
-	CardsCreated      int    `json:"cards_created"`
-	CardsSkipped      int    `json:"cards_skipped"`
-	MediaNew          int    `json:"media_new"`
-	MediaMissing      int    `json:"media_missing"`
-	ProgressApplied   int    `json:"progress_applied"`
-	ProgressSkipped   int    `json:"progress_skipped"`
+	DeckID          uint64 `json:"-"`
+	DeckPublicID    string `json:"deck_id,omitempty"`
+	NotesCreated    int    `json:"notes_created"`
+	NotesUpdated    int    `json:"notes_updated"`
+	NotesSkipped    int    `json:"notes_skipped"`
+	CardsCreated    int    `json:"cards_created"`
+	CardsSkipped    int    `json:"cards_skipped"`
+	MediaNew        int    `json:"media_new"`
+	MediaMissing    int    `json:"media_missing"`
+	ProgressApplied int    `json:"progress_applied"`
+	ProgressSkipped int    `json:"progress_skipped"`
+	// ProgressDiscarded means an .edeck's other-user progress was refused, or an
+	// .apkg's card states or reviews were discarded during import.
 	ProgressDiscarded bool   `json:"progress_discarded"`
 	StatesSkipped     int    `json:"states_skipped"`
 	StatesDiscarded   int    `json:"states_discarded"`
@@ -309,7 +311,9 @@ type PackageImportReport struct {
 	// WeightsApplied means the package's weights were written into the new preset.
 	WeightsApplied bool `json:"weights_applied"`
 	// WeightsDiscarded means the package carried weights that were not adopted, including rejected Anki weights.
-	WeightsDiscarded  bool `json:"weights_discarded"`
+	WeightsDiscarded bool `json:"weights_discarded"`
+	// WeightsInvalid means the target is a new deck, applying weights was requested,
+	// the package supplied weights, and fsrs.MigrateWeights rejected them.
 	WeightsInvalid    bool `json:"weights_invalid"`
 	DeckConfigSkipped bool `json:"deck_config_skipped"`
 	// CardsRemoved counts the stored cards this import soft-deleted because the note they belong to
