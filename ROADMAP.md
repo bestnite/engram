@@ -1171,16 +1171,49 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   derived username as well as by email, and add a regression that injects a link failure plus one that runs
   two first logins concurrently and expects both to succeed.
 
-- [ ] **M19-44 Anyone can fill the global OIDC pending table and stop every OIDC login for ten minutes** —
+- [x] **M19-44 Anyone can fill the global OIDC pending table and stop every OIDC login for ten minutes** —
   *should-fix.* `maxPendingAuth` caps the map at 1000 (`internal/auth/oidc.go:62-68`) and `PutPending` refuses
   new starts once it is full (`:292-305`); the only entry point is the unauthenticated
   `GET /auth/oidc/start` (`internal/web/oidc.go:87-141`), which has no rate limit, and entries live ten
   minutes (`:129`). One thousand requests make every login and identity bind fail with "pending table is
   full" until the entries expire, which is exactly what `TestOIDCStartRejectsWhenPendingTableFull` asserts.
   Verified by reading the cap, the eviction rule and the unthrottled route; *Unverified:* no timing was
-  measured. *Acceptance:* rate-limit the start endpoint per IP with the existing anonymous limiter and/or
+  measured.
+  *Acceptance:* rate-limit the start endpoint per IP with the existing anonymous limiter and/or
   evict the oldest entry instead of refusing new starts; a test fills the table and shows a start from a
   fresh IP still succeeds.
+  *Closed by this commit (`fix(auth): evict the oldest pending OIDC login instead of refusing`).*
+  `PutPending` (`internal/auth/oidc.go:294`) still sweeps expired entries first, then, if the table is
+  still at `maxPendingAuth`, calls `evictOldestPendingLocked` (`:315`) and inserts the new state. The
+  evicted entry is the one closest to expiry; every login start carries the same ten-minute lifetime, so
+  that is the oldest start. A flood can therefore still make another user's in-flight callback fail as an
+  unknown state, but it can no longer stop new logins for ten minutes. The method keeps its `bool`
+  result, which is now false only when the cap is not positive; the caller's failure branch is unchanged.
+  `TestOIDCPendingEvictsTheOldestInsteadOfRefusing` (`internal/auth/oidc_pending_test.go`) fills the table
+  with 1000 unexpired entries of increasing expiry, starts one more, and asserts it is accepted, the size
+  stays at the cap, the earliest-expiry entry is gone and the new state is present.
+  `TestOIDCStartEvictsOldestWhenPendingTableFull` (`internal/web/oidc_test.go`) pre-seeds 5000 unexpired
+  entries through the real client, then drives `GET /auth/oidc/start` and asserts the 302 authorize
+  redirect with a state and PKCE parameters. Raw output of
+  `go test ./internal/auth/ -run TestOIDCPendingEvictsTheOldestInsteadOfRefusing -count=1 -v`:
+  ```
+  === RUN   TestOIDCPendingEvictsTheOldestInsteadOfRefusing
+  --- PASS: TestOIDCPendingEvictsTheOldestInsteadOfRefusing (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/auth	0.011s
+  ```
+  and `go test ./internal/web/ -run TestOIDCStartEvictsOldestWhenPendingTableFull -count=1 -v`:
+  ```
+  === RUN   TestOIDCStartEvictsOldestWhenPendingTableFull
+  --- PASS: TestOIDCStartEvictsOldestWhenPendingTableFull (0.15s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.169s
+  ```
+  With only `internal/auth/oidc.go` reverted, the same runs failed with
+  `PutPending refused a fresh start while the table was full; the oldest entry must be evicted` and
+  `GET /auth/oidc/start = 303, want 302 (body <a href="/login">See Other</a>.)`.
+  `go vet ./internal/auth/ ./internal/web/`, `go test ./internal/auth/ -run 'TestOIDCPending' -count=1` and
+  `go test ./internal/web/ -run 'TestOIDC' -count=1` pass.
 
 - [ ] **M19-45 The batch export buffers every package in memory with no cap on the number of decks** —
   *should-fix.* `deckBatchExportZip` writes each package into a `bytes.Buffer`

@@ -323,9 +323,10 @@ func TestOIDCDisabledHidesEntryAndRoutes(t *testing.T) {
 	}
 }
 
-// TestOIDCStartRejectsWhenPendingTableFull is the acceptance for this rule: once the pending state table reaches its cap,
-// a new OIDC start must be refused (303 back to the login page) instead of piling up in the table (memory DoS).
-func TestOIDCStartRejectsWhenPendingTableFull(t *testing.T) {
+// TestOIDCStartEvictsOldestWhenPendingTableFull is the acceptance for this rule: once the pending state table
+// reaches its cap, a new OIDC start evicts the oldest pending login instead of being refused, so one anonymous
+// client cannot stop every OIDC login for the entries' lifetime (availability).
+func TestOIDCStartEvictsOldestWhenPendingTableFull(t *testing.T) {
 	srv, db := newAuthServer(t)
 	p := newStubOIDC(t)
 	seedOIDC(t, srv, db, p, auth.PolicyOpen)
@@ -340,16 +341,9 @@ func TestOIDCStartRejectsWhenPendingTableFull(t *testing.T) {
 		})
 	}
 
-	rec := getWithCookies(t, srv, "/auth/oidc/start", nil)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("GET /auth/oidc/start with a full pending table = %d, want 303 (body %s)", rec.Code, snippet(rec.Body.String()))
-	}
-	if loc := rec.Header().Get("Location"); loc != "/login" {
-		t.Errorf("rejection redirect Location = %q, want /login", loc)
-	}
-	for _, ck := range rec.Result().Cookies() {
-		if ck.Name == srv.sessions.CookieName() {
-			t.Fatal("rejected OIDC start unexpectedly set a session cookie")
-		}
+	// A fresh start still succeeds: the oldest entry is evicted to make room.
+	state, _, _ := startOIDCLogin(t, srv)
+	if state == "" {
+		t.Fatal("GET /auth/oidc/start with a full pending table produced no state")
 	}
 }

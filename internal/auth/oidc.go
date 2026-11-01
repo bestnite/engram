@@ -60,7 +60,8 @@ const (
 // Anonymous visitors can repeatedly GET /auth/oidc/start, and only a callback carrying the correct state deletes the corresponding entry:
 // without a cap and eviction this map grows without bound, which is a memory DoS path.
 const (
-	// maxPendingAuth is the maximum number of pending logins; when the cap is reached and there is no expired entry to evict, new starts are rejected.
+	// maxPendingAuth is the maximum number of pending logins; when the cap is reached and there is no expired entry to evict,
+	// the start closest to expiry is evicted so new logins keep working.
 	maxPendingAuth = 1000
 	// pendingEvictEvery is the minimum interval between expired-entry sweeps: a full scan on every start is expensive, so sweeps are throttled to it;
 	// when the table is full a sweep is forced immediately, so boundedness does not depend on the throttle having elapsed.
@@ -287,8 +288,11 @@ func (c *OIDCClient) Invalidate(issuer string) {
 	c.mu.Unlock()
 }
 
-// PutPending saves the temporary state of a started login, indexed by state, and rejects new starts once the limit is exceeded.
-// Returning false means the state table is full and there is no expired entry to evict, so the caller must abort this start.
+// PutPending saves the temporary state of a started login, indexed by state.
+// When the table is full after expired entries are swept, the entry closest to expiry (the oldest start) is
+// evicted, so an unauthenticated flood cannot stop every new login for the lifetime of the entries; the evicted
+// login's callback is refused as an unknown state, but new logins keep working.
+// Returning false means the table could not make room, which only happens when the cap is not positive.
 func (c *OIDCClient) PutPending(state string, p PendingAuth) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -298,10 +302,29 @@ func (c *OIDCClient) PutPending(state string, p PendingAuth) bool {
 		c.evictExpiredPendingLocked(now)
 	}
 	if len(c.pending) >= maxPendingAuth {
+		c.evictOldestPendingLocked()
+	}
+	if len(c.pending) >= maxPendingAuth {
 		return false
 	}
 	c.pending[state] = p
 	return true
+}
+
+// evictOldestPendingLocked deletes the pending login closest to expiry; the caller must hold c.mu.
+// Entries started by the same flow all carry the same lifetime, so the earliest expiry is the oldest start.
+func (c *OIDCClient) evictOldestPendingLocked() {
+	var oldestState string
+	var oldestExpiry time.Time
+	first := true
+	for state, p := range c.pending {
+		if first || p.ExpiresAt.Before(oldestExpiry) {
+			oldestState, oldestExpiry, first = state, p.ExpiresAt, false
+		}
+	}
+	if !first {
+		delete(c.pending, oldestState)
+	}
 }
 
 // evictExpiredPendingLocked deletes every expired pending login; the caller must hold c.mu.

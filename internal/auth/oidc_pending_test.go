@@ -54,6 +54,30 @@ func TestOIDCPendingSweepsExpiredEntries(t *testing.T) {
 	}
 }
 
+// TestOIDCPendingEvictsTheOldestInsteadOfRefusing: when the table is full of unexpired entries, a new start must
+// still be accepted by evicting the entry closest to expiry, so an anonymous flood cannot stop every new login.
+func TestOIDCPendingEvictsTheOldestInsteadOfRefusing(t *testing.T) {
+	c, now := fixedClock(t)
+	for i := 0; i < pendingCap; i++ {
+		c.PutPending(fmt.Sprintf("old-%d", i), PendingAuth{ExpiresAt: now.Add(time.Duration(i+1) * time.Second)})
+	}
+	if len(c.pending) != pendingCap {
+		t.Fatalf("seeded pending table holds %d entries, want %d", len(c.pending), pendingCap)
+	}
+	if !c.PutPending("fresh", PendingAuth{ExpiresAt: now.Add(time.Hour)}) {
+		t.Fatal("PutPending refused a fresh start while the table was full; the oldest entry must be evicted")
+	}
+	if got := len(c.pending); got != pendingCap {
+		t.Fatalf("pending table holds %d entries after the fresh start, want %d", got, pendingCap)
+	}
+	if _, ok := c.pending["old-0"]; ok {
+		t.Fatal("the entry closest to expiry was not evicted")
+	}
+	if _, ok := c.pending["fresh"]; !ok {
+		t.Fatal("the fresh pending entry was dropped")
+	}
+}
+
 // TestOIDCPendingTakeIsOnceOnly: a state can be consumed only once (replay is rejected).
 func TestOIDCPendingTakeIsOnceOnly(t *testing.T) {
 	c, now := fixedClock(t)
