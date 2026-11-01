@@ -71,6 +71,9 @@
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let pollPresetId: string | null = null;
   let pollJobId: string | null = null;
+  // Polls can overlap when one status request takes longer than the interval. Only the newest request
+  // may write, so a slow "running" answer cannot resurrect a job that a newer answer already finished.
+  let pollSequence = 0;
 
   const presets = $derived(data ? data.presets : []);
 
@@ -271,6 +274,7 @@
   }
 
   function stopPolling(): void {
+    pollSequence++;
     if (pollTimer !== null) {
       clearInterval(pollTimer);
       pollTimer = null;
@@ -281,10 +285,12 @@
 
   async function pollOnce(): Promise<void> {
     if (pollPresetId === null || pollJobId === null) return;
+    const sequence = ++pollSequence;
     const presetId = pollPresetId;
     const jobId = pollJobId;
     try {
       const resp = await apiClient.getPresetOptimizeStatus(presetId, jobId);
+      if (sequence !== pollSequence) return;
       applyJob(presetId, resp.job, resp.gate);
       if (!resp.job || !isActiveJob(resp.job)) {
         stopPolling();
@@ -292,6 +298,7 @@
         await load();
       }
     } catch {
+      if (sequence !== pollSequence) return;
       // Polling failures are not silent: show one error hint and stop, so the user can retry manually.
       toast.error($t('presets.error.failed'));
       stopPolling();

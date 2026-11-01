@@ -2160,7 +2160,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   (and "Anyone") from the failed read. `npm run check` ends `svelte-check found 0 errors and 0 warnings`, and
   `npm run test:client` passes 534 tests in 61 files.
 
-- [ ] **M19-64 Optimiser polling can overlap and write a stale "running" state after the job finished** —
+- [x] **M19-64 Optimiser polling can overlap and write a stale "running" state after the job finished** —
   *should-fix.* `startPolling` uses `setInterval(pollOnce, 2000)`
   (`frontend/src/lib/views/PresetsView.svelte:266-271`) while `pollOnce` awaits the status request (`:282-301`),
   so a response slower than the interval lets a second poll start, and both are applied in arrival order with no
@@ -2170,6 +2170,25 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   slow-response run. *Acceptance:* keep one status request in flight (schedule the next with `setTimeout` after
   each response, or drop older generations) and add a test with two out-of-order status responses that must end
   on the finished state.
+  *Closed by this commit (`fix(frontend): drop a stale optimiser status response`).*
+  `pollSequence` (`frontend/src/lib/views/PresetsView.svelte:76`) is bumped when a poll starts, when polling
+  stops and when a new polling run begins; `pollOnce` (`:286`) captures its sequence and discards the
+  response if a newer poll or a stop has happened since. A slow `running` answer can therefore no longer
+  overwrite the finished state that a newer answer already applied, and the error branch is guarded the
+  same way. The interval remains, but overlapping responses are now ordered by generation rather than by
+  arrival.
+  `frontend/src/tests/presets-polling-order.client.ts` starts two overlapping polls, resolves the newer one
+  with `succeeded` and the older one with `running`, and asserts the rendered status stays
+  `Optimisation finished.`. Raw output of
+  `npx vitest run --config vitest.config.client.ts src/tests/presets-polling-order.client.ts`:
+  ```
+   Test Files  1 passed (1)
+        Tests  1 passed (1)
+  ```
+  With only the sequence check removed, the same run failed with
+  `AssertionError: expected 'Optimising…' to be 'Optimisation finished.'`. The eight client suites covering
+  the preset and deck views end `Test Files 8 passed (8)` / `Tests 22 passed (22)`, and `npm run check` ends
+  `svelte-check found 0 errors and 0 warnings`.
 
 - [ ] **M19-65 `$&`, `$'` and `$$` in a parameter corrupt the interpolated message** — *nit.* `formatMessage`
   passes the value as the replacement argument of `String.replace` (`frontend/src/lib/i18n/index.ts:131`), so
