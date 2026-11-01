@@ -209,7 +209,7 @@ func TestThirdPartyHostsDetectsPlantedHost(t *testing.T) {
 		t.Errorf("thirdPartyHosts() flagged a relative path as external: %v", hosts)
 	}
 	// An ordinary navigation link (such as the source repository in the footer) triggers no render-time request and must be let through.
-	if hosts := thirdPartyHosts(`<a href="https://git.nite07.com/nite/engram">source</a>`); len(hosts) != 0 {
+	if hosts := thirdPartyHosts(`<a href="https://example.com/source">source</a>`); len(hosts) != 0 {
 		t.Errorf("thirdPartyHosts() flagged a plain navigation link as an external request: %v", hosts)
 	}
 }

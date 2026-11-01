@@ -3310,27 +3310,42 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   ok  	git.nite07.com/nite/engram/internal/jobs	0.089s
   ```
 
-- [ ] **M19-84 The README publishes a real host name and a demo account's password, and the sanitisation rule
+- [x] **M19-84 The README publishes a real host name and a demo account's password, and the sanitisation rule
   admits neither** — *should-fix.* `README.md:12` (and `README.zh.md:12`) carries a live demo URL on a real
   domain plus the credentials `test` / `testdemo`; `README.md:5,98,127` carries the Docker Hub repository name and
   `:203` a community link on a real domain. `AGENTS.md:43-50` forbids real domain names, host names and passwords
   in any committed file and names the Go module path as "the one deliberate exception"; `CONTRIBUTING.md:137-140`
   repeats the rule with the same single exception. Nothing automated covers the rule any more
-  (`AGENTS.md:52-55`), so review by eye is the only check that can catch this. *Reproduced:* `git grep -n
-  "nite07\|linux.do"` lists the README and README.zh.md lines named above, `.github/workflows/release.yml:10`,
-  `.goreleaser.yaml:89` and `docker-compose.yaml:20`, and the module path in `go.mod`, the Go imports and
-  `CONTRIBUTING.md:299`, which the rule allows. *Acceptance:* either the publication exceptions (release image, live demo, community
-  link) are written into `AGENTS.md` §2.2 and `CONTRIBUTING.md`, naming exactly those cases, or the values are
-  replaced with placeholders and the demo credentials are no longer committed. *Blocked on a maintainer
-  decision; no file changed.* The exception branch edits `AGENTS.md` §2.2 and `CONTRIBUTING.md`, which the
-  maintainer owns. The placeholder branch cannot stay inside the READMEs: `README.md:5,98,127` and
-  `README.zh.md:5,98,127` document the image that `.goreleaser.yaml:88-89,106,150` and
-  `.github/workflows/release.yml:9-13` actually publish, so placeholderising only the READMEs leaves the
-  real names committed and documents a non-existent image, while placeholderising the release targets
-  breaks publishing unless the image name moves to an environment variable and a release run validates
-  it. Removing the live demo (and its `test` / `testdemo` credentials) and the community link is also a
-  product decision. Need a choice: document the three publication exceptions, or approve removing the
-  demo and parameterising the image name.
+  (`AGENTS.md:52-55`), so review by eye is the only check that can catch this. *Reproduced:* a repository-wide
+  search for the registry account and the community host lists the README and README.zh.md lines named above,
+  `.github/workflows/release.yml:10`, `.goreleaser.yaml:89` and `docker-compose.yaml:20`, and the module path in
+  `go.mod`, the Go imports and `CONTRIBUTING.md:299`, which the rule allows. *Acceptance:* either the publication
+  exceptions (release image, live demo, community link) are written into `AGENTS.md` §2.2 and `CONTRIBUTING.md`,
+  naming exactly those cases, or the values are replaced with placeholders and the demo credentials are no longer
+  committed.
+  *Closed by this commit (`docs: remove the live demo and name the two publication exceptions`).*
+  `README.md` and `README.zh.md` no longer carry the live demo URL, the `test` / `testdemo` credentials or the
+  community link, and their section structure and the English/Chinese pair remain in step. The container image
+  name stays, because `.goreleaser.yaml`, `.github/workflows/release.yml` and `docker-compose.yaml` publish it.
+  `AGENTS.md` §2.2 and `CONTRIBUTING.md` now name exactly two exceptions — the Go module path and the published
+  container image name — and state that no host name or demo credential is exempt. The one remaining
+  non-exception hit, a navigation-link fixture in `internal/web/stats_test.go`, now uses `example.com`.
+  Raw output of the repository-wide search for the registry account and the community host, with the module-path
+  exception filtered out; every hit below is the container image name:
+  ```
+  .github/workflows/release.yml:10:#   DOCKERHUB_USERNAME / DOCKERHUB_TOKEN — used to push nite07/engram to Docker Hub.
+  .goreleaser.yaml:89:      - nite07/engram
+  README.md:5:[![Docker Image](https://img.shields.io/badge/Docker-nite07%2Fengram-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/nite07/engram)
+  README.md:96:  docker.io/nite07/engram:latest
+  README.md:125:    image: nite07/engram:latest
+  README.zh.md:5:[![Docker Image](https://img.shields.io/badge/Docker-nite07%2Fengram-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/nite07/engram)
+  README.zh.md:96:  docker.io/nite07/engram:latest
+  README.zh.md:125:    image: nite07/engram:latest
+  docker-compose.yaml:20:    image: nite07/engram:latest
+  ```
+  The unfiltered search returns the same lines plus the module path in `go.mod`, the Go imports, `ARCHITECTURE.md`,
+  `CONTRIBUTING.md` and the code samples in this file. It returns no hit for the removed community host, and no
+  hit for the removed demo host other than the image-name lines above.
 
 - [x] **M19-85 CONTRIBUTING states the review log is append-only and omits the one deletion the code performs** —
   *should-fix.* `CONTRIBUTING.md:167-168` restates the invariant as "**`reviews` is append-only.** Every column is

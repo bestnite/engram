@@ -9,8 +9,6 @@
 
 Engram is an open-source, self-hosted spaced repetition flashcard service. Built with a modern Svelte 5 SPA frontend and a Go backend, it pairs the state-of-the-art **FSRS v6** scheduling algorithm with a native **Model Context Protocol (MCP)** server for AI-assisted card creation and workflow automation.
 
-Live demo: <https://engram.nite07.com/> (registration is open; test account: `test` / `testdemo`)
-
 ---
 
 ## Screenshots
@@ -199,5 +197,3 @@ Engram is built upon and inspired by these great open-source projects:
 - [MathJax](https://www.mathjax.org/) — Beautiful mathematical formula rendering.
 - [goldmark](https://github.com/yuin/goldmark) — High-performance Markdown parser.
 - [zitadel/oidc](https://github.com/zitadel/oidc) & [go-i18n](https://github.com/nicksnyder/go-i18n) — OIDC authentication and internationalization catalogs.
-
-Friend link: [LINUX DO](https://linux.do) — A vibrant tech community.
