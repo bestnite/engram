@@ -42,7 +42,10 @@
 
   // Deck share receiving policy (consent model): who may share decks with me.
   // allowList holds the real values read back from the server (with usernames); the local side does not infer the outcome of the union operation.
+  // The policy starts unread: the stored value is unknown until the server answers, so no option is preselected.
   let sharePolicy = $state<'anyone' | 'whitelist' | 'nobody'>('anyone');
+  let sharePolicyRead = $state(false);
+  let sharePolicyLoading = $state(false);
   let allowList = $state<ShareAllowRow[]>([]);
   let allowName = $state('');
   let shareSaving = $state(false);
@@ -189,12 +192,19 @@
 
   /** Read the current receiving policy and allowlist (GET /api/v1/settings/share-policy). */
   async function loadSharePolicy(): Promise<void> {
+    sharePolicyLoading = true;
     try {
       const res = await apiClient.getShareInvites();
       sharePolicy = res.policy;
       allowList = res.allow_list ?? [];
+      sharePolicyRead = true;
     } catch {
-      // Keep the default (anyone) when it cannot be read: that is exactly the true meaning of "no special setting", not an error.
+      // A failed read says nothing about the stored policy, and the default is the most permissive one: showing it
+      // would present a setting the user never chose as selected and let a save send that value. Keep the controls
+      // out of the page until a read succeeds.
+      sharePolicyRead = false;
+    } finally {
+      sharePolicyLoading = false;
     }
   }
 
@@ -311,6 +321,20 @@
 
     <!-- Deck share receiving policy: it blocks before an invitation is sent, so it belongs to "my preferences" rather than deck settings. -->
     <SettingsSection title={$t('settings.share_policy.heading')} description={$t('settings.share_policy.intro')} testId="settings-share-policy">
+      {#if !sharePolicyRead}
+        <p data-testid="share-policy-unread" class="mb-3 max-w-2xl text-[13px] text-warning" role="note">
+          {$t('settings.share_policy.unread')}
+        </p>
+        <Button
+          testId="share-policy-retry"
+          variant="outline"
+          size="lg"
+          loading={sharePolicyLoading}
+          onclick={loadSharePolicy}
+        >
+          {$t('settings.share_policy.retry')}
+        </Button>
+      {:else}
       <!-- The three-tier receiving policy uses the same dropdown style as the other settings items on this page (UI language, review day boundary, timezone). -->
       <Select
         bind:value={sharePolicy}
@@ -374,6 +398,7 @@
             </ul>
           {/if}
         </div>
+      {/if}
       {/if}
     </SettingsSection>
 

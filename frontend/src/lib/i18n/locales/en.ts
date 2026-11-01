@@ -1060,6 +1060,8 @@ export const en: LocaleCatalog = {
   'settings.share_policy.saved': 'Saved',
   'settings.share_policy.failed': "That didn't save. Try again.",
   'settings.share_policy.user_not_found': 'No such user.',
+  'settings.share_policy.unread': "Your invitation setting could not be read, so nothing is shown and nothing has been changed.",
+  'settings.share_policy.retry': 'Try again',
   'admin.mail.restore': 'Restore default',
   'admin.mail.restore_hint': 'Only this type and language. Restoring brings back the built-in default.',
   'admin.mail.prefill_builtin': 'This is the built-in default. Saving it unchanged makes it your version, which then stops following language-pack updates.',

@@ -1059,6 +1059,8 @@ export const zhCN: LocaleCatalog = {
   'settings.share_policy.saved': '已保存',
   'settings.share_policy.failed': '没保存成功，请重试。',
   'settings.share_policy.user_not_found': '没有这个用户。',
+  'settings.share_policy.unread': '没能读取你的邀请设置，因此这里不显示任何选项，也没有改动任何内容。',
+  'settings.share_policy.retry': '重试',
   'admin.mail.restore': '恢复默认',
   'admin.mail.restore_hint': '只影响这一种类型这一种语言。恢复后回到内置默认。',
   'admin.mail.prefill_builtin': '当前显示的是内置默认正文。不改动直接保存会成为你的自定义版本（此后不再跟随语言包更新）。',

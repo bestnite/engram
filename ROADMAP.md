@@ -2012,7 +2012,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
         Tests  44 passed (44)
   ```
 
-- [ ] **M19-63 A failed privacy-policy read is displayed as "anyone may share with me"** — *should-fix.*
+- [x] **M19-63 A failed privacy-policy read is displayed as "anyone may share with me"** — *should-fix.*
   `loadSharePolicy` swallows the error and leaves the initial value `sharePolicy = 'anyone'`
   (`frontend/src/lib/views/SettingsView.svelte:45,191-198`); the comment at `:197` argues that a failed read is
   the same as "no special setting", but the value is a stored setting the client never saw, so a user whose
@@ -2020,6 +2020,26 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   Verified by reading the initializer and the catch; *Unverified:* no request was failed against a running
   instance. *Acceptance:* render an explicit unread state with the controls disabled or retried until the policy
   arrives, and add a test where the read rejects and the permissive value is not shown as selected.
+  *Closed by this commit (`fix(frontend): withhold the share policy until it has been read`).*
+  `loadSharePolicy` (`frontend/src/lib/views/SettingsView.svelte:194`) now records success in
+  `sharePolicyRead`, which starts false, and leaves it false on a failure instead of trusting the `'anyone'`
+  initial value. The section renders the unread notice and a retry button while it is false, and only renders
+  the policy dropdown and the allowlist after a read succeeds, so a stored `nobody` is never displayed as
+  `anyone` and no save can send that value from an unread form. The two new catalog keys
+  (`settings.share_policy.unread`, `settings.share_policy.retry`) exist in both locales.
+  `frontend/src/tests/settings-share-policy-unread.client.ts` mounts the real
+  view with `getShareInvites` rejecting, asserts the dropdown is absent, the unread notice is shown and the
+  word "Anyone" is nowhere on the page, then lets the retry answer `nobody` and asserts the dropdown appears
+  showing `Nobody` after exactly one more read. Raw output of
+  `npm run test:client -- src/tests/settings-share-policy-unread.client.ts`:
+  ```
+   Test Files  1 passed (1)
+        Tests  1 passed (1)
+  ```
+  With only `SettingsView.svelte` reverted, the same run failed with
+  `AssertionError: expected <button …(10)>…(2)</button> to be null` — the old page rendered the policy control
+  (and "Anyone") from the failed read. `npm run check` ends `svelte-check found 0 errors and 0 warnings`, and
+  `npm run test:client` passes 534 tests in 61 files.
 
 - [ ] **M19-64 Optimiser polling can overlap and write a stale "running" state after the job finished** —
   *should-fix.* `startPolling` uses `setInterval(pollOnce, 2000)`
