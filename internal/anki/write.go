@@ -317,7 +317,8 @@ VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)`)
 	defer cardStmt.Close()
 	for i := range c.Cards {
 		card := &c.Cards[i]
-		// Anki discards this column on import; an Engram round trip uses it to retain memory state.
+		// Anki discards cards.data on import; an Engram round trip uses it to retain
+		// memory state and the last review time (lrt).
 		fields := make(map[string]any)
 		if card.Stability != nil && card.Difficulty != nil {
 			fields["s"], fields["d"] = *card.Stability, *card.Difficulty
@@ -327,7 +328,7 @@ VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)`)
 		}
 		encoded, err := json.Marshal(fields)
 		if err != nil {
-			return nil, fmt.Errorf("anki package: encode card %d memory state: %w", card.ID, err)
+			return nil, fmt.Errorf("anki package: encode card %d data: %w", card.ID, err)
 		}
 		data := string(encoded)
 		if _, err := cardStmt.Exec(card.ID, card.NoteID, card.DeckID, card.Ordinal, card.Modified,

@@ -1482,6 +1482,9 @@ func ankiSteps(steps []float64) string {
 	return strings.Join(parts, ",")
 }
 
+// usableAnkiMemory requires finite values: go-fsrs v4 refuses non-new cards
+// with stability below 0.001 or difficulty below 1, and 10 is the highest
+// difficulty FSRS produces.
 func usableAnkiMemory(stability, difficulty *float64) bool {
 	return stability != nil && difficulty != nil &&
 		!math.IsNaN(*stability) && !math.IsInf(*stability, 0) && *stability >= 0.001 &&
@@ -1702,6 +1705,11 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			report.StatesSkipped++
 			continue
 		}
+		// Prefer lrt because it records the card's last review even when the log is
+		// incomplete; otherwise use the last kept revlog row as direct evidence.
+		// For review and relearning cards, due minus ivl is the remaining estimate.
+		// Leave learning cards NULL without either timestamp because their step due
+		// date and interval do not reliably reconstruct the last review.
 		if lastReview != nil {
 			// Anki writes lrt in seconds; also accept millisecond timestamps from packages
 			// that use the same precision as the review log.
@@ -1816,6 +1824,12 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			report.ReviewsSkipped++
 			continue
 		}
+		// Engram's own rows record the scheduled interval after the grade in
+		// interval_days, days since the previous review in duration_days, and the
+		// resulting memory state in stability and difficulty. Anki's ivl supplies
+		// the interval (negative values are seconds); duration uses fractional days
+		// since the previous kept row. Memory comes from replay when available, with
+		// the card's final memory state used for its last kept row when available.
 		elapsed := r.Time
 		interval := float64(r.Interval)
 		if interval < 0 {
