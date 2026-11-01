@@ -193,26 +193,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-20 Weight import tests: older Anki weight sets, schema-18 packages and the scheduler's
-  use of the weights** — `TestAnkiImportWeightsSchedule` in `internal/api/anki_weights_import_test.go`
-  imports one 21-value set and one 3-value set, both through a schema-11 package written by
-  `anki.WriteArchive`. Three inputs are not covered: a 17-value set under the `fsrsWeights` key and a
-  19-value set under the `fsrsParams5` key of `col.dconf`, which older Anki releases write and which
-  `fsrs.MigrateWeights` converts (`anki.WriteArchive` writes only `fsrsParams6`, so the test writes
-  those keys itself); a schema-18 (`collection.anki21b`) package, whose weights
-  `internal/anki/protobuf.go` decodes from protobuf floats; and a weight that is NaN or infinite,
-  which only the protobuf path can carry. The test also does not show that the scheduler uses the
-  adopted weights: it checks only that `Preview` returns no error, and that holds for the default
-  weights as well. The file lives in `internal/api` although it calls no handler. The fix: move the
-  test to `internal/schedule`, which can import `internal/store` and `internal/anki` without a cycle;
-  add the 17-value and 19-value cases; assert that the scheduler built from each imported preset holds
-  the result of `fsrs.MigrateWeights` on the package's set when the set was adopted, and the default
-  weights when it was not; add a schema-18 package that `tools/anki-oracle` produces with
-  `anki==26.9.3` and that carries FSRS parameters; cover the non-finite weight with a test in
-  `internal/store` that calls `createAnkiPreset` directly. *Acceptance:* each case named above passes;
-  `internal/api/anki_weights_import_test.go` no longer exists. Evidence is the raw scoped `go test`
-  and `go vet` output and the output of the oracle script that produced the fixture.
-
 - [ ] **M18-21 README describes what an `.apkg` import carries** — the "Anki `.apkg` packages"
   section of `README.md` lists "Scheduling state and review history" and "Anki's deck options and
   FSRS parameters" under the parts that are not imported, and says that a new deck starts from the
