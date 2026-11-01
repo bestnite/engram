@@ -363,30 +363,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   of the two sections matches its `README.md` counterpart statement for statement; `grep -n -E
   'edeck|export_deck' README.zh.md` prints nothing. Evidence is the diff and the grep output.
 
-- [ ] **M18-92 The approximation warning covers every non-learning start, and its comment cites no task
-  ID** — `M18-80` required a warning "whenever [a card's] first kept revlog row is not a learning row".
-  `deriveAnkiMemory` in `internal/store/anki_import.go` increments the counter only in the SM-2 branch,
-  that is, when the first kept row is a review row (type 1) or the card has no kept row. A card whose
-  first kept row is a relearning row (type 2) or a filtered-deck row (type 3) is replayed from an empty
-  state and writes no warning. `M18-79` measured the type 2 case against Anki 26.09.3: Again then Good
-  (+1 day) gives Anki 1.00 and 8.216, and the importer 1.887 and 6.402. Reproduced on `main` on both
-  drivers with a temporary test: a review card with no `s`/`d`, a first row Again and a second row Good
-  (type 1, +1 day) stores stability 1.8868 and difficulty 6.4021, and the log stays empty, both when the
-  first row is type 2 and when it is type 3. Two
-  comment defects sit in the same function. The comment on the SM-2 branch says "ROADMAP.md M18-79
-  measures …", which points at a retired ID once `M18-79` closes, the defect `M18-70` removed from
-  `internal/anki`. The doc comment says that the function "writes replayed memory into rowMemory for kept
-  revlog rows". It writes every kept row only on the replay path; with usable package values, it writes
-  only the last kept row. The fix: the counter also counts a card whose memory is replayed from a history
-  whose first kept row is type 2 or type 3. The log message no longer says "SM-2", because it now covers a
-  replay too, and still states that the value is not aligned with Anki. The comment states the limitation
-  in its own words without a task ID. The doc comment states which rows `rowMemory` receives on each
-  path. *Acceptance:* `TestAnkiProgressApproximationWarn` gains a `relearning_first` and a
-  `filtered_first` case, each expecting the warning with `cards` 2, and its existing cases keep their
-  expected counts; `git grep -n 'M18-' -- internal/store/anki_import.go` prints nothing. Evidence is the
-  raw scoped `go test` and `go vet` output of `internal/store`, the PostgreSQL run with `TEST_PG_DSN` set,
-  and the captured log line.
-
 - [ ] **M18-93 Decide what `progress_discarded` means with `include_progress` on** — the comment on
   `PackageImportReport.ProgressDiscarded` in `internal/store/package_import.go` says that the flag means
   "the package's card states or reviews were discarded during import". The only code that sets it is the
