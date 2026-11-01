@@ -1491,28 +1491,17 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 		!math.IsNaN(*difficulty) && !math.IsInf(*difficulty, 0) && *difficulty >= 1 && *difficulty <= 10
 }
 
-// deriveAnkiMemory uses the package's state, then replays eligible history, then
-// uses SM-2 when replay is ineligible, and skips a card if the result is unusable.
-// Anki writes s and d only when FSRS is enabled, while go-fsrs refuses a non-new
-// card with stability below 0.001, so non-new cards need a usable derived state.
-// Replay DeltaT counts whole review days between consecutive kept rows, using the
-// importing user's timezone and cutoff. A negative cards.ivl counts seconds and
-// is converted to days for SM-2. The SM-2 retention of 0.9 is a fixed assumption
-// about the retention the card's SM-2 intervals aimed at. An unusable state skips
-// the card instead of failing the import: storing it would make every preview
-// and submission fail, so the card stays new for the importer.
-func deriveAnkiMemory(card anki.Card, state *CardState, engine *fsrs.FSRS, history fsrs.ReviewEntries, firstType int, keptIDs []int64, rowMemory map[int64]fsrs.MemoryState, approximated *int) (*int64, bool, error) {
-	var data struct {
-		Stability  *float64 `json:"s"`
-		Difficulty *float64 `json:"d"`
-		LastReview *int64   `json:"lrt"`
-	}
-	if card.Data != "" {
-		if err := json.Unmarshal([]byte(card.Data), &data); err != nil {
-			return nil, false, fmt.Errorf("import Anki card %d data: %w", card.ID, err)
-		}
-	}
-	state.Stability, state.Difficulty = data.Stability, data.Difficulty
+// deriveAnkiMemory writes stability and difficulty into state, using the package
+// values, eligible history, or an SM-2 estimate in that order. It writes replayed
+// memory into rowMemory for kept revlog rows and the final state for the last row.
+// If HistoricalMemoryStates fails, its error is discarded: the final state remains
+// usable, but earlier rows retain NULL memory because their states are unavailable.
+// The result says whether the card state is usable; false makes the caller skip it
+// so that an invalid non-new state cannot break previews and submissions.
+// A negative cards.ivl counts seconds and is converted to days for SM-2. The SM-2
+// retention of 0.9 assumes the retention the card's SM-2 intervals aimed at.
+func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *CardState, engine *fsrs.FSRS, history fsrs.ReviewEntries, firstType int, keptIDs []int64, rowMemory map[int64]fsrs.MemoryState, approximated *int) bool {
+	state.Stability, state.Difficulty = stability, difficulty
 	if card.Type != 0 && !usableAnkiMemory(state.Stability, state.Difficulty) {
 		var memory *fsrs.MemoryState
 		var computeErr error
@@ -1536,14 +1525,14 @@ func deriveAnkiMemory(card anki.Card, state *CardState, engine *fsrs.FSRS, histo
 			memory, computeErr = engine.MemoryStateFromSM2(float64(card.Factor)/1000, interval, 0.9)
 		}
 		if computeErr != nil || memory == nil || !usableAnkiMemory(&memory.Stability, &memory.Difficulty) {
-			return data.LastReview, false, nil
+			return false
 		}
 		state.Stability, state.Difficulty = &memory.Stability, &memory.Difficulty
 	}
 	if len(keptIDs) > 0 && state.Stability != nil && state.Difficulty != nil {
 		rowMemory[keptIDs[len(keptIDs)-1]] = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}
 	}
-	return data.LastReview, true, nil
+	return true
 }
 
 func isAnkiReset(r anki.Review) bool {
@@ -1660,6 +1649,8 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 				rowDuration[r.ID] = float64(r.ID-ids[len(ids)-1]) / 86400000
 			}
 			keptIDs[r.CardID] = append(ids, r.ID)
+			// Replay DeltaT counts whole review days between consecutive kept rows,
+			// using the importing user's timezone and cutoff.
 			day, err := time.Parse("2006-01-02", reviewday.Day(time.UnixMilli(r.ID), loc, cutoff))
 			if err != nil {
 				return fmt.Errorf("import Anki progress: parse review day: %w", err)
@@ -1697,11 +1688,17 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			}
 			state.DueAt = &due
 		}
-		lastReview, usable, err := deriveAnkiMemory(card, &state, engine, histories[card.ID], firstType[card.ID], keptIDs[card.ID], rowMemory, &approximated)
-		if err != nil {
-			return err
+		var data struct {
+			Stability  *float64 `json:"s"`
+			Difficulty *float64 `json:"d"`
+			LastReview *int64   `json:"lrt"`
 		}
-		if !usable {
+		if card.Data != "" {
+			if err := json.Unmarshal([]byte(card.Data), &data); err != nil {
+				return fmt.Errorf("import Anki card %d data: %w", card.ID, err)
+			}
+		}
+		if !deriveAnkiMemory(card, data.Stability, data.Difficulty, &state, engine, histories[card.ID], firstType[card.ID], keptIDs[card.ID], rowMemory, &approximated) {
 			report.StatesSkipped++
 			continue
 		}
@@ -1710,10 +1707,10 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		// For review and relearning cards, due minus ivl is the remaining estimate.
 		// Leave learning cards NULL without either timestamp because their step due
 		// date and interval do not reliably reconstruct the last review.
-		if lastReview != nil {
+		if data.LastReview != nil {
 			// Anki writes lrt in seconds; also accept millisecond timestamps from packages
 			// that use the same precision as the review log.
-			stamp := *lastReview
+			stamp := *data.LastReview
 			var at time.Time
 			if stamp > -100000000000 && stamp < 100000000000 {
 				at = time.Unix(stamp, 0).UTC()
