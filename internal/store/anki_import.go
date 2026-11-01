@@ -1489,7 +1489,7 @@ func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *Car
 		carried := usableAnkiMemory(state.Stability, state.Difficulty)
 		var memory *fsrs.MemoryState
 		var computeErr error
-		if !carried && (len(history) == 0 || !complete) {
+		if !carried && len(history) == 0 {
 			*approximated++
 		}
 		if len(history) > 0 {
@@ -1563,7 +1563,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	approximated := 0
 	defer func() {
 		if approximated > 0 {
-			slog.Warn("Anki import memory approximation is not aligned with Anki", "user_id", userID, "cards", approximated)
+			slog.Warn("Anki import memory approximation without selected history is not aligned with Anki", "user_id", userID, "cards", approximated)
 		}
 	}()
 	var user User
