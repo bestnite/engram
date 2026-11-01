@@ -2036,7 +2036,12 @@ def build_memory_fixture(workdir: Path) -> None:
         special = col.db.all("select id, ease, ivl, lastIvl, factor, type from revlog where cid=?", cid)
         assert len(special) == 1, (label, special)
         col.db.execute("update revlog set id=? where id=?", base+4*day+labels.index(label), special[0][0])
+    legacy = workdir / "memory-legacy.apkg"
+    col.export_anki_package(out_path=str(legacy), options=ExportAnkiPackageOptions(
+        with_scheduling=True, with_deck_configs=True, with_media=False, legacy=True), limit=ExportLimit())
     col.close()
+    with zipfile.ZipFile(legacy) as archive:
+        db_path.write_bytes(archive.read("collection.anki21"))
     conn = connect(db_path)
     histories = {
         "review-lapses": [(0, 3, 30, 10, 2500, 1), (10, 1, -60, 30, 2500, 2), (11, 1, -60, -60, 2500, 2)],
