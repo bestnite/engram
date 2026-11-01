@@ -472,6 +472,129 @@ fine", and it does not mean "confirmed broken".
   *Acceptance:* a ≥ 1-day step in the undo fixture plus a mutation check, explicit `Now` in the deck-count
   and budget tests with the comment corrected, and a `NewScheduler` error case for an unacceptable step.
 
+- [ ] **M19-37 The request log writes live frame-media bearer tokens to disk** — *Blocker.*
+  `requestLogger` logs `c.Request.URL.Path` for every request (`internal/web/server.go:539-545`) and is
+  mounted globally (`:317`). `/fm/<token>/<name>` puts the token in the path (`internal/web/frame_media.go:34`),
+  and `frameMediaServe` accepts that token without any session: it re-checks the token's user and deck role,
+  not the caller (`:67-122`). Every card render's media fetch therefore writes a credential that is valid
+  for six hours (`:40-42`) to the log, and the frame-media file states the token "is never logged"
+  (`:64-66`). Anyone who can read the log stream (container logs, aggregator, backup) can replay a line
+  against `/fm/...` and read that deck's media for the rest of the window. The same logger also records
+  `PUT /api/v1/decks/import-uploads/<token>` and `GET /api/v1/decks/export-downloads/<token>`
+  (`internal/api/server.go:228-229`), but those handlers consume the ticket before `c.Next()` returns, so the
+  logged line holds a dead token; that part is hygiene, not a live credential. Verified by reading the
+  logger, the route and the verification path; *Unverified:* no log line was captured (the web tests pass a
+  discarding logger, and no test covers `requestLogger`).
+  *Acceptance:* log a redacted path (or the matched route pattern) for `/fm/` and the two ticket routes and
+  add a test that drives `/fm` and asserts the token does not appear in the captured log line.
+
+- [ ] **M19-38 A stolen session can change the account email and then reset the password, so the change
+  outlives the session** — *should-fix.* `emailChangeSubmit` accepts a new address from any signed-in
+  session without asking for the current password (`internal/web/account.go:271-315`); the confirmation mail
+  goes only to the new address (`internal/web/security_mail.go:172-178`), the old address is not notified,
+  and no session is revoked. The password-change path deliberately requires the old password
+  (`internal/web/profile.go:66-84`), so the email path is a weaker credential change: a session thief moves
+  the mailbox to an address they control, confirms it, then uses the normal reset flow
+  (`internal/web/account.go:133-169`) to set a password and sign in after the victim's session is gone.
+  Verified by reading the three handlers and the reset path; *Unverified:* not reproduced against a running
+  instance. *Acceptance:* require the current password (or a fresh OIDC re-authentication) for an email
+  change, notify the old address, revoke the other sessions, and add a negative test that a session without
+  the password cannot change the email.
+
+- [ ] **M19-39 A password change keeps the same session ID, so a copied session cookie survives it** —
+  *should-fix.* `ChangePasswordKeepingSession` keeps `keepSessionID` and revokes only the other rows
+  (`internal/auth/account.go:228-264`, `internal/store/session.go:69-85`), and the web handler passes the
+  current session's ID (`internal/web/profile.go:72-84`). Keeping the user signed in is reasonable, but the
+  kept row is the same credential: a copy of the cookie taken before the change still authenticates. The
+  existing test checks that API keys survive and the request succeeds
+  (`internal/web/password_reset_keys_test.go:114-147`); nothing asserts that the session ID changes.
+  Verified by reading the revocation query and the call site; *Unverified:* not reproduced with a copied
+  cookie. *Acceptance:* when keeping the current login, create a new session row with a new ID and CSRF token,
+  revoke the old one and set the new cookie; a regression copies the pre-change cookie and expects 401 while
+  the new cookie works.
+
+- [ ] **M19-40 JSON endpoints have no request-body cap and the server has no read timeout** — *should-fix.*
+  `newHTTPServer` sets only `ReadHeaderTimeout` and `IdleTimeout` (`internal/web/server.go:443-459`), and the
+  only `http.MaxBytesReader` calls are the media upload (`internal/web/media.go:94`) and the package paths
+  (`internal/api/package.go:229,243`). Every JSON handler decodes an unbounded body; `apiLogin` binds at
+  `internal/web/auth_api.go:57` **before** it reaches the limiter at `:81`, and register, forgot-password and
+  TOTP follow the same shape. An unauthenticated client can allocate the body size in memory on
+  `/api/v1/auth/login` (one large JSON string), and with no read timeout it can also hold connections open
+  by trickling a body. Verified by reading the server configuration and the handler order; *Unverified:*
+  the allocation and the hold were not measured. *Acceptance:* cap JSON bodies with `http.MaxBytesReader`
+  before binding (and keep the existing package limit on uploads), give request bodies a deadline that does
+  not cut off the documented large uploads, and add a test that an oversized login body answers 413.
+
+- [ ] **M19-41 One successful login clears the per-IP failure budget, so password spraying is not limited
+  by IP** — *should-fix.* `Reset` deletes both the account bucket and the `ip:` bucket
+  (`internal/auth/ratelimit.go:307-313`), and `apiLogin` calls it on every success
+  (`internal/web/auth_api.go:138-140`); the TOTP step does the same (`internal/web/totp_login.go:119-121`).
+  The per-account limit (10) still holds, but the per-IP limit (50) is the only control against trying one
+  password across many accounts: an attacker with one valid account can spend 49 attempts across 49 accounts
+  and then log in once to reset the IP count, indefinitely. Verified by reading the reset semantics;
+  *Unverified:* no spraying test exists and none was run. *Acceptance:* on success clear only the account
+  bucket, or keep the IP count until its window ends; add a test that a successful login by one account
+  leaves another account's accumulated IP failures in place.
+
+- [ ] **M19-42 The admin settings saves are not atomic, so a rejected later key leaves earlier keys
+  written** — *should-fix.* `adminSettingsSave` validates and writes inside one loop
+  (`internal/web/admin_settings_api.go:152-198`): a submission with a valid key followed by an invalid one
+  (for example `site.name` then `media.max_bytes=abc`) writes the first row and then returns 400. The
+  registration save has the same shape with two writes and no transaction
+  (`internal/web/admin_registration_api.go:146-155`), and the OIDC/SMTP saves leave earlier keys in place when
+  a later `PutSetting` fails. The notification-preference handler shows the intended order: validate every
+  submitted key, then write (`internal/web/mail_prefs_api.go:146-166`). Verified by reading the three
+  handlers; *Unverified:* no reproduction. *Acceptance:* validate the whole submission before any write and
+  apply the keys in one transaction (or one bulk upsert); a test submits one valid and one invalid key and
+  asserts every stored value is unchanged.
+
+- [ ] **M19-43 OIDC first login creates the account and the identity in two writes, so a failed link leaves
+  an orphan** — *should-fix.* `Resolve` creates the user at `internal/auth/oauthlink.go:180-192` and inserts
+  the identity afterwards (`:189`, `:248-274`) with no transaction. If the insert fails, the account has no
+  link; on the next login the email lookup either finds it and denies because the claim is unverified
+  (`:78-85`), or — when the IdP sends no email — the lookup is skipped and `CreateOIDCUser` reuses the
+  deterministic username (`:291-302`), so every retry fails on the unique constraint. `Bind` already re-reads
+  after a duplicate (`:226-234`); `Resolve`'s auto-link path does not. Verified by reading the writes and
+  the retry path; *Unverified:* no failure injection and no concurrent run. *Acceptance:* write the user and
+  the identity in one transaction (or remove the new user when the link fails), let `Resolve` recover by the
+  derived username as well as by email, and add a regression that injects a link failure plus one that runs
+  two first logins concurrently and expects both to succeed.
+
+- [ ] **M19-44 Anyone can fill the global OIDC pending table and stop every OIDC login for ten minutes** —
+  *should-fix.* `maxPendingAuth` caps the map at 1000 (`internal/auth/oidc.go:62-68`) and `PutPending` refuses
+  new starts once it is full (`:292-305`); the only entry point is the unauthenticated
+  `GET /auth/oidc/start` (`internal/web/oidc.go:87-141`), which has no rate limit, and entries live ten
+  minutes (`:129`). One thousand requests make every login and identity bind fail with "pending table is
+  full" until the entries expire, which is exactly what `TestOIDCStartRejectsWhenPendingTableFull` asserts.
+  Verified by reading the cap, the eviction rule and the unthrottled route; *Unverified:* no timing was
+  measured. *Acceptance:* rate-limit the start endpoint per IP with the existing anonymous limiter and/or
+  evict the oldest entry instead of refusing new starts; a test fills the table and shows a start from a
+  fresh IP still succeeds.
+
+- [ ] **M19-45 The batch export buffers every package in memory with no cap on the number of decks** —
+  *should-fix.* `deckBatchExportZip` writes each package into a `bytes.Buffer`
+  (`internal/web/package_web.go:84-85`), loops over the caller-supplied `req.DeckIDs` (`:89-127`) and sends
+  the whole buffer at the end (`:137`). Neither the count nor the accumulated size is bounded, so a user
+  with enough decks (or a repeated id list) makes the process hold the complete archive in memory. Verified
+  by reading the handler; *Unverified:* no measurement. *Acceptance:* cap the deck count and the total bytes
+  (413 when exceeded), stream the archive instead of buffering it, and add a test over the count cap.
+
+- [ ] **M19-46 Any status action other than `disable` enables the account** — *should-fix.*
+  `adminUserStatus` treats exactly `"disable"` as disable and every other string as enable
+  (`internal/web/admin_users_api.go:196-231`, the `else` at `:219`). A typo (`"disabled"`, a trailing space,
+  an empty action) silently re-enables a suspended account and returns 204. Verified by reading the branch;
+  *Unverified:* no test sends an unknown action. *Acceptance:* accept only `enable` and `disable`, answer 400
+  otherwise, and add table cases for `""`, `"disabled"` and `"enable"`.
+
+- [ ] **M19-47 A refused user deletion has already mailed the user and signed them out** — *nit.*
+  `adminUserDelete` sends the "account deleted" notice and calls `ForceLogout` before the authoritative
+  last-admin check inside `WithAdminGate` (`internal/web/admin_users_api.go:355-379`); the pre-check at
+  `:356` is lock-free, so a concurrent demotion can make the gate refuse after both side effects ran. The
+  target then receives a deletion mail and loses every session while the account remains. Verified by
+  reading the order; *Unverified:* the interleaving was not reproduced. *Acceptance:* move the notification
+  and the revocation after the gate commit and add a test that a deletion refused with `last_admin` sends no
+  mail and revokes no session.
+
 
 ## 2. Release ledger
 
