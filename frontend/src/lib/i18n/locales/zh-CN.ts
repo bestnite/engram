@@ -1822,6 +1822,7 @@ export const zhCN: LocaleCatalog = {
   'package.report.weights_invalid': '包内权重无效，未采用',
   'package.report.deck_config_skipped': '无法读取包内牌组配置，已使用默认值',
   'package.report.cards_skipped': '包内无法读取且未导入的卡片数',
+  'package.report.answer_specs_missing': '缺少机判规则的笔记类型数；经 Anki 重新导出的包会丢失这些规则',
   'package.import.preset_mode': '调度预设',
   'package.import.preset_mode_new': '新建预设',
   'package.import.preset_mode_reuse': '复用现有预设',

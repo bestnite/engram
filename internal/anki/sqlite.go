@@ -94,8 +94,10 @@ type legacyModel struct {
 	LaTeXPost         string           `json:"latexPost"`
 	LaTeXSVG          bool             `json:"latexsvg"`
 	OriginalStockKind int              `json:"originalStockKind"`
-	// Engram is the one unknown top-level key engram writes. Anki carries an unknown
-	// model key through import and export, so the answer controls survive a round trip.
+	// Engram is the one unknown top-level key engram writes. It survives engram to engram
+	// and engram to Anki, but Anki's default modern export stores note types as protobuf,
+	// and the reader below does not read the key back from that layout. See write.go's
+	// legacyEngramOut comment for the full limitation.
 	Engram *legacyEngram `json:"engram"`
 }
 
@@ -193,7 +195,8 @@ func legacyNoteTypes(models map[string]legacyModel) ([]NoteType, error) {
 		}
 		sortTemplates(templates)
 		var answers map[string]AnswerSpec
-		if model.Engram != nil && model.Engram.V == 1 {
+		hasAnswerSpecsKey := model.Engram != nil && model.Engram.V == 1
+		if hasAnswerSpecsKey {
 			answers = model.Engram.AnswerSpecs
 		}
 		noteTypes = append(noteTypes, NoteType{
@@ -210,6 +213,7 @@ func legacyNoteTypes(models map[string]legacyModel) ([]NoteType, error) {
 			OriginalID:        model.ID,
 			OriginalStockKind: model.OriginalStockKind,
 			AnswerSpecs:       answers,
+			AnswerSpecsKey:    hasAnswerSpecsKey,
 		})
 	}
 	return noteTypes, nil

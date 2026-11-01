@@ -36,6 +36,11 @@ func TestImportDeckAcceptsAnki(t *testing.T) {
 	if out["match_rule"] != "anki_guid" {
 		t.Fatalf("match_rule = %v, want anki_guid", out["match_rule"])
 	}
+	// The stock fixture is a modern Anki package, which carries no engram key; the same count
+	// must reach the MCP caller as the REST report.
+	if missing, _ := out["answer_specs_missing"].(float64); missing == 0 {
+		t.Fatalf("answer_specs_missing = %v, want the modern fixture's note types counted", out["answer_specs_missing"])
+	}
 }
 
 func TestImportDeckRejectsInvalidPackage(t *testing.T) {

@@ -612,6 +612,8 @@ export interface PackageImportReport {
   notes_skipped: number;
   cards_created: number;
   cards_skipped: number;
+  /** Note types the package carried without an engram answer-spec key; 0 means every one carried it. */
+  answer_specs_missing: number;
   /** Cards soft-deleted by a structural .apkg re-import (their progress rows stay). */
   cards_removed?: number;
   media_new: number;

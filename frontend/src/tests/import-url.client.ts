@@ -40,6 +40,7 @@ function reportFixture(overrides: Partial<PackageImportReport> = {}): PackageImp
     notes_skipped: 0,
     cards_created: 1,
     cards_skipped: 0,
+    answer_specs_missing: 0,
     media_new: 0,
     media_missing: 0,
     progress_applied: 0,
@@ -217,6 +218,27 @@ describe('ImportView — package weights', () => {
     expect(report).toBeTruthy();
     const row = Array.from(report!.querySelectorAll('dt')).find(
       (el) => el.textContent === formatMessage('zh-CN', 'package.report.cards_skipped')
+    );
+    if (count > 0) {
+      expect(row?.nextElementSibling?.textContent).toBe(String(count));
+    } else {
+      expect(row).toBeUndefined();
+    }
+  });
+
+  it.each([3, 0])('shows lost machine grading only when a note type arrived without it: %s', async (count) => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(reportFixture({ answer_specs_missing: count }));
+    mountView();
+    await flush();
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+    const report = reportSection();
+    expect(report).toBeTruthy();
+    const row = Array.from(report!.querySelectorAll('dt')).find(
+      (el) => el.textContent === formatMessage('zh-CN', 'package.report.answer_specs_missing')
     );
     if (count > 0) {
       expect(row?.nextElementSibling?.textContent).toBe(String(count));

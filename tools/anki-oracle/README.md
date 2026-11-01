@@ -22,8 +22,9 @@ the fixtures are added or Anki's pinned version moves.
 
 `verify_package.py` imports a `.apkg` produced by engram into a fresh collection with
 `anki==26.9.3` and prints its note, card, note type, media, deck-config and answer-spec counts.
-Answer specs are the engram extension carried in an unknown note type key, which Anki's model
-API does not expose, so the script counts them from the package's own schema-11 model JSON.
+Answer specs are the engram extension carried in an unknown note type key. The script counts them
+on the collection Anki built from the package, after the import, rather than on the input package's
+own model JSON: counting the input would only restate what the caller passed in.
 
 ```bash
 .venv/bin/python verify_package.py path/to/package.apkg

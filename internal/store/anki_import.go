@@ -1007,11 +1007,25 @@ func dropUnusedAnkiNoteTypes(pkg *anki.Package) {
 	pkg.NoteTypes = kept
 }
 
+// ankiAnswerSpecsMissing counts the imported note types that carry no usable engram
+// answer-spec key. Zero means every imported note type carried one; a positive count is how a
+// package that Anki re-exported in its default modern layout shows the lost machine grading.
+func ankiAnswerSpecsMissing(pkg *anki.Package) int {
+	missing := 0
+	for i := range pkg.NoteTypes {
+		if !pkg.NoteTypes[i].AnswerSpecsKey {
+			missing++
+		}
+	}
+	return missing
+}
+
 // importAnkiInTx performs the Anki mapping inside one transaction.
 func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *anki.Package, files []ankiMediaFile, placed map[string]mediaFileWrite, plan *ankiDeckPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport) error {
 	// The unused note types leave no trace in the target: they are not created, they contribute no
 	// media references to the report, and no stored row points at them.
 	dropUnusedAnkiNoteTypes(pkg)
+	report.AnswerSpecsMissing = ankiAnswerSpecsMissing(pkg)
 
 	deckID, err := s.resolveAnkiTargetDeck(ctx, tx, actorUserID, pkg, plan, targetKind, targetDeckID, opts, report)
 	if err != nil {

@@ -54,6 +54,9 @@ type NoteType struct {
 	// note type's "engram" key. Bindings name fields, not field ids. It is empty for a
 	// note type that carries no answer control.
 	AnswerSpecs map[string]AnswerSpec
+	// AnswerSpecsKey reports whether the package carried a usable engram answer-spec key
+	// (version 1) for this note type. A modern protobuf note type never carries one.
+	AnswerSpecsKey bool
 }
 
 // Field is one note type field, in field order.

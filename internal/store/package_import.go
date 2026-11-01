@@ -261,11 +261,16 @@ type PackageImportReport struct {
 	// CardsSkipped counts card rows the reader could not read. It does not count
 	// readable cards of notes left out by on_conflict skip, because the count
 	// comes from the reader rather than conflict handling.
-	CardsSkipped    int `json:"cards_skipped"`
-	MediaNew        int `json:"media_new"`
-	MediaMissing    int `json:"media_missing"`
-	ProgressApplied int `json:"progress_applied"`
-	ProgressSkipped int `json:"progress_skipped"`
+	CardsSkipped int `json:"cards_skipped"`
+	// AnswerSpecsMissing counts the imported note types whose package model carried no usable
+	// engram answer-spec key. Zero means every imported note type carried one; a positive count
+	// is how a package that Anki re-exported in its default modern layout shows the lost machine
+	// grading.
+	AnswerSpecsMissing int `json:"answer_specs_missing"`
+	MediaNew           int `json:"media_new"`
+	MediaMissing       int `json:"media_missing"`
+	ProgressApplied    int `json:"progress_applied"`
+	ProgressSkipped    int `json:"progress_skipped"`
 	// ProgressDiscarded means the package's card states or reviews were discarded during import.
 	ProgressDiscarded bool   `json:"progress_discarded"`
 	StatesSkipped     int    `json:"states_skipped"`

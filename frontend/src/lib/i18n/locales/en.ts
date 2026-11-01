@@ -1823,6 +1823,7 @@ export const en: LocaleCatalog = {
   'package.report.weights_invalid': 'Package weights rejected as invalid',
   'package.report.deck_config_skipped': 'Package deck configuration could not be read; defaults were used',
   'package.report.cards_skipped': 'Cards in the package could not be read and were not imported',
+  'package.report.answer_specs_missing': 'Note types without machine-grading rules; a package re-exported by Anki loses them',
   'package.import.preset_mode': 'Scheduling preset',
   'package.import.preset_mode_new': 'Create a new preset',
   'package.import.preset_mode_reuse': 'Reuse an existing preset',

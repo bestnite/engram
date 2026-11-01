@@ -47,6 +47,11 @@ func TestImportPackageAcceptsAnki(t *testing.T) {
 	if report.MediaMissing != 0 {
 		t.Fatalf("media_missing = %d, want 0 for the stock fixture", report.MediaMissing)
 	}
+	// The stock fixture is a modern Anki package, which carries no engram key, so the report
+	// must expose the lost machine grading over REST as a positive count.
+	if report.AnswerSpecsMissing == 0 {
+		t.Fatalf("answer_specs_missing = 0, want the modern fixture's note types counted: %+v", report)
+	}
 }
 
 func TestImportPackageCorruptAnkiIsBadFormat(t *testing.T) {

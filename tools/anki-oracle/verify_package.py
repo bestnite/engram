@@ -6,48 +6,26 @@ Usage:
 
 The script imports the package into a fresh temporary collection through Anki's own
 importer and prints its note, card, note type, media and deck-config counts. Answer
-specs are an engram extension carried in an unknown note type key; Anki's public model
-API does not expose unknown keys, so they are counted from the package's own schema-11
-model JSON.
+specs are an engram extension carried in an unknown note type key. They are counted in
+the collection Anki built from the package after the import, not in the input package's
+own model JSON: counting the input only restates what the caller passed in, while the
+imported collection is what Anki actually produced.
 """
 
 from __future__ import annotations
 
-import json
 import os
-import sqlite3
 import sys
 import tempfile
-import zipfile
 
 from anki.collection import Collection
 from anki.import_export_pb2 import ImportAnkiPackageRequest
 
 
-def count_answer_specs(package_path: str) -> int:
-    """Count answer specs in the package's legacy collection.anki21 model JSON."""
-    with zipfile.ZipFile(package_path) as archive:
-        name = None
-        for candidate in ("collection.anki21", "collection.anki2"):
-            if candidate in archive.namelist():
-                name = candidate
-                break
-        if name is None:
-            return 0
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "collection.sqlite")
-            with open(path, "wb") as out:
-                out.write(archive.read(name))
-            connection = sqlite3.connect(path)
-            try:
-                row = connection.execute("SELECT models FROM col").fetchone()
-            finally:
-                connection.close()
-    if not row or not row[0]:
-        return 0
-    models = json.loads(row[0])
+def count_answer_specs(collection: Collection) -> int:
+    """Count answer specs on the note types of the collection Anki imported."""
     total = 0
-    for model in models.values():
+    for model in collection.models.all():
         engram = model.get("engram") or {}
         if engram.get("v") == 1:
             total += len(engram.get("answer_specs") or {})
@@ -81,7 +59,7 @@ def main() -> int:
             print(f"media_names: {', '.join(sorted(media))}")
             print(f"deck_configs: {len(configs)}")
             print(f"deck_config_names: {', '.join(sorted(cfg['name'] for cfg in configs))}")
-            print(f"answer_specs: {count_answer_specs(package_path)}")
+            print(f"answer_specs: {count_answer_specs(collection)}")
         finally:
             collection.close()
     return 0

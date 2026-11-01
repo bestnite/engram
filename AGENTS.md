@@ -184,8 +184,13 @@ this file, and commit messages.
 - **Export format.** engram writes an `.apkg` the reference release imports: the collection is legacy
   schema 11 in `collection.anki21`; note types, notes, cards, media and one deck configuration travel;
   the caller's own card states, review log and FSRS weights travel only when requested; and answer
-  controls ride in one note type key (`engram`) that Anki keeps through import and export. Parameters
-  the legacy deck configuration cannot express are left out deliberately.
+  controls ride in one note type key (`engram`). The key survives engram → engram and engram → Anki:
+  engram's reader reads it back from its own package, and Anki's importer keeps the unknown key. It is
+  dropped when Anki re-exports the collection in its default modern layout, which stores note types as
+  protobuf, and engram's reader returns such a note type without the key, so machine grading is lost on
+  that path. This is a known limitation, not a promise; the import report's `answer_specs_missing` count
+  makes the loss visible. Parameters the legacy deck configuration cannot express are left out
+  deliberately.
 - **Ported files.** A Go or TypeScript file ported from Anki keeps Anki's header
   (`Copyright: Ankitects Pty Ltd and contributors`, `License: GNU AGPL, version 3 or later`) and
   names the upstream path it was ported from, at the reference tag.

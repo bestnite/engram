@@ -237,6 +237,7 @@
       ['package.report.weights_applied', value.weights_applied ? 1 : 0], ['package.report.weights_discarded', value.weights_discarded ? 1 : 0],
       ['package.report.weights_invalid', value.weights_invalid ? 1 : 0],
       ...(value.cards_skipped > 0 ? [['package.report.cards_skipped', value.cards_skipped] as [string, number]] : []),
+      ...(value.answer_specs_missing > 0 ? [['package.report.answer_specs_missing', value.answer_specs_missing] as [string, number]] : []),
       ...(value.deck_config_skipped ? [['package.report.deck_config_skipped', 1] as [string, number]] : []),
       ['package.report.match_rule', value.match_rule || '—'],
     ];
