@@ -71,3 +71,66 @@ func TestImportedAnkiMemoryPreview(t *testing.T) {
 		})
 	}
 }
+
+func TestAnkiResetRollbackPreview(t *testing.T) {
+	dbs := map[string]*gorm.DB{"sqlite": newTestDB(t)}
+	if db, ok := pgtest.Open(t); ok {
+		if err := db.AutoMigrate(store.AllModels()...); err != nil {
+			t.Fatal(err)
+		}
+		dbs["postgres"] = db
+	}
+	for driver, db := range dbs {
+		t.Run(driver, func(t *testing.T) {
+			user := store.User{Username: "reset", Email: "reset@example.com", DisplayName: "reset", Role: store.RoleUser, Status: store.StatusActive, Locale: "en", Timezone: "UTC"}
+			if err := db.Create(&user).Error; err != nil {
+				t.Fatal(err)
+			}
+			const start int64 = 1600000000000
+			const day int64 = 86400000
+			pkg := anki.WritePackage{Collection: anki.WriteCollection{
+				CreatedAt:   1600000000,
+				NoteTypes:   []anki.WriteNoteType{{ID: 10, Name: "Basic", Fields: []anki.Field{{Name: "Front"}}, Templates: []anki.Template{{Name: "Card", QFormat: "{{Front}}", AFormat: "{{Front}}"}}}},
+				Decks:       []anki.WriteDeck{{ID: 20, Name: "Reset", ConfigID: 30}},
+				DeckConfigs: []anki.WriteDeckConfig{{ID: 30, Name: "Default", DesiredRetention: .9, LearningSteps: []float64{1, 10}, RelearningSteps: []float64{10}, MaximumIntervalDays: 36500}},
+				Notes:       []anki.WriteNote{{ID: 40, GUID: "guid", NoteTypeID: 10, Fields: []string{"front"}}},
+				Cards:       []anki.WriteCard{{ID: 50, NoteID: 40, DeckID: 20, Type: 2, Queue: 2, Due: 210, Ivl: 7, Factor: 2500}},
+				Reviews:     []anki.WriteReview{{ID: start, CardID: 50, Ease: 3, Type: 0}, {ID: start + day, CardID: 50, Ease: 3, Type: 1, Ivl: 3}, {ID: start + 200*day, CardID: 50, Type: 4}, {ID: start + 201*day, CardID: 50, Ease: 3, Type: 0}, {ID: start + 204*day, CardID: 50, Ease: 3, Type: 1, Ivl: 7}},
+			}}
+			var archive bytes.Buffer
+			if err := anki.WriteArchive(&archive, &pkg); err != nil {
+				t.Fatal(err)
+			}
+			report, err := store.NewDeckStore(db).ImportPackage(context.Background(), user.ID, &archive, store.PackageImportOptions{Target: store.PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var deck store.Deck
+			if err := db.First(&deck, report.DeckID).Error; err != nil {
+				t.Fatal(err)
+			}
+			var preset store.Preset
+			if err := db.First(&preset, deck.PresetID).Error; err != nil {
+				t.Fatal(err)
+			}
+			scheduler := mustScheduler(t, &preset)
+			var state store.CardState
+			if err := db.Where("user_id = ?", user.ID).First(&state).Error; err != nil {
+				t.Fatal(err)
+			}
+			now := time.UnixMilli(start + 205*day)
+			for i := 0; i < 2; i++ {
+				state, err = undoOnce(t, db, state.CardID, user.ID, state.Version, scheduler, now)
+				if err != nil {
+					t.Fatalf("rollback %d: %v", i+1, err)
+				}
+			}
+			if state.State != "new" {
+				t.Fatalf("state = %+v, want new", state)
+			}
+			if _, err := scheduler.Preview(&state, now); err != nil {
+				t.Fatalf("Preview: %v", err)
+			}
+		})
+	}
+}

@@ -23,6 +23,47 @@ import (
 	"git.nite07.com/nite/engram/internal/anki"
 )
 
+func TestAnkiResetStateBefore(t *testing.T) {
+	const start int64 = 1600000000000
+	const day int64 = 86400000
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			for _, tc := range []struct {
+				name    string
+				reviews []anki.Review
+				want    []int
+			}{
+				{"reset", []anki.Review{{ID: start, CardID: 1, Type: 0, Ease: 3}, {ID: start + day, CardID: 1, Type: 1, Ease: 3}, {ID: start + 200*day, CardID: 1, Type: 4, Ease: 0, Factor: 0}, {ID: start + 201*day, CardID: 1, Type: 0, Ease: 1}}, []int{0, 2, 0}},
+				{"no_reset", []anki.Review{{ID: start, CardID: 1, Type: 0, Ease: 3}, {ID: start + day, CardID: 1, Type: 0, Ease: 1}}, []int{0, 1}},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					user := seedUsers(t, db, "reset_"+driver+"_"+tc.name)[0]
+					deck, notes := seedPackageDeck(t, db, user)
+					var card Card
+					if err := db.Where("note_id = ?", notes[0]).First(&card).Error; err != nil {
+						t.Fatal(err)
+					}
+					pkg := &anki.Package{CreatedAt: 1600000000, Cards: []anki.Card{{ID: 1, Type: 1, Queue: 1, Due: 1600000000}}, Reviews: tc.reviews}
+					if err := importAnkiProgress(context.Background(), db, user, deck, pkg, map[int64]uint64{1: card.ID}, PackageImportOptions{IncludeProgress: true}, &PackageImportReport{}, time.Now()); err != nil {
+						t.Fatal(err)
+					}
+					var reviews []Review
+					if err := db.Where("card_id = ? AND user_id = ?", card.ID, user).Order("reviewed_at").Find(&reviews).Error; err != nil {
+						t.Fatal(err)
+					}
+					var got []int
+					for _, r := range reviews {
+						got = append(got, r.StateBefore)
+					}
+					if !reflect.DeepEqual(got, tc.want) {
+						t.Fatalf("state_before = %v, want %v", got, tc.want)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestAnkiProgressApproximationWarn(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {

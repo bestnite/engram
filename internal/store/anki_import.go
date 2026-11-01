@@ -1542,6 +1542,10 @@ func deriveAnkiMemory(card anki.Card, state *CardState, engine *fsrs.FSRS, histo
 	return data.LastReview, true, nil
 }
 
+func isAnkiReset(r anki.Review) bool {
+	return r.Type == 4
+}
+
 // importAnkiProgress keeps per-user state separate from shared card content and
 // derives missing memory states.
 func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64, pkg *anki.Package, cardIDs map[int64]uint64, opts PackageImportOptions, report *PackageImportReport, now time.Time) error {
@@ -1629,7 +1633,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	lastDay := make(map[int64]time.Time)
 	reset := make(map[int64]int64)
 	for _, r := range pkg.Reviews {
-		if r.Type == 4 && r.ID > reset[r.CardID] {
+		if isAnkiReset(r) && r.ID > reset[r.CardID] {
 			reset[r.CardID] = r.ID
 		}
 	}
@@ -1756,7 +1760,11 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	for _, r := range pkg.Reviews {
 		// Anki's log has no pre-rating state, so deriving it from the review type is lossy.
 		earlier := seen[r.CardID]
-		seen[r.CardID] = true
+		if isAnkiReset(r) {
+			delete(seen, r.CardID)
+		} else {
+			seen[r.CardID] = true
+		}
 		before := 0
 		switch r.Type {
 		case 0:
