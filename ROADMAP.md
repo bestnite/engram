@@ -528,25 +528,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `git grep -n equalAnkiState` is empty. Evidence is the raw scoped `go test` and `go vet` output, the
   PostgreSQL run with `TEST_PG_DSN` set, and the grep output.
 
-- [ ] **M18-58 `.edeck` import applies the scheduler limits `M18-17` gave `.apkg`** —
-  `createPresetFromPackage` in `internal/store/package_import.go` copies `maximum_interval_days`,
-  `learning_steps` and `relearning_steps` of `preset.json` unchecked. It replaces only a maximum
-  interval that is 0 or less. It writes the row with `tx.Create`, not `PresetStore.Create`, so the
-  36 500-day bound `M18-17` added to `validatePresetForWrite` never runs on this path. Reproduced on
-  `main` on both drivers: a package preset with `maximum_interval_days` 50 000 and `learning_steps`
-  `-1m` is stored with both values. go-fsrs v4.0.0 `NewFSRS` then finds `Parameters.Validate` failing
-  and schedules the deck with `fsrs.DefaultParam()`. A preset with weights whose first value is 0.5 and
-  retention 0.85, and with either of these values, gets the default first weight 0.212 and retention
-  0.9. The fix applies the rule `createAnkiPreset` follows since `M18-17`. A maximum interval above
-  36 500 is stored as 36 500. A step list whose parts `ankiStepMinutes` in
-  `internal/store/anki_export.go` refuses, or which holds a negative step, keeps the preset's default
-  steps. The relearning steps follow the same rule. If `M18-5` lands first, this entry is deleted with
-  a commit message that names `M18-5`. *Acceptance:* a table test in `internal/store` calls
-  `createPresetFromPackage` with a maximum interval of 50 000, learning steps `-1m`, learning steps
-  `abc` and relearning steps `-10m`, and checks the stored preset. Every existing case of
-  `TestImportPackageApplyWeights` keeps its result. Evidence is the raw scoped `go test` and `go vet`
-  output.
-
 - [ ] **M18-59 Stored presets the scheduler cannot use are repaired** — v0.2.0 and v0.2.1 accepted every
   positive `maximum_interval_days` on `POST` and `PATCH /api/v1/presets`, because
   `validatePresetForWrite` checked only `<= 0`. `.apkg` imports before `238ede0` copied the package's
