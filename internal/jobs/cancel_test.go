@@ -8,9 +8,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -102,5 +105,94 @@ func TestCancelRunningJobKillsProcessAndUnblocksQueue(t *testing.T) {
 	done := waitForStatus(t, st, second.ID, StatusSucceeded, 5*time.Second)
 	if done.Status != StatusSucceeded {
 		t.Errorf("second job status = %q, want %q", done.Status, StatusSucceeded)
+	}
+}
+
+// TestCancelQueuedJobAtPickupNeverRunsCommand covers the queued-to-running race: the
+// worker has read the queued row and is between that read and MarkRunning when Cancel
+// marks the row failed. The subprocess must never start, and the terminal row must keep
+// the cancellation reason instead of being flipped to running and then succeeded.
+func TestCancelQueuedJobAtPickupNeverRunsCommand(t *testing.T) {
+	db, err := store.Open("sqlite", filepath.Join(t.TempDir(), "jobs.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := store.AutoMigrate(context.Background(), db); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	st := NewStore(db)
+
+	var ran atomic.Bool
+	runner, err := New(Deps{
+		DB:      db,
+		Store:   st,
+		Timeout: 5 * time.Second,
+		Command: func(context.Context, *store.Job, Reporter) (Command, error) {
+			ran.Store(true)
+			return Command{Name: "/bin/true"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Block the worker's first job read by primary key after its row was scanned. The
+	// read is the last step before the queued-to-running transition, so cancelling while
+	// it is held reproduces the interleaving deterministically.
+	var stalled atomic.Bool
+	reached := make(chan struct{})
+	release := make(chan struct{})
+	hook := func(tx *gorm.DB) {
+		sql := tx.Statement.SQL.String()
+		if !strings.Contains(sql, "id = ") {
+			return
+		}
+		if stalled.CompareAndSwap(false, true) {
+			close(reached)
+			<-release
+		}
+	}
+	if err := db.Callback().Query().After("gorm:query").Register("test:queued_pickup", hook); err != nil {
+		t.Fatalf("register query hook: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Query().Remove("test:queued_pickup") })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	runner.Start(ctx)
+
+	job, err := runner.Enqueue(context.Background(), KindOptimize, nil)
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	select {
+	case <-reached:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("the worker never read the queued job")
+	}
+
+	if err := runner.Cancel(context.Background(), job.ID); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	close(release)
+
+	// Give the worker time to resume past the read and reach its transition. A command
+	// that ran would set the flag, and a running transition would rewrite the row.
+	time.Sleep(300 * time.Millisecond)
+	if ran.Load() {
+		t.Errorf("the subprocess ran after the job was cancelled while queued")
+	}
+	got, err := st.ByID(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("ByID: %v", err)
+	}
+	if got.Status != StatusFailed {
+		t.Errorf("status after cancelling the queued job = %q, want %q", got.Status, StatusFailed)
+	}
+	if got.Error == nil || *got.Error != CancelReason {
+		t.Errorf("cancelled job error = %v, want %q", got.Error, CancelReason)
+	}
+	if got.StartedAt != nil {
+		t.Errorf("cancelled job started_at = %v, want NULL", got.StartedAt)
 	}
 }

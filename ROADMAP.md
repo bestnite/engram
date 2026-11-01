@@ -1426,7 +1426,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   than `running`; a regression starts a long job, cancels the process context, and asserts the row is terminal,
   the process group is gone, and the next `Start` has nothing to reclaim.
 
-- [ ] **M19-71 A job cancelled while it is still queued runs anyway and is reported succeeded** — *should-fix.*
+- [x] **M19-71 A job cancelled while it is still queued runs anyway and is reported succeeded** — *should-fix.*
   The worker reads the row at `internal/jobs/jobs.go:371-373` and only then registers the cancel handle that
   `Cancel` looks for at `:376-382`; `Cancel`'s queued branch loads the row itself and writes `failed` directly
   (`:297-309`). `Store.MarkRunning` updates by id with no status predicate (`internal/jobs/store.go:125-130`,
@@ -1440,6 +1440,30 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   conditional update (`WHERE status = 'queued'`) and treat zero affected rows as "already terminal, do not
   start"; a regression cancels a queued job at the moment the worker has read it and asserts the subprocess
   never runs and the row stays `failed`.
+  *Closed by this commit (`fix(jobs): refuse to start a job that left the queue`).*
+  `Store.MarkRunning` (`internal/jobs/store.go:132`) and the new `Store.FinishQueuedFailed` (`:151`) update a
+  row only while `status = 'queued'` and return `ErrJobNotQueued` (`:127`) when they affect no row.
+  `execute` (`internal/jobs/jobs.go:408`) treats that sentinel as "already terminal" and returns without
+  starting the subprocess or calling `fail`, and `Cancel` (`:283`) retries once so a job that reached
+  `running` is cancelled through its registered handle instead of being reported cancelled while it runs.
+  `TestCancelQueuedJobAtPickupNeverRunsCommand` (`internal/jobs/cancel_test.go:115`) stalls the worker's
+  `ByID` read with a GORM query callback after the queued row was scanned, cancels while it is held, then
+  asserts the command builder never ran, the status is `failed`, the error is `CancelReason`, and
+  `started_at` is NULL. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/jobs/ -run TestCancelQueuedJobAtPickupNeverRunsCommand -count=1 -v`:
+  ```
+  === RUN   TestCancelQueuedJobAtPickupNeverRunsCommand
+  2026/11/02 03:23:12 INFO job left the queue before it started job_id=1
+  2026/11/02 03:23:12 /home/nite/dev/engram/internal/jobs/cancel_test.go:158
+  [warn] removing callback `test:queued_pickup` from /home/nite/dev/engram/internal/jobs/cancel_test.go:158
+  --- PASS: TestCancelQueuedJobAtPickupNeverRunsCommand (0.31s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/jobs	0.322s
+  ```
+  Before the change the same test failed with `the subprocess ran after the job was cancelled while queued`,
+  `status after cancelling the queued job = "succeeded", want "failed"`, and
+  `cancelled job error = <nil>, want "cancelled by admin"`. `go vet ./internal/jobs/` and
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/jobs/ -count=1` pass.
 
 - [ ] **M19-72 A child that leaves the process group keeps the timeout from ending the job** — *should-fix.*
   `runProcess` hands the child a `tailBuffer` for stdout and stderr (`internal/jobs/jobs.go:560-562`), so

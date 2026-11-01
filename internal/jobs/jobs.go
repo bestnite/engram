@@ -279,34 +279,56 @@ func (r *Runner) List(ctx context.Context, limit, offset int) ([]store.Job, int6
 // Why wait for currentDone: acceptance requires "after cancelling, nothing hangs and a new enqueue succeeds". The single-concurrency check looks at
 // unfinished rows in the jobs table, so only once execute has written failed will the next Enqueue stop hitting 409.
 func (r *Runner) Cancel(ctx context.Context, id uint64) error {
-	r.runMu.Lock()
-	if r.currentID == id && r.currentCancel != nil {
-		cancel := r.currentCancel
-		done := r.currentDone
+	// A running job is cancelled through its registered handle; a queued one is marked
+	// failed. The queued-to-failed write is conditional, so a job that moved to running
+	// between the read and the write is handled by the running path on one retry instead
+	// of being reported cancelled while its subprocess keeps going.
+	for attempt := 0; ; attempt++ {
+		r.runMu.Lock()
+		if r.currentID == id && r.currentCancel != nil {
+			cancel := r.currentCancel
+			done := r.currentDone
+			r.runMu.Unlock()
+			cancel()
+			select {
+			case <-done:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
 		r.runMu.Unlock()
-		cancel()
-		select {
-		case <-done:
+
+		job, err := r.store.ByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		switch job.Status {
+		case StatusFailed:
+			// Already terminal (most likely just cancelled): cancellation is idempotent, so return success.
 			return nil
-		case <-ctx.Done():
-			return ctx.Err()
+		case StatusQueued:
+			err := r.store.FinishQueuedFailed(ctx, id, r.now(), CancelReason)
+			if err == nil {
+				return nil
+			}
+			if !errors.Is(err, ErrJobNotQueued) {
+				return err
+			}
+			// The worker won the transition; the retry above finds its registered handle.
+		case StatusRunning:
+			// A running row normally has a registered handle. One retry covers the
+			// registration, and a row this process does not own is failed as before.
+			if attempt > 0 {
+				return r.store.FinishFailed(ctx, id, r.now(), CancelReason, "")
+			}
+		default:
+			return ErrNotRunning
+		}
+		if attempt > 0 {
+			return ErrNotRunning
 		}
 	}
-	r.runMu.Unlock()
-
-	// Not running: it may still be waiting in the queue. Persist failed directly; the worker skips it as terminal when it picks it up.
-	job, err := r.store.ByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	if job.Status == StatusFailed {
-		// Already terminal (most likely just cancelled): cancellation is idempotent, so return success.
-		return nil
-	}
-	if job.Status != StatusQueued && job.Status != StatusRunning {
-		return ErrNotRunning
-	}
-	return r.store.FinishFailed(ctx, id, r.now(), CancelReason, "")
 }
 
 // SetOnSuccess sets the job success hook; it must be called before Start to avoid racing the worker (same as SetOnFailure).
@@ -383,6 +405,12 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 
 	startedAt := r.now()
 	if err := r.store.MarkRunning(ctx, job.ID, startedAt); err != nil {
+		if errors.Is(err, ErrJobNotQueued) {
+			// Cancelled between the read above and this transition: Cancel already wrote
+			// the terminal row, and the subprocess must not start.
+			r.logger.Info("job left the queue before it started", "job_id", job.ID)
+			return
+		}
 		// A failed transition to running must also reach a terminal state: staying in queued would make Store.Active count it as in-flight,
 		// making every later Enqueue return 409 forever until the process restarts and RecoverStale reclaims it (same root symptom).
 		// The error text names the failing step, so jobs.error pinpoints it at a glance.

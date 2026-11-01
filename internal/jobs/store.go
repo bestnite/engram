@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -121,12 +122,47 @@ func (s *Store) List(ctx context.Context, limit, offset int) ([]store.Job, int64
 	return jobs, total, nil
 }
 
-// MarkRunning sets the job to running and records started_at.
+// ErrJobNotQueued reports that a job had already left the queued state when a transition
+// written only for a queued row ran. The caller must not start the job in that case.
+var ErrJobNotQueued = errors.New("job is no longer queued")
+
+// MarkRunning sets the job to running and records started_at. The update is conditional on
+// the row still being queued: a job cancelled while the worker was reading it is already
+// failed, and must not be flipped back to running and executed.
 func (s *Store) MarkRunning(ctx context.Context, id uint64, at time.Time) error {
-	return s.update(ctx, id, map[string]any{
-		"status":     StatusRunning,
-		"started_at": at.UTC(),
-	})
+	res := s.db.WithContext(ctx).Model(&store.Job{}).
+		Where("id = ? AND status = ?", id, StatusQueued).
+		Updates(map[string]any{
+			"status":     StatusRunning,
+			"started_at": at.UTC(),
+		})
+	if res.Error != nil {
+		return fmt.Errorf("update job %d: %w", id, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("update job %d: %w", id, ErrJobNotQueued)
+	}
+	return nil
+}
+
+// FinishQueuedFailed marks a queued job failed, conditional on the row still being queued.
+// A job that moved to running between the caller's read and this write is left to the
+// running cancellation path instead of being reported as cancelled here.
+func (s *Store) FinishQueuedFailed(ctx context.Context, id uint64, at time.Time, msg string) error {
+	res := s.db.WithContext(ctx).Model(&store.Job{}).
+		Where("id = ? AND status = ?", id, StatusQueued).
+		Updates(map[string]any{
+			"status":      StatusFailed,
+			"finished_at": at.UTC(),
+			"error":       msg,
+		})
+	if res.Error != nil {
+		return fmt.Errorf("update job %d: %w", id, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("update job %d: %w", id, ErrJobNotQueued)
+	}
+	return nil
 }
 
 // SetStage updates stage-level progress.
