@@ -51,17 +51,66 @@ func Start(now time.Time, loc *time.Location, cutoffHour int) time.Time {
 		loc = time.UTC
 	}
 	cutoffHour = NormalizeCutoff(cutoffHour)
-	day := now.In(loc).Add(-time.Duration(cutoffHour) * time.Hour)
-	return time.Date(day.Year(), day.Month(), day.Day(), cutoffHour, 0, 0, 0, loc).UTC()
+	y, m, d := now.In(loc).Add(-time.Duration(cutoffHour) * time.Hour).Date()
+	return localDayStart(y, m, d, cutoffHour, loc)
 }
 
-// NextStart returns the instant the review day after the one containing now begins, in UTC. It adds one calendar day in
-// loc rather than 24 hours, so a daylight-saving change still lands on the cutoff hour.
+// NextStart returns the instant the review day after the one containing now begins, in UTC. It advances one local
+// calendar day rather than 24 hours, so a daylight-saving change still lands on the cutoff hour.
 func NextStart(now time.Time, loc *time.Location, cutoffHour int) time.Time {
+	return AddDays(now, loc, cutoffHour, 1)
+}
+
+// AddDays returns the instant the review day n local calendar days after the one containing base begins, in UTC. Days
+// are counted on the local calendar, so a daylight-saving change keeps the cutoff hour instead of drifting by an hour.
+func AddDays(base time.Time, loc *time.Location, cutoffHour, n int) time.Time {
 	if loc == nil {
 		loc = time.UTC
 	}
-	return Start(now, loc, cutoffHour).In(loc).AddDate(0, 0, 1).UTC()
+	cutoffHour = NormalizeCutoff(cutoffHour)
+	y, m, d := Start(base, loc, cutoffHour).In(loc).Date()
+	return localDayStart(y, m, d+n, cutoffHour, loc)
+}
+
+// localDayStart returns the instant the review day on local date y-m-d begins, in UTC. It is the earliest instant whose
+// local clock reads the cutoff hour, and the transition instant when a daylight-saving change skips that hour.
+//
+// time.Date alone is not enough for those two days: it resolves a skipped hour backwards, so the day would begin up to
+// an hour before the cutoff, and its choice between two repeated occurrences of the hour is unspecified. Both break the
+// review day's length and every boundary derived from it, so the instant is resolved from the zone offsets in force
+// around that date instead.
+func localDayStart(y int, m time.Month, d, cutoffHour int, loc *time.Location) time.Time {
+	if loc == nil {
+		loc = time.UTC
+	}
+	// The wall clock at the cutoff, written as a UTC instant so adding an offset cannot itself be ambiguous.
+	wall := time.Date(y, m, d, cutoffHour, 0, 0, 0, time.UTC)
+	offsets := make(map[int]struct{}, 2)
+	for _, probe := range []time.Time{wall.Add(-48 * time.Hour), wall.Add(48 * time.Hour)} {
+		_, offset := probe.In(loc).Zone()
+		offsets[offset] = struct{}{}
+	}
+	var first time.Time
+	for offset := range offsets {
+		candidate := wall.Add(-time.Duration(offset) * time.Second)
+		local := candidate.In(loc)
+		if local.Year() != y || local.Month() != m || local.Day() != d {
+			continue
+		}
+		// With the offset in force at the candidate the clock reads the cutoff. A skipped hour reads up to the
+		// shift past it instead, which is the transition instant.
+		if local.Hour() < cutoffHour || local.Hour() > cutoffHour+2 {
+			continue
+		}
+		if first.IsZero() || candidate.Before(first) {
+			first = candidate
+		}
+	}
+	if first.IsZero() {
+		// No daylight-saving change near this date: time.Date is exact.
+		return time.Date(y, m, d, cutoffHour, 0, 0, 0, loc).UTC()
+	}
+	return first.UTC()
 }
 
 // Day returns the review day containing now as YYYY-MM-DD, the value written to and compared with reviews.review_day.

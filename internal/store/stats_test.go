@@ -157,11 +157,11 @@ func TestStatsDueForecastMatchesHandSQL(t *testing.T) {
 				return n
 			}
 			join := "FROM card_states cs JOIN cards c ON c.id = cs.card_id AND c.deleted_at IS NULL AND cs.suspended_at IS NULL JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL WHERE cs.state <> 'new' AND cs.user_id = ?"
-			wantToday := hand("SELECT COUNT(*) "+join+" AND cs.due_at <= ?", 1, edges[0])
-			wantTomorrow := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ? AND cs.due_at <= ?", 1, edges[0], edges[1])
-			want7 := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ? AND cs.due_at <= ?", 1, edges[1], edges[2])
-			want30 := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ? AND cs.due_at <= ?", 1, edges[2], edges[3])
-			wantLater := hand("SELECT COUNT(*) "+join+" AND cs.due_at > ?", 1, edges[3])
+			wantToday := hand("SELECT COUNT(*) "+join+" AND cs.due_at < ?", 1, edges[0])
+			wantTomorrow := hand("SELECT COUNT(*) "+join+" AND cs.due_at >= ? AND cs.due_at < ?", 1, edges[0], edges[1])
+			want7 := hand("SELECT COUNT(*) "+join+" AND cs.due_at >= ? AND cs.due_at < ?", 1, edges[1], edges[2])
+			want30 := hand("SELECT COUNT(*) "+join+" AND cs.due_at >= ? AND cs.due_at < ?", 1, edges[2], edges[3])
+			wantLater := hand("SELECT COUNT(*) "+join+" AND cs.due_at >= ?", 1, edges[3])
 			wantNew := hand(`SELECT COUNT(*) FROM cards c JOIN notes n ON n.id = c.note_id AND n.deleted_at IS NULL LEFT JOIN card_states cs ON cs.card_id = c.id AND cs.user_id = ? WHERE c.deleted_at IS NULL AND cs.suspended_at IS NULL AND (cs.card_id IS NULL OR cs.state = 'new')`, 1)
 
 			if got.Today != wantToday || got.Tomorrow != wantTomorrow || got.Within7 != want7 ||

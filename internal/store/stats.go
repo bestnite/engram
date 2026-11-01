@@ -71,7 +71,9 @@ func (s *StatsStore) ReviewVolume(ctx context.Context, userID uint64, today stri
 //
 // The buckets and New are disjoint: a buried new card carries a due_at but is still new, so it is counted in New only.
 // The day boundary is the review-day start from reviewday.Start: the cutoff moment of the date that local (now - day_cutoff_hour) falls in.
-// The "today" bucket holds every scheduled card with due_at <= the end of today, so overdue cards are never missed.
+// Every other boundary is that instant advanced by local calendar days. Buckets are half-open, so the "today" bucket
+// holds every scheduled card due before tomorrow's start and overdue cards are never missed, and a card due exactly at a
+// boundary belongs to the later bucket.
 type DueForecast struct {
 	Today    int64
 	Tomorrow int64
@@ -89,10 +91,13 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 	if userID == 0 {
 		return DueForecast{}, fmt.Errorf("due forecast: user id is required")
 	}
-	e1 := reviewday.Start(now, loc, cutoffHour).Add(24 * time.Hour) // end of today
-	e2 := e1.Add(24 * time.Hour)                                    // end of tomorrow
-	e7 := e1.Add(7 * 24 * time.Hour)                                // end of the 7-day window
-	e30 := e1.Add(30 * 24 * time.Hour)                              // end of the 30-day window
+	// Every boundary is a local calendar day's start, so a daylight-saving change keeps each window the same
+	// number of days. The buckets are half-open: a card due exactly at a boundary belongs to the later bucket.
+	today := reviewday.Start(now, loc, cutoffHour)
+	e1 := reviewday.AddDays(today, loc, cutoffHour, 1)   // end of today
+	e2 := reviewday.AddDays(today, loc, cutoffHour, 2)   // end of tomorrow
+	e7 := reviewday.AddDays(today, loc, cutoffHour, 7)   // end of the 7-day window
+	e30 := reviewday.AddDays(today, loc, cutoffHour, 30) // end of the 30-day window
 
 	db := s.db.WithContext(ctx)
 	scope := activeDeckIDsQuery(s.db, userID)
@@ -108,11 +113,11 @@ func (s *StatsStore) DueForecast(ctx context.Context, userID, deckID uint64, now
 		Later    int64 `gorm:"column:b_later"`
 	}
 	err := WhereScheduled(UserCardStates(db, userID, scope)).
-		Select(`COALESCE(SUM(CASE WHEN cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_today,
-			COALESCE(SUM(CASE WHEN cs.due_at > ? AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_tomorrow,
-			COALESCE(SUM(CASE WHEN cs.due_at > ? AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_within7,
-			COALESCE(SUM(CASE WHEN cs.due_at > ? AND cs.due_at <= ? THEN 1 ELSE 0 END), 0) AS b_within30,
-			COALESCE(SUM(CASE WHEN cs.due_at > ? THEN 1 ELSE 0 END), 0) AS b_later`,
+		Select(`COALESCE(SUM(CASE WHEN cs.due_at < ? THEN 1 ELSE 0 END), 0) AS b_today,
+			COALESCE(SUM(CASE WHEN cs.due_at >= ? AND cs.due_at < ? THEN 1 ELSE 0 END), 0) AS b_tomorrow,
+			COALESCE(SUM(CASE WHEN cs.due_at >= ? AND cs.due_at < ? THEN 1 ELSE 0 END), 0) AS b_within7,
+			COALESCE(SUM(CASE WHEN cs.due_at >= ? AND cs.due_at < ? THEN 1 ELSE 0 END), 0) AS b_within30,
+			COALESCE(SUM(CASE WHEN cs.due_at >= ? THEN 1 ELSE 0 END), 0) AS b_later`,
 			e1, e1, e2, e2, e7, e7, e30, e30).
 		Scan(&row).Error
 	if err != nil {

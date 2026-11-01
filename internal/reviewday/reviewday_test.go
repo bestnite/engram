@@ -99,6 +99,32 @@ func TestDayStartNextStart(t *testing.T) {
 			wantStart: time.Date(2026, 10, 31, 4, 0, 0, 0, newYork).UTC(),
 			wantNext:  time.Date(2026, 11, 1, 4, 0, 0, 0, newYork).UTC(),
 		},
+		{
+			// Daylight saving starts at 02:00, so a 02:00 cutoff never occurs. The day begins at the transition
+			// instant (03:00 EDT), not an hour earlier, and the next day returns to 02:00.
+			name: "cutoff inside the skipped hour resolves to the transition",
+			now:  time.Date(2026, 3, 8, 12, 0, 0, 0, newYork), loc: newYork, cutoff: 2,
+			wantDay:   "2026-03-08",
+			wantStart: time.Date(2026, 3, 8, 3, 0, 0, 0, newYork).UTC(),
+			wantNext:  time.Date(2026, 3, 9, 2, 0, 0, 0, newYork).UTC(),
+		},
+		{
+			// Daylight saving ends at 02:00, so 01:00 occurs twice. The day begins at the first occurrence
+			// (01:00 EDT), and the 25-hour day ends at 01:00 EST the next day.
+			name: "cutoff inside the repeated hour takes its first occurrence",
+			now:  time.Date(2026, 11, 1, 12, 0, 0, 0, newYork), loc: newYork, cutoff: 1,
+			wantDay:   "2026-11-01",
+			wantStart: time.Date(2026, 11, 1, 5, 0, 0, 0, time.UTC),
+			wantNext:  time.Date(2026, 11, 2, 6, 0, 0, 0, time.UTC),
+		},
+		{
+			// The second occurrence of 01:00 does not start a second review day.
+			name: "a moment in the repeated hour stays in the same day",
+			now:  time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC), loc: newYork, cutoff: 1,
+			wantDay:   "2026-11-01",
+			wantStart: time.Date(2026, 11, 1, 5, 0, 0, 0, time.UTC),
+			wantNext:  time.Date(2026, 11, 2, 6, 0, 0, 0, time.UTC),
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

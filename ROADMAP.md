@@ -859,7 +859,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestExportAnkiPackage|TestAnkiExport|TestImportPackage|TestPackageImport|TestMedia' -count=1`
   passes on both drivers.
 
-- [ ] **M19-23 The due forecast uses a fixed 24 hours in place of the local day boundary** — *should-fix.*
+- [x] **M19-23 The due forecast uses a fixed 24 hours in place of the local day boundary** — *should-fix.*
   `stats.go` builds forecast buckets from `start+24h` while the review-day code uses local `AddDate`
   (`internal/store/stats.go:92-95,111-116`), so the boundary is an hour off on the day before a DST
   change; `<=` also puts a card due exactly at the next cut-off into today. *Reproduced* on both drivers
@@ -869,6 +869,58 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   local calendar day, use half-open intervals, and test both sides of a DST change and the exact
   cut-off. The neighbouring `reviewday.Start` behaviour inside the DST cut-off hour needs fixing
   together with this.
+  *Closed by this commit (`fix(store): derive the due forecast from the local calendar day`).*
+  `DueForecast` (`internal/store/stats.go:92`) now takes `reviewday.Start(now, …)` as today's start and
+  derives the other four boundaries with the new `reviewday.AddDays` (`internal/reviewday/reviewday.go:60`),
+  which counts local calendar days, so each window keeps its length across a spring or autumn change. The
+  five bucket predicates are half-open (`due_at < e1`, then `>= e1 AND < e2`, …), so a card due exactly
+  at a boundary belongs to the later bucket. The neighbouring defect was real: `Start` resolved a cut-off
+  hour that a daylight-saving change skips backwards, so a 02:00 cut-off on the spring change began at
+  01:00 EST (one hour early) and `NextStart` inherited the shift; `localDayStart`
+  (`internal/reviewday/reviewday.go:79`) now resolves the instant from the zone offsets in force around
+  the date — the earliest instant reading the cut-off, or the transition instant for a skipped hour — and
+  `NextStart` is `AddDays(…, 1)`.
+  `TestStatsDueForecastUsesTheLocalDayBoundary` (`internal/store/stats_dst_test.go`) runs six cases on
+  both drivers at noon on each eve: 07:30Z is today, the exact boundary and 08:30Z are tomorrow on the
+  spring eve, 08:30Z is still today and the exact 09:00Z boundary is tomorrow on the fall eve, and a
+  card two days out follows the calendar into the 7-day window. `TestDayStartNextStart`
+  (`internal/reviewday/reviewday_test.go`) gained the skipped-hour, repeated-hour and moment-inside-the-
+  repeated-hour cases. `TestStatsDueForecastMatchesHandSQL` now uses the same half-open predicates and
+  the corrected 7- and 30-day edges. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestStatsDueForecastUsesTheLocalDayBoundary|TestStatsDueForecastMatchesHandSQL|TestStatsDueForecastCountsBuriedNewCardOnce|TestPausedDeckLeavesForecastAndRetroCheck' -count=1 -v`:
+  ```
+  --- PASS: TestPausedDeckLeavesForecastAndRetroCheck (0.36s)
+      --- PASS: TestPausedDeckLeavesForecastAndRetroCheck/sqlite (0.02s)
+      --- PASS: TestPausedDeckLeavesForecastAndRetroCheck/postgres (0.29s)
+  --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary (0.37s)
+      --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/sqlite (0.02s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/sqlite/spring_eve:_the_end_of_today_is_tomorrow's_first_instant (0.00s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/sqlite/spring_eve:_half_an_hour_after_the_end_of_today_is_tomorrow (0.00s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/sqlite/fall_eve:_half_an_hour_after_the_old_fixed_boundary_is_still_today (0.00s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/sqlite/fall_eve:_the_end_of_today_is_tomorrow's_first_instant (0.00s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/sqlite/fall_eve:_a_day_inside_the_7-day_window_follows_the_calendar (0.00s)
+      --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/postgres (0.29s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/postgres/spring_eve:_the_end_of_today_is_tomorrow's_first_instant (0.02s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/postgres/spring_eve:_half_an_hour_after_the_end_of_today_is_tomorrow (0.01s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/postgres/fall_eve:_half_an_hour_after_the_old_fixed_boundary_is_still_today (0.01s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/postgres/fall_eve:_the_end_of_today_is_tomorrow's_first_instant (0.01s)
+          --- PASS: TestStatsDueForecastUsesTheLocalDayBoundary/postgres/fall_eve:_a_day_inside_the_7-day_window_follows_the_calendar (0.01s)
+  --- PASS: TestStatsDueForecastMatchesHandSQL (0.31s)
+      --- PASS: TestStatsDueForecastMatchesHandSQL/sqlite (0.02s)
+      --- PASS: TestStatsDueForecastMatchesHandSQL/postgres (0.24s)
+  --- PASS: TestStatsDueForecastCountsBuriedNewCardOnce (0.98s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	2.035s
+  ```
+  With only `internal/store/stats.go` and `internal/reviewday/reviewday.go` reverted, the same run failed
+  on both drivers with `DueForecast() = {Today:1 Tomorrow:0 ...}, want {Today:0 Tomorrow:1 ...}` for the
+  exact spring boundary and the 08:30Z case, and
+  `DueForecast() = {Today:0 Tomorrow:1 ...}, want {Today:1 ...}` for the 08:30Z fall case; the reviewday
+  cases failed with `Start() = 2026-03-08 06:00:00 +0000 UTC, want 2026-03-08 07:00:00 +0000 UTC` and
+  `NextStart() = 2026-03-09 05:00:00 +0000 UTC, want 2026-03-09 06:00:00 +0000 UTC`.
+  `go test ./internal/reviewday/ ./internal/schedule/ ./internal/reminder/ ./internal/digest/ -count=1`
+  and `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestStats|TestPausedDeck|TestRetroCheck|TestDueForecast|TestQueue|TestBury|TestDigest|TestReminder' -count=1`
+  pass on both drivers.
 
 - [x] **M19-24 The upgrade preflight cannot inspect an early database and calls unconvertible data
   clean** — *should-fix.* The preflight probes `decks.public_id` for compatibility but still selects
