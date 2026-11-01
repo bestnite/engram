@@ -691,6 +691,147 @@ fine", and it does not mean "confirmed broken".
   the next sweep retries it, and add a test that makes one removal fail and expects the batch's other files
   to be gone and the failed row to survive.
 
+- [ ] **M19-55 The review page's global key handler swallows Space and Enter on its own controls** — *should-fix.*
+  `onKeydown` maps Space/Enter to reveal or submit and calls `preventDefault()` for every decision but `ignore`
+  (`frontend/src/lib/views/ReviewView.svelte:799-813`; the branch is `frontend/src/lib/review-shortcuts.ts:74-80`),
+  while `isTypingTarget` counts only input, textarea and select (`ReviewView.svelte:721-728`) and `isChoiceTarget`
+  is a constant `false` (`:731-733`). The listener is on the window (`:879`), so a focused button or link never
+  receives its default activation. *Reproduced* in a mounted view under happy-dom: with focus on the header's
+  Edit button, a Space keydown left `defaultPrevented: true click fired: false answer area now present: true` —
+  the card revealed instead of the button firing; Enter takes the same branch. The affected controls include the
+  edit entry, the exit link, the undo button and the answer-scroll checkbox. *Acceptance:* ignore the review keys
+  when the event target is a button, link or checkbox (or scope the listener to the card area), and add a client
+  test that activates each header control with Space and with Enter.
+
+- [ ] **M19-56 A deck filter does not survive a reload because the router decodes `+` literally** — *should-fix.*
+  `parseQuery` splits the query and calls `decodeURIComponent` (`frontend/src/lib/router/index.ts:11-24`, the
+  decode at `:21`), which leaves `+` as a plus, while the deck view writes the same address through
+  `URLSearchParams` (`frontend/src/lib/views/DeckDetailView.svelte:192-199`), which encodes a space as `+`.
+  *Reproduced* by calling the real functions: `matchRoute('/decks/abc?q=two+words').query` is
+  `{"q":"two+words"}` and `parseQuery('?q=two+words')` is `{"q":"two+words"}`, so after a reload, a back
+  navigation or the editor's return link the filter is read as the literal string `two+words` and the API
+  searches for a plus sign. The review page reads its own scope with `URLSearchParams`
+  (`ReviewView.svelte:249-266`), so the two readers of one address disagree about a tag that holds a space.
+  *Acceptance:* parse the address with one implementation that treats `+` as a space, and add a round-trip test
+  for a filter and a tag containing a space, a plus and a percent sign.
+
+- [ ] **M19-57 A malformed percent-encoded path throws during bootstrap and blanks the app** — *should-fix.*
+  `matchRoute` calls `decodeURIComponent` on each path segment and each query part with no guard
+  (`frontend/src/lib/router/index.ts:21,65`), and the route store is initialised from the current address at
+  module load (`:107`), so an address such as `/decks/%E0%A4%A` throws before the app mounts. *Reproduced* by
+  importing the real module: `matchRoute('/decks/%E0%A4%A') -> THREW URIError URI malformed`. The server serves
+  the SPA shell for any unknown GET page path (`internal/web/not_found.go:26-37`), so such an address reaches
+  the client; the same call runs on the user-controlled `?return=` value through `safeReturnPath`
+  (`frontend/src/lib/return-to.ts:27-30`), so an editor link with a malformed return path crashes the editor
+  too. *Acceptance:* a decode failure yields the 404 route or drops the parameter instead of throwing, with
+  tests for a malformed path, a malformed query value and a malformed return value.
+
+- [ ] **M19-58 The create-deck dialog re-requests the preset list forever when that read fails** — *should-fix.*
+  The effect reads `createPresets.length` and, on a failed fetch, assigns a new empty array
+  (`frontend/src/lib/views/DecksView.svelte:163-180`, the assignment at `:177`); the new array invalidates the
+  state the same effect tracks, so the effect runs again at once and starts another request. *Reproduced* by
+  mounting the real view against a rejecting `listPresets`: after opening the dialog and six flush rounds the
+  spy had recorded `listPresets calls after 6 flush rounds: 21`. In a running app this is a continuous request
+  loop for as long as the dialog stays open, and the dialog never reports why the list is empty. *Acceptance:*
+  fetch once per dialog opening (a flag or a promise held outside the tracked state), show the failure in the
+  dialog, and add a client test asserting exactly one request when the call rejects.
+
+- [ ] **M19-59 An older note-list response overwrites the newer filter and rewrites the address** — *should-fix.*
+  `loadData` has no request generation or abort (`frontend/src/lib/views/DeckDetailView.svelte:273-309`): it
+  assigns `notes`, `total`, `page` and `appliedFilters` and then calls `replaceAddress(listAddress)`
+  (`:297-301`) whichever response lands last, and the debounced filter input (`:345-348`), pagination
+  (`:357-367`) and the post-bulk reload (`:417`) can overlap. *Reproduced* by mounting the view with two filter
+  requests: after the newer `q=ab` response rendered `NEW`, resolving the older `q=a` request left the input
+  showing `ab` while the list showed `OLD-A` and the address became `/decks/d1?q=a`. *Acceptance:* keep one
+  in-flight generation per list (bump a counter and drop stale results, or abort the previous request) and add a
+  client regression with two out-of-order filter responses that must end on the newest result and address.
+
+- [ ] **M19-60 The sidebar shows the previous account's deck names after a 401 session switch** — *should-fix.*
+  `refreshSidebarDecks` returns without a request inside its 15-second throttle
+  (`frontend/src/lib/components/shell/sidebar.ts:83`), and `resetSidebarDecks` is called only from the explicit
+  logout path (`frontend/src/lib/components/shell/UserMenu.svelte:43-44`); `clearSession` on a 401 neither clears
+  the cache nor the throttle (`frontend/src/lib/auth/index.ts:71-80`), and an in-flight refresh is not cancelled
+  either (`sidebar.ts:79-87`). *Reproduced* against the real module: after account A's refresh the store held
+  `{"decks":[{"id":"a1","name":"A private deck","due":7}],"totalDue":7}`, and a non-forced refresh for account B
+  logged `B fetch called: 0` and left the store unchanged. After B signs in on the same tab the shell's route
+  effect calls that throttled refresh, so A's deck names and due counts stay visible for the rest of the window.
+  *Acceptance:* clear the sidebar cache and its throttle whenever the session becomes unauthenticated and on
+  login, cancel a refresh belonging to the previous session, and add a test that switches two clients and shows
+  only the second client's decks.
+
+- [ ] **M19-61 Every review render computes four interval previews that no page displays** — *should-fix.*
+  The SPA render handler calls `api.PreviewIntervals` for each card render and returns `intervals`
+  (`internal/web/review_api.go:313-331`), and that function's doc comment says the review page shows the values
+  under the four rating buttons (`internal/api/review_preview.go:25-26`). The frontend declares the field
+  (`frontend/src/lib/api/types.ts:943-944`) but no view reads it: a module-wide search for `intervals` finds only
+  the type and unrelated copy. Each render therefore adds a card read, a note read, a role check, a scheduler
+  build and a card-state read, then four scheduler previews, all discarded. Verified by reading the handler, the
+  API function and the search result; *Unverified:* the per-request cost was not measured. *Acceptance:* render
+  the four intervals under the rating buttons from that response, or remove the response field and the
+  per-render call so neither the API comment nor the type describes a UI that does not exist.
+
+- [ ] **M19-62 `npm run check` fails on main, so the CI frontend gate is red** — *should-fix.* Eleven type
+  errors in two test files: `frontend/src/tests/import-url.client.ts:345,365,394,417,438,466,519,552,588` build
+  preset fixtures with the retired `gate: {threshold, current, eligible}` shape, while `OptimizeGate` now
+  requires `reviews`, `min` and `shortfall` (`frontend/src/lib/api/types.ts:1376-1381`); the same file at `:464`
+  sets a `Deck.updated_at` that the server never sends; `frontend/src/tests/deck-export.client.ts:44` uses the
+  stale block too. *Reproduced:* `npm run check` exits 1 with `svelte-check found 11 errors and 0 warnings in 2
+  files`, and `.github/workflows/ci.yml:70` runs that script under `set -euo pipefail`. The 585 tests still pass,
+  so nothing else notices the drift. *Acceptance:* `npm run check` exits 0 against fixtures built from the
+  current payload shapes.
+
+- [ ] **M19-63 A failed privacy-policy read is displayed as "anyone may share with me"** — *should-fix.*
+  `loadSharePolicy` swallows the error and leaves the initial value `sharePolicy = 'anyone'`
+  (`frontend/src/lib/views/SettingsView.svelte:45,191-198`); the comment at `:197` argues that a failed read is
+  the same as "no special setting", but the value is a stored setting the client never saw, so a user whose
+  policy is `nobody` is shown the permissive option as selected and can save that section from a lying form.
+  Verified by reading the initializer and the catch; *Unverified:* no request was failed against a running
+  instance. *Acceptance:* render an explicit unread state with the controls disabled or retried until the policy
+  arrives, and add a test where the read rejects and the permissive value is not shown as selected.
+
+- [ ] **M19-64 Optimiser polling can overlap and write a stale "running" state after the job finished** —
+  *should-fix.* `startPolling` uses `setInterval(pollOnce, 2000)`
+  (`frontend/src/lib/views/PresetsView.svelte:266-271`) while `pollOnce` awaits the status request (`:282-301`),
+  so a response slower than the interval lets a second poll start, and both are applied in arrival order with no
+  generation check (`:303-310`). When the newer response sees the job finished, `stopPolling()` and `load()` show
+  the result, and an older in-flight response can then apply the same preset back to `running` while polling has
+  already stopped. Verified by reading the timer, the await and the missing guard; *Unverified:* no
+  slow-response run. *Acceptance:* keep one status request in flight (schedule the next with `setTimeout` after
+  each response, or drop older generations) and add a test with two out-of-order status responses that must end
+  on the finished state.
+
+- [ ] **M19-65 `$&`, `$'` and `$$` in a parameter corrupt the interpolated message** — *nit.* `formatMessage`
+  passes the value as the replacement argument of `String.replace` (`frontend/src/lib/i18n/index.ts:131`), so
+  replacement patterns contained in user data are expanded instead of inserted. *Reproduced* with the real
+  function: a deck named `A$&B` produced `Paused "A{name}B". ...`, a name of `$'` repeated the rest of the
+  sentence, and `A$$B` produced `A$B`. The same class of bug was fixed for field renames in Go (the `M17-58`
+  ledger row). *Acceptance:* pass a function as the replacement, and add a unit test with `$&`, `$'`, `` $` ``
+  and `$$` in the parameter.
+
+- [ ] **M19-66 English has no singular form, so counts of one read "1 decks" and "1 days"** — *nit.*
+  `formatMessage` only substitutes placeholders (`frontend/src/lib/i18n/index.ts:121-136`) and the catalogs hold
+  one form per key (`frontend/src/lib/i18n/locales/en.ts:324,383,1199,1568` among others). *Reproduced* with the
+  real function: `decks.count` with `count: 1` gives `1 decks`, `stats.streak.days` gives `1 days`,
+  `notetype.empty.cleanup.count` gives `1 empty cards` and `deck.tag_review.notes` gives `1 cards`; the deck
+  list header and the stats streak print these. *Acceptance:* apply one plural rule per locale through
+  `formatMessage` (an `Intl.PluralRules` variant key or an explicit singular key), with a test asserting both
+  one and two for the count keys.
+
+- [ ] **M19-67 `Note.external_ref` is typed as non-null while the server sends null** — *nit.* The response type
+  declares `external_ref: string` (`frontend/src/lib/api/types.ts:165`), but the server writes `n.ExternalRef`,
+  a `*string` (`internal/api/notes.go:106`, `internal/store/models.go:169`), so a note without an external
+  reference arrives as `null`. Every current reader treats it as falsy
+  (`frontend/src/lib/views/DeckDetailView.svelte:101,821-823`), so nothing breaks today; the declaration hides
+  the null branch from the compiler. Verified by reading the two declarations. *Acceptance:* type the field as
+  `string | null` or return an empty string, and let the compiler check the readers.
+
+- [ ] **M19-68 `bulkResult` in the deck detail view is written and never read** — *nit.* The state is declared at
+  `frontend/src/lib/views/DeckDetailView.svelte:186`, cleared at `:407,922` and assigned at `:410-411` only to be
+  passed to `announceBulkResult`, which reads its argument; the template never reads the state. The toast is
+  built from the argument, so the state changes nothing and suggests a result banner that does not exist.
+  Verified with `grep -n bulkResult`. *Acceptance:* call `announceBulkResult(summarizeBulk(res))` and delete the
+  three assignments, or render the state as the result banner its name promises.
+
 
 ## 2. Release ledger
 
