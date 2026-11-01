@@ -186,7 +186,6 @@
   let bulkError = $state('');
   let confirmingBulkDelete = $state(false);
   let bulkTagsOpen = $state(false);
-  let bulkResult = $state<{ affected: number; notFound: number; insufficientRole: number } | null>(null);
 
   const deckId = $derived($routeStore.params.id || '');
 
@@ -411,11 +410,9 @@
     }
     bulkPending = action;
     bulkError = '';
-    bulkResult = null;
     try {
       const res = await apiClient.bulkNotes({ action, note_ids: selectedIds, tags, dry_run: false });
-      bulkResult = summarizeBulk(res);
-      announceBulkResult(bulkResult);
+      announceBulkResult(summarizeBulk(res));
       bulkTagInput = '';
       // The dialog closes only once the request completes: the confirm button spins while in flight, and on failure the error stays in the dialog.
       bulkTagsOpen = false;
@@ -926,7 +923,7 @@
         class={selectionBarButton}
         data-testid="bulk-delete"
         disabled={bulkBusy}
-        onclick={() => { bulkError = ''; bulkResult = null; confirmingBulkDelete = true; }}
+        onclick={() => { bulkError = ''; confirmingBulkDelete = true; }}
       >
         <Trash2 aria-hidden="true" />
         {$t('notes.bulk_delete')}

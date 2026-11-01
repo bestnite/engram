@@ -2630,12 +2630,25 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   svelte-check found 0 errors and 0 warnings
   ```
 
-- [ ] **M19-68 `bulkResult` in the deck detail view is written and never read** — *nit.* The state is declared at
+- [x] **M19-68 `bulkResult` in the deck detail view is written and never read** — *nit.* The state is declared at
   `frontend/src/lib/views/DeckDetailView.svelte:186`, cleared at `:407,922` and assigned at `:410-411` only to be
   passed to `announceBulkResult`, which reads its argument; the template never reads the state. The toast is
   built from the argument, so the state changes nothing and suggests a result banner that does not exist.
   Verified with `grep -n bulkResult`. *Acceptance:* call `announceBulkResult(summarizeBulk(res))` and delete the
   three assignments, or render the state as the result banner its name promises.
+  *Closed by this commit (`fix(frontend): drop the unused bulk result state`).*
+  `DeckDetailView.svelte` now calls `announceBulkResult(summarizeBulk(res))` at the one success site; the
+  `$state` declaration and both `bulkResult = null` clears are removed, and `summarizeBulk` keeps its one
+  caller. No reader existed in the template, so the toast is unchanged. Raw evidence:
+  ```
+  $ grep -n "bulkResult" frontend/src/lib/views/DeckDetailView.svelte
+  $ npm --prefix frontend run check
+  svelte-check found 0 errors and 0 warnings
+  $ cd frontend && npx vitest run src/tests/notes.test.ts
+  Test Files  1 passed (1)
+       Tests  16 passed (16)
+  ```
+  `grep` finding nothing is the check the acceptance asks for: the symbol and its assignments are gone.
 
 
 - [x] **M19-69 A failed outbox status write re-sends the same batch without end** — *Blocker.* `drain` loops
