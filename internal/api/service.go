@@ -126,6 +126,18 @@ func (a *API) CreateDeck(ctx context.Context, u *store.User, in CreateDeckInput)
 			return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
 		}
 		presetID = id
+	} else {
+		// A preset chosen at creation belongs to the caller: resolving another account's preset in the transport
+		// must not let the deck inherit that account's scheduling parameters. An unusable id is reported exactly
+		// like an unknown one, so the response does not reveal that another account's preset exists.
+		p, err := a.presets.ByID(ctx, presetID)
+		if errors.Is(err, gorm.ErrRecordNotFound) || (err == nil && p.OwnerUserID != u.ID) {
+			return nil, newServiceError(http.StatusNotFound, CodeNotFound, "")
+		}
+		if err != nil {
+			a.logger.Error("resolve deck preset failed", "user_id", u.ID, "preset_id", presetID, "error", err)
+			return nil, newServiceError(http.StatusInternalServerError, CodeInternal, "")
+		}
 	}
 	d := store.Deck{
 		OwnerUserID: u.ID,
