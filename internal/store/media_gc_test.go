@@ -115,3 +115,68 @@ func TestClearOrphanedMediaBatchesLargeSets(t *testing.T) {
 		})
 	}
 }
+
+// TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan is the acceptance for the deck scope of the note-type
+// reference: media names are keyed by (deck_id, name), so a template reference in deck B must not keep
+// deck A's already-unreferenced file that happens to carry the same name.
+func TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			now := time.Now().UTC().Truncate(time.Second)
+			owner := seedUsers(t, db, "gc_collision_owner")[0]
+			deckA := seedPresetDeck(t, db, owner)
+			deckB := seedPresetDeck(t, db, owner)
+			noteTypeB := stockNoteTypeID(t, db, deckB, "basic")
+
+			const name = "_font.woff2"
+			shas := map[string]string{"a": strings.Repeat("a", 64), "b": strings.Repeat("b", 64)}
+			for _, sha := range shas {
+				if err := db.Create(&Media{Sha256: sha, RelPath: sha[:2] + "/" + sha + ".woff2", Mime: "font/woff2", Bytes: 1, CreatedAt: now}).Error; err != nil {
+					t.Fatalf("create media %s: %v", sha, err)
+				}
+			}
+			for _, row := range []MediaName{
+				{DeckID: deckA, Name: name, Sha256: shas["a"]},
+				{DeckID: deckB, Name: name, Sha256: shas["b"]},
+			} {
+				if err := db.Create(&row).Error; err != nil {
+					t.Fatalf("create media name %+v: %v", row, err)
+				}
+			}
+			// Deck B's note type references the name; nothing references it in deck A.
+			if err := db.Create(&MediaNoteType{NoteTypeID: noteTypeB, MediaName: name}).Error; err != nil {
+				t.Fatalf("create media note type: %v", err)
+			}
+
+			marked, _, err := MarkOrphanedMedia(ctx, db, now)
+			if err != nil {
+				t.Fatalf("MarkOrphanedMedia() error = %v", err)
+			}
+			if marked != 1 {
+				t.Fatalf("MarkOrphanedMedia() marked %d rows, want 1: another deck's same-name reference kept deck A's file alive", marked)
+			}
+
+			if err := db.Model(&Media{}).Where("sha256 = ?", shas["a"]).Update("orphaned_at", now.Add(-30*24*time.Hour)).Error; err != nil {
+				t.Fatalf("age orphan mark: %v", err)
+			}
+			deleted, err := DeleteOrphanedMedia(ctx, db, now.Add(-7*24*time.Hour), 10)
+			if err != nil {
+				t.Fatalf("DeleteOrphanedMedia() error = %v", err)
+			}
+			if len(deleted) != 1 || deleted[0].Sha256 != shas["a"] {
+				t.Fatalf("deleted = %+v, want only deck A's unreferenced file", deleted)
+			}
+			var keptB int64
+			if err := db.Model(&Media{}).Where("sha256 = ?", shas["b"]).Count(&keptB).Error; err != nil {
+				t.Fatalf("count deck B's media: %v", err)
+			}
+			if keptB != 1 {
+				t.Fatalf("deck B's referenced media rows = %d, want 1", keptB)
+			}
+		})
+	}
+}

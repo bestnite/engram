@@ -499,7 +499,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `note_types` and the deck's `media_names`; a regression deletes a deck with template assets, runs the
   mark and the expiry, and asserts no residue and the quota released.
 
-- [ ] **M19-16 The collector keeps an orphan alive because another deck uses the same file name** —
+- [x] **M19-16 The collector keeps an orphan alive because another deck uses the same file name** —
   *should-fix.* The orphan query joins `media_note_types` to `media_names` on name alone
   (`internal/store/media_gc.go:23-24`) without carrying `note_types.deck_id`; media names are keyed by
   `(deck_id, name)`, not globally. Deck B's `_font.woff2` template reference therefore keeps deck A's
@@ -509,6 +509,31 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   a cross-account effect on collection and disk use. *Acceptance:* join through `note_types` on
   `mn.deck_id = nt.deck_id AND mn.name = mnt.media_name`; a regression with two live decks holding the
   same file name and different hashes, one of them no longer referenced.
+  *Closed by this commit (`fix(store): scope the note-type media reference to its own deck`).*
+  `orphanCondition` (`internal/store/media_gc.go:22`) now joins `media_note_types` to `note_types` on
+  `note_type_id` and to `media_names` on `mn.deck_id = nt.deck_id AND mn.name = mnt.media_name`, so a
+  template reference only protects bytes named in its own deck. The same condition serves marking,
+  clearing and deleting, so all three are fixed together.
+  `TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan` (`internal/store/media_gc_test.go`) gives two decks
+  a `_font.woff2` name pointing at different shas, puts the name on deck B's note type, and leaves deck A
+  with no reference; it asserts exactly one row is marked, that row is deck A's sha, deletion past the
+  grace period removes only it, and deck B's media row survives. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan -count=1 -v`:
+  ```
+  === RUN   TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan
+  === RUN   TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan/postgres
+  === RUN   TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan/sqlite
+  --- PASS: TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan (0.32s)
+      --- PASS: TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan/postgres (0.26s)
+      --- PASS: TestMediaGCSameNameInAnotherDeckDoesNotKeepOrphan/sqlite (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.681s
+  ```
+  With only `internal/store/media_gc.go` reverted, the same run failed on both drivers with
+  `MarkOrphanedMedia() marked 0 rows, want 1: another deck's same-name reference kept deck A's file alive`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run
+  'TestMediaGC|TestMediaNote|TestMediaName|TestClearOrphaned|TestBackfillNoteTypeMedia|TestExportAnkiPackageRefusesUnreadableTemplateMedia|TestMediaReadable' -count=1`
+  passes on both drivers, and `go test ./internal/media/ -count=1` passes.
 
 - [ ] **M19-17 Soft-deleting a note frees its quota but keeps its media forever** — *should-fix.* The
   quota reference set ignores soft-deleted notes, the pending set counts nothing as long as any
