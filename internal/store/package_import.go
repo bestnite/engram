@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -1431,6 +1432,13 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 	if p.MaximumIntervalDays <= 0 {
 		p.MaximumIntervalDays = DefaultMaximumIntervalDays
 	}
+	p.MaximumIntervalDays = min(p.MaximumIntervalDays, DefaultMaximumIntervalDays)
+	if !validPackageSteps(p.LearningSteps) {
+		p.LearningSteps = DefaultLearningSteps
+	}
+	if !validPackageSteps(p.RelearningSteps) {
+		p.RelearningSteps = DefaultRelearningSteps
+	}
 	_, weightsErr := fsrs.MigrateWeights(pp.Weights)
 	if applyWeights && len(pp.Weights) > 0 && weightsErr == nil {
 		raw, err := json.Marshal(pp.Weights)
@@ -1450,6 +1458,20 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 		return Preset{}, fmt.Errorf("import package: create preset: %w", err)
 	}
 	return p, nil
+}
+
+func validPackageSteps(steps string) bool {
+	for _, part := range strings.Split(steps, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		minutes, ok := ankiStepMinutes(part)
+		if !ok || minutes < 0 || math.IsNaN(minutes) || math.IsInf(minutes, 0) {
+			return false
+		}
+	}
+	return true
 }
 
 // existingNoteIndex builds an index of the target deck's existing notes: external_ref -> note, fingerprint -> note.
