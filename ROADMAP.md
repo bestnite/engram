@@ -2411,13 +2411,37 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   and `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestNoteType|TestNote|TestMediaName' -count=1`
   pass on both drivers.
 
-- [ ] **M19-102 A failed bulk-import row puts the driver's text into the 200 report** — *should-fix.*
+- [x] **M19-102 A failed bulk-import row puts the driver's text into the 200 report** — *should-fix.*
   `internal/api/service.go:709` copies `rowErr.Error()` into `ImportResponse.Errors[].reason`, and `:657` does the
   same for a whole-batch failure; both reach the client in a 200 body, in the field whose purpose is to tell the
   caller what is wrong with that row. *Reproduced:* an aborting `BEFORE INSERT` trigger on `notes` produced
   `errors=[{0 "create note: constraint failed: probe_internal_marker (1811)"}]`. *Acceptance:* a per-row write failure
   reports a stable code or a catalog-backed reason, the underlying error goes only to the log, and a test aborts an
   insert and asserts the report carries no driver text.
+  *Closed by this commit (`fix(api): keep a bulk-import row failure out of the response`).*
+  `importRowFailureReason` (`internal/api/service.go:773`) returns the controlled detail for a
+  `*store.NotePayloadError`, the stable `media_not_readable` code plus its rejected names for a
+  `*store.MediaWriteError`, and `internal_error` for every other row failure. `writeImportBatch` (`:755`) logs the
+  underlying error with the deck and row index before it records that reason, so the driver text reaches the log and
+  never the 200 body. The whole-batch failure in `ImportNotes` (`:698`) likewise records `internal_error` after its
+  existing log line instead of `batchErr.Error()`.
+  `TestBulkImportRowFailureDoesNotEchoDriverText` (`internal/api/import_error_test.go`) installs an aborting
+  `BEFORE INSERT` trigger on `notes` whose message contains `probe_internal_marker`, posts one note through
+  `POST /api/v1/decks/:id/notes`, and asserts the 200 report has one row error with reason `internal_error`, no
+  `probe_internal_marker` / `constraint failed` / `SQL` text, and no note row left behind. Raw test-runner output of
+  `go test ./internal/api/ -run TestBulkImportRowFailureDoesNotEchoDriverText -count=1 -v`:
+  ```
+  === RUN   TestBulkImportRowFailureDoesNotEchoDriverText
+  --- PASS: TestBulkImportRowFailureDoesNotEchoDriverText (0.02s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.034s
+  ```
+  With the row-error site reverted to `rowErr.Error()`, the same run failed with
+  `row error reason = "create note: constraint failed: probe_internal_marker (1811)", want the stable "internal_error"`
+  and the two no-driver-text assertions for `probe_internal_marker` and `constraint failed`.
+  `go vet ./internal/api/` and `go test ./internal/api/ -count=1` pass (`4.629s`), and
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/api/ -run 'TestBulkImport|TestRESTBulkImport|TestImport' -count=1`
+  passes on both drivers (`1.151s`).
 
 - [ ] **M19-103 The `get_due_cards` tool returns one card when `limit` is omitted** — *should-fix.*
   `internal/mcp/tools.go:529` passes `in.Limit` unchanged, so an omitted argument is 0 and `DueCards`

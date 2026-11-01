@@ -695,7 +695,7 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 			// Infrastructure-level failure (savepoint/commit failure): record the index of the batch's first row and continue with the next batch,
 			// committed batches are not rolled back; external_ref idempotency on retry prevents duplicate cards.
 			a.logger.Error("import batch failed", "deck_id", d.ID, "start_index", batch[0].index, "error", batchErr)
-			resp.Errors = append(resp.Errors, ImportError{batch[0].index, batchErr.Error()})
+			resp.Errors = append(resp.Errors, ImportError{batch[0].index, CodeInternal})
 		}
 	}
 
@@ -747,7 +747,12 @@ func (a *API) writeImportBatch(ctx context.Context, batch []importPlan, resp *Im
 				if rbErr := tx.RollbackTo(savepoint).Error; rbErr != nil {
 					return fmt.Errorf("rollback savepoint for row %d: %w", p.index, rbErr)
 				}
-				resp.Errors = append(resp.Errors, ImportError{p.index, rowErr.Error()})
+				// The row's error is logged here and never echoed: a driver or filesystem failure carries
+				// paths and SQL text that the caller must not see. Only a controlled payload or media
+				// error, both already shaped for the caller, becomes the reason; everything else is the
+				// stable internal_error code.
+				a.logger.Error("import row failed", "deck_id", p.note.DeckID, "index", p.index, "error", rowErr)
+				resp.Errors = append(resp.Errors, ImportError{p.index, importRowFailureReason(rowErr)})
 				continue
 			}
 			if p.action == "create" {
@@ -758,6 +763,26 @@ func (a *API) writeImportBatch(ctx context.Context, batch []importPlan, resp *Im
 		}
 		return nil
 	})
+}
+
+// importRowFailureReason turns one failed import row's error into the reason the caller may see.
+//
+// A payload error and a media-write error are already written for the caller: the first names the offending field,
+// the second carries the stable media_not_readable code and the rejected names. Any other error may carry a driver
+// message, a path or SQL text, so it is reduced to the stable internal_error code; the caller logs the full error.
+func importRowFailureReason(err error) string {
+	var payloadErr *store.NotePayloadError
+	if errors.As(err, &payloadErr) {
+		return payloadErr.Detail
+	}
+	var mediaErr *store.MediaWriteError
+	if errors.As(err, &mediaErr) {
+		if len(mediaErr.Entries) == 0 {
+			return mediaErr.Code
+		}
+		return mediaErr.Code + ": " + strings.Join(mediaErr.Entries, ", ")
+	}
+	return CodeInternal
 }
 
 // UpdateNoteInput is the single-note update input; Tags uses a pointer to distinguish "not provided"
