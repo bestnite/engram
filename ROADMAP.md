@@ -418,30 +418,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   *Acceptance:* each new statement matches `importAnkiProgress` and `createAnkiPreset` in
   `internal/store/anki_import.go`. Evidence is the `README.md` diff.
 
-- [ ] **M18-71 The import tests share one fixture helper and record what they measure** — the commits of
-  `M18-23` to `M18-27` added four copies of one procedure: open a fixture `.apkg`, run SQL on its
-  collection, and write the archive again. Two copies are inline in `TestAnkiImportReportsSkippedCard` and
-  `TestAnkiImportUnreadableRevlog` in `internal/store/anki_progress_import_test.go`; the others are
-  `schedulingToleranceArchive` in `internal/store/anki_scheduling_tolerance_test.go` and
-  `skippedConfigArchive` in `internal/store/anki_skipped_config_test.go`. `ankiFixtureWithoutTemplate` in
-  `internal/store/anki_import_test.go` is a fifth, older copy. The copies differ:
-  `TestAnkiImportReportsSkippedCard` and `skippedConfigArchive` ignore the error of `Close`.
-  `TestAnkiImportUnreadableRevlog` has two more defects. It expects `len(pkg.Decks)` new decks, but an
-  import creates exactly one deck, so a fixture with a second package deck fails it for a reason unrelated
-  to the revlog. Its `t.Logf` line prints the expected counts under the label `deltas`, not the measured
-  ones, so the evidence in the commit that closed `M18-23` (`19a2505`) is the expectation, not a
-  measurement. `TestAnkiImportReportsSkippedCard` checks only the count; it does not check that the
-  package's other cards were created. The fix: one helper in `internal/store/anki_import_test.go` takes a
-  fixture name and SQL statements, handles the three collection layouts, checks every `Close` error and
-  returns the archive bytes, and the five sites call it. `TestAnkiImportUnreadableRevlog` expects one new
-  deck and logs the measured counts. `TestAnkiImportReportsSkippedCard` moves to
-  `internal/store/anki_scheduling_tolerance_test.go` and also checks that `cards_created` equals the
-  package's card count minus 1. This entry changes tests only. *Acceptance:* in
-  `internal/store/anki_*_test.go`, `zip.NewWriter` appears only in the new helper and in
-  `minimalPackageZipForTest`; every test named here passes on both drivers. Evidence is the output of
-  `git grep -n 'zip.NewWriter' -- 'internal/store/anki_*_test.go'` and the raw scoped `go test` and
-  `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set.
-
 - [ ] **M18-72 The release ledger records `M18-19` and what `M18-23` to `M18-26` changed** — `M18-28` asks
   the `M18-2` ledger row to name each of `M18-23` to `M18-26` that has landed, but not to state what they
   changed, and no entry asks for a row for `M18-19`. All five have landed, and each changes what an import
