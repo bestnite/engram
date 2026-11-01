@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/config"
@@ -150,6 +152,10 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 	now := time.Now().UTC()
 
 	specs := append(append(generalSettingSpecs(), mediaSettingSpecs()...), optimizeSettingSpecs()...)
+	// Validate every submitted key before the first write: one invalid value must fail the whole
+	// submission, not leave the keys that happened to come first stored.
+	type settingWrite struct{ key, value string }
+	regular := make([]settingWrite, 0, len(specs))
 	changed := make([]string, 0, len(specs)+1)
 	for _, spec := range specs {
 		raw, present := req.Values[spec.key]
@@ -189,15 +195,12 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 				return
 			}
 		}
-		if err := store.PutSetting(ctx, s.db, spec.key, raw, store.Ptr(u.ID), now); err != nil {
-			s.logger.Error("spa admin: save setting failed", "key", spec.key, "error", err)
-			adminError(c, http.StatusInternalServerError, "save_failed")
-			return
-		}
+		regular = append(regular, settingWrite{key: spec.key, value: raw})
 		changed = append(changed, spec.key)
 	}
 
 	// Sensitive keys: only a non-empty new value is accepted, stored AES-GCM encrypted, and never echoed back.
+	secrets := make([]settingWrite, 0, 1)
 	if s.secrets != nil {
 		keys, err := store.SensitiveSettingKeys(ctx, s.db)
 		if err != nil {
@@ -210,13 +213,28 @@ func (s *Server) adminSettingsSave(c *gin.Context) {
 			if !present || strings.TrimSpace(raw) == "" {
 				continue
 			}
-			if err := store.PutSecret(ctx, s.db, s.secrets, key, raw, store.Ptr(u.ID), now); err != nil {
-				s.logger.Error("spa admin: save secret failed", "key", key, "error", err)
-				adminError(c, http.StatusInternalServerError, "save_failed")
-				return
-			}
+			secrets = append(secrets, settingWrite{key: key, value: raw})
 			changed = append(changed, key)
 		}
+	}
+
+	// One transaction for the whole submission: a failing write rolls back every key of the same save.
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, w := range regular {
+			if err := store.PutSetting(ctx, tx, w.key, w.value, store.Ptr(u.ID), now); err != nil {
+				return fmt.Errorf("setting %q: %w", w.key, err)
+			}
+		}
+		for _, w := range secrets {
+			if err := store.PutSecret(ctx, tx, s.secrets, w.key, w.value, store.Ptr(u.ID), now); err != nil {
+				return fmt.Errorf("secret %q: %w", w.key, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		s.logger.Error("spa admin: save settings failed", "error", err)
+		adminError(c, http.StatusInternalServerError, "save_failed")
+		return
 	}
 
 	if len(changed) > 0 {

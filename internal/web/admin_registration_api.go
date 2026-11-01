@@ -2,11 +2,13 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/store"
@@ -143,13 +145,18 @@ func (s *Server) adminRegistrationSave(c *gin.Context) {
 	ctx := c.Request.Context()
 	now := time.Now().UTC()
 
-	if err := store.PutSetting(ctx, s.db, auth.SettingKeyRegistrationPolicy, policy, store.Ptr(actor.ID), now); err != nil {
-		s.logger.Error("spa admin: save registration policy failed", "error", err)
-		adminError(c, http.StatusInternalServerError, "save_failed")
-		return
-	}
-	if err := store.PutSetting(ctx, s.db, auth.SettingKeyEmailAllowlist, allowlist, store.Ptr(actor.ID), now); err != nil {
-		s.logger.Error("spa admin: save email allowlist failed", "error", err)
+	// Both keys belong to one decision about registration, so they commit together: a failed second
+	// write must not leave the new policy in force with the old allowlist.
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := store.PutSetting(ctx, tx, auth.SettingKeyRegistrationPolicy, policy, store.Ptr(actor.ID), now); err != nil {
+			return fmt.Errorf("registration policy: %w", err)
+		}
+		if err := store.PutSetting(ctx, tx, auth.SettingKeyEmailAllowlist, allowlist, store.Ptr(actor.ID), now); err != nil {
+			return fmt.Errorf("email allowlist: %w", err)
+		}
+		return nil
+	}); err != nil {
+		s.logger.Error("spa admin: save registration settings failed", "error", err)
 		adminError(c, http.StatusInternalServerError, "save_failed")
 		return
 	}

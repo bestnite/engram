@@ -2,12 +2,14 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/store"
@@ -179,22 +181,34 @@ func (s *Server) adminOIDCSave(c *gin.Context) {
 	}
 	changed := make([]string, 0, len(writes)+1)
 	for _, w := range writes {
-		if err := store.PutSetting(ctx, s.db, w.key, w.value, store.Ptr(u.ID), now); err != nil {
-			s.logger.Error("spa admin: save oidc setting failed", "key", w.key, "error", err)
-			adminError(c, http.StatusInternalServerError, "save_failed")
-			return
-		}
 		changed = append(changed, w.key)
 	}
+	secret := ""
 	if s.secrets != nil {
-		if secret := req.ClientSecret; strings.TrimSpace(secret) != "" {
-			if err := store.PutSecret(ctx, s.db, s.secrets, auth.SettingKeyOIDCClientSecret, secret, store.Ptr(u.ID), now); err != nil {
-				s.logger.Error("spa admin: save oidc client secret failed", "error", err)
-				adminError(c, http.StatusInternalServerError, "save_failed")
-				return
-			}
+		if req.ClientSecret != "" && strings.TrimSpace(req.ClientSecret) != "" {
+			secret = req.ClientSecret
 			changed = append(changed, auth.SettingKeyOIDCClientSecret)
 		}
+	}
+
+	// The provider fields and the client secret are one configuration: a failed write must not
+	// leave a half-updated provider that the next login would use.
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, w := range writes {
+			if err := store.PutSetting(ctx, tx, w.key, w.value, store.Ptr(u.ID), now); err != nil {
+				return fmt.Errorf("oidc setting %q: %w", w.key, err)
+			}
+		}
+		if secret != "" {
+			if err := store.PutSecret(ctx, tx, s.secrets, auth.SettingKeyOIDCClientSecret, secret, store.Ptr(u.ID), now); err != nil {
+				return fmt.Errorf("oidc client secret: %w", err)
+			}
+		}
+		return nil
+	}); err != nil {
+		s.logger.Error("spa admin: save oidc config failed", "error", err)
+		adminError(c, http.StatusInternalServerError, "save_failed")
+		return
 	}
 
 	// Invalidate the discovery document cache after a config change: clear both the old and the new issuer.

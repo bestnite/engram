@@ -1223,7 +1223,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go test ./internal/web/ -run 'TestLogin|TestTOTP|TestAuth|TestRate|TestRegister|TestForgot' -count=1`
   passes.
 
-- [ ] **M19-42 The admin settings saves are not atomic, so a rejected later key leaves earlier keys
+- [x] **M19-42 The admin settings saves are not atomic, so a rejected later key leaves earlier keys
   written** — *should-fix.* `adminSettingsSave` validates and writes inside one loop
   (`internal/web/admin_settings_api.go:152-198`): a submission with a valid key followed by an invalid one
   (for example `site.name` then `media.max_bytes=abc`) writes the first row and then returns 400. The
@@ -1234,6 +1234,33 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   handlers; *Unverified:* no reproduction. *Acceptance:* validate the whole submission before any write and
   apply the keys in one transaction (or one bulk upsert); a test submits one valid and one invalid key and
   asserts every stored value is unchanged.
+  *Closed by this commit (`fix(web): save each admin settings submission in one transaction`).*
+  `adminSettingsSave` (`internal/web/admin_settings_api.go:140`) now separates the phases: the loop at `:155`
+  only validates and collects the accepted keys, the sensitive keys are collected at `:203` without writing,
+  and `:222` applies every regular and sensitive write inside one `db.Transaction`. The three other saves are
+  wrapped the same way: registration policy plus allowlist (`admin_registration_api.go:148`), the OIDC provider
+  fields plus client secret (`admin_oidc.go:194`) and the SMTP fields plus password (`admin_smtp.go:195`). The
+  audit row is still written only after the transaction commits, and the OIDC discovery cache is still
+  invalidated only then, so a rolled-back save leaves the running configuration untouched.
+  `TestAdminSettingsRejectsTheWholeSubmission` (`internal/web/admin_settings_atomic_test.go`) seeds
+  `site.name=Before` and submits `site.name=After` together with `media_max_bytes=abc`; the response is 400 and
+  the stored `site.name` is still `Before`. `TestAdminSettingsRollsBackAFailingWrite` installs SQLite triggers
+  that abort the `media_max_bytes` write, submits `site.name` plus a legal `media_max_bytes`, gets 500 and
+  asserts neither key was stored — the valid key is rolled back with the failed one. Raw output of
+  `go test ./internal/web/ -run 'TestAdminSettingsRejectsTheWholeSubmission|TestAdminSettingsRollsBackAFailingWrite' -count=1 -v`:
+  ```
+  === RUN   TestAdminSettingsRejectsTheWholeSubmission
+  --- PASS: TestAdminSettingsRejectsTheWholeSubmission (0.04s)
+  === RUN   TestAdminSettingsRollsBackAFailingWrite
+  --- PASS: TestAdminSettingsRollsBackAFailingWrite (0.03s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.091s
+  ```
+  With only the four handlers reverted, the same run failed with
+  `site.name after the rejected submission = "After", want the previous "Before": the valid key must not be written`
+  and `site.name = "Rolled Back" after the rolled-back submission, want it not stored`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/web/ -run 'TestAdmin|TestOIDC|TestSMTP|TestRegistration' -count=1`
+  and the same run without the PostgreSQL DSN pass.
 
 - [ ] **M19-43 OIDC first login creates the account and the identity in two writes, so a failed link leaves
   an orphan** — *should-fix.* `Resolve` creates the user at `internal/auth/oauthlink.go:180-192` and inserts

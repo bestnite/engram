@@ -1,12 +1,14 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/mail"
@@ -167,6 +169,8 @@ func (s *Server) adminSMTPSave(c *gin.Context) {
 		mail.SettingKeySMTPFrom:     req.From,
 		mail.SettingKeySMTPTLSMode:  req.TLSMode,
 	}
+	type settingWrite struct{ key, value string }
+	settings := make([]settingWrite, 0, 6)
 	changed := make([]string, 0, 6)
 	for _, key := range []string{
 		mail.SettingKeySMTPHost, mail.SettingKeySMTPPort, mail.SettingKeySMTPUsername,
@@ -177,22 +181,35 @@ func (s *Server) adminSMTPSave(c *gin.Context) {
 			// Blank means no change, consistent with the system settings page.
 			continue
 		}
-		if err := store.PutSetting(ctx, s.db, key, raw, store.Ptr(u.ID), now); err != nil {
-			s.logger.Error("spa admin: save smtp setting failed", "key", key, "error", err)
-			adminError(c, http.StatusInternalServerError, "save_failed")
-			return
-		}
+		settings = append(settings, settingWrite{key: key, value: raw})
 		changed = append(changed, key)
 	}
+	password := ""
 	if s.secrets != nil {
 		if pw := req.Password; strings.TrimSpace(pw) != "" {
-			if err := store.PutSecret(ctx, s.db, s.secrets, mail.SettingKeySMTPPassword, pw, store.Ptr(u.ID), now); err != nil {
-				s.logger.Error("spa admin: save smtp password failed", "error", err)
-				adminError(c, http.StatusInternalServerError, "save_failed")
-				return
-			}
+			password = pw
 			changed = append(changed, mail.SettingKeySMTPPassword)
 		}
+	}
+
+	// The relay fields and the password are one configuration: a failed write must not leave a
+	// half-updated relay that the next send would use.
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, w := range settings {
+			if err := store.PutSetting(ctx, tx, w.key, w.value, store.Ptr(u.ID), now); err != nil {
+				return fmt.Errorf("smtp setting %q: %w", w.key, err)
+			}
+		}
+		if password != "" {
+			if err := store.PutSecret(ctx, tx, s.secrets, mail.SettingKeySMTPPassword, password, store.Ptr(u.ID), now); err != nil {
+				return fmt.Errorf("smtp password: %w", err)
+			}
+		}
+		return nil
+	}); err != nil {
+		s.logger.Error("spa admin: save smtp config failed", "error", err)
+		adminError(c, http.StatusInternalServerError, "save_failed")
+		return
 	}
 
 	if len(changed) > 0 {
