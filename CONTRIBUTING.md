@@ -42,7 +42,8 @@ subagents as much as to external contributors.
 
 ## Development environment
 
-- **Go 1.26 or newer** (the module declares `go 1.26`; the development machines run 1.27).
+- **Go 1.27 or newer** (the `go` line of `go.mod` is the authoritative minimum: it declares
+  `go 1.27.0`, and an older toolchain refuses to build the module).
 - A C toolchain is not required for development: SQLite works through a pure-Go driver.
 - **Node.js 22 or newer** builds the frontend. Its output (`frontend/dist`) is embedded with
   `go:embed`, so the frontend build has to run before the Go build; `go build ./...` fails

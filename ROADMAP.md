@@ -2949,7 +2949,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   local start (driver, DSN, both secrets, migration, first-admin step) that succeeds on a fresh checkout, and the
   other document links to it.
 
-- [ ] **M19-81 CONTRIBUTING names a Go minimum the module refuses to build with** — *should-fix.*
+- [x] **M19-81 CONTRIBUTING names a Go minimum the module refuses to build with** — *should-fix.*
   `CONTRIBUTING.md:45` states "**Go 1.26 or newer** (the module declares `go 1.26` ...)", while `go.mod:3`
   declares `go 1.27.0` and `README.md:4` advertises "Go 1.27+". Since Go 1.21 the toolchain refuses to build a
   module whose `go` line is newer than the running toolchain, so a contributor who installs the documented
@@ -2957,6 +2957,27 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   toolchain was available to run the refusal, so the failure text is read from the toolchain rule.
   *Acceptance:* the minimum in `CONTRIBUTING.md`, the `go` line in `go.mod` and the README badge name the same
   version, and the paragraph states which one is authoritative.
+  *Closed by this commit (`docs(contributing): name the module's Go minimum`).* `CONTRIBUTING.md:45-46` now says
+  "**Go 1.27 or newer**" and names the `go` line of `go.mod` as the authoritative minimum, so it agrees with
+  `go.mod`'s `go 1.27.0` and the README badge's "Go 1.27+"; the Dockerfile builds with the same minor
+  (`golang:1.27-bookworm`). Raw output of the commands that must agree, grouped by a `$` marker:
+  ```
+  $ head -3 go.mod
+  module git.nite07.com/nite/engram
+
+  go 1.27.0
+  $ grep -n "Go Version" README.md
+  4:[![Go Version](https://img.shields.io/badge/Go-1.27+-00ADD8?logo=go&logoColor=white)](go.mod)
+  $ sed -n 43,46p CONTRIBUTING.md
+  ## Development environment
+
+  - **Go 1.27 or newer** (the `go` line of `go.mod` is the authoritative minimum: it declares
+    `go 1.27.0`, and an older toolchain refuses to build the module).
+  $ go version
+  go version go1.27.3-X:nodwarf5 linux/amd64
+  ```
+  The refusal itself was not run: no Go 1.26 toolchain is installed, so the paragraph states the rule the
+  toolchain applies from Go 1.21 onward rather than a captured failure.
 
 - [ ] **M19-82 CONTRIBUTING still documents the removed card-type system and names a package that does not
   exist** — *should-fix.* `CONTRIBUTING.md:173-174` restates the registration rule as "**Card types are
