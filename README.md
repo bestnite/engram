@@ -9,7 +9,7 @@
 
 Engram is an open-source, self-hosted spaced repetition flashcard service. Built with a modern Svelte 5 SPA frontend and a Go backend, it pairs the state-of-the-art **FSRS v6** scheduling algorithm with a native **Model Context Protocol (MCP)** server for AI-assisted card creation and workflow automation.
 
-Live demo: <https://engram.nite07.com/> (registration is open; you can also sign in with the test account `test` / `testdemo`)
+Live demo: <https://engram.nite07.com/> (registration is open; test account: `test` / `testdemo`)
 
 ---
 
@@ -27,53 +27,39 @@ Live demo: <https://engram.nite07.com/> (registration is open; you can also sign
 
 ## Features
 
-- **FSRS v6 Scheduling**: Adaptive scheduling based on the open-source FSRS v6 algorithm, optimizing review intervals and reducing workload compared to legacy SM-2 algorithms. Supports custom parameter optimization.
-- **Anki-Compatible Note Types**: Note types are data — fields, templates, CSS and Anki's note type options — with eight registered answer controls (text, numeric, single choice, multiple choice, true/false, list, cloze blanks and short answer). Field values are HTML, formulas render with MathJax, and audio/TTS use Anki syntax (`[sound:<name>]`, `[anki:tts …]…[/anki:tts]`).
-- **Anki `.apkg` Deck Import**: Import decks straight from Anki packages. Engram reads all three `.apkg` layouts (legacy `collection.anki2` and `collection.anki21`, and the zstd-compressed `collection.anki21b`), and the package's deck tree, note types, notes, tags, cards and media arrive as Anki has them. Re-importing a package matches notes by Anki's GUID, so it updates the deck in place and keeps the progress already recorded against it.
-- **Multi-user & Deck Sharing**: Multi-tenant architecture with OIDC / Single Sign-On (SSO) support. Decks can be shared across users while keeping each user's review scheduling and progress strictly isolated.
-- **AI & MCP Native**: Built-in Model Context Protocol server exposing dedicated tools for LLMs and agents to search, create, update, review, and export flashcards.
-- **Modern Interface & PWA**: Clean single-page application built with Svelte 5 and Tailwind CSS, featuring dark/light themes, keyboard navigation shortcuts, internationalization (`zh-CN` and `en`), and PWA support.
-- **Email Reminders & Digest**: Automated daily review alerts and weekly summaries via SMTP.
-- **In-depth Analytics**: Visual insights including retention rates by interval, forecast queues, review volume heatmaps, and difficulty distributions.
+- **FSRS v6 Spaced Repetition**: Powered by the modern open-source FSRS v6 algorithm. Provides superior retention modeling, optimizes review intervals, and dramatically cuts long-term study load compared to legacy SM-2. Supports personalized parameter optimization.
+- **Deep Anki Compatibility**: Full support for Anki-style note types, templates, custom CSS, MathJax formulas, and audio/TTS (`[sound:...]`, `[anki:tts]`). Seamlessly imports and exports `.apkg` packages including nested subdecks, tags, cards, and media.
+- **Interactive Answer Controls**: Beyond self-rating, Engram supports built-in interactive question types: text input, numeric, single choice, multiple choice, true/false, ordered list, cloze fill-in-the-blank, and short answer with instant automated grading.
+- **Native AI & MCP Server**: Out-of-the-box Model Context Protocol (MCP) server. Connect Claude Desktop, Cursor, or any AI agent to automatically generate cards, search decks, study interactively, and manage reviews.
+- **Multi-User & Deck Sharing**: Multi-tenant architecture with OIDC / Single Sign-On (SSO) support. Share decks with team members or friends while keeping each learner's scheduling and review history strictly isolated.
+- **Modern Interface & PWA**: Responsive single-page application built with Svelte 5 and Tailwind CSS. Features dark/light modes, full keyboard shortcuts, internationalization (`zh-CN` and `en`), and PWA support for mobile and offline use.
+- **Study Reminders & Digest**: Automated daily review notifications and weekly summary digests via SMTP email.
+- **Visual Analytics**: Interactive insights including retention rates by interval, forecast queues, review volume heatmaps, and difficulty distributions.
 
 ---
 
-## Importing Decks
+## Importing & Exporting Decks
 
-Import a deck from the **Import** page (upload the file, or paste the file's public direct link), the CLI (`engram import`), or the MCP `import_deck` tool. Anki's `.apkg` is the only deck package format used for import and export.
+Engram natively supports Anki `.apkg` deck packages for seamless migration and backup.
 
-Deck packages do not carry a note's `external_ref`, `extra` or `source_url`: Anki drops `notes.data` on import, so it cannot preserve these values through an Anki round trip.
+You can import packages via the **Web UI** (upload file or paste a public URL), the **CLI** (`engram import`), or through **MCP / AI agents** (`import_deck`).
 
-Choose the target: `new_deck` creates a deck, and `into_deck:<id>` merges into a deck you can edit. The CLI and the MCP tool also take `replace_deck:<id>` to replace an existing deck, which only the deck's owner may do.
-
-An `.apkg` import reads the package's deck configuration only when `preset_mode` is `new` (the default), and takes the package's FSRS weights only when `apply_weights` is also set. The import report's `weights_invalid` is true when `apply_weights` was on and the package's weights were refused. For the `new_deck` target only, `POST /api/v1/decks/import`, `POST /api/v1/decks/import-url`, `POST /api/v1/decks/import-uploads`, the **Import** page, the CLI flags `--preset-mode` and `--preset-id`, and the `import_deck` and `create_import_upload` MCP tools take a preset choice: `preset_mode` `reuse` points the new deck at the preset named by `preset_id`, and `copy` points it at a new copy of that preset; neither reads the package's configuration or its weights, `apply_weights` is refused with either mode, `reuse` and `copy` are refused with any target other than `new_deck`, and `preset_id` is refused unless the mode is `reuse` or `copy`. `preset_id` always names one of your own presets. Learning progress travels only when asked: `include_progress` (off by default) applies the package's card states and review log to your own account, and without it every imported card starts as new.
-
-### Anki `.apkg` packages
-
-The package brings these across:
-
-- **Deck tree**: the longest `::` name prefix shared by the package's decks that hold cards becomes the Engram deck name; when they share none, the branch holding the most cards names the deck. Each deeper deck name stays on its cards as a subdeck path, so `A::B::C` becomes deck `A::B` with path `C`.
-- **Note types**: fields, templates (all four sides, including browser variants), CSS, the LaTeX preamble and suffix, and Anki's note type options arrive unchanged.
-- **Notes, tags and cards**: every note is created as the package holds it, with its tags, and the package's cards are created as they exist.
-- **Media**: images, audio and video are registered under their Anki file names and resolved by the package's fields, templates and CSS.
-- **Scheduling state and review history**: `include_progress`, off by default, applies the package's card states and review log to your own account. Otherwise, imported cards start as new cards.
-- **Deck configuration and FSRS weights**: With `preset_mode` `new`, a new deck's preset takes supported settings from the package's deck configuration. `apply_weights`, off by default, adopts the package's FSRS weights if they can be migrated when the target is `new_deck` and `preset_mode` is `new`. `preset_mode` `reuse` and `copy` refuse `apply_weights`. The `into_deck` and `replace_deck` targets accept `apply_weights` but ignore it, leaving the preset unchanged. The import report's `weights_applied` and `weights_discarded` fields record the outcome.
-
-An imported note type carries no answer control, so its cards are self-rated until you add one in the note type editor.
-
-Re-importing the same package, or a newer export of it, matches notes by Anki's GUID and note types by the package's origin id. A note and note type that still have the same field and template structure are updated in place and keep their cards and progress; a changed structure creates a new note type and moves the notes to it. When re-importing progress, a card whose last review in Engram is not earlier than the package's keeps its Engram state. A package review is written only when it is later than the importer's latest review of that card in Engram.
-
-The import report lists what the package refers to but does not carry: missing media files, video a browser cannot play, external scripts or stylesheets, and LaTeX images the package does not embed. A package with missing media fails by default; tick "Continue when media files are missing" to import it anyway.
+### What Gets Imported
+- **Decks & Subdecks**: Preserves full deck hierarchy (e.g. `Language::Grammar`).
+- **Note Types & Templates**: Fields, card templates (front/back), styling (CSS), and MathJax / LaTeX formatting.
+- **Content & Media**: Notes, tags, cards, and all bundled media (images, audio, video).
+- **Optional Study History**: Optionally import your existing scheduling states, review history logs, and FSRS weights (`include_progress`).
+- **Smart In-Place Updates**: Re-importing a deck matches notes by Anki GUIDs, updating content in place without creating duplicates or overwriting newer review progress.
 
 ---
 
 ## AI & MCP Integration
 
-Engram exposes a built-in Streamable HTTP MCP server at `/mcp` authenticated by user API keys. Any MCP-compatible client or agent (such as Claude Desktop, Cursor, or Hermes) can interact with your flashcards directly.
+Engram includes a built-in Streamable HTTP MCP server at `/mcp`, secured with user API keys. Any MCP-compatible agent or client can seamlessly connect to your flashcard collection.
 
-### Configuration
+### Connecting Your AI Client
 
-Create an API key in the **Settings** panel, then add Engram to your MCP client configuration:
+Generate an API key in **Settings → API Keys**, then add Engram to your client configuration (e.g., Claude Desktop, Cursor):
 
 ```json
 {
@@ -88,24 +74,13 @@ Create an API key in the **Settings** panel, then add Engram to your MCP client 
 }
 ```
 
-### Available Tools
-
-Engram provides 23 dedicated MCP tools:
-
-- `list_decks` / `create_deck` / `update_deck`: Inspect accessible decks, create new ones with custom scheduling presets, or rename and describe them.
-- `delete_deck`: Delete a deck together with its notes, cards and progress. Only the owner can do this, and the deletion cannot be undone.
-- `bulk_decks`: Delete several decks in one call; each row is owner-checked, and `dry_run` counts without writing. Mirrors REST `POST /decks/bulk`.
-- `list_note_types` / `get_note_type`: List a deck's note types or read one, with each type's field ids and names, templates and CSS. Note field values are HTML strings keyed by field name, so an agent can write a note without guessing the payload shape.
-- `search_notes` / `get_note` / `list_deck_tags`: Query notes with tag and keyword filters, read a single note, and list the tags used in a deck.
-- `create_notes` / `update_note` / `delete_note` / `bulk_notes`: Create, update and delete notes across all note types, with dry-run validation, bulk insertion and bulk tag or delete actions. A note names its `note_type` and sends `fields` as HTML strings keyed by field name.
-- `get_due_cards` / `submit_review`: Fetch cards due for review and record reviews. Self-assessed cards take a rating (`Again`, `Hard`, `Good`, `Easy`), and a short-answer card may also carry the answer the learner wrote, stored with the review; answer-type cards (cloze, list, typed, numeric, choice, true/false) take the answer instead, and the server grades it.
-- `add_extra_new_cards`: After the daily new card limit is reached, allow extra new cards in one deck for the current review day only. The deck settings do not change, and the next day returns to the daily limit.
-- `bury_card`: Postpone one card to the start of your next review day without touching its progress. Mirrors REST `POST /cards/{id}/bury`.
-- `set_deck_paused`: Pause or resume a deck for yourself only. A paused deck leaves the default review queue, the due count and the reminder emails, but keeps its progress and can still be reviewed by name.
-- `get_stats`: Retrieve learning summaries, queue counts, and retention rates.
-- `import_deck`: Import Anki `.apkg` deck packages into a new deck, an existing deck, or a full deck replacement.
-- `create_export_download`: Get a single-use download URL for a deck package, so a large archive never passes through the model.
-- `create_import_upload`: Get a single-use upload URL for a deck package. The agent sends the file to it with an HTTP client such as `curl`, so a large package never passes through the model and the API key never leaves the MCP client.
+### Capabilities
+Engram exposes a comprehensive suite of MCP tools designed for LLM workflows:
+- **Deck & Tag Management**: Browse, create, update, or delete decks (`list_decks`, `create_deck`, `update_deck`, `delete_deck`, `bulk_decks`, `list_deck_tags`).
+- **Note & Card Authoring**: Search and inspect notes, or batch-create flashcards from reading materials using flexible templates (`search_notes`, `get_note`, `create_notes`, `update_note`, `bulk_notes`).
+- **Study & Automated Grading**: Fetch due cards, submit self-evaluations or answers for automated grading, postpone cards, or adjust daily limits (`get_due_cards`, `submit_review`, `bury_card`, `add_extra_new_cards`).
+- **Statistics & Insights**: Query study summaries, due queues, and retention rates (`get_stats`).
+- **Package Import & Export**: Import Anki packages or generate one-time download/upload tickets for large archives without saturating LLM context windows (`import_deck`, `create_import_upload`, `create_export_download`).
 
 ---
 
@@ -113,7 +88,7 @@ Engram provides 23 dedicated MCP tools:
 
 ### Quick Start (Docker Run)
 
-Uses an embedded SQLite database suitable for personal use or testing:
+Run a standalone instance with embedded SQLite storage (ideal for personal use):
 
 ```bash
 docker run -d --name engram -p 8080:8080 \
@@ -123,13 +98,13 @@ docker run -d --name engram -p 8080:8080 \
   docker.io/nite07/engram:latest
 ```
 
-Open `http://localhost:8080/`. On a fresh instance, navigate to `/setup` to create the initial administrator account.
+Visit `http://localhost:8080/`. On initial launch, complete the quick setup wizard at `/setup` to create the administrator account.
 
-### Production (Docker Compose)
+### Production Setup (Docker Compose with PostgreSQL)
 
-For multi-user deployments, PostgreSQL is recommended.
+For multi-user or production setups, PostgreSQL is recommended.
 
-Save the following as `docker-compose.yaml` (or use the repository's [docker-compose.yaml](./docker-compose.yaml)):
+Download or create `docker-compose.yaml` (see [docker-compose.yaml](./docker-compose.yaml)):
 
 ```yaml
 services:
@@ -170,7 +145,7 @@ volumes:
   engram-media:
 ```
 
-Start the stack:
+Start the containers:
 
 ```bash
 SESSION_SECRET="$(openssl rand -base64 32)" \
@@ -180,29 +155,16 @@ docker compose up -d
 
 ### Reverse Proxy & HTTPS
 
-When placing Engram behind a reverse proxy (such as Caddy, Nginx, or Traefik):
+When deploying behind a reverse proxy (such as Caddy, Nginx, or Traefik):
 
-1. Set `BASE_URL` to your public URL (e.g., `https://engram.example.com`).
-2. Set `TRUSTED_PROXIES` to the address your proxy connects **from**, as Engram sees it (comma-separated IPs or CIDRs). Login rate limiting, audit logs and new-device alerts use the client IP; until this is set, every request appears to come from the proxy.
-
-`TRUSTED_PROXIES` is empty by default, so `X-Forwarded-For` and `X-Real-IP` are ignored. This is deliberate: a header is only as trustworthy as the hop that set it. List the proxies you run, never client networks or `0.0.0.0/0`.
-
-The right value depends on how the proxy reaches Engram:
-
-| Topology | Address Engram sees |
-| :--- | :--- |
-| Proxy and Engram on the same host, no containers | Loopback: `127.0.0.1/32,::1/128` |
-| Engram in a container, port published to the host, proxy on the host | Usually the container network's **gateway**, not `127.0.0.1`: published ports are forwarded through the bridge. Find it with `docker network inspect <network>` (`Gateway`). |
-| Proxy and Engram in the same container network | The proxy container's address in that network, or the whole network's subnet |
-| CDN or load balancer → proxy → Engram | Every hop that appends to `X-Forwarded-For` must be listed, or the proxy must overwrite the header with the real client IP before forwarding |
-
-To find the address without guessing, start Engram behind your proxy with `TRUSTED_PROXIES` unset and send one request. If the request carried a forwarded header from a loopback or private address that is not trusted, Engram logs one warning, `forwarded client ip header ignored ...`, and its `remote_ip` field is the address to add. At startup Engram also logs which proxies it trusts.
+1. **`BASE_URL`**: Set to your external address (e.g. `https://engram.example.com`). Used for email links and OIDC redirects.
+2. **`TRUSTED_PROXIES`**: Set to the IP address or CIDR range of your proxy (e.g. `127.0.0.1/32,::1/128` for a local proxy, or the container gateway IP in Docker). This ensures client IP addresses are correctly identified for rate limiting, audit logging, and security alerts.
 
 ---
 
 ## Configuration
 
-Core environment variables required for startup:
+Core environment variables:
 
 | Variable | Description | Example / Default |
 | :--- | :--- | :--- |
@@ -215,28 +177,27 @@ Core environment variables required for startup:
 | `AUTO_MIGRATE` | Automatically sync schema on startup (`1` or `0`) | `1` |
 | `MEDIA_DIR` | Directory for uploaded media files | `data/media` |
 
-Additional settings (SMTP email, registration policy, OIDC provider, upload quotas) can be configured directly in the **Admin Panel** without restarting the service. See [.env.example](./.env.example) for the complete list of overrides.
+Most runtime configurations (SMTP mail server, registration policy, OIDC SSO providers, storage quotas) can be configured directly through the **Admin Panel** without restarting the service. See [.env.example](./.env.example) for all available options.
 
 ---
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local development setup, build instructions, and testing requirements.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local development setup, build instructions, and testing guidelines.
 
 ---
 
 ## Acknowledgements
 
-Engram builds on these projects:
+Engram is built upon and inspired by these great open-source projects:
 
-- [go-fsrs](https://github.com/open-spaced-repetition/go-fsrs) — FSRS v6 scheduling and parameter optimisation.
-- [fsrs-rs](https://github.com/open-spaced-repetition/fsrs-rs) — the training implementation behind the optimiser adapter.
-- [Gin](https://github.com/gin-gonic/gin) and [GORM](https://gorm.io) — HTTP and database layers.
-- [Svelte](https://svelte.dev/) — the single-page front end.
-- [goldmark](https://github.com/yuin/goldmark) — Markdown rendering for the one-time note migration and the mail-template conversion. Card content is HTML and is shown only inside the sandboxed frame.
-- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) — the MCP server.
-- [zitadel/oidc](https://github.com/zitadel/oidc) and [go-i18n](https://github.com/nicksnyder/go-i18n) — OIDC sign-in and translation catalogs.
-- [MathJax](https://www.mathjax.org/) — formula rendering.
-- [Tailwind CSS](https://tailwindcss.com/) — styling.
+- [Anki](https://apps.ankiweb.net/) — The gold standard for spaced repetition; its note types, templates, and package ecosystem inspired Engram's compatibility design.
+- [go-fsrs](https://github.com/open-spaced-repetition/go-fsrs) & [fsrs-rs](https://github.com/open-spaced-repetition/fsrs-rs) — The cutting-edge FSRS v6 algorithm and parameter optimization engine.
+- [Gin](https://github.com/gin-gonic/gin) & [GORM](https://gorm.io) — Fast, ergonomic Go HTTP and ORM framework.
+- [Svelte](https://svelte.dev/) & [Tailwind CSS](https://tailwindcss.com/) — Modern, responsive SPA front end and styling.
+- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) — Model Context Protocol (MCP) server implementation.
+- [MathJax](https://www.mathjax.org/) — Beautiful mathematical formula rendering.
+- [goldmark](https://github.com/yuin/goldmark) — High-performance Markdown parser.
+- [zitadel/oidc](https://github.com/zitadel/oidc) & [go-i18n](https://github.com/nicksnyder/go-i18n) — OIDC authentication and internationalization catalogs.
 
-Friend link: [LINUX DO](https://linux.do) — a Chinese-language tech community.
+Friend link: [LINUX DO](https://linux.do) — A vibrant tech community.

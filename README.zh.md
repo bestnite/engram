@@ -7,9 +7,9 @@
 
 [English](README.md) | **中文**
 
-Engram 是一个开源、自托管的渐进式间隔重复闪卡（Flashcard）服务。采用 Svelte 5 SPA 前端与 Go 后端构建，将现代自适应间隔排程算法 **FSRS v6** 与原生 **Model Context Protocol (MCP)** 服务结合，提供开箱即用的 AI 辅助制卡与自动化学习流。
+Engram 是一个开源、自托管的渐进式间隔重复闪卡（Flashcard）服务。基于现代化 Svelte 5 SPA 前端与 Go 后端打造，将新一代自适应间隔排程算法 **FSRS v6** 与原生 **Model Context Protocol (MCP)** 服务结合，提供开箱即用的 AI 辅助制卡与自动化学习流。
 
-线上 Demo：<https://engram.nite07.com/>（注册开放，也可使用测试账号 `test` / `testdemo` 登录体验）
+线上 Demo：<https://engram.nite07.com/>（开放注册，亦可使用体验账号 `test` / `testdemo` 登录体验）
 
 ---
 
@@ -27,54 +27,39 @@ Engram 是一个开源、自托管的渐进式间隔重复闪卡（Flashcard）�
 
 ## 功能特性
 
-- **FSRS v6 间隔排程**：内置新一代开源算法 FSRS v6，相比传统 SM-2 记忆模型预测更精准、长期复习负担显著减轻；支持参数独立优化。
-- **兼容 Anki 的笔记类型**：笔记类型就是数据——字段、模板、CSS 与 Anki 的笔记类型选项——并内置八种已注册的答案控件（文本、数值、单选、多选、判断、列表、填空、简答）。字段值是 HTML，公式由 MathJax 渲染，音频/TTS 使用 Anki 语法（`[sound:<name>]`、`[anki:tts …]…[/anki:tts]`）。
-- **Anki `.apkg` 卡组导入**：可直接导入 Anki 卡组包。支持三种 `.apkg` 结构（旧版 `collection.anki2`、`collection.anki21`，以及 zstd 压缩的 `collection.anki21b`），包内的卡组树、笔记类型、笔记、标签、卡片与媒体按 Anki 中的内容落地。再次导入同一个包时按 Anki 的 GUID 匹配笔记，因此只更新原卡组，不会产生副本，也不会改动已有进度。
-- **多用户与卡组共享**：支持 OIDC / 单点登录（SSO）。卡组可在用户间共享协作，各用户复习状态与进度严格隔离独立。
-- **原生 AI & MCP 支持**：内置基于 Streamable HTTP 的 Model Context Protocol (MCP) 服务，为大语言模型与 Agent 提供全套查询、增删改查、复习与导出工具。
-- **现代交互与 PWA**：基于 Svelte 5 与 Tailwind CSS 的轻量单页应用，提供深色/浅色主题、全键盘快捷操作、中英双语界面，并支持 PWA 离线运行。
-- **邮件提醒与周报**：支持通过 SMTP 定时发送每日学习提醒邮件与每周学习总结周报。
-- **多维度学习统计**：提供复习量趋势、未来到期卡片预测、遗忘与留存率分析等多维度统计面板。
+- **新一代 FSRS v6 间隔排程**：内置开源 FSRS v6 自适应记忆算法，相较传统 SM-2 模型遗忘预测更精准，大幅减轻长期复习压力；支持针对个人学习历史进行参数优化。
+- **深度兼容 Anki 生态**：全面支持 Anki 风格的笔记类型、正反面卡片模板、自定义 CSS 样式、MathJax 数学公式与音视频/TTS 语法（`[sound:...]`、`[anki:tts]`）。无缝导入导出 `.apkg` 卡组包。
+- **丰富的交互式题型**：除传统自评分数外，内置 8 种交互式题型控件（文本输入、数值、单选、多选、判断、列表排序、完形填空、简答），支持系统自动判分与即时反馈。
+- **原生 AI & MCP 服务**：内置基于 Streamable HTTP 的 Model Context Protocol (MCP) 服务端，配合 Claude Desktop、Cursor 等任意 AI Agent 即可实现对话式制卡、卡片搜索与自动化复习。
+- **多用户与卡组共享协作**：多租户架构，支持 OIDC / 单点登录（SSO）。支持将卡组共享给团队或好友，各用户的排程进度与复习历史完全独立隔离。
+- **现代化交互与 PWA 支持**：采用 Svelte 5 与 Tailwind CSS 构建的高性能单页应用，支持深色/浅色模式、全键盘快捷键、中英双语国际化，支持 PWA 离线运行。
+- **学习提醒与周期周报**：支持配置 SMTP 邮件服务，定时发送每日待复习提醒邮件与每周学习情况总结周报。
+- **多维度学习统计洞察**：提供未来到期排程预测、留存率分析、复习热力图与卡片难度分布等数据可视化看板。
 
 ---
 
-## 导入卡组
+## 卡组导入与导出
 
-在**导入**页上传文件或粘贴文件的公开直链，或用 CLI（`engram import`）、MCP 的 `import_deck` 工具，都可以导入卡组。Anki 的 `.apkg` 是导入和导出使用的唯一卡组包格式。
+Engram 原生支持 Anki `.apkg` 格式，无论是从 Anki 迁移还是日常备份都极为便捷。
 
-卡组包不携带笔记的 `external_ref`、`extra` 或 `source_url`：Anki 在导入时丢弃 `notes.data`，因此这些值无法经过 Anki 导入导出往返而保留。
+支持通过 **Web 页面**（上传文件或粘贴公开下载链接）、**命令行 CLI**（`engram import`）以及 **MCP / AI Agent**（`import_deck`）导入。
 
-导入时需要选择目标：`new_deck` 新建卡组，`into_deck:<id>` 合并到你有编辑权限的卡组；CLI 与 MCP 工具还接受 `replace_deck:<id>` 整体替换现有卡组，该操作仅卡组所有者可用。
-
-导入 `.apkg` 时，仅当 `preset_mode` 为 `new`（默认值）才读取包内的卡组配置，并且仅当同时设置 `apply_weights` 才采用包内的 FSRS 权重。当 `apply_weights` 已开启而包内权重被拒绝时，导入报告中的 `weights_invalid` 为 true。仅针对 `new_deck` 目标，`POST /api/v1/decks/import`、`POST /api/v1/decks/import-url`、`POST /api/v1/decks/import-uploads`、**导入**页、CLI 的 `--preset-mode` 和 `--preset-id` 标志以及 MCP 的 `import_deck` 和 `create_import_upload` 工具接受预设选择：`preset_mode` 为 `reuse` 时，新卡组指向 `preset_id` 指定的预设；为 `copy` 时，新卡组指向该预设的新副本。两种模式均不读取包内配置或权重，均拒绝 `apply_weights`；`reuse` 和 `copy` 对除 `new_deck` 以外的目标均被拒绝，而 `preset_id` 仅在模式为 `reuse` 或 `copy` 时被接受。`preset_id` 始终指定你自己的一个预设。学习进度仅在请求时带入：`include_progress`（默认关闭）将包内的卡片状态和复习日志应用到你自己的账户；未开启时，每张导入的卡片都从新卡开始。
-
-### Anki `.apkg` 卡组包
-
-包内以下内容会带入：
-
-- **卡组树**：包内持有卡片的卡组共有的最长 `::` 名称前缀成为 Engram 卡组名；若它们没有共同前缀，则由卡片最多的分支命名卡组。更深层的卡组名保留为各张卡片的子卡组路径，例如 `A::B::C` 导入为卡组 `A::B`、路径 `C`。
-- **笔记类型**：字段、模板（正反两面及其浏览器预览变体共四种）、CSS、LaTeX 前缀与后缀，以及 Anki 的笔记类型选项，均保持不变。
-- **笔记、标签与卡片**：笔记按包内内容创建并保留标签，卡片按包内已有的卡片创建。
-- **媒体**：图片、音频与视频按 Anki 中的文件名登记，并由包内的字段、模板与 CSS 引用。
-
-- **调度状态与复习历史**：`include_progress` 默认关闭，开启后将包内的卡片状态和复习日志应用到你自己的账户；否则导入的卡片从新卡开始。
-- **卡组配置与 FSRS 权重**：当 `preset_mode` 为 `new` 时，新卡组的预设采用包内卡组配置中受支持的设置。`apply_weights` 默认关闭；当目标为 `new_deck` 且 `preset_mode` 为 `new` 时，若包内的 FSRS 权重可以迁移，开启它即可采用这些权重。`preset_mode` 的 `reuse` 和 `copy` 模式拒绝 `apply_weights`。`into_deck` 和 `replace_deck` 目标接受但忽略 `apply_weights`，预设保持不变。导入报告中的 `weights_applied` 和 `weights_discarded` 字段记录结果。
-
-导入的笔记类型没有答案控件，因此在笔记类型编辑器中为它添加答案控件之前，其卡片只能自评。
-
-再次导入同一个包或它的较新导出版本时，按 Anki 的 GUID 匹配笔记、按包的来源 id 匹配笔记类型。字段与模板结构未变的笔记和笔记类型就地更新，并保留已有卡片与进度；结构发生变化时会新建笔记类型，并把笔记迁到新类型上。再次导入进度时，如果卡片在 Engram 中的最后复习时间不早于包中的最后复习时间，则保留其 Engram 状态。仅当包内的复习记录晚于导入者在 Engram 中对该卡片的最新复习记录时，才写入该记录。
-
-导入报告会列出包中引用但未随包提供的内容：缺失的媒体文件、浏览器无法播放的视频、外部脚本或样式表，以及包中未内嵌的 LaTeX 图片。默认情况下缺失媒体会导致导入失败；勾选“媒体缺失时继续”即可照常导入。
+### 导入支持内容
+- **层级卡组树**：完整保留父子卡组层级关系（如 `语言::英语::词汇`）。
+- **笔记类型与模板**：字段定义、卡片正反面模板、CSS 样式表及 MathJax / LaTeX 格式。
+- **内容与多媒体**：笔记内容、标签、卡片以及包内内嵌的所有图片、音频与视频文件。
+- **学习进度迁移（可选）**：支持选择性带入原卡片排程状态、复习历史日志与 FSRS 算法权重（`include_progress`）。
+- **智能增量更新**：再次导入相同卡组时，按 Anki GUID 智能匹配并就地更新内容，不会产生重复卡片，亦不会覆盖之后更新的学习记录。
 
 ---
 
 ## AI 与 MCP 集成
 
-Engram 内置 Streamable HTTP MCP 服务（挂载于 `/mcp`），通过用户 API Key 统一鉴权。支持在 Claude Desktop、Cursor、Hermes 等兼容 MCP 协议的客户端中直接调用。
+Engram 内置 Streamable HTTP MCP 服务（位于 `/mcp`），通过用户 API Key 统一鉴权。支持在各大 LLM 客户端与智能体中直接调用。
 
-### 客户端配置示例
+### 客户端配置
 
-在 Web 端**设置**中生成 API Key 后，在客户端配置中加入 Engram：
+在 Engram Web 端**设置 → API 密钥**生成密钥后，将其添加到你的 MCP 客户端配置中（以 Claude Desktop / Cursor 为例）：
 
 ```json
 {
@@ -89,24 +74,13 @@ Engram 内置 Streamable HTTP MCP 服务（挂载于 `/mcp`），通过用户 AP
 }
 ```
 
-### 工具列表
-
-Engram 暴露 23 个业务 MCP 工具：
-
-- `list_decks` / `create_deck` / `update_deck`：查看可访问卡组、创建新卡组并指定调度预设，或修改卡组名称与描述。
-- `delete_deck`：连同笔记、卡片和学习进度一起删除卡组。仅所有者可以执行，且删除后不可恢复。
-- `bulk_decks`：一次删除多个卡组，逐行校验所有者；`dry_run` 只计数不写入。对应 REST `POST /decks/bulk`。
-- `list_note_types` / `get_note_type`：列出一个卡组的 note 类型或读取其中一个，返回字段 id 与名称、模板和 CSS。note 的字段值是 HTML 字符串，按字段名索引，agent 不必猜请求体的形状。
-- `search_notes` / `get_note` / `list_deck_tags`：按标签与关键词筛选笔记、读取单条笔记、列出卡组内用到的标签。
-- `create_notes` / `update_note` / `delete_note` / `bulk_notes`：创建、更新和删除所有笔记类型的笔记，支持试运行校验、批量插入，以及批量打标签或删除。笔记用 `note_type` 指定类型，`fields` 按字段名提交 HTML 字符串。
-- `get_due_cards` / `submit_review`：获取到期待复习的卡片并记录复习。自评卡片提交评分（`Again`、`Hard`、`Good`、`Easy`），简答卡片还可以附带学习者写下的作答，随复习记录保存；作答类卡片（填空、列表、输入作答、数值、选择、判断）提交作答，由服务端判分。
-- `add_extra_new_cards`：学完每日新卡上限后，为某个卡组追加今天的新卡额度，只对当前复习日生效；卡组设置不变，第二天回到每日上限。
-- `bury_card`：把一张卡推迟到你的下一个复习日开始时，不改动学习进度。对应 REST `POST /cards/{id}/bury`。
-- `set_deck_paused`：只为自己暂停或恢复一个卡组。暂停的卡组不进入默认复习队列、待复习数和提醒邮件，但学习进度保留，指定这个卡组时仍可复习。
-- `get_stats`：获取学习摘要、队列数量和留存率。
-- `import_deck`：将 Anki `.apkg` 卡组包导入为新卡组、导入现有卡组或整体替换一个卡组。
-- `create_export_download`：获取卡组包的一次性下载地址，使大压缩包无需经过模型。
-- `create_import_upload`：为卡组包申请一次性上传地址，agent 用 `curl` 等 HTTP 客户端直接上传文件；大卡组不必经过模型输出，API Key 也不离开 MCP 客户端。
+### 工具能力概览
+Engram 提供了覆盖完整学习工作流的 23 个 MCP 工具：
+- **卡组与标签管理**：查看、新建、重命名、暂停或删除卡组，列出卡组标签（`list_decks`、`create_deck`、`update_deck`、`delete_deck`、`bulk_decks`、`list_deck_tags`）。
+- **笔记与制卡**：智能体可查询笔记内容，或根据阅读资料批量生成闪卡，支持富文本 HTML 字段与自定义模板（`search_notes`、`get_note`、`create_notes`、`update_note`、`bulk_notes`）。
+- **复习与智能判分**：获取待复习卡片、提交自评或作答内容由服务端自动判分、临时推迟卡片或追加当日新卡（`get_due_cards`、`submit_review`、`bury_card`、`add_extra_new_cards`）。
+- **学习统计与洞察**：获取学习摘要、队列分布与留存率统计（`get_stats`）。
+- **卡组包导入导出**：支持直接导入 `.apkg` 卡组，或通过一次性上传/下载链接处理大文件，避免大体积二进制数据占用 LLM 上下文（`import_deck`、`create_import_upload`、`create_export_download`）。
 
 ---
 
@@ -114,7 +88,7 @@ Engram 暴露 23 个业务 MCP 工具：
 
 ### 快速体验（Docker Run）
 
-使用单容器内置 SQLite 数据库，适合个人本地体验：
+使用单容器内置 SQLite 数据库，开箱即用，适合个人轻量使用与本地试用：
 
 ```bash
 docker run -d --name engram -p 8080:8080 \
@@ -124,11 +98,11 @@ docker run -d --name engram -p 8080:8080 \
   docker.io/nite07/engram:latest
 ```
 
-浏览器访问 `http://localhost:8080/`。全新实例首次访问会自动重定向至 `/setup` 初始化管理员账号。
+访问 `http://localhost:8080/`。首次启动会自动引导进入 `/setup` 页面创建系统初始管理员账号。
 
-### 生产部署（Docker Compose）
+### 生产部署（Docker Compose + PostgreSQL）
 
-多用户生产环境建议配合 PostgreSQL 使用。
+生产环境与多用户部署推荐使用 PostgreSQL。
 
 创建 `docker-compose.yaml`（或直接使用仓库中的 [docker-compose.yaml](./docker-compose.yaml)）：
 
@@ -181,23 +155,10 @@ docker compose up -d
 
 ### 反向代理与 HTTPS
 
-若在 Caddy、Nginx 或 Traefik 等反向代理后运行：
+将 Engram 部署在反向代理（如 Caddy、Nginx、Traefik）后时：
 
-1. 设置 `BASE_URL` 为外部访问域名（如 `https://engram.example.com`）。
-2. 设置 `TRUSTED_PROXIES` 为 Engram **实际看到的**反代连接来源地址（逗号分隔的 IP 或 CIDR）。登录限流、审计日志与新设备提醒都依赖客户端 IP；不设置时，所有请求看起来都来自反代本身。
-
-`TRUSTED_PROXIES` 缺省为空，即忽略 `X-Forwarded-For` 与 `X-Real-IP`。这是有意的：请求头只和设置它的那一跳一样可信。只列出你自己运行的代理，不要列客户端网段，也不要写 `0.0.0.0/0`。
-
-该填什么取决于反代如何连到 Engram：
-
-| 拓扑 | Engram 看到的地址 |
-| :--- | :--- |
-| 反代与 Engram 在同一台主机，不用容器 | 回环地址：`127.0.0.1/32,::1/128` |
-| Engram 在容器里、端口发布到宿主机，反代在宿主机上 | 通常是容器网络的**网关地址**，而不是 `127.0.0.1`：发布端口经网桥转发。用 `docker network inspect <网络名>` 查看 `Gateway` |
-| 反代与 Engram 在同一个容器网络里 | 反代容器在该网络中的地址，或整个网络的子网 |
-| CDN 或负载均衡 → 反代 → Engram | 每一个会追加 `X-Forwarded-For` 的跳都要列入；或者让反代在转发前用真实客户端 IP 覆盖该请求头 |
-
-不想猜的话：先不设置 `TRUSTED_PROXIES`，在反代后启动 Engram 并发一个请求。若请求带着转发头、来源是未被信任的回环或私有地址，Engram 会记一条警告 `forwarded client ip header ignored ...`，其中 `remote_ip` 字段就是要填的地址。启动时 Engram 也会记录当前信任了哪些代理。
+1. **`BASE_URL`**：配置为外部实际访问地址（例如 `https://engram.example.com`），用于系统生成邮件直链与 OIDC 回调地址。
+2. **`TRUSTED_PROXIES`**：配置为反向代理所在 IP 或 CIDR 网段（如本地代理 `127.0.0.1/32,::1/128`，或容器网桥网关 IP）。此配置确保服务能获取真实客户端 IP，用于登录安全限流、审计日志与新设备提醒。
 
 ---
 
@@ -228,16 +189,15 @@ SMTP 邮件服务、注册开放策略、OIDC 登录提供方及存储配额等�
 
 ## 鸣谢
 
-Engram 站在以下优秀开源项目的肩膀上：
+Engram 站在以下优秀开源项目与社区的肩膀上：
 
-- [go-fsrs](https://github.com/open-spaced-repetition/go-fsrs) —— FSRS v6 排程与参数优化。
-- [fsrs-rs](https://github.com/open-spaced-repetition/fsrs-rs) —— 优化器适配器所用训练实现。
-- [Gin](https://github.com/gin-gonic/gin) 与 [GORM](https://gorm.io) —— HTTP 与数据库层。
-- [Svelte](https://svelte.dev/) —— 前端单页应用。
-- [goldmark](https://github.com/yuin/goldmark) —— 一次性笔记迁移与邮件模板转换所用的 Markdown 渲染。卡片内容是 HTML，且只在沙箱 iframe 内显示。
-- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) —— 内置 MCP 服务端。
-- [zitadel/oidc](https://github.com/zitadel/oidc) 与 [go-i18n](https://github.com/nicksnyder/go-i18n) —— OIDC 登录与国际化语言包。
-- [MathJax](https://www.mathjax.org/) —— 数学公式渲染。
-- [Tailwind CSS](https://tailwindcss.com/) —— 页面样式库。
+- [Anki](https://apps.ankiweb.net/) —— 享誉全球的间隔重复闪卡先驱，Engram 的笔记类型、模板系统与卡组包格式设计深受其启发。
+- [go-fsrs](https://github.com/open-spaced-repetition/go-fsrs) 与 [fsrs-rs](https://github.com/open-spaced-repetition/fsrs-rs) —— 业界领先的 FSRS v6 排程算法与参数优化引擎。
+- [Gin](https://github.com/gin-gonic/gin) 与 [GORM](https://gorm.io) —— 高性能 Go HTTP 与 ORM 框架。
+- [Svelte](https://svelte.dev/) 与 [Tailwind CSS](https://tailwindcss.com/) —— 现代化响应式前端单页应用与样式库。
+- [modelcontextprotocol/go-sdk](https://github.com/modelcontextprotocol/go-sdk) —— Model Context Protocol (MCP) Go 语言服务端。
+- [MathJax](https://www.mathjax.org/) —— 优质的数学公式渲染库。
+- [goldmark](https://github.com/yuin/goldmark) —— 高效的 Markdown 解析引擎。
+- [zitadel/oidc](https://github.com/zitadel/oidc) 与 [go-i18n](https://github.com/nicksnyder/go-i18n) —— OIDC 单点登录与国际化多语言支持。
 
-友情链接：[LINUX DO](https://linux.do)。
+友情链接：[LINUX DO](https://linux.do) —— 真诚、友善、团结、专业的技术社区。
