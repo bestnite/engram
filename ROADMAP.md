@@ -481,28 +481,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   exist. Evidence is the oracle script's output, the `sha256sum -c` output and the raw scoped `go test`
   and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set.
 
-- [ ] **M18-101 The `learning-due` regeneration rule is measured and the README check is consistent** —
-  `M18-78` asked for two runs of `generate.py` that produce byte-identical `learning-due` files. It was
-  closed (`10f8a14`) by a README paragraph instead. That paragraph says that Anki writes an intraday due
-  "from the time `answerCard` runs" and that no offset applied afterwards reproduces the file. The
-  committed fixture suggests another cause. Five intraday cards answered 1 ms apart, all with `ivl` -60,
-  have dues 62 214, 69 213, 66 212, 67 211 and 68 210 ms after their answer times. That spread of 7 s does
-  not follow the answer order, which timing alone cannot produce. It fits a learning-step fuzz seeded per
-  card, where the card id is itself a wall-clock value. The README's procedure also contradicts itself.
-  `generate.py` rebuilds the `learning-due` pair on every run, so "regenerated only when its rule changes"
-  is not enforced. After any run, `sha256sum -c` reports both files as `FAILED` and `git status --short`
-  lists them, while line 62 says that the two commands "must report every file as `OK` and print nothing".
-  The exception names only the `.apkg`, but `learning-due.golden.json` drifts with it. The fix has two
-  parts. First, measure with the oracle whether the due offsets repeat when the cards' ids and the
-  collection's creation time are fixed before `answerCard` runs; record the measured offsets of two runs
-  in the README. Second, if they repeat, `generate.py` fixes those values and the pair joins the
-  determinism check. If they do not repeat, `generate.py` leaves the committed pair untouched unless it is
-  given a flag that rebuilds it, and the README names both files, the flag and the check that then
-  passes. *Acceptance:* two runs of the README's determinism check, without the flag, report every file
-  as `OK` and print nothing; `TestAnkiLearningDueOraclePackage` passes on both drivers. Evidence is the
-  oracle's printed offsets for two runs, both `sha256sum -c` outputs and the raw scoped `go test` output,
-  the PostgreSQL run with `TEST_PG_DSN` set.
-
 - [ ] **M18-102 The closing evidence the reviewed tasks lack is recorded** — section 7 of `AGENTS.md`
   lets an entry leave the backlog only with evidence, and these closing commits lack the evidence their
   acceptance named. `M18-20` (`16b130f`) says the work landed in `63c508c`, a commit that no branch
