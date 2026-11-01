@@ -79,6 +79,55 @@ func TestWorkerDeliversQueuedMessage(t *testing.T) {
 	}
 }
 
+// TestFailedStatusWriteEndsTheRound covers the state a full database volume produces: reads still
+// work, writes fail. The row whose "sent" update failed is still due, so a drain that carried on
+// would select the same batch again and deliver it again without end. The round must stop after the
+// failed write and leave the row for the next tick.
+func TestFailedStatusWriteEndsTheRound(t *testing.T) {
+	db := testDB(t)
+	for i := 0; i < 2; i++ {
+		if err := store.EnqueueOutboxMessage(context.Background(), db, &store.OutboxMessage{
+			To: "a@example.com", Type: "invite", Subject: "stuck", HeadersJSON: "{}",
+		}, time.Now().UTC()); err != nil {
+			t.Fatalf("EnqueueOutboxMessage: %v", err)
+		}
+	}
+	// The injected failure is the status write, not the send: the mail goes out and its outcome
+	// cannot be recorded.
+	if err := db.Exec(`CREATE TRIGGER mail_outbox_reject_sent BEFORE UPDATE OF status ON mail_outbox
+		WHEN NEW.status = 'sent' BEGIN SELECT RAISE(ABORT, 'injected status write failure'); END`).Error; err != nil {
+		t.Fatalf("install failing status-write trigger: %v", err)
+	}
+	sender := &recordingSender{}
+	ob := NewOutbox(Deps{DB: db, Sender: sender, Retry: fastRetry(3), PollInterval: 5 * time.Millisecond, BatchSize: 2})
+	configuredSettings(t, db, "127.0.0.1:587", "no-reply@example.com")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ob.drain(ctx)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		cancel()
+		<-done
+		t.Fatalf("drain did not return after the status write failed; Send calls = %d", sender.calls())
+	}
+	if got := sender.calls(); got > 2 {
+		t.Errorf("Send calls = %d, want at most one batch (2)", got)
+	}
+	var pending int64
+	if err := db.Model(&store.OutboxMessage{}).Where("status = ?", store.OutboxStatusPending).Count(&pending).Error; err != nil {
+		t.Fatalf("count pending rows: %v", err)
+	}
+	if pending != 2 {
+		t.Errorf("pending rows = %d, want 2 (a failed status write leaves its row for the next tick)", pending)
+	}
+}
+
 // TestTransientFailureIsRetriedAndLastErrorVisible is an acceptance point: a transient send failure
 // is retried, and the last error and the attempt count can be read from the admin panel
 // (OutboxSummaryOf).

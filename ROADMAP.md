@@ -1042,7 +1042,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   three assignments, or render the state as the result banner its name promises.
 
 
-- [ ] **M19-69 A failed outbox status write re-sends the same batch without end** — *Blocker.* `drain` loops
+- [x] **M19-69 A failed outbox status write re-sends the same batch without end** — *Blocker.* `drain` loops
   "select the due batch → deliver each → stop when the batch is short" (`internal/mail/outbox.go:264-285`) with
   no claim, lease or in-memory attempt counter; `deliver` sends first and records the outcome afterwards
   (`:299-317`), so a row whose `MarkOutboxSent` write failed still matches the next SELECT
@@ -1055,6 +1055,25 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Acceptance:* stop the round when a status write fails and let the next tick retry, or claim each row with a
   lease or attempt increment inside the same statement; a regression makes the status write fail and asserts a
   bounded number of sends and that the round returns.
+  *Closed by the `fix(mail): stop the outbox round when a status write fails` commit on `main`.*
+  `deliver` (`internal/mail/outbox.go:296`) now returns the error from `MarkOutboxSent`,
+  `MarkOutboxRetry` and `MarkOutboxFailed` (and from resolving the SMTP config); `drain` (`:280`) logs
+  `mail: delivery round stopped after a failed status write` and returns on the first error. The row
+  stays as the next SELECT expects it, so the next tick retries it; this trades one bounded duplicate
+  delivery for an unbounded loop, which is the trade the acceptance allows. `TestFailedStatusWriteEndsTheRound`
+  (`internal/mail/outbox_test.go`) queues two mails, installs a SQLite trigger that aborts the
+  `status = 'sent'` UPDATE, drains with `BatchSize: 2`, and asserts the drain returns within two seconds,
+  sends at most one batch and leaves both rows pending. Raw output of
+  `go test ./internal/mail/ -run TestFailedStatusWriteEndsTheRound -count=1 -v`:
+  ```
+  === RUN   TestFailedStatusWriteEndsTheRound
+  --- PASS: TestFailedStatusWriteEndsTheRound (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/mail	0.022s
+  ```
+  With only `outbox.go` reverted the same test failed with
+  `drain did not return after the status write failed; Send calls = 8842` after the two-second guard.
+  `go test ./internal/mail/ -count=1` passes.
 
 - [ ] **M19-70 Shutdown abandons a running optimisation and leaves its row unfinished** — *should-fix.*
   `runServe` builds the signal context at `cmd/engram/main.go:187` and hands it to every worker — retention,

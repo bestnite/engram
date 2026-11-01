@@ -277,7 +277,12 @@ func (o *Outbox) drain(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			o.deliver(ctx, row)
+			if err := o.deliver(ctx, row); err != nil {
+				// A failed status write leaves the row exactly as the next SELECT expects it, so carrying on
+				// would pick the same row again and deliver it again. Stop this round; the next tick retries.
+				o.logger.Error("mail: delivery round stopped after a failed status write", "outbox_id", row.ID, "error", err)
+				return
+			}
 		}
 		if len(rows) < o.batch {
 			return
@@ -286,35 +291,27 @@ func (o *Outbox) drain(ctx context.Context) {
 }
 
 // deliver delivers one mail and writes the state back according to the result: success -> sent;
-// failure -> rescheduled with backoff, or permanently failed.
-func (o *Outbox) deliver(ctx context.Context, row store.OutboxMessage) {
+// failure -> rescheduled with backoff, or permanently failed. The returned error means the outcome
+// could not be written; the caller stops the round because the unchanged row is due again at once.
+func (o *Outbox) deliver(ctx context.Context, row store.OutboxMessage) error {
 	cfg, ok, err := o.resolver.Config(ctx)
 	if err != nil {
-		o.logger.Error("mail: resolve smtp config failed", "outbox_id", row.ID, "error", err)
-		return
+		return fmt.Errorf("resolve smtp config: %w", err)
 	}
 	if !ok {
-		return
+		return nil
 	}
 	sendErr := o.sender.Send(ctx, cfg, messageFromRow(row))
 	attempts := row.Attempts + 1
 	if sendErr == nil {
-		if err := store.MarkOutboxSent(ctx, o.db, row.ID, o.now()); err != nil {
-			o.logger.Error("mail: mark outbox sent failed", "outbox_id", row.ID, "error", err)
-		}
-		return
+		return store.MarkOutboxSent(ctx, o.db, row.ID, o.now())
 	}
 	o.logger.Warn("mail: delivery failed", "outbox_id", row.ID, "attempts", attempts, "error", sendErr)
 	if attempts >= o.retry.MaxAttempts {
-		if err := store.MarkOutboxFailed(ctx, o.db, row.ID, attempts, sendErr.Error(), o.now()); err != nil {
-			o.logger.Error("mail: mark outbox failed failed", "outbox_id", row.ID, "error", err)
-		}
-		return
+		return store.MarkOutboxFailed(ctx, o.db, row.ID, attempts, sendErr.Error(), o.now())
 	}
 	next := o.now().Add(o.retry.backoff(attempts))
-	if err := store.MarkOutboxRetry(ctx, o.db, row.ID, attempts, next, sendErr.Error(), o.now()); err != nil {
-		o.logger.Error("mail: reschedule outbox failed", "outbox_id", row.ID, "error", err)
-	}
+	return store.MarkOutboxRetry(ctx, o.db, row.ID, attempts, next, sendErr.Error(), o.now())
 }
 
 // messageFromRow turns an outbox row back into a Message (for delivery).
