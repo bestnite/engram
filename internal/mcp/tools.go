@@ -139,7 +139,7 @@ type importDeckIn struct {
 	AllowOthersProgress bool `json:"allow_others_progress,omitempty" jsonschema:"admin only: import progress that belongs to another user"`
 	IncludeProgress     bool `json:"include_progress,omitempty" jsonschema:"import Anki scheduling progress for the current user"`
 	// ApplyWeights defaults to false: only under the new_deck target are the package's weights written into the newly created preset.
-	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for the new deck's preset (new_deck only); default false"`
+	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for a new_deck preset with preset_mode new if they can be migrated; default false; reuse and copy refuse apply_weights; into_deck and replace_deck accept but ignore it and leave the preset unchanged"`
 }
 
 // createImportUploadIn is the input of create_import_upload: the import options are fixed into the ticket when it is issued.
@@ -160,7 +160,7 @@ type createImportUploadIn struct {
 	AllowOthersProgress bool `json:"allow_others_progress,omitempty" jsonschema:"admin only: import progress that belongs to another user"`
 	IncludeProgress     bool `json:"include_progress,omitempty" jsonschema:"import Anki scheduling progress for the current user"`
 	// ApplyWeights defaults to false: only under the new_deck target are the package's weights written into the newly created preset.
-	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for the new deck's preset (new_deck only); default false"`
+	ApplyWeights bool `json:"apply_weights,omitempty" jsonschema:"use the package's FSRS weights for a new_deck preset with preset_mode new if they can be migrated; default false; reuse and copy refuse apply_weights; into_deck and replace_deck accept but ignore it and leave the preset unchanged"`
 }
 
 // updateNoteIn is the input of update_note.
