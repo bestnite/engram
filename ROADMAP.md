@@ -164,25 +164,6 @@ above, and it lands after `M18-49` and `M18-51`, which change the function it re
 after `M18-49`, which changes the replay its expected values come from, and never runs beside another
 entry that changes `internal/store/anki_progress_import_test.go`.
 
-- [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
-  half of `internal/store/package_import.go`, `internal/store/package_document.go`,
-  `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
-  of `schema/README.md`, the export dialog of `frontend/src/lib/views/DeckDetailView.svelte`, which
-  then offers only `.apkg` with the four switches, the `export_deck` MCP tool, the JSON document branch
-  of the upload ticket, and the CLI's `.edeck` export. Keep in a package-named file everything the
-  `.apkg` path still uses: `PackageError` and its codes, `PackageImportOptions`,
-  `PackageImportReport`, `PackageImportError`, the package limits, `MediaQuotaBytes`,
-  `uniqueOwnerName`, the archive spool and the `ImportPackage` entry. `README.md` and
-  `ARCHITECTURE.md` record the single format and name what it does not carry (the note's
-  `external_ref`, `extra` and `source_url`, because Anki drops `notes.data` on import), and the
-  release ledger records the breaking removals. This entry is split into `M18-83` to `M18-86` and closes when all four have landed. They run one at a
-  time, in the order that never leaves a producer of `.edeck` without its reader: `M18-85` (the export
-  dialog) first, then `M18-84` (the MCP tool, the upload ticket and the CLI), then `M18-83` (the store
-  import core), then `M18-86` (schema, documentation and this ledger). *Acceptance:* `git grep -n edeck -- '*.go' '*.ts' '*.svelte'` is
-  empty; export and import both go through `.apkg` only; an archive named `.zip` whose entries hold
-  an Anki collection is accepted, because the file name never decides the reader; the full-module gate
-  passes. Evidence is the grep output, the test output, and a captured export-then-import round trip.
-
 - [ ] **M18-49 The replay selects the rows Anki selects** — `deriveAnkiMemory` in
   `internal/store/anki_import.go` replays the kept rows from an empty state, except when the first kept
   row is a review row (revlog type 1): then it builds SM-2 from the card's `factor` and `ivl` and
@@ -262,14 +243,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   names. Evidence is the oracle's printed values and the golden.
 
 
-
-- [ ] **M18-86 Single-format documentation and the removal in the release ledger** — fourth part of the
-  split of `M18-5`. Delete `schema/deck-package.schema.json` and `schema/examples/deck-package.example.json`,
-  remove the `.edeck` section of `schema/README.md`, state the single format in `README.md` and
-  `ARCHITECTURE.md` and name what it does not carry (`external_ref`, `extra`, `source_url`, because Anki
-  drops `notes.data` on import), and record the breaking removal in the release ledger. *Acceptance:*
-  `git grep -n -i edeck -- README.md ARCHITECTURE.md schema` prints nothing apart from the ledger row that
-  records the removal, and the ledger holds that row. Evidence is the grep output and the diff.
 
 
 ---
@@ -373,6 +346,7 @@ bluemonday-sanitised `internal/render` are gone.
 | Unmapped templates the target declares keep their cards (M17-63) | A template the mapping leaves out keeps its card when the target config declares the same template id: the card keeps its id, template and `card_states` and counts only in `cards_moved`, so a change between two types that share `forward` and `reverse` no longer asks to confirm a removal that removes nothing. An unmapped template the target does not declare is still removed after confirmation. | No |
 | Orphan marks cleared for media an import reuses (M17-64) | Before the import transaction opens, `placeAnkiMedia` clears `orphaned_at` on every media row the package will reuse, so a garbage-collection run during a long import cannot delete the row and its file and fail the transaction. A dry run clears nothing, and an import still removes only the files it created. | No |
 | Legacy `.apkg` export (M18-1, with M18-11) | A deck export writes an Anki package the reference release imports: legacy schema 11 in `collection.anki21`, a `meta` entry and the media table; one switch each for scheduling, deck configurations, media and FSRS weights; the weights travel in `fsrsParams6`, answer specs in the `engram` note type key, and a card with a last review time carries `lrt`, in seconds, in `cards.data` (M18-11). The package is byte-for-byte deterministic. | No — a new export format, with the export switches on the HTTP route, the CLI and the MCP tool |
+| The `.edeck` deck package format is removed (M18-5, in parts M18-83 to M18-86) | A deck package is an Anki `.apkg` and nothing else: the import readers, the REST and web exports, the CLI, the MCP tools and the export dialog accept and produce `.apkg`; the old format's reader, writer, JSON document, schema files and MCP export tool are gone. A package carries no `external_ref`, `extra` or `source_url`, because Anki drops `notes.data` on import. | Yes — a file format is removed; a `.edeck` file can no longer be imported or exported |
 | `.apkg` import of scheduling data (M18-2, with M18-10 to M18-13, M18-36, M18-37, M18-47 to M18-50, the reader rules of M18-23 to M18-26, M18-14 to M18-18, M18-56 to M18-62, and M18-65 to M18-71) | An `.apkg` import applies the package's deck configuration to the new deck's preset and, when `include_progress` is on and off by default, the package's card states and review log to the importing account. An imported review row's `interval_days` is the revlog `ivl` (a negative `ivl` converted from seconds to days), its `duration_days` counts fractional days since the card's previous kept row, and its stability and difficulty come from the replay (M18-10). A card's last review time comes from `lrt`, then the last kept revlog row, then the due date minus `ivl` (M18-11). An interday learning card's due date counts days from collection creation, a filtered-deck card's due date comes from `odue`, and a learning or relearning due value is read as seconds above one billion and as days otherwise in every queue (M18-12, M18-47); such a card is placed in its home deck by `odid` (M18-48). An unusable `s`/`d` counts as missing (M18-36). The replay drops the rows up to the last reset, a history that begins with a review row takes the SM-2 state (M18-37), and the first learning row after a reset records state_before 0 (M18-50). Since M18-13 the reader tolerates layouts it used to reject with `package_bad_format`: a REAL value in a scheduling column is rounded, an undecodable deck configuration leaves the preset defaults, and an unreadable revlog no longer rejects a package imported with `include_progress` off (with it on, the import fails, as M18-23 requires). With `include_progress` off, `states_discarded` counts only cards with scheduling state and `progress_discarded` is true only when a state or a review was discarded (M18-14). A re-import with the option on keeps the importer's row when its `last_review_at` is not earlier than the package's and writes only the review rows later than the importer's latest review (M18-15). The new preset stores at most 36500 days and keeps the default steps when the package's steps are negative or not finite (M18-17). The report gains `weights_invalid` (M18-18). With `include_progress` on, a revlog row that cannot be read fails the import with `package_bad_format` (M18-23); a skipped card's review rows count in `reviews_discarded` with a warning (M18-65). When the top deck's configuration is not found and a configuration was skipped, the new preset holds the defaults rather than the single remaining one (M18-24), and one malformed `col.dconf` entry drops only that entry (M18-25). A REAL value in `cards.nid`, `cards.did` or `cards.ord` fails the import; in `revlog.cid`, `revlog.ease` or `revlog.type` it makes that revlog row unreadable; in `cards.type`, `cards.queue`, `cards.odid` or `cards.flags` it leaves that card out and counts in the new `cards_skipped` field (M18-26). | No — a new option and new report fields; imported cards still start as new when the option is off |
 | `.apkg` exports on every transport (M18-3) | The deck export route, the web download, the CLI and the `export_deck` MCP tool take `format=apkg`, and `create_export_download` issues a single-use download ticket for the same package. | No — one new format value and one ticket route |
 | Imported FSRS weights are opt-in and validated (M18-9) | An `.apkg` import writes the package's FSRS weights only when `apply_weights` is on, the target is `new_deck` and `fsrs.MigrateWeights` accepts them; the report's `weights_applied` and `weights_discarded` now describe an `.apkg` import as well. | No — a new option and report meaning |

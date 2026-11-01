@@ -159,7 +159,7 @@ func TestValidateURL(t *testing.T) {
 		raw     string
 		wantErr bool
 	}{
-		{"https ok", "https://example.com/pkg.edeck", false},
+		{"https ok", "https://example.com/pkg.apkg", false},
 		{"https with port and query", "https://example.com:8443/pkg?sig=abc", false},
 		{"http rejected", "http://example.com/pkg", true},
 		{"ftp rejected", "ftp://example.com/pkg", true},
@@ -192,7 +192,7 @@ func TestValidateURL(t *testing.T) {
 func TestFetchDownloadsPublicPackage(t *testing.T) {
 	pkg := []byte("PK\x03\x04 fake-but-binary-package-bytes")
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/pkg.edeck" {
+		if r.URL.Path != "/pkg.apkg" {
 			http.NotFound(w, r)
 			return
 		}
@@ -201,7 +201,7 @@ func TestFetchDownloadsPublicPackage(t *testing.T) {
 	defer srv.Close()
 
 	c, d := newTestClient(t, srv, publicResolver(), DefaultLimits())
-	got, err := readAll(c.Fetch(context.Background(), "https://example.com/pkg.edeck", 1<<20))
+	got, err := readAll(c.Fetch(context.Background(), "https://example.com/pkg.apkg", 1<<20))
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
@@ -229,7 +229,7 @@ func TestFetchSpoolsToTemporaryFileAndRemovesIt(t *testing.T) {
 	defer srv.Close()
 
 	c, _ := newTestClient(t, srv, publicResolver(), DefaultLimits())
-	body, err := c.Fetch(context.Background(), "https://example.com/pkg.edeck", 1<<20)
+	body, err := c.Fetch(context.Background(), "https://example.com/pkg.apkg", 1<<20)
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
@@ -444,7 +444,7 @@ func TestFetchRejectsRedirectToPrivateAndNonHTTPS(t *testing.T) {
 // leading and trailing whitespace is stripped and the request still goes out on the canonical result.
 func TestFetchCanonicalisesURL(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/pkg.edeck" {
+		if r.URL.Path != "/pkg.apkg" {
 			http.NotFound(w, r)
 			return
 		}
@@ -453,7 +453,7 @@ func TestFetchCanonicalisesURL(t *testing.T) {
 	defer srv.Close()
 
 	c, d := newTestClient(t, srv, publicResolver(), DefaultLimits())
-	if _, err := readAll(c.Fetch(context.Background(), "  https://example.com/pkg.edeck  ", 1<<20)); err != nil {
+	if _, err := readAll(c.Fetch(context.Background(), "  https://example.com/pkg.apkg  ", 1<<20)); err != nil {
 		t.Fatalf("Fetch() with a whitespace-padded url error = %v, want success", err)
 	}
 	if dialed := d.dialed(); len(dialed) != 1 || !strings.HasPrefix(dialed[0], "93.184.216.34:") {
