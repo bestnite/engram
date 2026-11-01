@@ -164,7 +164,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   write, with the version re-read inside it; a regression with two connections migrating at once shows
   metadata intact and exactly one note type. A process mutex alone is not a fix.
 
-- [ ] **M19-5 A cancelled import deletes a media file another import committed** — *Blocker.*
+- [x] **M19-5 A cancelled import deletes a media file another import committed** — *Blocker.*
   `cleanupMediaWrites` treats "the lookup failed" as "no metadata row"
   (`internal/store/package_import.go:506-519`, esp. `:512-515`; called from `anki_import.go:917-922`).
   A places the file outside its transaction, B reuses that file and commits the metadata row, A then
@@ -175,6 +175,30 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   the file. *Acceptance:* a lookup error keeps the file and reports; deletion requires proof of
   absence, not a failed query. Cover it with a regression that cancels one import mid-flight while a
   second commits the same sha, and shows the file surviving and a later upload reusing it.
+  *Closed by `248f7f5`.* `cleanupMediaWrites` (`internal/store/package_import.go:502-527`) now separates
+  the three outcomes: a metadata row keeps the file, a failed lookup keeps the file and logs
+  `media cleanup kept a file whose metadata lookup failed` with the sha and path, and only a successful
+  lookup that finds no row removes it. Note the entry's own line references predate the fix; the function
+  is at `:509`. `TestCancelledImportKeepsMediaCommittedByAnother`
+  (`internal/store/media_cleanup_test.go`) prepares import A so its bytes are on disk with no row, lets
+  import B commit the row for the same sha, cancels A's context, asserts the cleanup's lookup really fails
+  on that context, then asserts the file survives, the warning was logged, and a later
+  `SaveBytesTracked` reuses the row and the file. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestCancelledImportKeepsMediaCommittedByAnother -count=1 -v`:
+  ```
+  === RUN   TestCancelledImportKeepsMediaCommittedByAnother
+  === RUN   TestCancelledImportKeepsMediaCommittedByAnother/sqlite
+  === RUN   TestCancelledImportKeepsMediaCommittedByAnother/postgres
+  --- PASS: TestCancelledImportKeepsMediaCommittedByAnother (0.35s)
+      --- PASS: TestCancelledImportKeepsMediaCommittedByAnother/sqlite (0.01s)
+      --- PASS: TestCancelledImportKeepsMediaCommittedByAnother/postgres (0.03s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.361s
+  ```
+  The same test before the fix failed with `cancelled import A removed a file that existed before it:
+  /tmp/TestCancelledImportKeepsMediaCommittedByAnothersqlite2182148403/001/b1/b13e90f8....png:
+  stat ...: no such file or directory`. The package/Anki/media store tests also pass with
+  `go test ./internal/store/ -run 'TestAnkiImport|TestMedia|TestPackage|TestResolvePackageMaxConcurrentImports' -count=1`.
 
 - [ ] **M19-6 Deleting a note type can succeed while a note is created against it** — *Blocker.* The
   delete counts referencing notes and then deletes in the same transaction
