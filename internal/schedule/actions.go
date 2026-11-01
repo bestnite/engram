@@ -16,7 +16,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// ErrNothingToUndo means the card has no review log, so Undo has nothing to roll back.
+// ErrNothingToUndo means no review can be safely restored from the available history.
 var ErrNothingToUndo = errors.New("schedule: no review to undo")
 
 // UndoInput are the inputs for one undo; tx has the same semantics as in Submit (the caller provides the transaction boundary).
@@ -92,6 +92,9 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 	if err != nil {
 		return store.CardState{}, err
 	}
+	if stateBefore != StateNew && (prev == nil || !validUndoMemory(prev.Stability, prev.Difficulty)) {
+		return store.CardState{}, fmt.Errorf("%w: card %d user %d has no usable previous memory", ErrNothingToUndo, in.CardID, in.UserID)
+	}
 
 	card, err := cardFromState(cur)
 	if err != nil {
@@ -150,6 +153,12 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 		return store.CardState{}, err
 	}
 	return next, nil
+}
+
+func validUndoMemory(stability, difficulty *float64) bool {
+	return stability != nil && difficulty != nil &&
+		!math.IsNaN(*stability) && !math.IsInf(*stability, 0) && *stability >= 0.001 &&
+		!math.IsNaN(*difficulty) && !math.IsInf(*difficulty, 0) && *difficulty >= 1 && *difficulty <= 10
 }
 
 // rebuildReviewLog rebuilds the ReviewLog that fsrs.Rollback needs, from the log being undone and the log before it,

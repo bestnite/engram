@@ -1485,10 +1485,11 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 // retention of 0.9 assumes the retention the card's SM-2 intervals aimed at.
 func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *CardState, engine *fsrs.FSRS, selected []anki.Review, history fsrs.ReviewEntries, complete bool, keptIDs []int64, rowMemory map[int64]fsrs.MemoryState, approximated *int) bool {
 	state.Stability, state.Difficulty = stability, difficulty
-	if card.Type != 0 && !usableAnkiMemory(state.Stability, state.Difficulty) {
+	if card.Type != 0 {
+		carried := usableAnkiMemory(state.Stability, state.Difficulty)
 		var memory *fsrs.MemoryState
 		var computeErr error
-		if len(history) == 0 || !complete {
+		if !carried && (len(history) == 0 || !complete) {
 			*approximated++
 		}
 		if len(history) > 0 {
@@ -1524,7 +1525,7 @@ func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *Car
 					memory, computeErr = engine.MemoryState(history, start)
 				}
 			}
-		} else {
+		} else if !carried {
 			// This SM-2 estimate is not aligned with Anki's memory state.
 			interval := float64(card.Interval)
 			if interval < 0 {
@@ -1532,10 +1533,12 @@ func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *Car
 			}
 			memory, computeErr = engine.MemoryStateFromSM2(float64(card.Factor)/1000, interval, 0.9)
 		}
-		if computeErr != nil || memory == nil || !usableAnkiMemory(&memory.Stability, &memory.Difficulty) {
-			return false
+		if !carried {
+			if computeErr != nil || memory == nil || !usableAnkiMemory(&memory.Stability, &memory.Difficulty) {
+				return false
+			}
+			state.Stability, state.Difficulty = &memory.Stability, &memory.Difficulty
 		}
-		state.Stability, state.Difficulty = &memory.Stability, &memory.Difficulty
 	}
 	if len(keptIDs) > 0 && state.Stability != nil && state.Difficulty != nil {
 		rowMemory[keptIDs[len(keptIDs)-1]] = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}

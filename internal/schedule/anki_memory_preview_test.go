@@ -3,7 +3,9 @@ package schedule
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -186,6 +188,36 @@ func TestAnkiResetRollbackPreview(t *testing.T) {
 			}
 			if _, err := scheduler.Preview(&state, now); err != nil {
 				t.Fatalf("Preview: %v", err)
+			}
+			type snapshot struct {
+				States  []store.CardState
+				Reviews []store.Review
+				Audits  []store.AuditLog
+			}
+			read := func() snapshot {
+				var v snapshot
+				if err := db.Order("card_id,user_id").Find(&v.States).Error; err != nil {
+					t.Fatal(err)
+				}
+				if err := db.Order("id").Find(&v.Reviews).Error; err != nil {
+					t.Fatal(err)
+				}
+				if err := db.Order("id").Find(&v.Audits).Error; err != nil {
+					t.Fatal(err)
+				}
+				return v
+			}
+			before := read()
+			tx := db.Begin()
+			_, err = Rollback(context.Background(), tx, UndoInput{CardID: state.CardID, UserID: user.ID, ExpectedVersion: state.Version, Scheduler: scheduler, Now: now})
+			if !errors.Is(err, ErrNothingToUndo) {
+				t.Fatalf("pre-reset undo error=%v", err)
+			}
+			if err := tx.Commit().Error; err != nil {
+				t.Fatal(err)
+			}
+			if after := read(); !reflect.DeepEqual(before, after) {
+				t.Fatalf("pre-reset refusal changed tables: before=%+v after=%+v", before, after)
 			}
 		})
 	}
