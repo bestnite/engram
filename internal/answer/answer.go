@@ -77,6 +77,14 @@ type Roles interface {
 	Roles() []Role
 }
 
+// selfAssessed is implemented by a control whose answer is not machine graded:
+// Grade returns no score and the learner chooses the rating. IsMachineGraded
+// reads this declaration instead of knowing control names, so a later control
+// with the same flow needs no change here.
+type selfAssessed interface {
+	SelfAssessed() bool
+}
+
 // Registry maps a control name to its factory.
 type Registry struct {
 	controls map[string]Factory
@@ -135,15 +143,26 @@ func Lookup(name string) (Control, bool) { return Default.Lookup(name) }
 
 // IsMachineGraded reports whether an answer spec names a control whose answer the server grades.
 //
-// A nil spec names no control, so nothing is graded. The short answer control carries a spec because it records the
-// written answer, but its rating stays a self-assessment: it returns no score, so it is not machine graded. Every other
-// registered control grades the submitted answer against the field values its roles bind.
+// A nil spec names no control, so nothing is graded. A control that implements selfAssessed keeps the learner's own
+// rating even though it carries a spec; every other registered control grades the submitted answer against the field
+// values its roles bind.
 func IsMachineGraded(spec *notetype.AnswerSpec) bool {
-	if spec == nil || spec.Control == "short_answer" {
+	if spec == nil {
 		return false
 	}
-	_, ok := Lookup(spec.Control)
-	return ok
+	control, ok := Lookup(spec.Control)
+	if !ok {
+		return false
+	}
+	return machineGraded(control)
+}
+
+// machineGraded reports whether a control's Grade produces the rating. It is
+// separate from IsMachineGraded so the optional interface can be exercised
+// without registering a second control in the process registry.
+func machineGraded(control Control) bool {
+	assessed, ok := control.(selfAssessed)
+	return !ok || !assessed.SelfAssessed()
 }
 
 // Names returns the control names registered in Default.

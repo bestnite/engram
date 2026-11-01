@@ -1256,7 +1256,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go test ./internal/answer/ -count=1` passes, and
   `go test ./internal/web/ -run 'TestGrade|TestReview|TestOptionOrder|TestChoice' -count=1` passes.
 
-- [ ] **M19-33 `IsMachineGraded` special-cases a control name in core code** — *nit.*
+- [x] **M19-33 `IsMachineGraded` special-cases a control name in core code** — *nit.*
   `internal/answer/answer.go:136-147` returns false when `spec.Control == "short_answer"`, while the package
   doc and AGENTS §2.3.7 say adding a control means adding one file and registering it with no core change.
   A second self-assessed control (the essay or draw-and-explain kind M10-3 will need) must edit this
@@ -1265,6 +1265,36 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   rule for any control but `short_answer`. *Acceptance:* an optional interface implemented by the control
   (`SelfAssessed() bool`, or `MachineGraded() bool`) consulted by `IsMachineGraded`, with no control name
   appearing as a string literal outside its own file.
+  *Closed by this commit (`fix(answer): let a control declare itself self-assessed`).*
+  The optional interface `selfAssessed` (`internal/answer/answer.go:84`) declares `SelfAssessed() bool`.
+  `shortAnswerControl` implements it in its own file (`internal/answer/short_answer.go:18`), and
+  `IsMachineGraded` (`answer.go:149`) looks the control up and asks `machineGraded` (`:163`), which returns
+  false only when the control implements the interface and reports true. A second self-assessed control
+  therefore adds one file and one method, with no edit to core code and no control name in a conditional;
+  the remaining `short_answer` literals in `internal/notetype/stock_engram.go` are the stock note type's
+  own kind and answer-spec data, not a name test.
+  `TestIsMachineGradedAsksTheControl` and `TestMachineGradedReadsTheOptionalInterface`
+  (`internal/answer/machine_graded_test.go`) cover nil, unknown, self-assessed and machine-graded specs,
+  then exercise the interface on two registered controls without a second registry entry. Raw output of
+  `go test ./internal/answer/ -run 'TestIsMachineGradedAsksTheControl|TestMachineGradedReadsTheOptionalInterface' -count=1 -v`:
+  ```
+  === RUN   TestIsMachineGradedAsksTheControl
+  === RUN   TestIsMachineGradedAsksTheControl/nil_spec
+  === RUN   TestIsMachineGradedAsksTheControl/unknown_control
+  === RUN   TestIsMachineGradedAsksTheControl/self-assessed_control
+  === RUN   TestIsMachineGradedAsksTheControl/graded_control
+  --- PASS: TestIsMachineGradedAsksTheControl (0.00s)
+      --- PASS: TestIsMachineGradedAsksTheControl/nil_spec (0.00s)
+      --- PASS: TestIsMachineGradedAsksTheControl/unknown_control (0.00s)
+      --- PASS: TestIsMachineGradedAsksTheControl/self-assessed_control (0.00s)
+      --- PASS: TestIsMachineGradedAsksTheControl/graded_control (0.00s)
+  === RUN   TestMachineGradedReadsTheOptionalInterface
+  --- PASS: TestMachineGradedReadsTheOptionalInterface (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/answer	0.002s
+  ```
+  `go test ./internal/answer/ -count=1`, `go test ./internal/api/ -run 'TestDueCards|TestReview|TestAnswer' -count=1`
+  and `go test ./internal/web/ -run 'TestReview|TestGrade|TestChoice' -count=1` pass.
 
 - [ ] **M19-34 The retention interval constant is dead and the sweep runs every 10 minutes while the
   package documents one hour** — *nit.* `retention.DefaultInterval = time.Hour` is documented as the

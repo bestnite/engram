@@ -13,6 +13,10 @@ type shortAnswerControl struct{}
 
 func (shortAnswerControl) Name() string { return "short_answer" }
 
+// SelfAssessed marks the control as learner-rated: Grade returns no score and
+// the review keeps the rating the learner chose.
+func (shortAnswerControl) SelfAssessed() bool { return true }
+
 // Roles declares the optional reference answer.
 func (shortAnswerControl) Roles() []Role {
 	return []Role{{Name: "reference", Kind: KindText}}
