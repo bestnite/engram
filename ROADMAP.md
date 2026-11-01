@@ -1296,7 +1296,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go test ./internal/answer/ -count=1`, `go test ./internal/api/ -run 'TestDueCards|TestReview|TestAnswer' -count=1`
   and `go test ./internal/web/ -run 'TestReview|TestGrade|TestChoice' -count=1` pass.
 
-- [ ] **M19-34 The retention interval constant is dead and the sweep runs every 10 minutes while the
+- [x] **M19-34 The retention interval constant is dead and the sweep runs every 10 minutes while the
   package documents one hour** — *nit.* `retention.DefaultInterval = time.Hour` is documented as the
   fallback (`internal/retention/retention.go:36-41,72-75`) and passed through as the zero value
   (`:96-102`), after which the worker substitutes its own 10-minute default
@@ -1305,6 +1305,26 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   reader reasoning about load is wrong by 6×, and AGENTS §1 makes a comment that disagrees with the code a
   finding. Verified by tracing the three call sites; no command needed. *Acceptance:* resolve the default
   in `New` so the constant and the comment become true, or delete the constant and document ten minutes.
+  *Closed by this commit (`fix(retention): document the worker's ten-minute sweep interval`).*
+  Took the deletion branch, which leaves the production rhythm unchanged. `retention.DefaultInterval` and its
+  one-hour rationale are gone (`internal/retention/retention.go`); `Deps.Interval` now says that the
+  worker's ten-minute default applies when it is `<=0`, which is the value `worker.DefaultInterval` actually
+  supplies. `retention.New` still passes zero through, so there is no second default to disagree with the
+  worker. No other file named the removed constant.
+  `go test ./internal/retention/ -count=1 -v` passes:
+  ```
+  === RUN   TestWorkerRunsASweepOnStart
+  --- PASS: TestWorkerRunsASweepOnStart (0.02s)
+  === RUN   TestSweepRespectsEachRetentionWindow
+  --- PASS: TestSweepRespectsEachRetentionWindow (0.01s)
+  === RUN   TestSweepKeepsInvitesWithoutExpiry
+  --- PASS: TestSweepKeepsInvitesWithoutExpiry (0.01s)
+  === RUN   TestNewRequiresEveryStore
+  --- PASS: TestNewRequiresEveryStore (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/retention	0.055s
+  ```
+  `go build ./internal/retention/ ./internal/worker/` and `go vet ./internal/retention/` are clean.
 
 - [x] **M19-35 The grade-mapping thresholds are not range-checked, so a perfect score can map to `Again`** —
   *nit.* `validate` checks version and rating range but not the threshold domain

@@ -34,11 +34,6 @@ import (
 )
 
 const (
-	// DefaultInterval is the default reclamation interval (1 hour).
-	//
-	// Rationale: everything reclaimed is an **already expired/stale** row, so deleting it a little later has no user-perceptible
-	// consequence, and there is no need for a ten-minute round like reminder/digest. The relevant time columns are indexed, so a single delete is independent of table size.
-	DefaultInterval = time.Hour
 	// ActionTokenGrace is how long a token is kept after expiry (30 days).
 	ActionTokenGrace = 30 * 24 * time.Hour
 	// FingerprintRetention is how long a login fingerprint is kept after it was last seen (90 days).
@@ -71,7 +66,7 @@ type Deps struct {
 	Fingerprints StalePurger
 	Media        MediaCollector
 	Logger       *slog.Logger
-	// Interval is the reclamation interval; DefaultInterval is used when <=0.
+	// Interval is the reclamation interval; the worker's ten-minute default is used when <=0.
 	Interval time.Duration
 }
 
