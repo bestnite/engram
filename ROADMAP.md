@@ -272,12 +272,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   nothing; `go test ./internal/store/...` passes on SQLite and with `TEST_PG_DSN` set, with the `postgres`
   subtests PASS. Evidence is the grep output and the raw scoped test output.
 
-- [ ] **M18-84 Remove `.edeck` from the transport entry points** — second part of the split of `M18-5`, run after `M18-85`.
-  Remove the `export_deck` MCP tool, the JSON-document branch of the upload ticket, and the CLI's `.edeck`
-  export; `.apkg` stays the only format on every entry. *Acceptance:* `git grep -n edeck -- internal/mcp
-  internal/api cmd` prints nothing; the transport tests pass on SQLite and with `TEST_PG_DSN` set, with the
-  `postgres` subtests PASS. Evidence is the grep output and the raw scoped test output.
-
 - [ ] **M18-86 Single-format documentation and the removal in the release ledger** — fourth part of the
   split of `M18-5`. Delete `schema/deck-package.schema.json` and `schema/examples/deck-package.example.json`,
   remove the `.edeck` section of `schema/README.md`, state the single format in `README.md` and
