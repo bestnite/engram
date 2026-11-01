@@ -52,11 +52,11 @@ their items with `<br>`. The server maps each field name to the note type's fiel
 rejects an unknown name with a per-row error that names it. A field the payload omits
 becomes the empty string.
 
-`kind` remains accepted as a transitional alias for `note_type`: it names an engram stock
-kind (`basic`, `cloze`, ...), the server resolves it to the deck's stock note type for that
-kind, and creates that note type when the deck has none. New clients send `note_type`;
-`kind` disappears when the rich-text editor replaces the card-kind editor. When a note
-carries both, `note_type` wins.
+The request names the note type with `note_type` only. There is no `kind` key: the server has
+no field for it, so a note that sends `kind` without `note_type` names no note type and the
+import reports it as a per-row `note_type is required` error, and the schema rejects such a
+body because `note_type` is required. Every note is imported into the note type `note_type`
+names; nothing is resolved from a stock kind.
 
 Every note may also carry `external_ref` (the caller-defined idempotency key),
 `note_id`, `tags`, `extra` and `source_url`. `extra` and `source_url` are stored in the

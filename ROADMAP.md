@@ -2889,7 +2889,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go vet ./internal/api/`, `go test ./internal/api/ -run 'TestNote|TestBulkImport|TestImport' -count=1` and
   `go test ./internal/mcp/ -count=1` pass.
 
-- [ ] **M19-79 The schema README documents a `kind` request alias the server rejects** — *should-fix.*
+- [x] **M19-79 The schema README documents a `kind` request alias the server rejects** — *should-fix.*
   `schema/README.md:55-59` tells a client that `kind` "remains accepted as a transitional alias for `note_type`",
   that the server "resolves it to the deck's stock note type for that kind, and creates that note type when the
   deck has none", and that "when a note carries both, `note_type` wins". `ImportNote` has no such field
@@ -2901,6 +2901,40 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `{"notes":[{"kind":"basic","fields":{"front":"q","back":"a"}}]}` reports `'note_type' is a required property`;
   the server-side refusal is read, not run. *Acceptance:* the paragraph is removed, or rewritten to say what is
   true, and no committed document promises a request key the decoder does not have.
+  *Closed by this commit (`docs(schema): drop the note-import kind alias`).* The paragraph was rewritten to the
+  behaviour the decoder has: `schema/README.md:55-59` now states that there is no `kind` key, that a note sending
+  `kind` without `note_type` names no note type, that the import reports it as the per-row `note_type is
+  required` error, and that the schema rejects the body because `note_type` is required. No other committed
+  document promises a request key the decoder lacks: `git grep -n "kind" -- '*.md' ':!ROADMAP.md'` leaves only
+  descriptions of note-type configuration and the image-occlusion shape kinds. Raw output of `uvx check-jsonschema
+  --schemafile schema/note-import.schema.json` on
+  `{"notes":[{"kind":"basic","fields":{"front":"q","back":"a"}}]}`:
+  ```
+  Schema validation errors were encountered.
+    /tmp/opencode/kind-note.json::$.notes[0]: 'note_type' is a required property
+  ```
+  Raw output of `go doc ./internal/api ImportNote` (no kind field):
+  ```
+  package api // import "git.nite07.com/nite/engram/internal/api"
+
+  type ImportNote struct {
+  	NoteType    string         `json:"note_type"`
+  	Fields      map[string]any `json:"fields"`
+  	ExternalRef string         `json:"external_ref"`
+  	// NoteID addresses an existing note by external id; mutually exclusive with ExternalRef. An empty string means not addressed by id.
+  	NoteID string   `json:"note_id"`
+  	Tags   []string `json:"tags"`
+  	// SourceURL and Extra are the note's metadata columns, which schema/note-import.schema.json declares at
+  	// this level. A nil SourceURL, or an absent Extra, keeps the value stored on the note being updated, so an
+  	// import that only rewrites content does not erase metadata it never named. An explicit value writes over
+  	// it, and an empty source_url or a null extra clears the column.
+  	SourceURL *string         `json:"source_url"`
+  	Extra     json.RawMessage `json:"extra"`
+  }
+  ```
+  `go test ./internal/api/ -run TestNoteImportSchemaMatchesTheContract -count=1 -v` prints
+  `--- PASS: TestNoteImportSchemaMatchesTheContract (0.00s)` / `ok  	git.nite07.com/nite/engram/internal/api	0.012s`,
+  and that test treats `{"notes":[{"kind":"basic","fields":{"front":"q","back":"a"}}]}` as invalid.
 
 - [ ] **M19-80 The documented local start command fails before the server opens the database** — *should-fix.*
   `AGENTS.md:225-226` gives the only `go run` line in the repository: `DB_DRIVER=sqlite DB_DSN=data/engram.db
