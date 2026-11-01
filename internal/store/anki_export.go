@@ -141,7 +141,7 @@ func (s *DeckStore) ExportAnkiPackage(ctx context.Context, actorUserID, deckID u
 
 	var media []anki.WriteMedia
 	if opts.IncludeMedia {
-		media, err = s.ankiMediaFiles(ctx, deckID, types, notes, opts.MediaRoot)
+		media, err = s.ankiMediaFiles(ctx, actorUserID, deckID, types, notes, opts.MediaRoot)
 		if err != nil {
 			return nil, err
 		}
@@ -673,7 +673,11 @@ func ankiStepMinutes(part string) (float64, bool) {
 // types reference, sorted by name, with its bytes read from the content-addressed store.
 // A reference that does not resolve is a missing file, not an empty one, and fails the
 // export so the package never silently drops an asset.
-func (s *DeckStore) ankiMediaFiles(ctx context.Context, deckID uint64, types []NoteType, notes []Note, mediaRoot string) ([]anki.WriteMedia, error) {
+//
+// A name whose bytes the exporting user cannot read is refused: note fields are validated when
+// they are written, but a note type template can name a medium that belongs to a co-editor of
+// the deck, and shipping it would hand the exporter bytes no read request would serve them.
+func (s *DeckStore) ankiMediaFiles(ctx context.Context, actorUserID, deckID uint64, types []NoteType, notes []Note, mediaRoot string) ([]anki.WriteMedia, error) {
 	if mediaRoot == "" {
 		return nil, fmt.Errorf("%w: media root is empty", ErrPackageMediaMissing)
 	}
@@ -710,6 +714,7 @@ func (s *DeckStore) ankiMediaFiles(ctx context.Context, deckID uint64, types []N
 	nameStore := NewMediaNameStore(s.db)
 	mediaStore := NewMediaStore(s.db)
 	out := make([]anki.WriteMedia, 0, len(names))
+	var unreadable []string
 	for _, name := range names {
 		sha := ""
 		if match := mediaShaNameRE.FindStringSubmatch(name); match != nil {
@@ -726,6 +731,14 @@ func (s *DeckStore) ankiMediaFiles(ctx context.Context, deckID uint64, types []N
 			}
 			sha = row.Sha256
 		}
+		ok, err := mediaReadableByUser(ctx, s.db, actorUserID, sha)
+		if err != nil {
+			return nil, fmt.Errorf("export anki package: media readability %s: %w", sha, err)
+		}
+		if !ok {
+			unreadable = append(unreadable, "media/"+sha)
+			continue
+		}
 		meta, err := mediaStore.BySha256(ctx, sha)
 		if err != nil {
 			return nil, fmt.Errorf("export anki package: media metadata %s: %w", sha, err)
@@ -738,6 +751,14 @@ func (s *DeckStore) ankiMediaFiles(ctx context.Context, deckID uint64, types []N
 			return nil, fmt.Errorf("%w: sha256=%s: %v", ErrPackageMediaMissing, sha, err)
 		}
 		out = append(out, anki.WriteMedia{Name: name, Bytes: raw})
+	}
+	if len(unreadable) > 0 {
+		sort.Strings(unreadable)
+		return nil, &PackageError{
+			Code:    CodePackageMediaForbidden,
+			Message: "the export references media you cannot read",
+			Entries: unreadable,
+		}
 	}
 	return out, nil
 }
