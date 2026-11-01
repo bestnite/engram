@@ -2,8 +2,9 @@
 
 Thanks for wanting to help. This document covers **how to build, test, and submit changes**
 and restates the rules that external contributors are expected to follow. It is deliberately
-short on the product itself: for what the service is and how to run it locally, read
-[`README.md`](README.md) first — this file does not repeat the quick start.
+short on the product itself: for what the service is, read [`README.md`](README.md) first.
+The complete local start is in [Running locally](#running-locally) below, and the README
+links here for it.
 
 This repository ships no in-tree specification document: the code and its tests are the
 statement of behaviour, the rules that matter to a contribution are restated below, and anything
@@ -64,6 +65,28 @@ subagents as much as to external contributors.
   TEST_PG_DSN='postgres://…' go test ./... -count=1 -timeout 1800s
   ```
 
+### Running locally
+
+To start the service locally with SQLite, build the embedded frontend once, then run the
+server with both required secrets set:
+
+```bash
+# The frontend build output is gitignored and go:embed needs frontend/dist to exist.
+npm --prefix frontend ci
+npm --prefix frontend run build
+
+# Both secrets are required; the server refuses to start without them.
+export SESSION_SECRET="$(openssl rand -base64 32)"
+export ENCRYPTION_KEY="$(openssl rand -base64 32)"
+
+DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
+```
+
+The server listens on `http://localhost:8080/` with the defaults above. Open
+`http://localhost:8080/setup` to create the first administrator; setting
+`BOOTSTRAP_ADMIN_EMAIL=you@example.com` only pre-fills that form. `data/` is gitignored,
+so delete `data/engram.db` to start from an empty database.
+
 ## Build, test, and check
 
 Run the full check suite from the repository root before every commit:
@@ -85,10 +108,6 @@ npm --prefix frontend run build
 
 Run that before the Go checks whenever you touch anything under `frontend/`: the output is
 gitignored, so a stale build is invisible in `git status`.
-
-To start the service locally with SQLite, use the quick start in [`README.md`](README.md).
-It covers the data directory, the required environment variables, and the first-admin
-setup; do not duplicate that setup here.
 
 ## Repository checks
 

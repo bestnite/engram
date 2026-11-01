@@ -2936,7 +2936,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `--- PASS: TestNoteImportSchemaMatchesTheContract (0.00s)` / `ok  	git.nite07.com/nite/engram/internal/api	0.012s`,
   and that test treats `{"notes":[{"kind":"basic","fields":{"front":"q","back":"a"}}]}` as invalid.
 
-- [ ] **M19-80 The documented local start command fails before the server opens the database** — *should-fix.*
+- [x] **M19-80 The documented local start command fails before the server opens the database** — *should-fix.*
   `AGENTS.md:225-226` gives the only `go run` line in the repository: `DB_DRIVER=sqlite DB_DSN=data/engram.db
   AUTO_MIGRATE=1 go run ./cmd/engram serve`. `SESSION_SECRET` and `ENCRYPTION_KEY` are declared `required: true`
   with no default (`internal/config/config.go:56-59`), and `Load` returns an error naming every missing one
@@ -2948,6 +2948,29 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   variable(s): ENCRYPTION_KEY, SESSION_SECRET"` and exited 1. *Acceptance:* one committed place shows a complete
   local start (driver, DSN, both secrets, migration, first-admin step) that succeeds on a fresh checkout, and the
   other document links to it.
+  *Closed by this commit (`docs(contributing): show a complete local start`).* `CONTRIBUTING.md` now has a
+  "Running locally" section under Development environment with the frontend build, both generated secrets,
+  `DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1`, the `go run ./cmd/engram serve` line and the `/setup`
+  first-admin step; the introduction no longer sends the reader to the README quick start for it. `README.md:186`
+  and `README.zh.md:186` link to that section. The exact documented command, run from the repository root after
+  deleting the SQLite file it names (`data/` is gitignored), served and answered both requests:
+  ```
+  $ rm -f data/engram.db
+  $ export SESSION_SECRET="$(openssl rand -base64 32)"
+  $ export ENCRYPTION_KEY="$(openssl rand -base64 32)"
+  $ DB_DRIVER=sqlite DB_DSN=data/engram.db AUTO_MIGRATE=1 go run ./cmd/engram serve
+  level=INFO msg="schema synchronized" migrations_applied=20
+  level=INFO msg="http server listening" addr=127.0.0.1:8080
+  $ curl -s -w '\n%{http_code}\n' http://127.0.0.1:8080/healthz
+  {"status":"ok","database":"ok","schema_version":20}
+  200
+  $ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/setup
+  200
+  level=INFO msg="http server stopped"
+  ```
+  The maintainers' build block in `AGENTS.md:225-226` still shows the three-variable form; this task forbids
+  editing `AGENTS.md`, so the contributor-facing documents carry the complete start and that line is left for a
+  maintainer to point here.
 
 - [x] **M19-81 CONTRIBUTING names a Go minimum the module refuses to build with** — *should-fix.*
   `CONTRIBUTING.md:45` states "**Go 1.26 or newer** (the module declares `go 1.26` ...)", while `go.mod:3`

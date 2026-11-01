@@ -183,7 +183,7 @@ Most runtime configurations (SMTP mail server, registration policy, OIDC SSO pro
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local development setup, build instructions, and testing guidelines.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the complete local start command, build instructions, and testing guidelines.
 
 ---
 

@@ -183,7 +183,7 @@ SMTP 邮件服务、注册开放策略、OIDC 登录提供方及存储配额等�
 
 ## 参与开发
 
-关于本地开发环境搭建、构建测试命令与代码规范，请参阅 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+关于完整的本地启动命令、构建测试命令与代码规范，请参阅 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
 
 ---
 
