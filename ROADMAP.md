@@ -534,7 +534,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   surfaced); regressions show a settings save after a reset does not restore weights, and an optimiser
   write from a stale snapshot does not roll settings back.
 
-- [ ] **M19-21 Two concurrent `AddTags` both succeed and one addition is lost** — *should-fix.* Tags are
+- [x] **M19-21 Two concurrent `AddTags` both succeed and one addition is lost** — *should-fix.* Tags are
   read outside the transaction, merged in Go, and written unconditionally inside it
   (`internal/store/note.go:696-727,731-743`); serialising the write transaction cannot save a stale read,
   so production SQLite with a single connection has the same defect. *Reproduced* with 200 notes and 20
@@ -544,6 +544,35 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   reproduction pins two `AddTags`. *Acceptance:* move read, merge and write into one locked transaction,
   or compare-and-set on the old tag value with a retry (moving only the SELECT into a plain PostgreSQL
   transaction is not enough); add a concurrent union/difference regression.
+  *Closed by this commit (`fix(store): merge tags inside one locked transaction`).* `applyTags`
+  (`internal/store/note.go:698`) now opens the transaction first, reads the rows through
+  `loadNotesForTagging` with `SELECT ... FOR UPDATE` on PostgreSQL (SQLite keeps its single write
+  connection), and computes the per-row change through `planTagChanges` before writing, so the read cannot
+  be stale. The `dryRun` path still reads without a transaction because it writes nothing. On PostgreSQL a
+  second transaction waits on the locked rows and re-reads the committed value; on SQLite the single
+  connection serialises the whole transaction.
+  `TestConcurrentAddTagsKeepsBothAdditions` and `TestConcurrentRemoveTagsKeepsBothRemovals`
+  (`internal/store/note_tags_concurrency_test.go`) run 10 rounds of two concurrent operations over 20 notes
+  per driver, check both errors, and assert the union kept both tags and the difference removed both. The
+  SQLite database is capped at one connection, as `Open` does, so the test exercises the production
+  serialisation. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestConcurrentAddTagsKeepsBothAdditions|TestConcurrentRemoveTagsKeepsBothRemovals' -count=1 -v`:
+  ```
+  --- PASS: TestConcurrentAddTagsKeepsBothAdditions (0.51s)
+      --- PASS: TestConcurrentAddTagsKeepsBothAdditions/sqlite (0.03s)
+      --- PASS: TestConcurrentAddTagsKeepsBothAdditions/postgres (0.17s)
+  --- PASS: TestConcurrentRemoveTagsKeepsBothRemovals (0.46s)
+      --- PASS: TestConcurrentRemoveTagsKeepsBothRemovals/sqlite (0.04s)
+      --- PASS: TestConcurrentRemoveTagsKeepsBothRemovals/postgres (0.17s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.985s
+  ```
+  With only the production change reverted, the same run failed on both drivers:
+  `round 0 note 1 tags = [a], want both a and b` (sqlite), `round 1 note 1 tags = [b], want both a and b`
+  (postgres), `round 1 note 1 tags = [b], want both removals kept` (sqlite) and `round 0 note 1 tags =
+  [a], want both removals kept` (postgres). `go test ./internal/store/ -run 'TestWhereNoteTags|TestDeckTag'
+  -count=1`, `go test ./internal/api/ -run 'TestBulkNotes|TestReviewTags' -count=1` and
+  `go test ./internal/mcp/ -run 'Tag' -count=1` pass.
 
 - [ ] **M19-22 A large but legal deck cannot be exported** — *should-fix.* Export expands every note
   and card ID into one `IN` list with no batching (`internal/store/anki_export.go:68-71,122-125,135-138`).

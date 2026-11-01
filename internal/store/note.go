@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"git.nite07.com/nite/engram/internal/notetype"
 )
@@ -690,7 +691,10 @@ func (s *NoteStore) SetTags(ctx context.Context, ids []uint64, tags []string, dr
 
 // applyTags is the sole implementation of the three tag primitives. Tags are normalized first (see NormalizeTags),
 // then the new value is computed row by row: an unchanged value is skipped (no write, not counted in the return), only a different one writes tags_json + updated_at.
-// Every write shares one transaction and a single failing row rolls it all back; under dryRun it only counts and runs no UPDATE.
+// Every read, merge and write shares one transaction, and the rows are locked on PostgreSQL, so two concurrent
+// primitives cannot both write a value computed from the same old row and lose one addition. SQLite needs no lock:
+// the production connection is a single one, which already serialises the transaction. Under dryRun it only counts and runs no UPDATE.
+// Every write shares one transaction and a single failing row rolls it all back.
 func (s *NoteStore) applyTags(ctx context.Context, ids []uint64, tags []string, op tagOp, dryRun bool) (int64, error) {
 	clean := NormalizeTags(tags)
 	if len(clean) == 0 {
@@ -699,19 +703,71 @@ func (s *NoteStore) applyTags(ctx context.Context, ids []uint64, tags []string, 
 	if len(ids) == 0 {
 		return 0, nil
 	}
+	if dryRun {
+		notes, err := loadNotesForTagging(ctx, s.db, ids, false)
+		if err != nil {
+			return 0, err
+		}
+		changes, err := planTagChanges(notes, clean, op)
+		if err != nil {
+			return 0, err
+		}
+		return int64(len(changes)), nil
+	}
+	var affected int64
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		notes, err := loadNotesForTagging(ctx, tx, ids, true)
+		if err != nil {
+			return err
+		}
+		changes, err := planTagChanges(notes, clean, op)
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		for _, ch := range changes {
+			if err := tx.Model(&Note{}).Where("id = ?", ch.id).
+				Updates(map[string]any{"tags_json": ch.raw, "updated_at": now}).Error; err != nil {
+				return fmt.Errorf("update tags for note %d: %w", ch.id, err)
+			}
+		}
+		affected = int64(len(changes))
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return affected, nil
+}
+
+// loadNotesForTagging reads the rows a tag operation works on. When lock is set, PostgreSQL's SELECT ... FOR UPDATE
+// makes a concurrent transaction wait and then re-read the committed value instead of merging into its stale copy;
+// SQLite holds one write connection, and its parser rejects a locking clause, so it is left unlocked.
+func loadNotesForTagging(ctx context.Context, db *gorm.DB, ids []uint64, lock bool) ([]Note, error) {
+	q := db.WithContext(ctx)
+	if lock && db.Dialector.Name() == "postgres" {
+		q = q.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
 	var notes []Note
-	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&notes).Error; err != nil {
-		return 0, fmt.Errorf("load notes for tagging: %w", err)
+	if err := q.Where("id IN ?", ids).Find(&notes).Error; err != nil {
+		return nil, fmt.Errorf("load notes for tagging: %w", err)
 	}
-	type tagChange struct {
-		id  uint64
-		raw string
-	}
+	return notes, nil
+}
+
+// tagChange is one row's new stored tags, computed from the row as read inside the transaction.
+type tagChange struct {
+	id  uint64
+	raw string
+}
+
+// planTagChanges computes each row's post-operation tag list and keeps only the rows that actually change.
+func planTagChanges(notes []Note, clean []string, op tagOp) ([]tagChange, error) {
 	changes := make([]tagChange, 0, len(notes))
 	for i := range notes {
 		old, err := ParseTags(notes[i].TagsJSON)
 		if err != nil {
-			return 0, fmt.Errorf("note %d: %w", notes[i].ID, err)
+			return nil, fmt.Errorf("note %d: %w", notes[i].ID, err)
 		}
 		var next []string
 		switch op {
@@ -727,27 +783,11 @@ func (s *NoteStore) applyTags(ctx context.Context, ids []uint64, tags []string, 
 		}
 		raw, err := json.Marshal(next)
 		if err != nil {
-			return 0, fmt.Errorf("encode tags for note %d: %w", notes[i].ID, err)
+			return nil, fmt.Errorf("encode tags for note %d: %w", notes[i].ID, err)
 		}
 		changes = append(changes, tagChange{id: notes[i].ID, raw: string(raw)})
 	}
-	if dryRun {
-		return int64(len(changes)), nil
-	}
-	now := time.Now().UTC()
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for _, ch := range changes {
-			if err := tx.Model(&Note{}).Where("id = ?", ch.id).
-				Updates(map[string]any{"tags_json": ch.raw, "updated_at": now}).Error; err != nil {
-				return fmt.Errorf("update tags for note %d: %w", ch.id, err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	return int64(len(changes)), nil
+	return changes, nil
 }
 
 // NormalizeTags normalizes a tag list: trims surrounding whitespace, drops empty strings, de-duplicates by first occurrence and keeps the order.
