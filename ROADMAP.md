@@ -381,23 +381,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   Evidence is the output of `grep -n -E 'M18-(10|11|12|36|37)\b' ROADMAP.md` limited to the ledger
   section.
 
-- [ ] **M18-61 The import report labels say what an `.apkg` import did** — `M18-14` made
-  `progress_discarded` true for an `.apkg` import that carries progress and has `include_progress` off.
-  `frontend/src/lib/views/ImportView.svelte` labels that row `package.report.progress_discarded`, which
-  reads "Other users’ progress dropped" / "舍弃他人进度". That text describes the `.edeck` case only, where
-  the field means that another user's progress was refused. An Anki package has no users. The same view
-  prints `weights_applied`, `weights_discarded` and, since `M18-18`, `weights_invalid` as `1` or `0`, while
-  `dry_run` and `progress_discarded` print the catalog's yes and no. In
-  `internal/store/package_import.go`, `ProgressDiscarded` has no doc comment for its two meanings, and
-  `WeightsInvalid` has none at all, while its neighbours have one. The fix: the text of
-  `package.report.progress_discarded` in both catalogs states that the package's progress was not
-  imported, without naming other users. The line keeps its key and position, and the two catalogs keep
-  identical key sets. The view prints the three weight rows as yes or no. `ProgressDiscarded` gains a
-  comment that states the `.edeck` meaning and the `.apkg` meaning. `WeightsInvalid` gains a comment
-  that states the four conditions `M18-18` defined. *Acceptance:* a component test shows the new
-  `progress_discarded` text, and shows yes or no in each of the three weight rows for `true` and `false`.
-  The scoped `go vet` of `internal/store` passes. Evidence is the component test output and the diff.
-
 - [ ] **M18-63 The release ledger and `AGENTS.md` record `M18-14` to `M18-18`** — `M18-22` writes each
   ledger row from the commits whose messages name that row's ID. The commits of `M18-14`, `M18-15`,
   `M18-17` and `M18-18` name only their own IDs. Their changes are visible through the HTTP API, the
@@ -621,6 +604,13 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   *Acceptance:* a note in the committed oracle README states the measured rule with the values that
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
+
+- [ ] **M18-81 The `validSteps` comment describes the maximum interval** — in
+  `frontend/src/lib/views/PresetsView.svelte` the comment above `validSteps` describes the maximum
+  interval rather than the learning-step rule the function checks, so a reader is told the wrong rule.
+  Found while working on `M18-60`. The fix states what `validSteps` checks and why, in its own words.
+  *Acceptance:* the comment matches the function's code. Evidence is the diff.
+
 
 ---
 
