@@ -91,7 +91,9 @@ so no two of them run at the same time. `M18-26` waits for a maintainer decision
 file, so only the parent does it, with the maintainer present.
 
 `M18-29` to `M18-35` fix defects that a review of the landed `M18-4` (commits `2c2f15a`, `253a2bb` and
-`156065b`) found. They also land before `M18-5`. `M18-29` changes `internal/store/anki_import.go`, so
+`156065b`) found. `M18-47` to `M18-55` were to land before `M18-5`; `M18-49` and `M18-51` are deferred until Anki's
+replay rule is measured (`M18-79`), and the maintainer lets `M18-5` proceed meanwhile, so the removal of
+`.edeck` lands with those two defects still open in the Anki importer. `M18-29` changes `internal/store/anki_import.go`, so
 it runs alone like the entries above. `M18-29`, `M18-30` and `M18-33` all change
 `internal/store/package_import.go`, so no two of them run at the same time. `M18-31` and `M18-33` both
 change `internal/mcp/tools.go`, so they never run at the same time. `M18-32` changes only tests and
