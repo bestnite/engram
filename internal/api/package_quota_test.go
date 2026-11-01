@@ -1,13 +1,10 @@
 package api
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -26,36 +23,9 @@ func apiPNGBody(n int) []byte {
 	return b
 }
 
-// apiMediaPackageZip builds a minimal valid legacy archive containing one note that references a media entry, plus the inline media bytes.
 func apiMediaPackageZip(t *testing.T, body []byte) (raw []byte, sha string) {
-	t.Helper()
 	sum := sha256.Sum256(body)
-	sha = hex.EncodeToString(sum[:])
-	mediaPath := "media/" + sha + ".png"
-	files := map[string]string{
-		"manifest.json":   `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":true,"include_reviews":false,"counts":{"notes":1,"cards":0,"media":1}}`,
-		"note_types.json": packageTestNoteTypesJSON,
-		"notes.json":      fmt.Sprintf(`[{"note_type":"nt-1","fields":{"front":"q","back":"%s"}}]`, mediaPath),
-		"cards.json":      `[]`,
-		"preset.json":     `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
-		"media.json":      fmt.Sprintf(`{"%s":{"path":"%s","mime":"image/png"}}`, sha, mediaPath),
-		mediaPath:         string(body),
-	}
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	for name, content := range files {
-		w, err := zw.Create(name)
-		if err != nil {
-			t.Fatalf("zip create %s: %v", name, err)
-		}
-		if _, err := w.Write([]byte(content)); err != nil {
-			t.Fatalf("zip write %s: %v", name, err)
-		}
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatalf("zip close: %v", err)
-	}
-	return buf.Bytes(), sha
+	return fixturePackage(t, body, nil, true), hex.EncodeToString(sum[:])
 }
 
 // TestImportPackageCountsMediaAgainstImporterQuota asserts an over-quota import is rejected by the REST entries (413,

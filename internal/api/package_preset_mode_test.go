@@ -120,11 +120,7 @@ func TestImportPresetReuseResponse(t *testing.T) {
 	if err := env.db.Create(&preset).Error; err != nil {
 		t.Fatal(err)
 	}
-	raw := packageZip(t, map[string]string{
-		"manifest.json":   `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":0,"cards":0}}`,
-		"note_types.json": `[]`, "notes.json": `[]`, "cards.json": `[]`,
-		"preset.json": `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true}`,
-	})
+	raw := fixturePackage(t, nil, nil, false)
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
 	f, err := w.CreateFormFile("file", "import.apkg")

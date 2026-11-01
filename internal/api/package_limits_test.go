@@ -49,41 +49,10 @@ func postImport(t *testing.T, env *testEnv, key string, body *bytes.Buffer, cont
 	return rec
 }
 
-// packageTestNoteTypesJSON is the note_types.json of the hand-built test packages: one normal type.
-const packageTestNoteTypesJSON = `[{"ref":"nt-1","name":"Basic","config":{"kind":"normal","fields":[{"id":"front","name":"front"},{"id":"back","name":"back"}],"templates":[{"id":"t-forward","name":"Forward","qfmt":"{{front}}","afmt":"{{front}}<hr>{{back}}"}]}}]`
-
-// minimalPackageZip builds a minimal valid legacy archive (one basic note, no media, no progress).
 func minimalPackageZip(t *testing.T) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	entries := map[string]string{
-		"manifest.json":   `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":1}}`,
-		"note_types.json": packageTestNoteTypesJSON,
-		"notes.json":      `[{"note_type":"nt-1","fields":{"front":"q","back":"a"}}]`,
-		"cards.json":      `[]`,
-		"preset.json":     `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
-	}
-	for name, body := range entries {
-		w, err := zw.Create(name)
-		if err != nil {
-			t.Fatalf("zip create %s: %v", name, err)
-		}
-		if _, err := w.Write([]byte(body)); err != nil {
-			t.Fatalf("zip write %s: %v", name, err)
-		}
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatalf("zip close: %v", err)
-	}
-	return buf.Bytes()
+	return fixturePackage(t, nil, nil, true)
 }
 
-// TestImportPackageRejectsOversizedBody is the core negative case: with package_max_bytes set to 256 bytes,
-// a 4 KiB multipart body must be rejected before parsing (413, code package_too_large).
-//
-// Before the fix the handler called FormFile first, gin read the whole 4 KiB part into memory before handling, and the result was 400
-// (not a zip) instead of 413 - which is exactly why this case goes red before the fix.
 func TestImportPackageRejectsOversizedBody(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	user := seedUser(t, env.db, "import_oversize", store.RoleUser)

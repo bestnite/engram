@@ -1,9 +1,9 @@
 package mcp
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
+	"git.nite07.com/nite/engram/internal/anki"
 	"io"
 	"net/http"
 	"strings"
@@ -29,29 +29,19 @@ func (f *stubPackageFetcher) Fetch(_ context.Context, rawURL string, _ int64) (i
 	return io.NopCloser(bytes.NewReader(f.body)), nil
 }
 
-// mcpMinimalPackageZip builds a minimal valid legacy archive (one basic note).
 func mcpMinimalPackageZip(t *testing.T) []byte {
 	t.Helper()
+	pkg := anki.WritePackage{Collection: anki.WriteCollection{
+		CreatedAt:   1700000000,
+		Decks:       []anki.WriteDeck{{ID: 2, Name: "imported", ConfigID: 2}},
+		DeckConfigs: []anki.WriteDeckConfig{{ID: 2, Name: "Imported", DesiredRetention: 0.9, LearningSteps: []float64{1}, RelearningSteps: []float64{10}, MaximumIntervalDays: 100}},
+		NoteTypes:   []anki.WriteNoteType{{ID: 2, Name: "Basic", Fields: []anki.Field{{Name: "Front"}, {Ord: 1, Name: "Back"}}, Templates: []anki.Template{{Name: "Card 1", QFormat: "{{Front}}", AFormat: "{{FrontSide}}<hr>{{Back}}"}}}},
+		Notes:       []anki.WriteNote{{ID: 2, GUID: "fixture-guid", NoteTypeID: 2, Fields: []string{"q", "a"}}},
+		Cards:       []anki.WriteCard{{ID: 2, NoteID: 2, DeckID: 2}},
+	}}
 	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	entries := map[string]string{
-		"manifest.json":   `{"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"imported"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":1}}`,
-		"note_types.json": `[{"ref":"nt-1","name":"Basic","config":{"kind":"normal","fields":[{"id":"front","name":"front"},{"id":"back","name":"back"}],"templates":[{"id":"t-forward","name":"Forward","qfmt":"{{front}}","afmt":"{{front}}<hr>{{back}}"}]}}]`,
-		"notes.json":      `[{"note_type":"nt-1","fields":{"front":"q","back":"a"}}]`,
-		"cards.json":      `[]`,
-		"preset.json":     `{"desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true,"weights":null,"weights_optimized_at":null,"weights_review_count":null}`,
-	}
-	for name, body := range entries {
-		w, err := zw.Create(name)
-		if err != nil {
-			t.Fatalf("zip create %s: %v", name, err)
-		}
-		if _, err := w.Write([]byte(body)); err != nil {
-			t.Fatalf("zip write %s: %v", name, err)
-		}
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatalf("zip close: %v", err)
+	if err := anki.WriteArchive(&buf, &pkg); err != nil {
+		t.Fatal(err)
 	}
 	return buf.Bytes()
 }
