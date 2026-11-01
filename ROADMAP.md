@@ -595,6 +595,102 @@ fine", and it does not mean "confirmed broken".
   and the revocation after the gate commit and add a test that a deletion refused with `last_admin` sends no
   mail and revokes no session.
 
+- [ ] **M19-48 Anki drops the `engram` note-type key, so machine grading does not survive a round trip
+  through Anki** — *should-fix.* `internal/anki/write.go:414-418` states that "Anki carries an unknown
+  top-level model key through import and through both of its exports", and `AGENTS.md` §2.7 turns that into
+  the contract: "answer controls ride in one note type key (`engram`) that Anki keeps through import and
+  export". It does not hold for the pinned release. Reproduced with `anki==26.9.3`: I added
+  `"engram":{"v":1,"answer_specs":{"Card 1":{"control":"text","bindings":{"answer":"Back"}}}}` to the model
+  JSON of `internal/notetype/testdata/anki/stock.anki21.apkg`, imported it with
+  `Collection.import_anki_package`, and `collection.models.all()` came back without the key;
+  `Collection.export_anki_package` then wrote a `collection.anki2` whose model JSON has no `engram` key
+  either. engram's own reader still returns the spec from the same package, so the loss happens only when
+  Anki sits in the middle, and nothing reports it: `PackageImportReport` has no answer-spec field, so a deck
+  that travelled engram → Anki → engram imports with every answer control silently gone.
+  `tools/anki-oracle/verify_package.py:14-52` cannot catch this, because `count_answer_specs` counts the
+  specs in the *input* package's own model JSON instead of in the collection Anki produced, which makes the
+  check circular. *Acceptance:* carry the spec in something Anki preserves and pin it with a golden that
+  imports an engram package through Anki and reads the spec back out of Anki's own collection, or state in
+  `AGENTS.md` §2.7 and `write.go` that the key survives engram-to-engram traffic only and report the loss
+  on import.
+
+- [ ] **M19-49 An unclosed `[anki:` marker makes audio-tag parsing quadratic, so one note field can stall a
+  review** — *should-fix.* `parseAVTagNode` looks for the closing tag of each candidate with
+  `strings.Index(rest, closing)` (`internal/notetype/av.go:300`) and, finding none, reports "not a
+  directive"; `parseAVTextNode` then advances one `[` and the next candidate scans the whole remainder again
+  (`:310-317`). Measured on a copy of the package:
+  `ExtractAVTags(strings.Repeat("[anki:tts lang=en_US]", 40000), "q")` is 840 KB and takes 5.05 s, and
+  420 KB takes 1.23 s — four times the work for a doubling; a plain-text control of 840 KB takes 109 µs.
+  The input is untrusted: a field of an imported `.apkg` reaches `ExtractAVTags` twice per card view
+  (`internal/web/review.go:223,234`, `internal/web/notes.go:224,233`) and the same parser runs over every
+  field on save through `notetype.PlainText` (`internal/store/note_search.go:53`), so a 4 MB field costs
+  minutes of CPU per request. *Unverified:* no request was timed end to end. *Acceptance:* resolve every
+  closing tag in one pass instead of rescanning the remainder per candidate, and add a test that renders a
+  field holding thousands of unclosed markers within a time budget.
+
+- [ ] **M19-50 A zero-byte media file is dropped as missing, though Anki keeps it** — *nit.* The package
+  importer treats an entry with no bytes as a missing file rather than an empty one
+  (`internal/store/anki_import.go:293-303,307-316,1301`), and a direct upload of an empty file fails with
+  `ErrMagicMismatch`, whose message is "file has no detectable content" (`internal/media/media.go:215-217`).
+  Reproduced the other way round with `anki==26.9.3`: a package whose media index maps `"0"` to a 0-byte
+  `empty.txt` imports with the file present in the media directory at 0 bytes, and
+  `collection.media.have("empty.txt")` is true. A deck that shows an empty attachment therefore renders in
+  Anki and loses the file, reported as missing media, in engram. Verified by reading both paths and by the
+  Anki run above. *Acceptance:* keep a named zero-byte entry as a file on import and accept an empty upload,
+  with one test that imports such a package and reads the entry back.
+
+- [ ] **M19-51 Three public helpers have no caller, and one duplicates the frontend's occlusion grammar** —
+  *nit.* `ParseImageOcclusions` and the `ImageOcclusion`, `ImageOcclusionShape` and
+  `ImageOcclusionProperty` types (`internal/notetype/cloze.go:407-426,632-668`) are called by nothing
+  outside their own tests; the editor they describe parses the same field in TypeScript
+  (`frontend/src/lib/image-occlusion/markup.ts`), so one grammar has two implementations. They have already
+  diverged, on the live rendering path as well: a property value containing a lone backslash ends the value
+  and drops every later attribute of the shape in Go (`cloze.go:456-463`) — measured,
+  `{{c1::image-occlusion:rect:left=0.1:fill=#a\b:width=0.3:height=0.4}}` yields only `left` and `fill=#a` —
+  while `decodePropertyValue` keeps the character (`markup.ts:106-120`), and Go accepts any shape kind
+  (`hexagon` yields a shape with properties) where the TypeScript parser accepts only the four it knows.
+  `Config.Clone` (`template.go:129-148`) and `ExtractClozeHints` (`typeanswer.go:80-90`) are likewise 0 %
+  covered and have no caller; `Clone` also shares the `OriginalStockKind` and `AnkiOrigin` pointers with its
+  source, which `stock.go:428-460` takes care to copy. Verified with
+  `go test ./internal/notetype/ -cover` and a module-wide `grep`. *Acceptance:* delete the two unused
+  helpers and keep one implementation of the occlusion grammar, agreeing with the frontend on a stray
+  backslash and on an unknown shape kind.
+
+- [ ] **M19-52 The type-in golden records rendered card HTML that no test compares** — *nit.*
+  `internal/notetype/testdata/anki/typeanswer.golden.json` holds `question_nodes_text` and
+  `answer_nodes_text` for four notes, including the `{{cloze:Text}} {{type:cloze:Text}}` and
+  `{{type:nc:Back}}` forms whose filter chains `applyFilters` folds (`filters.go:37-44`), but
+  `TestRenderGolden` walks only `stock`, `template-syntax`, `template-filters` and `cloze`
+  (`template_golden_test.go:62`), and the fixture's other consumer reads `compare_answers` only
+  (`typeanswer_test.go:66-96`). `TestGenerateCardsGolden` does render those fronts through
+  `GenerateCards`, but it compares generated ordinals, never the text, so a template that rendered nothing
+  would still pass: the wiring from `splitReplacement` to the folded filter is unpinned end to end. Verified
+  by reading the fixture's three consumers. *Acceptance:* add `typeanswer` to `TestRenderGolden`'s fixture
+  list, or drop the two fields from the golden so it no longer claims coverage it lacks.
+
+- [ ] **M19-53 Three archive-hardening branches have no hostile-input test** — *nit.* `indexEntries`
+  rejects a symlink entry (`internal/anki/archive.go:99-101`) and a duplicate entry name (`:102-104`), and
+  `safeEntryName` rejects a Windows drive-letter name (`:146-148`); none of the three is exercised. The
+  reader's tests build a `../evil` entry, a `../evil.png` media name, corrupt meta, corrupt zstd and the
+  three size caps, and nothing else (`internal/anki/anki_test.go:236-334`); `isASCIILetter` reports 0 %
+  coverage and no test mentions a symlink. This is exactly the input a malicious `.apkg` carries, so a
+  refactor that dropped one branch would fail no test. Verified with `go test ./internal/anki/ -cover`
+  (77.9 % of statements) and by reading the tests. *Acceptance:* add one archive per branch, each asserting
+  `ErrUnsafeEntry` or `ErrBadArchive`.
+
+- [ ] **M19-54 Garbage collection aborts a batch after deleting the rows, leaking the rest of its files** —
+  *nit.* `CollectGarbage` asks `store.DeleteOrphanedMedia` for a batch of 200 and removes the files only
+  afterwards (`internal/media/media.go:304-327`); one `os.Remove` that fails with anything but "not exist"
+  (permissions, a read-only mount) returns immediately, and because the whole batch's rows are already
+  committed as deleted, the remaining files have no row pointing at them and nothing will ever reclaim
+  them, while the next call finds no rows to retry. `absPath` failing has the same shape (`:316-319`). The
+  re-upload guard is also a check-then-act window: a row inserted between `bySha256` (`:311-315`) and
+  `os.Remove` (`:320`) keeps pointing at the file that is then deleted. Verified by reading the three
+  functions. *Unverified:* not reproduced; it needs a filesystem error, and a concurrent upload for the
+  window. *Acceptance:* attempt every file of the batch, keep the row of a file that could not be removed so
+  the next sweep retries it, and add a test that makes one removal fail and expects the batch's other files
+  to be gone and the failed row to survive.
+
 
 ## 2. Release ledger
 
