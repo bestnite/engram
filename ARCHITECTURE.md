@@ -36,7 +36,7 @@ engram/
 ├── cmd/engram/               # the binary: subcommands and explicit wiring
 ├── internal/                 # all Go packages (section 3)
 ├── frontend/                 # Svelte 5 SPA, its tests, and embed.go
-├── schema/                   # JSON Schemas for note import, bulk notes, and deck packages
+├── schema/                   # JSON Schemas for note import and bulk notes, plus one example of each
 ├── tools/optimizer/          # Rust FSRS optimiser adapter
 ├── tools/anki-oracle/        # Python oracle that generates the Anki reference fixtures
 ├── Dockerfile, Dockerfile.release, docker-compose.yaml

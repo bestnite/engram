@@ -3391,12 +3391,28 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go test ./internal/api/ -run 'TestBulkNotes|TestNoteBulk|TestNoteImport' -count=1` passes, and
   `go vet ./internal/api/` is clean.
 
-- [ ] **M19-87 ARCHITECTURE gives `schema/` a deck-package schema that no longer exists** — *nit.*
+- [x] **M19-87 ARCHITECTURE gives `schema/` a deck-package schema that no longer exists** — *nit.*
   `ARCHITECTURE.md:39` describes the directory as "JSON Schemas for note import, bulk notes, and deck packages".
   It contains `note-import.schema.json`, `note-bulk.schema.json`, `README.md` and two examples; the deck-package
   schema left with the `.edeck` format that `M18-5` removed (`AGENTS.md:155-158`). *Reproduced:* `ls schema`
   prints those four entries. *Acceptance:* the tree comment lists the two schemas the directory holds, or the
   removed schema is restored together with the decision that restores it.
+  *Closed by this commit (`docs(architecture): describe the schemas the directory holds`).*
+  Took the first branch: the tree comment now reads "JSON Schemas for note import and bulk notes, plus one
+  example of each" (`ARCHITECTURE.md:39`). No schema file changed. Raw output of `ls schema schema/examples`:
+  ```
+  schema:
+  examples
+  note-bulk.schema.json
+  note-import.schema.json
+  README.md
+
+  schema/examples:
+  note-bulk.example.json
+  note-import.example.json
+  ```
+  `git grep -n "deck package schema\|deck-package schema\|deck packages" -- '*.md'` now leaves only the
+  `README.md` sentence about `.apkg` import, this entry, and nothing else in `ARCHITECTURE.md`.
 
 - [x] **M19-88 ARCHITECTURE's dependency table is not what its own regeneration command reports** — *nit.* The
   table's heading says the rows are "Imports between internal packages, as reported by `go list`"
