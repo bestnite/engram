@@ -211,6 +211,10 @@ func isRequestBodyTooLarge(err error) bool {
 	return strings.Contains(err.Error(), "http: request body too large")
 }
 
+// importMultipartOverhead is the part headers and small form fields allowed above package_max_bytes
+// on the multipart import; the archive itself is still capped at exactly package_max_bytes by the store.
+const importMultipartOverhead = 1 << 20
+
 // handleImportPackage is POST /api/v1/decks/import (multipart file upload).
 //
 // The multipart contract is fields first, archive last. The handler reads the field parts, resolves
@@ -219,9 +223,11 @@ func isRequestBodyTooLarge(err error) bool {
 // before any field part is rejected instead of silently importing into the new_deck defaults.
 // Field parts appearing after the file part are ignored.
 //
-// The request body is not capped here: the store caps the spooled archive at package_max_bytes
-// (the package cap, not the single-media upload cap) and answers package_too_large. Keeping the cap
-// in the store means the transport can stop reading an unreadable or unauthorized archive early.
+// The body is bounded at package_max_bytes plus importMultipartOverhead so the field parts cannot
+// stream through the parser without limit; the store still caps the spooled archive at exactly
+// package_max_bytes (the package cap, not the single-media upload cap) and answers package_too_large.
+// Keeping the archive cap in the store means the transport can stop reading an unreadable or
+// unauthorized archive early.
 func (a *API) handleImportPackage(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	// Take the import slot before the body is touched: a refused request must read and spool nothing.
@@ -232,8 +238,19 @@ func (a *API) handleImportPackage(c *gin.Context) {
 	}
 	defer release()
 
+	// Bound the whole body: the store caps the archive it spools, but the field parts and the
+	// multipart framing are read here, so the package cap plus a fixed overhead keeps an unbounded
+	// body from streaming through the parser. The store's own cap still decides the archive's 413;
+	// this outer bound only refuses a body larger than the package could ever be.
+	limit := store.ResolvePackageLimits(c.Request.Context(), a.db).MaxPackageBytes
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit+importMultipartOverhead)
+
 	reader, err := c.Request.MultipartReader()
 	if err != nil {
+		if isRequestBodyTooLarge(err) {
+			abortError(c, http.StatusRequestEntityTooLarge, store.CodePackageTooLarge, "")
+			return
+		}
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
@@ -248,6 +265,10 @@ func (a *API) handleImportPackage(c *gin.Context) {
 			break
 		}
 		if err != nil {
+			if isRequestBodyTooLarge(err) {
+				abortError(c, http.StatusRequestEntityTooLarge, store.CodePackageTooLarge, "")
+				return
+			}
 			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 			return
 		}
@@ -256,6 +277,10 @@ func (a *API) handleImportPackage(c *gin.Context) {
 				value, err := io.ReadAll(io.LimitReader(part, maxFieldBytes+1))
 				part.Close()
 				if err != nil {
+					if isRequestBodyTooLarge(err) {
+						abortError(c, http.StatusRequestEntityTooLarge, store.CodePackageTooLarge, "")
+						return
+					}
 					abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 					return
 				}

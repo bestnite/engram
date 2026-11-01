@@ -2725,13 +2725,15 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Unverified:* only read; the spool file was not measured. *Acceptance:* the multipart entry reads the form fields
   and authorizes the target and preset before it consumes the archive part, and a test posts an oversized part with a
   target deck the caller cannot edit and shows the request is refused without spooling.
-  *Closed by this commit (`fix(api): authorise an import before reading the archive`).*
+  *Closed by this commit (`fix(api): authorise an import before reading the archive`), with
+  `fix(api): bound the multipart import body` adding the transport bound.*
   `handleImportPackage` (`internal/api/package.go:214`) now parses the multipart with `c.Request.MultipartReader()`:
   each non-file part is capped at 64 KiB (first value wins, as `PostForm` did), the preset and the target are resolved
   and authorized before the archive part is handed to `ImportDeckPackage`, and only then does the store spool it. The
-  handler no longer wraps the body in `http.MaxBytesReader`; the store's spool keeps the `package_max_bytes` cap, and
-  the handler maps that one code back to 413 `package_too_large` for this route (the shared `mapPackageError` keeps its
-  400 for the other transports). The multipart contract is now fields first, archive last: a file part that arrives
+  body keeps a transport bound at `package_max_bytes` plus `importMultipartOverhead`, so the field parts cannot stream
+  without limit; the store's spool keeps the archive at exactly the `package_max_bytes` cap, and the handler maps that
+  one code back to 413 `package_too_large` for this route (the shared `mapPackageError` keeps its 400 for the other
+  transports). The multipart contract is now fields first, archive last: a file part that arrives
   before any field part answers 400 `invalid_request` instead of silently importing into the `new_deck` defaults, and
   field parts after the archive are ignored. The SPA's `importDeckPackage` (`frontend/src/lib/api/client.ts:341`) appends
   the file last; the Go multipart test builders send their fields first.
