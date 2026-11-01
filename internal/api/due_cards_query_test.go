@@ -150,7 +150,6 @@ func TestQueueBuildQueryCountIsConstant(t *testing.T) {
 			Now:           env.now,
 			Timezone:      "UTC",
 			DayCutoffHour: store.Ptr(4),
-			ReviewOrder:   schedule.OrderByDueAt,
 			NewOrder:      schedule.NewOrderCreated,
 		})
 		if err != nil {

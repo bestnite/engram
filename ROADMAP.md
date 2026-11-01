@@ -1156,7 +1156,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `floor(interval_days)`) and restore it verbatim; add a regression with a ≥ 1-day step plus a mutation
   control that fails when the field is left unrestored.
 
-- [ ] **M19-30 The retrievability order has no caller, and when reached it applies the daily cap before
+- [x] **M19-30 The retrievability order has no caller, and when reached it applies the daily cap before
   ranking** — *should-fix.* `OrderByRetrievability` is the documented default (`internal/schedule/queue.go:
   33-38`) but the only production call site always passes `OrderByDueAt` (`internal/api/service.go:1177-1185`),
   so that order is unreachable. If it were reached, `Build` sorts the rows the deck query already limited by
@@ -1166,6 +1166,28 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   wanted_lowest_R_card=2`. *Acceptance:* either delete the path and the enum value, or rank before capping
   (fetch up to `BatchSize`, compute retrievability, apply each deck's allowance to the ranked list); a
   regression keeps a low-R card that is not the earliest due.
+  *Closed by this commit (`fix(schedule): remove the unreachable retrievability queue order`).*
+  Took the deletion branch: `ReviewOrder`, `OrderByRetrievability`, `OrderByDueAt` and
+  `QueueOptions.ReviewOrder` are gone (`internal/schedule/queue.go`), so no caller can request an order whose
+  per-deck `LIMIT` has already chosen the rows. `Build` merges the deck-level due slices and sorts them by
+  `due_at`, then card id, which is the order production already passed. Retrievability is still computed for
+  every due review card because `DueCard.Retrievability` is part of the REST/MCP response
+  (`internal/api/service.go:1331`), but it no longer influences the order. The production call site
+  (`internal/api/service.go:1253`) and `internal/api/due_cards_query_test.go` no longer pass the removed field.
+  `TestBuildOrdering` (`internal/schedule/queue_test.go:94`) now builds the queue once and asserts that the
+  earlier-due high-stability card comes first, the later-due low-retrievability card second, and both
+  retrievability values are populated and ordered the opposite way; a queue that still sorted by
+  retrievability would put the low-retrievability card first and fail. Raw output of
+  `go test ./internal/schedule/ -run TestBuildOrdering -count=1 -v`:
+  ```
+  === RUN   TestBuildOrdering
+  --- PASS: TestBuildOrdering (0.02s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/schedule	0.024s
+  ```
+  `go test ./internal/schedule/ -count=1` and
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/schedule/ -count=1` pass, and
+  `go test ./internal/api/ -run TestDueCards -count=1` passes.
 
 - [x] **M19-31 A `choice_single`/`choice_multi` back face panics on a large numeric field value** —
   *should-fix.* `optionIndex` rejects negatives and fractions but has no upper bound

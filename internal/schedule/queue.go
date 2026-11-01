@@ -27,16 +27,6 @@ const (
 // so "unlimited" has to be distinguishable from "0 cards left".
 const deckUnlimited = -1
 
-// ReviewOrder decides how due review cards are sorted.
-type ReviewOrder int
-
-const (
-	// OrderByRetrievability sorts by ascending retention probability (default, the most likely to be forgotten comes first).
-	OrderByRetrievability ReviewOrder = iota
-	// OrderByDueAt sorts by ascending due time (classic order).
-	OrderByDueAt
-)
-
 // NewOrder decides the presentation order of new cards.
 type NewOrder int
 
@@ -104,11 +94,9 @@ type QueueOptions struct {
 	// Pointers are used because an integer zero cannot distinguish "unset" from "explicit 0 (unlimited)".
 	NewPerDayOverride     *int
 	ReviewsPerDayOverride *int
-	// ReviewOrder — see ReviewOrder.
-	ReviewOrder ReviewOrder
 	// NewOrder — see NewOrder.
 	NewOrder NewOrder
-	// BatchSize is the batch size for fetching review cards at a time (retrievability has to be sorted in memory).
+	// BatchSize is the batch size for fetching review cards at a time (they are merged and sorted in memory).
 	BatchSize int
 	// LearnAhead is the learn-ahead window: cards in the learning / relearning phase due within (Now, Now+LearnAhead] are appended to the end of the queue,
 	// and they only come up after all other cards are done (the queue is consumed in order and rebuilt after each grade). 0 means no look-ahead.
@@ -226,21 +214,18 @@ func (b *QueueBuilder) Build(ctx context.Context, userID uint64, opts QueueOptio
 		return nil, err
 	}
 
-	// Review cards: fetched deck by deck, then merged, globally sorted the requested way, then truncated to BatchSize (the upper bound for in-memory sorting).
+	// Review cards: fetched deck by deck, then merged, globally sorted by due time, then truncated to BatchSize (the upper bound for in-memory sorting).
+	// Retrievability is computed for the response but does not affect the order: the daily cap already applied per deck in SQL selects by due time,
+	// so ordering after that fetch could only permute the earliest-due slice.
 	reviews := col.mergeReviews()
-	if opts.ReviewOrder == OrderByRetrievability {
-		for i := range reviews {
-			r, err := b.scheduler.Retrievability(reviews[i].row.toCardState(), now)
-			if err != nil {
-				return nil, fmt.Errorf("schedule: compute retrievability for card %d: %w", reviews[i].item.CardID, err)
-			}
-			reviews[i].item.Retrievability = r
+	for i := range reviews {
+		r, err := b.scheduler.Retrievability(reviews[i].row.toCardState(), now)
+		if err != nil {
+			return nil, fmt.Errorf("schedule: compute retrievability for card %d: %w", reviews[i].item.CardID, err)
 		}
+		reviews[i].item.Retrievability = r
 	}
 	sort.SliceStable(reviews, func(i, j int) bool {
-		if opts.ReviewOrder == OrderByRetrievability && reviews[i].item.Retrievability != reviews[j].item.Retrievability {
-			return reviews[i].item.Retrievability < reviews[j].item.Retrievability
-		}
 		if !reviews[i].item.DueAt.Equal(reviews[j].item.DueAt) {
 			return reviews[i].item.DueAt.Before(reviews[j].item.DueAt)
 		}

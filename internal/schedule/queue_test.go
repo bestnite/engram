@@ -105,7 +105,7 @@ func kindsOf(items []QueueItem) []QueueKind {
 	return out
 }
 
-// TestBuildOrdering asserts the queue order: learning cards → due review cards → new cards, and that review cards can be sorted two ways.
+// TestBuildOrdering asserts the queue order: learning cards → due review cards → new cards, with review cards sorted by due time.
 func TestBuildOrdering(t *testing.T) {
 	db := newTestDB(t)
 	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
@@ -135,7 +135,7 @@ func TestBuildOrdering(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	items, err := builder.Build(ctx, 1, withOrder(base, OrderByRetrievability))
+	items, err := builder.Build(ctx, 1, base)
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
@@ -152,32 +152,21 @@ func TestBuildOrdering(t *testing.T) {
 	if items[0].CardID != learningCard {
 		t.Errorf("first item card = %d, want learning card %d", items[0].CardID, learningCard)
 	}
-	// Ascending retrievability: low-stability R1 comes before high-stability R2.
-	if items[1].CardID != lowStab || items[2].CardID != highStab {
-		t.Errorf("review order = [%d %d], want [%d %d] by retrievability", items[1].CardID, items[2].CardID, lowStab, highStab)
+	// Ascending due_at: R2 is due earlier, so it comes before R1 even though R1 has the lower retrievability.
+	if items[1].CardID != highStab || items[2].CardID != lowStab {
+		t.Errorf("review order = [%d %d], want [%d %d] by due time", items[1].CardID, items[2].CardID, highStab, lowStab)
 	}
-	if !(items[1].Retrievability < items[2].Retrievability) {
-		t.Errorf("retrievabilities = %v, %v; want ascending", items[1].Retrievability, items[2].Retrievability)
+	if items[1].Retrievability <= 0 || items[2].Retrievability <= 0 {
+		t.Errorf("retrievabilities = %v, %v; want both computed for the response", items[1].Retrievability, items[2].Retrievability)
+	}
+	if !(items[1].Retrievability > items[2].Retrievability) {
+		t.Errorf("retrievabilities = %v, %v; want the earlier-due card to have the higher value", items[1].Retrievability, items[2].Retrievability)
 	}
 	for i, id := range newIDs {
 		if items[3+i].CardID != id {
 			t.Errorf("new item %d = %d, want %d (creation order)", i, items[3+i].CardID, id)
 		}
 	}
-
-	// Ascending due_at: R2 is due earlier, so it comes before R1.
-	byDue, err := builder.Build(ctx, 1, withOrder(base, OrderByDueAt))
-	if err != nil {
-		t.Fatalf("Build(due) error = %v", err)
-	}
-	if byDue[1].CardID != highStab || byDue[2].CardID != lowStab {
-		t.Errorf("due order = [%d %d], want [%d %d]", byDue[1].CardID, byDue[2].CardID, highStab, lowStab)
-	}
-}
-
-func withOrder(o QueueOptions, order ReviewOrder) QueueOptions {
-	o.ReviewOrder = order
-	return o
 }
 
 // TestDailyNewCapAcrossDayBoundary asserts that 03:59 / 04:00 belong to different review days,

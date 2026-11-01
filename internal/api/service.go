@@ -1250,7 +1250,6 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 		Now:           a.now(),
 		Timezone:      u.Timezone,
 		DayCutoffHour: u.DayCutoffHour,
-		ReviewOrder:   schedule.OrderByDueAt,
 		NewOrder:      schedule.NewOrderRandom,
 		LearnAhead:    store.ResolveLearnAhead(u.LearnAheadMinutes),
 		Tags:          tags,
