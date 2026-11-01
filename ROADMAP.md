@@ -488,7 +488,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   rule on both the stored and the queried side (a derived normalised tag column with a backfill is the
   obvious shape), with a two-driver regression covering accented and non-ASCII case folding.
 
-- [ ] **M19-15 Deleting a deck leaves the note-type and media rows behind, so the files are never
+- [x] **M19-15 Deleting a deck leaves the note-type and media rows behind, so the files are never
   collected** — *should-fix.* The cascade clears notes and cards but not `note_types`, `media_names`
   or `media_note_types` (`internal/store/deck.go:332-355`; account deletion calls the same function at
   `user_admin.go:159-163`). The leftover template references keep the collector convinced the media is
@@ -498,6 +498,30 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   not. *Acceptance:* in the same transaction clear `media_note_types` by note-type ID, then
   `note_types` and the deck's `media_names`; a regression deletes a deck with template assets, runs the
   mark and the expiry, and asserts no residue and the quota released.
+  *Closed by this commit (`fix(store): remove deck note types and media names with the deck`).*
+  `deleteDeckTx` (`internal/store/deck.go:332`) now deletes the deck's `media_note_types` rows by note-type id,
+  then the deck's `note_types`, then its `media_names`, in the same transaction and after the notes are gone.
+  That is the cascade `DeckStore.Delete`, `DeleteMany` and account deletion already share, so all three clean
+  up the same scope. `TestDeckDeleteReleasesNoteTypeMedia` (`internal/store/deck_delete_media_test.go`) gives a
+  deck a note type whose CSS references `_font.woff2`, registers that name and a 1000-byte upload, deletes the
+  deck, and asserts every residue count is zero, the mark selects exactly the released sha, the expiry deletes
+  it, and the uploader's usage returns to zero. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestDeckDeleteReleasesNoteTypeMedia -count=1 -v`:
+  ```
+  === RUN   TestDeckDeleteReleasesNoteTypeMedia
+  === RUN   TestDeckDeleteReleasesNoteTypeMedia/sqlite
+  === RUN   TestDeckDeleteReleasesNoteTypeMedia/postgres
+  --- PASS: TestDeckDeleteReleasesNoteTypeMedia (0.29s)
+      --- PASS: TestDeckDeleteReleasesNoteTypeMedia/sqlite (0.01s)
+      --- PASS: TestDeckDeleteReleasesNoteTypeMedia/postgres (0.22s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.303s
+  ```
+  With only `internal/store/deck.go` reverted, the same test failed on both drivers with
+  `residue *store.NoteType = 1 rows after deck delete, want 0`, the same line for `*store.MediaName` and
+  `*store.MediaNoteType`, and `MarkOrphanedMedia() marked 0 rows, want 1: the template asset is now
+  unreferenced`. `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run
+  'TestDeck|TestUserDelete|TestMediaGC|TestUserMediaUsage|TestNoteType' -count=1` passes.
 
 - [x] **M19-16 The collector keeps an orphan alive because another deck uses the same file name** —
   *should-fix.* The orphan query joins `media_note_types` to `media_names` on name alone

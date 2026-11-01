@@ -349,6 +349,18 @@ func deleteDeckTx(tx *gorm.DB, deckID uint64) error {
 	if err := tx.Exec("DELETE FROM deck_share_invites WHERE deck_id = ?", deckID).Error; err != nil {
 		return fmt.Errorf("delete deck_share_invites: %w", err)
 	}
+	// The deck's note types and media names go with it. A template reference left behind would keep the
+	// collector convinced its file is still in use, and a name row left behind would keep resolving the
+	// bytes forever; neither can be reclaimed once the deck is gone.
+	if err := tx.Exec("DELETE FROM media_note_types WHERE note_type_id IN (SELECT id FROM note_types WHERE deck_id = ?)", deckID).Error; err != nil {
+		return fmt.Errorf("delete media_note_types: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM note_types WHERE deck_id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete note_types: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM media_names WHERE deck_id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("delete media_names: %w", err)
+	}
 	if err := tx.Exec("DELETE FROM decks WHERE id = ?", deckID).Error; err != nil {
 		return fmt.Errorf("delete deck: %w", err)
 	}
