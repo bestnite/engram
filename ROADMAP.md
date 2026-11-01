@@ -477,7 +477,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   and a bound **after** scaling by the unit, refusing `1e308d` with `preset_steps_invalid`; a table case
   asserting `NewScheduler` errors and a `internal/web` case asserting the PATCH is refused.
 
-- [ ] **M19-28 An accepted step overflows `time.Duration` and writes a due date in 1734 with an interval
+- [x] **M19-28 An accepted step overflows `time.Duration` and writes a due date in 1734 with an interval
   of 0 into the review log** — *Blocker.* `stepMinutes` bounds nothing (`internal/schedule/scheduler.go:
   221-247`) and `validStepSpec` accepts `200000d`; 200 000 × 1440 minutes overflows the nanosecond
   duration (`go-fsrs steps.go:24-26`) and `applyStep` adds it, producing `due_at` in the past with
@@ -489,6 +489,59 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   = true`. *Acceptance:* reject any step whose minute value is not finite or exceeds 36 500 days in every
   validator; treat `due.Before(now)` on a non-New outcome as an error rather than clamping the interval;
   regressions for one step just under and one just over the cap, neither writing a review row.
+  *Closed by `4a4f573`.* `stepMinutes` (`internal/schedule/scheduler.go:228`) now scales by the unit
+  first and refuses a non-finite result or one above 36,500 days (52,560,000 minutes); the same bound
+  is applied by the other three step validators: `validStepSpec` (`internal/web/presets.go:51`),
+  `validPackageSteps` (`internal/store/package_import.go:679`) and `validAnkiSteps`
+  (`internal/store/anki_import.go:1972`). `outcomeFrom` (`internal/schedule/scheduler.go:345`) now
+  returns an error when a non-New outcome's due date is before now instead of clamping
+  `interval_days` to zero; `Next` and `Preview` propagate it, and `Submit` returns before it writes
+  either `card_states` or `reviews`. `TestStepsOutsideSchedulerRangeAreRefused`,
+  `TestSubmitRefusesDueDateBeforeNow` and `TestLegitimateLongStepStillWritesReview`
+  (`internal/schedule/step_range_test.go`) cover the parser, both drivers through `Submit`, and the
+  due-before-now branch with a scheduler built past validation so it really overflows. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/schedule/ -run
+  'TestStepsOutsideSchedulerRangeAreRefused|TestSubmitRefusesDueDateBeforeNow|TestLegitimateLongStepStillWritesReview' -count=1 -v`:
+  ```
+  === RUN   TestStepsOutsideSchedulerRangeAreRefused
+  === RUN   TestStepsOutsideSchedulerRangeAreRefused/just_under_the_cap
+  === RUN   TestStepsOutsideSchedulerRangeAreRefused/at_the_cap
+  === RUN   TestStepsOutsideSchedulerRangeAreRefused/one_day_over_the_cap
+  === RUN   TestStepsOutsideSchedulerRangeAreRefused/the_overflow_from_the_report
+  === RUN   TestStepsOutsideSchedulerRangeAreRefused/non-finite_after_scaling
+  === RUN   TestStepsOutsideSchedulerRangeAreRefused/not_a_number
+  --- PASS: TestStepsOutsideSchedulerRangeAreRefused (0.00s)
+  --- PASS: TestStepsOutsideSchedulerRangeAreRefused/just_under_the_cap (0.00s)
+  --- PASS: TestStepsOutsideSchedulerRangeAreRefused/at_the_cap (0.00s)
+  --- PASS: TestStepsOutsideSchedulerRangeAreRefused/one_day_over_the_cap (0.00s)
+  --- PASS: TestStepsOutsideSchedulerRangeAreRefused/the_overflow_from_the_report (0.00s)
+  --- PASS: TestStepsOutsideSchedulerRangeAreRefused/non-finite_after_scaling (0.00s)
+  --- PASS: TestStepsOutsideSchedulerRangeAreRefused/not_a_number (0.00s)
+  === RUN   TestSubmitRefusesDueDateBeforeNow
+  === RUN   TestSubmitRefusesDueDateBeforeNow/sqlite
+  === RUN   TestSubmitRefusesDueDateBeforeNow/postgres
+  --- PASS: TestSubmitRefusesDueDateBeforeNow (0.32s)
+  --- PASS: TestSubmitRefusesDueDateBeforeNow/sqlite (0.00s)
+  --- PASS: TestSubmitRefusesDueDateBeforeNow/postgres (0.01s)
+  === RUN   TestLegitimateLongStepStillWritesReview
+  === RUN   TestLegitimateLongStepStillWritesReview/sqlite
+  === RUN   TestLegitimateLongStepStillWritesReview/postgres
+  --- PASS: TestLegitimateLongStepStillWritesReview (0.28s)
+  --- PASS: TestLegitimateLongStepStillWritesReview/sqlite (0.00s)
+  --- PASS: TestLegitimateLongStepStillWritesReview/postgres (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/schedule	0.610s
+  ```
+  The same tests against the previous parser failed with `NewScheduler("36501d") error = nil, want the
+  step refused`, `NewScheduler("200000d") error = nil`, `NewScheduler("1e308d") error = nil` and
+  `Submit() error = nil, want the out-of-range due date refused`; the web and store cases likewise
+  failed on their new over-cap rows. One reading note: the acceptance's "neither writing a review row"
+  would contradict its own rule ("exceeds 36 500 days" is the rejection threshold), so the regression
+  treats 36,499 and 36,500 days as legal and asserts they schedule and write, while the over-cap and
+  due-before-now cases write nothing. `go test ./internal/schedule/ -count=1` with `TEST_PG_DSN
+  set`, `go test ./internal/web/ -run TestPreset -count=1` and `go test ./internal/store/ -run
+  'TestPreset|TestRepairPresetSchedulerLimits|TestCreateAnkiPreset|TestMigratePreset' -count=1`
+  pass.
 
 - [ ] **M19-29 Undo restores `scheduled_days` by rounding a float, so the restored state is not what the
   scheduler wrote** — *should-fix.* `rebuildReviewLog` recomputes the field as
