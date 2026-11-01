@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,10 +117,11 @@ func TestUniqueConstraints(t *testing.T) {
 				if err := db.Create(&first).Error; err != nil {
 					t.Fatalf("first insert: %v", err)
 				}
-				dup := first
-				dup.ID = 0
-				if err := db.Create(&dup).Error; err == nil {
-					t.Error("duplicate (deck_id, external_ref) was accepted, want unique violation")
+				dup := Note{DeckID: first.DeckID, NoteTypeID: first.NoteTypeID, FieldsJSON: first.FieldsJSON, TagsJSON: first.TagsJSON,
+					ExternalRef: first.ExternalRef, CreatedAt: now, UpdatedAt: now}
+				err := db.Create(&dup).Error
+				if !uniqueViolationOn(err, "idx_notes_deck_external_ref", "notes.deck_id", "notes.external_ref") {
+					t.Errorf("duplicate (deck_id, external_ref) error = %v, want the idx_notes_deck_external_ref violation", err)
 				}
 			})
 
@@ -128,10 +130,10 @@ func TestUniqueConstraints(t *testing.T) {
 				if err := db.Create(&first).Error; err != nil {
 					t.Fatalf("first insert: %v", err)
 				}
-				dup := first
-				dup.ID = 0
-				if err := db.Create(&dup).Error; err == nil {
-					t.Error("duplicate (note_id, template) was accepted, want unique violation")
+				dup := Card{NoteID: first.NoteID, Template: first.Template, CreatedAt: now}
+				err := db.Create(&dup).Error
+				if !uniqueViolationOn(err, "idx_cards_note_template", "cards.note_id", "cards.template") {
+					t.Errorf("duplicate (note_id, template) error = %v, want the idx_cards_note_template violation", err)
 				}
 			})
 
@@ -161,6 +163,25 @@ func TestUniqueConstraints(t *testing.T) {
 			})
 		})
 	}
+}
+
+// uniqueViolationOn reports whether err is a unique-constraint failure on the named index or on
+// the named table columns. PostgreSQL names the index, SQLite names the columns, so both spellings
+// identify the same constraint; a failure on another index, such as public_id, is not a match.
+func uniqueViolationOn(err error, index string, columns ...string) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	if strings.Contains(message, index) {
+		return true
+	}
+	for _, column := range columns {
+		if !strings.Contains(message, column) {
+			return false
+		}
+	}
+	return len(columns) > 0
 }
 
 func TestLoadSettingsDecodesJSONValues(t *testing.T) {

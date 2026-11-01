@@ -968,7 +968,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestCheckNotesMigration|TestMigration' -count=1`
   passes on both drivers.
 
-- [ ] **M19-25 The unique-constraint test still passes with the business constraints dropped** —
+- [x] **M19-25 The unique-constraint test still passes with the business constraints dropped** —
   *should-fix.* The duplicate object is built as `dup := first; dup.ID = 0`, which keeps `PublicID`
   (`internal/store/models_test.go:119-121,131-133`), so the insert can fail on `public_id` alone while the
   test treats any error as proof that the composite business constraint exists. *Reproduced* by dropping
@@ -979,6 +979,33 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   false-negative test, not a missing constraint. *Acceptance:* clear `ID` and `PublicID` or build a
   fresh object duplicating only the business key, assert the specific constraint error rather than any
   error, and keep the mutation control so deleting the business index makes the test fail.
+  *Closed by this commit (`test(store): assert the business unique constraints, not the public id`).*
+  Both subtests of `TestUniqueConstraints` (`internal/store/models_test.go:104`) now insert a fresh
+  `Note`/`Card` (`:113`, `:128`) built from the business key alone, so a `public_id` collision cannot mask
+  the result, and each requires `uniqueViolationOn` (`:171`) to match `idx_notes_deck_external_ref` /
+  `idx_cards_note_template`; PostgreSQL names the index and SQLite names the columns, so both spellings
+  identify the same constraint. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestUniqueConstraints -count=1 -v`:
+  ```
+  --- PASS: TestUniqueConstraints (0.28s)
+      --- PASS: TestUniqueConstraints/sqlite (0.02s)
+          --- PASS: TestUniqueConstraints/sqlite/notes(deck_id,_external_ref) (0.00s)
+          --- PASS: TestUniqueConstraints/sqlite/cards(note_id,_template) (0.00s)
+          --- PASS: TestUniqueConstraints/sqlite/identities(provider,_subject) (0.00s)
+          --- PASS: TestUniqueConstraints/sqlite/media(sha256) (0.00s)
+      --- PASS: TestUniqueConstraints/postgres (0.21s)
+          --- PASS: TestUniqueConstraints/postgres/notes(deck_id,_external_ref) (0.00s)
+          --- PASS: TestUniqueConstraints/postgres/cards(note_id,_template) (0.00s)
+          --- PASS: TestUniqueConstraints/postgres/identities(provider,_subject) (0.00s)
+          --- PASS: TestUniqueConstraints/postgres/media(sha256) (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.287s
+  ```
+  The mutation control was run by dropping both indexes inside the test after `AutoMigrate`: the same
+  run failed on both drivers with `duplicate (deck_id, external_ref) error = <nil>, want the
+  idx_notes_deck_external_ref violation` and the same line for `(note_id, template)`. The unchanged body
+  before this commit saw `constraint failed: UNIQUE constraint failed: notes.public_id (2067)` on SQLite,
+  which is the false negative the entry reports.
 
 - [ ] **M19-26 Dead `.edeck` preset and limit code is kept alive by tests that exercise nothing in
   production** — *nit.* `createPresetFromPackage`, `PackagePreset`, `PackageLimits` and
