@@ -732,6 +732,19 @@
     return false;
   }
 
+  /**
+   * Whether the focused control activates itself with Space or Enter. The window handler must leave those keys to a
+   * button, link or checkbox in the page, otherwise the card reveals or submits instead of the control firing.
+   */
+  function isActivationTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    return (
+      target.closest(
+        'button, a[href], input, select, textarea, summary, [role="button"], [role="checkbox"], [role="radio"], [role="switch"]',
+      ) !== null
+    );
+  }
+
   /** The action shared by space/enter and swipe: a graded card requests the answer reveal, a self-graded card flips. */
   function applyReveal(): void {
     if (machineGraded) {
@@ -797,6 +810,9 @@
   }
 
   function onKeydown(event: KeyboardEvent): void {
+    // Space and Enter belong to the focused control: a header button, link or checkbox activates itself, and the page
+    // must not reveal or submit the card instead.
+    if ((event.key === ' ' || event.key === 'Enter') && isActivationTarget(event.target)) return;
     const action = handleShortcut(
       event.key,
       { alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey },

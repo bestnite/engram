@@ -1909,7 +1909,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestMediaGC|TestMediaNote|TestMediaName|TestClearOrphaned|TestMediaUploaders|TestUserMediaUsage|TestDeckDeleteReleasesNoteTypeMedia|TestPackage' -count=1`
   pass. The re-upload check between `bySha256` and `os.Remove` is unchanged, so that window remains.
 
-- [ ] **M19-55 The review page's global key handler swallows Space and Enter on its own controls** — *should-fix.*
+- [x] **M19-55 The review page's global key handler swallows Space and Enter on its own controls** — *should-fix.*
   `onKeydown` maps Space/Enter to reveal or submit and calls `preventDefault()` for every decision but `ignore`
   (`frontend/src/lib/views/ReviewView.svelte:799-813`; the branch is `frontend/src/lib/review-shortcuts.ts:74-80`),
   while `isTypingTarget` counts only input, textarea and select (`ReviewView.svelte:721-728`) and `isChoiceTarget`
@@ -1920,6 +1920,26 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   edit entry, the exit link, the undo button and the answer-scroll checkbox. *Acceptance:* ignore the review keys
   when the event target is a button, link or checkbox (or scope the listener to the card area), and add a client
   test that activates each header control with Space and with Enter.
+  *Closed by this commit (`fix(frontend): leave Space and Enter to the focused control`).*
+  `onKeydown` (`frontend/src/lib/views/ReviewView.svelte:812`) now returns before `handleShortcut` when the key is
+  Space or Enter and `isActivationTarget` (`:739`) finds a `button`, `a[href]`, form control, `summary` or an
+  ARIA `button`/`checkbox`/`radio`/`switch` around the event target. Other shortcuts (`b`, `s`, `u`, `e`, `1`–`4`)
+  still reach the page from any focus, and keys sent from the card frame through `onFrameKey` are unchanged. The
+  checkbox keeps its own Space activation; Enter leaves it unchanged, which is the native checkbox rule.
+  `review-key-activation.client.ts:12` mounts the real view and presses Space and Enter on the header edit button,
+  the exit link, the scroll-to-answer checkbox and the header undo entry (the last one after a rating), asserting
+  the edit and exit keys are not prevented, the checkbox toggles on Space, and no key reveals the card. Raw output
+  of `npm run test:client -- src/tests/review-key-activation.client.ts`:
+  ```
+   Test Files  1 passed (1)
+        Tests  4 passed (4)
+  ```
+  With only the early return removed, the same run failed on all four cases: `AssertionError: expected true to be
+  false` for the edit button, exit link and undo entry (the page had prevented the key), and
+  `AssertionError: expected null not to be null` for the checkbox (the page had revealed the card). `npm run check`
+  ends `svelte-check found 0 errors and 0 warnings`; the related client suites pass 21 tests in 3 files
+  (`review-key-activation`, `review-scroll`, `review-edit-return`) and the node suites
+  `review-shortcuts.test.ts`, `review.test.ts`, `review-view.test.ts` pass 42 tests in 3 files.
 
 - [ ] **M19-56 A deck filter does not survive a reload because the router decodes `+` literally** — *should-fix.*
   `parseQuery` splits the query and calls `decodeURIComponent` (`frontend/src/lib/router/index.ts:11-24`, the
