@@ -2686,7 +2686,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   resource. — insufficient role for this deck"}})`. The MCP `get_note` tool calls the same method, so it now reports
   the read refusal as `not_found` as well.
 
-- [ ] **M19-106 A multipart import spools the package before it validates the preset or the target role** —
+- [x] **M19-106 A multipart import spools the package before it validates the preset or the target role** —
   *should-fix.* `internal/api/package.go:217-252` takes the slot and the body cap, then `c.FormFile` reads the
   package part, and only afterwards run `ImportPresetID` (`:247`) and `authorizeImportTarget` (`:45`, inside
   `ImportDeckPackage`); the direct-link and ticket entries state and follow the opposite order
@@ -2695,6 +2695,38 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Unverified:* only read; the spool file was not measured. *Acceptance:* the multipart entry reads the form fields
   and authorizes the target and preset before it consumes the archive part, and a test posts an oversized part with a
   target deck the caller cannot edit and shows the request is refused without spooling.
+  *Closed by this commit (`fix(api): authorise an import before reading the archive`).*
+  `handleImportPackage` (`internal/api/package.go:214`) now parses the multipart with `c.Request.MultipartReader()`:
+  each non-file part is capped at 64 KiB (first value wins, as `PostForm` did), the preset and the target are resolved
+  and authorized before the archive part is handed to `ImportDeckPackage`, and only then does the store spool it. The
+  handler no longer wraps the body in `http.MaxBytesReader`; the store's spool keeps the `package_max_bytes` cap, and
+  the handler maps that one code back to 413 `package_too_large` for this route (the shared `mapPackageError` keeps its
+  400 for the other transports). The multipart contract is now fields first, archive last: a file part that arrives
+  before any field part answers 400 `invalid_request` instead of silently importing into the `new_deck` defaults, and
+  field parts after the archive are ignored. The SPA's `importDeckPackage` (`frontend/src/lib/api/client.ts:341`) appends
+  the file last; the Go multipart test builders send their fields first.
+  `TestImportPackageAuthorizesBeforeReadingArchive` (`internal/api/package_auth_order_test.go`) posts an oversized
+  archive with a target deck the caller cannot edit, asserts 403 `forbidden` and an empty `TMPDIR`, repeats it with an
+  unknown target (404 `not_found`), and keeps the 413 `package_too_large` positive control for an authorized target.
+  `TestImportPackageRejectsFilePartBeforeFields` pins the 400 for a file-first request. Raw output of
+  `go test ./internal/api/ -run TestImportPackageAuthorizesBeforeReadingArchive -count=1 -v`:
+  ```
+  === RUN   TestImportPackageAuthorizesBeforeReadingArchive
+  === RUN   TestImportPackageAuthorizesBeforeReadingArchive/foreign_target_is_refused_before_spooling
+  === RUN   TestImportPackageAuthorizesBeforeReadingArchive/unknown_target_is_refused_before_spooling
+  === RUN   TestImportPackageAuthorizesBeforeReadingArchive/oversized_archive_for_an_authorized_target_still_hits_the_cap
+  --- PASS: TestImportPackageAuthorizesBeforeReadingArchive (0.02s)
+      --- PASS: TestImportPackageAuthorizesBeforeReadingArchive/foreign_target_is_refused_before_spooling (0.00s)
+      --- PASS: TestImportPackageAuthorizesBeforeReadingArchive/unknown_target_is_refused_before_spooling (0.00s)
+      --- PASS: TestImportPackageAuthorizesBeforeReadingArchive/oversized_archive_for_an_authorized_target_still_hits_the_cap (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.036s
+  ```
+  With only `internal/api/package.go` reverted, the same run failed with
+  `foreign target import = 413, want 403`, `unknown target import = 413, want 404`, and the file-first case imported a
+  deck (`file-first import = 200, want 400`). The surrounding suite ends
+  `ok  	git.nite07.com/nite/engram/internal/api	0.305s` for
+  `go test ./internal/api/ -run 'TestImportPackage|TestImportPreset|TestImportMultipart|TestImportSharedDeck|TestImportSlot' -count=1`.
 
 - [x] **M19-107 A bad `on_conflict` is `package_bad_format` on import and `invalid_request` at ticket issuance** —
   *should-fix.* `internal/store/package_import.go:432-434` wraps the option check in

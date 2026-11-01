@@ -17,14 +17,19 @@ import (
 )
 
 // Acceptance for the request body cap on the REST import entries. The cap is the admin-configured
-// package_max_bytes (not the single-media media_max_bytes), and must take effect before multipart
-// parsing, with a stable 413 when exceeded.
+// package_max_bytes (not the single-media media_max_bytes), and must take effect while the archive is
+// spooled, with a stable 413 when exceeded.
 
-// multipartBody builds a multipart request body holding only a file field, plus its Content-Type.
+// multipartBody builds a multipart request body holding a target field and a file field, plus its
+// Content-Type. Form fields must precede the archive part: the handler authorizes the target before
+// it reads the file, and rejects a file-first request.
 func multipartBody(t *testing.T, filename string, data []byte) (*bytes.Buffer, string) {
 	t.Helper()
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
+	if err := w.WriteField("target", "new_deck"); err != nil {
+		t.Fatalf("write target field: %v", err)
+	}
 	fw, err := w.CreateFormFile("file", filename)
 	if err != nil {
 		t.Fatalf("create form file: %v", err)

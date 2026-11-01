@@ -32,6 +32,9 @@ func TestImportEntriesReportBadConflictOptionAsInvalidRequest(t *testing.T) {
 	t.Run("multipart", func(t *testing.T) {
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
+		if err := w.WriteField("target", "new_deck"); err != nil {
+			t.Fatalf("write target field: %v", err)
+		}
 		if err := w.WriteField("on_conflict", "bogus"); err != nil {
 			t.Fatalf("write on_conflict field: %v", err)
 		}

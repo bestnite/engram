@@ -26,17 +26,20 @@ func TestImportProgressTransports(t *testing.T) {
 				case "multipart":
 					var body bytes.Buffer
 					w := multipart.NewWriter(&body)
-					file, err := w.CreateFormFile("file", "deck.apkg")
-					if err != nil {
-						t.Fatal(err)
-					}
-					if _, err := file.Write(raw); err != nil {
+					if err := w.WriteField("target", "new_deck"); err != nil {
 						t.Fatal(err)
 					}
 					if enabled {
 						if err := w.WriteField("include_progress", "1"); err != nil {
 							t.Fatal(err)
 						}
+					}
+					file, err := w.CreateFormFile("file", "deck.apkg")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if _, err := file.Write(raw); err != nil {
+						t.Fatal(err)
 					}
 					if err := w.Close(); err != nil {
 						t.Fatal(err)

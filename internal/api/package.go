@@ -212,6 +212,16 @@ func isRequestBodyTooLarge(err error) bool {
 }
 
 // handleImportPackage is POST /api/v1/decks/import (multipart file upload).
+//
+// The multipart contract is fields first, archive last. The handler reads the field parts, resolves
+// the preset and authorizes the target before it consumes the file part; only then does the store
+// spool the archive. A refused import therefore reads no archive bytes, and a file part that arrives
+// before any field part is rejected instead of silently importing into the new_deck defaults.
+// Field parts appearing after the file part are ignored.
+//
+// The request body is not capped here: the store caps the spooled archive at package_max_bytes
+// (the package cap, not the single-media upload cap) and answers package_too_large. Keeping the cap
+// in the store means the transport can stop reading an unreadable or unauthorized archive early.
 func (a *API) handleImportPackage(c *gin.Context) {
 	u, _ := CurrentUser(c)
 	// Take the import slot before the body is touched: a refused request must read and spool nothing.
@@ -221,46 +231,85 @@ func (a *API) handleImportPackage(c *gin.Context) {
 		return
 	}
 	defer release()
-	// Cap the request body at package_max_bytes before parsing multipart: gin spills parts beyond MaxMultipartMemory
-	// to a temp file, so setting no limit first would invite memory/disk amplification. This is the package cap,
-	// not the single-media upload cap: a 12 MB deck is a normal package even with the default 10 MiB media limit.
-	// Over the limit is a stable 413, reusing the deck package's existing package_too_large code.
-	limit := store.ResolvePackageLimits(c.Request.Context(), a.db).MaxPackageBytes
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
-	fh, err := c.FormFile("file")
+
+	reader, err := c.Request.MultipartReader()
 	if err != nil {
-		if isRequestBodyTooLarge(err) {
-			abortError(c, http.StatusRequestEntityTooLarge, store.CodePackageTooLarge, "")
+		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+		return
+	}
+	// Collect the first value of each field part, matching Request.PostForm's first-value-wins rule.
+	// A field is capped so a caller cannot make the handler buffer an unbounded text part.
+	const maxFieldBytes = 64 << 10
+	fields := make(map[string]string)
+	var archive io.Reader
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 			return
 		}
+		if part.FormName() != "file" {
+			if _, seen := fields[part.FormName()]; !seen {
+				value, err := io.ReadAll(io.LimitReader(part, maxFieldBytes+1))
+				part.Close()
+				if err != nil {
+					abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+					return
+				}
+				if len(value) > maxFieldBytes {
+					abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+					return
+				}
+				fields[part.FormName()] = string(value)
+			} else {
+				part.Close()
+			}
+			continue
+		}
+		if len(fields) == 0 {
+			// A file-first request carries no target or preset yet; falling back to the new_deck
+			// defaults would import the archive the caller may have meant to merge elsewhere.
+			part.Close()
+			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "form fields must precede the file part")
+			return
+		}
+		archive = part
+		break
+	}
+	if archive == nil {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
-	f, err := fh.Open()
-	if err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
-		return
-	}
-	defer f.Close()
 
-	dryRun := c.PostForm("dry_run") == "1" || c.PostForm("dry_run") == "true"
-	presetID, err := a.ImportPresetID(c.Request.Context(), u.ID, c.PostForm("preset_id"))
+	dryRun := fields["dry_run"] == "1" || fields["dry_run"] == "true"
+	presetID, err := a.ImportPresetID(c.Request.Context(), u.ID, fields["preset_id"])
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
-	report, err := a.ImportDeckPackage(c.Request.Context(), u, CurrentAPIKeyID(c), f, store.PackageImportOptions{
-		PresetMode: c.PostForm("preset_mode"), PresetID: presetID,
-		Target:     c.PostForm("target"),
+	// ImportDeckPackage authorizes the target before the store reads the archive part, so an
+	// unauthorized import returns its 404/403 without spooling the package.
+	report, err := a.ImportDeckPackage(c.Request.Context(), u, CurrentAPIKeyID(c), archive, store.PackageImportOptions{
+		PresetMode: fields["preset_mode"], PresetID: presetID,
+		Target:     fields["target"],
 		DryRun:     dryRun,
-		OnConflict: c.PostForm("on_conflict"),
+		OnConflict: fields["on_conflict"],
 		// Allowing import of someone else's progress is an admin setting; only an explicit admin opt-in counts here.
-		AllowOthersProgress: c.PostForm("allow_others_progress") == "1" && u.Role == store.RoleAdmin,
-		IncludeProgress:     c.PostForm("include_progress") == "1",
-		SkipMissingMedia:    c.PostForm("skip_missing_media") == "1",
-		ApplyWeights:        c.PostForm("apply_weights") == "1",
+		AllowOthersProgress: fields["allow_others_progress"] == "1" && u.Role == store.RoleAdmin,
+		IncludeProgress:     fields["include_progress"] == "1",
+		SkipMissingMedia:    fields["skip_missing_media"] == "1",
+		ApplyWeights:        fields["apply_weights"] == "1",
 	})
 	if err != nil {
+		// The body cap moved from the transport's MaxBytesReader to the store's spool. package_too_large
+		// keeps its 413 for this route even though mapPackageError's default status is 400.
+		if se := asServiceError(err); se.Code == store.CodePackageTooLarge {
+			abortError(c, http.StatusRequestEntityTooLarge, store.CodePackageTooLarge, se.Message)
+			return
+		}
 		writeServiceError(c, err)
 		return
 	}

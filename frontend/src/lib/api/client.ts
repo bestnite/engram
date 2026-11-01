@@ -339,7 +339,8 @@ export class ApiClient {
   async importDeckPackage(file: File, options: import('./types').DeckPackageImportOptions): Promise<PackageImportReport> {
     if (!this.csrfToken) await this.getSession();
     const form = new FormData();
-    form.append('file', file, file.name);
+    // The server reads the fields before it touches the archive part; the file must therefore be
+    // appended last. A file-first request is rejected so it cannot fall back to new_deck defaults.
     form.append('target', options.target);
     form.append('dry_run', options.dryRun ? '1' : '0');
     form.append('on_conflict', options.onConflict || 'update');
@@ -355,6 +356,7 @@ export class ApiClient {
     if (options.presetId) {
       form.append('preset_id', options.presetId);
     }
+    form.append('file', file, file.name);
     return this.notifying('decks', this.request<PackageImportReport>('/api/v1/decks/import', { method: 'POST', body: form }));
   }
 

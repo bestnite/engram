@@ -71,17 +71,20 @@ func TestImportPackageApplyWeightsForm(t *testing.T) {
 
 			var body bytes.Buffer
 			w := multipart.NewWriter(&body)
+			if err := w.WriteField("target", "new_deck"); err != nil {
+				t.Fatalf("write target: %v", err)
+			}
+			if tc.applyWeights != "" {
+				if err := w.WriteField("apply_weights", tc.applyWeights); err != nil {
+					t.Fatalf("write apply_weights: %v", err)
+				}
+			}
 			fw, err := w.CreateFormFile("file", "weights.apkg")
 			if err != nil {
 				t.Fatalf("create form file: %v", err)
 			}
 			if _, err := fw.Write(raw); err != nil {
 				t.Fatalf("write form file: %v", err)
-			}
-			if tc.applyWeights != "" {
-				if err := w.WriteField("apply_weights", tc.applyWeights); err != nil {
-					t.Fatalf("write apply_weights: %v", err)
-				}
 			}
 			if err := w.Close(); err != nil {
 				t.Fatalf("close multipart writer: %v", err)

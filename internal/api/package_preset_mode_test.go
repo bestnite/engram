@@ -126,17 +126,20 @@ func TestImportPresetReuseResponse(t *testing.T) {
 	raw := fixturePackage(t, nil, nil, false)
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
-	f, err := w.CreateFormFile("file", "import.apkg")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.Write(raw); err != nil {
+	if err := w.WriteField("target", "new_deck"); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.WriteField("preset_mode", "reuse"); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.WriteField("preset_id", preset.PublicID); err != nil {
+		t.Fatal(err)
+	}
+	f, err := w.CreateFormFile("file", "import.apkg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Write(raw); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.Close(); err != nil {
@@ -183,17 +186,22 @@ func TestImportMultipartRejectsPresetOptions(t *testing.T) {
 			}
 			var body bytes.Buffer
 			w := multipart.NewWriter(&body)
+			if _, ok := tc.fields["target"]; !ok {
+				if err := w.WriteField("target", "new_deck"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for k, v := range tc.fields {
+				if err := w.WriteField(k, v); err != nil {
+					t.Fatal(err)
+				}
+			}
 			f, err := w.CreateFormFile("file", "import.apkg")
 			if err != nil {
 				t.Fatal(err)
 			}
 			if _, err := f.Write(minimalPackageZip(t)); err != nil {
 				t.Fatal(err)
-			}
-			for k, v := range tc.fields {
-				if err := w.WriteField(k, v); err != nil {
-					t.Fatal(err)
-				}
 			}
 			if err := w.Close(); err != nil {
 				t.Fatal(err)
@@ -234,14 +242,14 @@ func TestImportSharedDeckOmitsOwnerPreset(t *testing.T) {
 	key := seedKey(t, env.keys, editor.ID, []string{store.ScopeWrite}, nil)
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
+	if err := w.WriteField("target", "into_deck:"+deck.PublicID); err != nil {
+		t.Fatal(err)
+	}
 	f, err := w.CreateFormFile("file", "import.apkg")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.Write(minimalPackageZip(t)); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.WriteField("target", "into_deck:"+deck.PublicID); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.Close(); err != nil {
