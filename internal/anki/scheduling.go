@@ -20,7 +20,7 @@ func readScheduling(db *gorm.DB, pkg *Package) error {
 }
 
 func readReviews(db *gorm.DB, pkg *Package) error {
-	rows, err := db.Raw("SELECT id, " + rejectRealIntegers("cid") + ", " + roundedIntegers("usn") + ", " + rejectRealIntegers("ease") + ", " + roundedIntegers("ivl", "lastIvl", "factor", "time") + ", " + rejectRealIntegers("type") + " FROM revlog ORDER BY id").Rows()
+	rows, err := db.Raw("SELECT id, " + rejectRealIntegers("cid") + ", " + roundedIntegers("usn") + ", " + rejectRealIntegers("ease") + ", " + roundedIntegers("ivl", "lastIvl", "factor", "time") + ", " + rejectRealIntegers("type") + ", typeof(cid), typeof(ease), typeof(type) FROM revlog ORDER BY id").Rows()
 	if err != nil {
 		return fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
 	}
@@ -28,9 +28,23 @@ func readReviews(db *gorm.DB, pkg *Package) error {
 	var scanErr error
 	for rows.Next() {
 		var r Review
-		if err := rows.Scan(&r.ID, &r.CardID, &r.USN, &r.Ease, &r.Interval, &r.LastInterval, &r.Factor, &r.Time, &r.Type); err != nil {
+		var cidType, easeType, typeType string
+		if err := rows.Scan(&r.ID, &r.CardID, &r.USN, &r.Ease, &r.Interval, &r.LastInterval, &r.Factor, &r.Time, &r.Type, &cidType, &easeType, &typeType); err != nil {
 			if scanErr == nil {
 				scanErr = fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
+			}
+			continue
+		}
+		var realErr error
+		for i, kind := range []string{cidType, easeType, typeType} {
+			if kind == "real" {
+				realErr = fmt.Errorf("%w: revlog.%s holds a REAL value", ErrCorruptCollection, []string{"cid", "ease", "type"}[i])
+				break
+			}
+		}
+		if realErr != nil {
+			if scanErr == nil {
+				scanErr = realErr
 			}
 			continue
 		}

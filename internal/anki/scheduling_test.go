@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
@@ -26,11 +27,13 @@ func TestRealColumnRules(t *testing.T) {
 		{"cards", "id", "ID", "primary"}, {"cards", "nid", "", "fail"}, {"cards", "did", "", "fail"}, {"cards", "ord", "", "fail"},
 		{"cards", "mod", "Modified", "round"}, {"cards", "usn", "USN", "round"}, {"cards", "due", "Due", "round"}, {"cards", "ivl", "Interval", "round"}, {"cards", "factor", "Factor", "round"}, {"cards", "reps", "Reps", "round"}, {"cards", "lapses", "Lapses", "round"}, {"cards", "left", "Left", "round"}, {"cards", "odue", "OriginalDue", "round"},
 		{"cards", "type", "", "skip"}, {"cards", "queue", "", "skip"}, {"cards", "odid", "", "skip"}, {"cards", "flags", "", "skip"},
+		{"cards", "type", "", "text"}, {"cards", "queue", "", "text"}, {"cards", "odid", "", "text"}, {"cards", "flags", "", "text"},
+		{"cards", "type", "", "null"}, {"cards", "queue", "", "null"}, {"cards", "odid", "", "null"}, {"cards", "flags", "", "null"},
 		{"revlog", "id", "ID", "primary"}, {"revlog", "cid", "", "revlog"}, {"revlog", "ease", "", "revlog"}, {"revlog", "type", "", "revlog"},
 		{"revlog", "usn", "USN", "round"}, {"revlog", "ivl", "Interval", "round"}, {"revlog", "lastIvl", "LastInterval", "round"}, {"revlog", "factor", "Factor", "round"}, {"revlog", "time", "Time", "round"},
 	}
 	for _, tc := range tests {
-		t.Run(tc.table+"/"+tc.column, func(t *testing.T) {
+		t.Run(tc.table+"/"+tc.column+"/"+tc.rule, func(t *testing.T) {
 			db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 			if err != nil {
 				t.Fatal(err)
@@ -50,7 +53,13 @@ func TestRealColumnRules(t *testing.T) {
 			if tc.table == "col" {
 				where = ""
 			}
-			err = db.Exec(fmt.Sprintf("UPDATE %s SET %s = 7.5%s", tc.table, tc.column, where)).Error
+			value := "7.5"
+			if tc.rule == "text" {
+				value = "'x'"
+			} else if tc.rule == "null" {
+				value = "NULL"
+			}
+			err = db.Exec(fmt.Sprintf("UPDATE %s SET %s = %s%s", tc.table, tc.column, value, where)).Error
 			if tc.rule == "primary" {
 				if err == nil {
 					t.Fatal("SQLite accepted REAL primary key")
@@ -62,9 +71,15 @@ func TestRealColumnRules(t *testing.T) {
 			}
 			pkg := &Package{}
 			pkg.Cards, err = readCards(db, pkg)
-			if tc.rule == "fail" {
+			if tc.rule == "fail" || tc.rule == "text" || tc.rule == "null" {
 				if !errors.Is(err, ErrCorruptCollection) {
 					t.Fatalf("error = %v", err)
+				}
+				if pkg.CardsSkipped != 0 {
+					t.Fatalf("skipped = %d, want 0", pkg.CardsSkipped)
+				}
+				if tc.rule == "fail" && (!strings.Contains(err.Error(), tc.table+"."+tc.column) || !strings.Contains(err.Error(), "REAL") || strings.Contains(err.Error(), "NULL")) {
+					t.Fatalf("unexpected error text: %v", err)
 				}
 				return
 			}
@@ -82,6 +97,9 @@ func TestRealColumnRules(t *testing.T) {
 			case "revlog":
 				if !errors.Is(pkg.RevlogErr, ErrCorruptCollection) || len(pkg.Reviews) != 1 || pkg.Reviews[0].ID != 2 {
 					t.Fatalf("reviews = %+v, error = %v", pkg.Reviews, pkg.RevlogErr)
+				}
+				if msg := pkg.RevlogErr.Error(); !strings.Contains(msg, tc.table+"."+tc.column) || !strings.Contains(msg, "REAL") || strings.Contains(msg, "NULL") {
+					t.Fatalf("unexpected error text: %s", msg)
 				}
 			case "round":
 				var v reflect.Value

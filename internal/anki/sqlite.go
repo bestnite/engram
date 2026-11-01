@@ -262,7 +262,7 @@ func readNotes(db *gorm.DB) ([]Note, error) {
 // readCards reads the cards table. Schema 11 and schema 18 use the same
 // columns, so both layouts share this query.
 func readCards(db *gorm.DB, pkg *Package) ([]Card, error) {
-	rows, err := db.Raw("SELECT id, " + rejectRealIntegers("nid", "did", "ord") + ", " + roundedIntegers("mod", "usn", "due", "ivl", "factor", "reps", "lapses", "left", "odue") + ", data, " + rejectRealIntegers("type", "queue", "odid", "flags") + " FROM cards ORDER BY id").Rows()
+	rows, err := db.Raw("SELECT id, " + rejectRealIntegers("nid", "did", "ord") + ", " + roundedIntegers("mod", "usn", "due", "ivl", "factor", "reps", "lapses", "left", "odue") + ", data, type, queue, odid, flags, typeof(nid), typeof(did), typeof(ord), typeof(type), typeof(queue), typeof(odid), typeof(flags) FROM cards ORDER BY id").Rows()
 	if err != nil {
 		return nil, fmt.Errorf("%w: cards table: %v", ErrCorruptCollection, err)
 	}
@@ -271,13 +271,29 @@ func readCards(db *gorm.DB, pkg *Package) ([]Card, error) {
 	for rows.Next() {
 		var card Card
 		var rawType, rawQueue, rawOdid, rawFlags any
-		if err := rows.Scan(&card.ID, &card.NoteID, &card.DeckID, &card.Ordinal, &card.Modified, &card.USN, &card.Due, &card.Interval, &card.Factor, &card.Reps, &card.Lapses, &card.Left, &card.OriginalDue, &card.Data, &rawType, &rawQueue, &rawOdid, &rawFlags); err != nil {
+		var nidType, didType, ordType, typeType, queueType, odidType, flagsType string
+		if err := rows.Scan(&card.ID, &card.NoteID, &card.DeckID, &card.Ordinal, &card.Modified, &card.USN, &card.Due, &card.Interval, &card.Factor, &card.Reps, &card.Lapses, &card.Left, &card.OriginalDue, &card.Data, &rawType, &rawQueue, &rawOdid, &rawFlags, &nidType, &didType, &ordType, &typeType, &queueType, &odidType, &flagsType); err != nil {
 			return nil, fmt.Errorf("%w: cards table: %v", ErrCorruptCollection, err)
 		}
-		var typ, queue, odid, flags sql.NullInt64
-		if typ.Scan(rawType) != nil || queue.Scan(rawQueue) != nil || odid.Scan(rawOdid) != nil || flags.Scan(rawFlags) != nil || !typ.Valid || !queue.Valid || !odid.Valid || !flags.Valid {
+		for i, kind := range []string{nidType, didType, ordType} {
+			if kind == "real" {
+				return nil, fmt.Errorf("%w: cards.%s holds a REAL value", ErrCorruptCollection, []string{"nid", "did", "ord"}[i])
+			}
+		}
+		if typeType == "real" || queueType == "real" || odidType == "real" || flagsType == "real" {
 			pkg.CardsSkipped++
 			continue
+		}
+		var typ, queue, odid, flags sql.NullInt64
+		for i, value := range []any{rawType, rawQueue, rawOdid, rawFlags} {
+			column := []string{"type", "queue", "odid", "flags"}[i]
+			dest := []*sql.NullInt64{&typ, &queue, &odid, &flags}[i]
+			if err := dest.Scan(value); err != nil {
+				return nil, fmt.Errorf("%w: cards.%s: %v", ErrCorruptCollection, column, err)
+			}
+			if !dest.Valid {
+				return nil, fmt.Errorf("%w: cards.%s: NULL value", ErrCorruptCollection, column)
+			}
 		}
 		card.Type, card.Queue, card.OriginalDeckID, card.Flags = int(typ.Int64), int(queue.Int64), odid.Int64, int(flags.Int64)
 		cards = append(cards, card)
@@ -291,7 +307,7 @@ func readCards(db *gorm.DB, pkg *Package) ([]Card, error) {
 func rejectRealIntegers(columns ...string) string {
 	expressions := make([]string, len(columns))
 	for i, column := range columns {
-		expressions[i] = fmt.Sprintf("CASE WHEN typeof(%[1]s) = 'real' THEN NULL ELSE %[1]s END", column)
+		expressions[i] = fmt.Sprintf("CASE WHEN typeof(%[1]s) = 'real' THEN 0 ELSE %[1]s END", column)
 	}
 	return strings.Join(expressions, ", ")
 }
