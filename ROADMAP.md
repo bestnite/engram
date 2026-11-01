@@ -350,21 +350,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   component test output, the output of `npm --prefix frontend run build`, the grep output and the raw
   scoped `go vet` output.
 
-- [ ] **M18-95 The card skip comments state which columns skip and which fail** — the doc comment of
-  `readCards` in `internal/anki/sqlite.go` says "A card row with a REAL code value is skipped and
-  counted". The code fails the import with `ErrCorruptCollection` when `cards.nid`, `cards.did` or
-  `cards.ord` holds a REAL value, and skips and counts the row only when `cards.type`, `cards.queue`,
-  `cards.odid` or `cards.flags` holds one. `odid` is a deck identifier, not a code, so the sentence has two
-  readings for `odid`. The comment on `PackageImportReport.CardsSkipped` in
-  `internal/store/package_import.go` says that it "counts package card rows that were not imported". The
-  field copies `pkg.CardsSkipped`, so it does not count the cards of notes that `on_conflict` `skip` left
-  out, which are not imported either. The fix: the `readCards` comment names the three columns that fail
-  the import and the four columns that skip the row. The `CardsSkipped` comment states that it counts the
-  card rows the reader could not read, and that cards of skipped notes are not counted. This entry
-  changes comments only. *Acceptance:* each statement of both comments matches `readCards` and
-  `importAnkiInTx`; the scoped `go vet` of `internal/anki` and `internal/store` passes. Evidence is the
-  diff and the raw scoped `go vet` output.
-
 - [ ] **M18-96 Each condition of `deck_config_skipped` is tested** — `resolveAnkiTargetDeck` in
   `internal/store/anki_import.go` sets `deck_config_skipped` only when four conditions hold: the target is
   `new_deck`, `preset_mode` is `new`, `DeckConfigsSkipped` is true, and `ankiTopConfig` returned nil.
