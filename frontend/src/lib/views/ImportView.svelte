@@ -369,7 +369,7 @@
     <section bind:this={reportSection} class="mt-10 scroll-mt-6 border-t border-border pt-6 animate-in fade-in-0 slide-in-from-bottom-1 duration-200" aria-live="polite">
       <h2 class="text-base font-semibold">{$t('package.report.heading')}</h2>
       <dl class="mt-4 grid gap-x-8 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-        {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border py-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium tabular-nums">{key.endsWith('dry_run') || key.endsWith('progress_discarded') || key.startsWith('package.report.weights_') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
+        {#each reportRows(report) as [key, value] (key)}<div class="flex justify-between gap-3 border-b border-border py-2"><dt class="text-muted-foreground">{$t(key)}</dt><dd class="font-medium tabular-nums">{key.endsWith('dry_run') || key.endsWith('progress_discarded') || key.endsWith('deck_config_skipped') || key.startsWith('package.report.weights_') ? $t(value ? 'package.value.yes' : 'package.value.no') : value}</dd></div>{/each}
       </dl>
       {#if report.errors.length}<h3 class="mt-5 text-sm font-semibold">{$t('package.report.errors')}</h3><ul class="mt-2 list-disc pl-5 text-sm">{#each report.errors as item}<li>{item.entry}: {item.reason}</li>{/each}</ul>{/if}
       {#if report.missing_media?.length}

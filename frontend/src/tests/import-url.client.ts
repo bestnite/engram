@@ -234,8 +234,17 @@ describe('ImportView — package weights', () => {
     await flush();
     submitForm();
     await flush();
-    expect(reportSection()).toBeTruthy();
-    expect(reportSection()?.textContent?.includes(formatMessage('zh-CN', 'package.report.deck_config_skipped'))).toBe(skipped);
+    const report = reportSection();
+    expect(report).toBeTruthy();
+    const row = Array.from(report!.querySelectorAll('dt')).find(
+      (el) => el.textContent === formatMessage('zh-CN', 'package.report.deck_config_skipped')
+    );
+    if (skipped) {
+      expect(row).toBeDefined();
+      expect(row?.nextElementSibling?.textContent).toBe(formatMessage('zh-CN', 'package.value.yes'));
+    } else {
+      expect(row).toBeUndefined();
+    }
   });
 
   it.each(['zh-CN', 'en'] as const)('shows the progress and boolean weight rows in %s', async (locale) => {
@@ -295,7 +304,7 @@ describe('ImportView — package weights', () => {
   });
 });
 
-describe('ImportView — preset modes, progress and counters (M18-6)', () => {
+describe('ImportView — preset modes, progress and counters', () => {
   const ownPresets = [
     {
       id: 'preset-1',

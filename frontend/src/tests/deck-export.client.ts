@@ -7,11 +7,11 @@ import { routeStore, matchRoute } from '../lib/router';
 import { setLocale, formatMessage } from '../lib/i18n';
 
 /**
- * Deck export dialog in DeckDetailView (M18-85):
+ * Deck export dialog in DeckDetailView (package export options):
  * Offers the .apkg package format with four switches (media, progress, review history, weights)
  * and no legacy format choice.
  */
-describe('DeckDetailView export dialog (M18-85)', () => {
+describe('DeckDetailView export dialog (package export options)', () => {
   let instance: ReturnType<typeof mount> | null = null;
   let target: HTMLElement;
   const legacyExt = '.' + ['e', 'deck'].join('');

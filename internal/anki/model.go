@@ -11,9 +11,11 @@ type Package struct {
 	Notes     []Note
 	Cards     []Card
 	// CardsSkipped counts card rows skipped because a scheduling field is REAL.
-	CardsSkipped      int
-	SkippedCardIDs    map[int64]bool
-	Reviews           []Review
+	CardsSkipped   int
+	SkippedCardIDs map[int64]bool
+	Reviews        []Review
+	// ReviewsUnreadable counts the revlog rows the reader skipped, and the import
+	// counts them in reviews_discarded when include_progress is off.
 	ReviewsUnreadable int
 	// RevlogErr records an incomplete review log without preventing content import.
 	RevlogErr   error

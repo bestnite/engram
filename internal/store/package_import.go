@@ -300,7 +300,9 @@ type PackageImportReport struct {
 	WeightsDiscarded bool `json:"weights_discarded"`
 	// WeightsInvalid means the target is a new deck, applying weights was requested,
 	// the package supplied weights, and fsrs.MigrateWeights rejected them.
-	WeightsInvalid    bool `json:"weights_invalid"`
+	WeightsInvalid bool `json:"weights_invalid"`
+	// DeckConfigSkipped reports that the target is a new deck, preset_mode is new,
+	// the package's deck configurations were skipped, and no top-level configuration was found.
 	DeckConfigSkipped bool `json:"deck_config_skipped"`
 	// CardsRemoved counts the stored cards this import soft-deleted because the note they belong to
 	// moved to a note type that no longer declares their template. The card_states and reviews rows
