@@ -1486,21 +1486,6 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 		!math.IsNaN(*difficulty) && !math.IsInf(*difficulty, 0) && *difficulty >= 1 && *difficulty <= 10
 }
 
-func equalAnkiState(a, b CardState) bool {
-	equalTime := func(x, y *time.Time) bool {
-		return x == nil && y == nil || x != nil && y != nil && x.Equal(*y)
-	}
-	equalFloat := func(x, y *float64) bool {
-		return x == nil && y == nil || x != nil && y != nil && *x == *y
-	}
-	return a.CardID == b.CardID && a.UserID == b.UserID && a.State == b.State &&
-		equalTime(a.DueAt, b.DueAt) && a.StepIndex == b.StepIndex &&
-		equalFloat(a.Stability, b.Stability) && equalFloat(a.Difficulty, b.Difficulty) &&
-		a.Reps == b.Reps && a.Lapses == b.Lapses && a.ScheduledDays == b.ScheduledDays &&
-		a.ElapsedDays == b.ElapsedDays && equalTime(a.LastReviewAt, b.LastReviewAt) &&
-		a.Version == b.Version && equalTime(a.SuspendedAt, b.SuspendedAt)
-}
-
 // deriveAnkiMemory uses the package's state, then replays eligible history, then
 // uses SM-2 when replay is ineligible, and skips a card if the result is unusable.
 // Anki writes s and d only when FSRS is enabled, while go-fsrs refuses a non-new
@@ -1615,11 +1600,10 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			oldStates[state.CardID] = state
 		}
 		var reviews []Review
-		if err := tx.WithContext(ctx).Select("card_id", "reviewed_at", "rating").Where("user_id = ? AND card_id IN ?", userID, ids[start:end]).Find(&reviews).Error; err != nil {
+		if err := tx.WithContext(ctx).Select("card_id", "reviewed_at").Where("user_id = ? AND card_id IN ?", userID, ids[start:end]).Find(&reviews).Error; err != nil {
 			return fmt.Errorf("check Anki review: %w", err)
 		}
 		for _, review := range reviews {
-			reviewKeys[reviewKey{review.CardID, review.ReviewedAt.UTC(), review.Rating}] = true
 			if review.ReviewedAt.After(latestReview[review.CardID]) {
 				latestReview[review.CardID] = review.ReviewedAt
 			}
@@ -1732,15 +1716,13 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		}
 		if exists {
 			state.Version = old.Version
+			// A later local review wins because it is newer progress; a later package
+			// review writes the package state. Equal times write nothing, so repeated
+			// imports do not change the version. A NULL package time is oldest because
+			// the package has no evidence of a later review.
 			var packageTime, localTime time.Time
 			if state.LastReviewAt != nil {
 				packageTime = *state.LastReviewAt
-			} else if state.DueAt != nil {
-				interval := time.Duration(card.Interval) * 24 * time.Hour
-				if card.Interval < 0 {
-					interval = -time.Duration(card.Interval) * time.Second
-				}
-				packageTime = state.DueAt.Add(-interval)
 			}
 			if old.LastReviewAt != nil {
 				localTime = *old.LastReviewAt

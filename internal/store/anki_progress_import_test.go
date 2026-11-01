@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -338,6 +339,67 @@ func TestAnkiProgressLocalWins(t *testing.T) {
 					t.Fatalf("state=%+v report=%+v", state, report)
 				}
 				t.Logf("state reps=%d applied=%d skipped=%d; reviews applied=%d skipped=%d", state.Reps, report.ProgressApplied, report.StatesSkipped, report.ReviewsApplied, report.ReviewsSkipped)
+			})
+		}
+	}
+}
+
+func TestAnkiProgressPackageTime(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		for _, tc := range []struct {
+			name     string
+			existing bool
+		}{
+			{"local_review", true},
+			{"no_existing_state", false},
+		} {
+			t.Run(driver+"/"+tc.name, func(t *testing.T) {
+				pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				pkg.Notes, pkg.Cards, pkg.Reviews = pkg.Notes[:1], pkg.Cards[:1], nil
+				card := &pkg.Cards[0]
+				card.Type, card.Queue, card.Due, card.Interval, card.Reps, card.Data = 1, 1, 1600000600, 0, 9, `{"s":3,"d":5}`
+				user := seedUsers(t, db, "package_time_"+driver+"_"+tc.name)[0]
+				plan, initial := planAnkiDecks(pkg), &PackageImportReport{}
+				if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{PresetMode: PackagePresetNew, Now: time.Now}, initial); err != nil {
+					t.Fatal(err)
+				}
+				var row Card
+				if err := db.Where("note_id IN (?)", db.Model(&Note{}).Select("id").Where("deck_id = ?", initial.DeckID)).First(&row).Error; err != nil {
+					t.Fatal(err)
+				}
+				var baseline CardState
+				if tc.existing {
+					local := time.Unix(1600000300, 0).UTC()
+					state := CardState{CardID: row.ID, UserID: user, State: "learning", Reps: 42, LastReviewAt: &local}
+					if err := db.Create(&state).Error; err != nil {
+						t.Fatal(err)
+					}
+					if err := db.Where("card_id = ? AND user_id = ?", row.ID, user).First(&baseline).Error; err != nil {
+						t.Fatal(err)
+					}
+				}
+				for i := 0; i < 3; i++ {
+					report := &PackageImportReport{}
+					if err := importAnkiProgress(context.Background(), db, user, initial.DeckID, pkg, map[int64]uint64{card.ID: row.ID}, PackageImportOptions{IncludeProgress: true}, report, time.Now()); err != nil {
+						t.Fatal(err)
+					}
+					var state CardState
+					if err := db.Where("card_id = ? AND user_id = ?", row.ID, user).First(&state).Error; err != nil {
+						t.Fatal(err)
+					}
+					if !tc.existing && i == 0 {
+						if report.ProgressApplied != 1 || report.StatesSkipped != 0 || state.LastReviewAt != nil {
+							t.Fatalf("first import state=%+v report=%+v", state, report)
+						}
+						baseline = state
+					} else if report.ProgressApplied != 0 || report.StatesSkipped != 1 || !reflect.DeepEqual(state, baseline) {
+						t.Fatalf("import %d state=%+v baseline=%+v report=%+v", i+1, state, baseline, report)
+					}
+					t.Logf("import %d: version=%d applied=%d skipped=%d", i+1, state.Version, report.ProgressApplied, report.StatesSkipped)
+				}
 			})
 		}
 	}
