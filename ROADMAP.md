@@ -434,28 +434,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   fails. Evidence is the raw scoped `go test` and `go vet` output of both runs, the PostgreSQL run with
   `TEST_PG_DSN` set.
 
-- [ ] **M18-97 The store tests refuse every invalid preset selection again** — `M18-74` named the
-  refusal cases of `TestImportPresetModes` in `internal/store/package_preset_mode_test.go`. `f2adaab`
-  (`M18-83`) deleted that test with the legacy format, and the remaining `TestAnkiImportPresetModes` has
-  no refusal case. Two rules of `ValidateImportPreset` in `internal/store/package_import.go` are now
-  tested nowhere: a `preset_id` with `replace_deck`, and a `preset_id` with `into_deck` and mode `new`.
-  `git grep -n -E 'replace_deck.*preset|preset.*replace_deck' -- '*_test.go'` prints nothing. The API and
-  MCP refusal tests that remain run on SQLite only, so the owner-count query of `ValidateImportPreset`
-  no longer runs on PostgreSQL. The `M18-74` acceptance command now matches no test and passes without
-  running one. The fix: `internal/store/package_preset_mode_test.go` gains a table test, on both drivers,
-  that imports an `.apkg` through `ImportPackage` with each refused selection. For each of `reuse` and
-  `copy`, five cases: `new_deck` without `preset_id`; `new_deck` with another user's preset; `new_deck`
-  with the caller's preset and `apply_weights`; `into_deck` with the caller's preset; `replace_deck` with
-  the caller's preset. Mode `new` with the caller's preset, once for each of the three targets. An
-  unknown mode for `new_deck`. An empty mode with the caller's preset, once for `into_deck` and once for
-  `replace_deck`. Each refusal returns a
-  `PackageError` with code `preset_selection_invalid` and adds no deck, preset, note or card. Each case
-  name states its target, its mode, which preset it names and its weights flag. This entry changes tests
-  only. *Acceptance:* every case passes on both drivers; with the `targetKind != PackageTargetNewDeck &&
-  opts.PresetID != 0` check removed for one run, the two empty-mode cases fail, because only that check
-  refuses them. Evidence
-  is the raw scoped `go test` and `go vet` output of both runs, the PostgreSQL run with `TEST_PG_DSN` set.
-
 - [ ] **M18-98 The preset-limit tests measure their own layer, and the comments state the rules** — four
   defects in the code `M18-59`, `M18-60` and `M18-81` landed. First,
   `TestPresetWriteRejectsExcessiveMaximumInterval` in `internal/web/presets_api_test.go` passes with the
