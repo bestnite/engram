@@ -157,6 +157,9 @@ func TestAnkiImportSkippedDeckConfigs(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					if report.DeckConfigSkipped != tc.topBad {
+						t.Fatalf("DeckConfigSkipped = %v, want %v", report.DeckConfigSkipped, tc.topBad)
+					}
 					got := deckPreset(t, db, report.DeckID)
 					if tc.defaults {
 						want := NewPreset(owner, got.Name)

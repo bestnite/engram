@@ -192,6 +192,7 @@
       ['package.report.progress_skipped', value.progress_skipped], ['package.report.progress_discarded', value.progress_discarded ? 1 : 0],
       ['package.report.weights_applied', value.weights_applied ? 1 : 0], ['package.report.weights_discarded', value.weights_discarded ? 1 : 0],
       ...(value.weights_invalid ? [['package.report.weights_invalid', 1] as [string, number]] : []),
+      ...(value.deck_config_skipped ? [['package.report.deck_config_skipped', 1] as [string, number]] : []),
       ['package.report.match_rule', value.match_rule || '—'],
     ];
   }

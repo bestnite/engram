@@ -1556,7 +1556,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 				report.StatesDiscarded++
 			}
 		}
-		report.ReviewsDiscarded = len(pkg.Reviews)
+		report.ReviewsDiscarded = len(pkg.Reviews) + pkg.ReviewsUnreadable
 		report.ProgressDiscarded = report.StatesDiscarded > 0 || report.ReviewsDiscarded > 0
 		return nil
 	}
@@ -1852,6 +1852,7 @@ func (s *DeckStore) resolveAnkiTargetDeck(ctx context.Context, tx *gorm.DB, acto
 	}
 	switch targetKind {
 	case PackageTargetNewDeck:
+		report.DeckConfigSkipped = opts.PresetMode == PackagePresetNew && pkg.DeckConfigsSkipped && cfg == nil
 		name := strings.TrimSpace(opts.NewDeckName)
 		if name == "" {
 			name = plan.TopName

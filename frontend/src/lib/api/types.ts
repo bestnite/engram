@@ -621,6 +621,7 @@ export interface PackageImportReport {
   weights_applied: boolean;
   weights_invalid: boolean;
   weights_discarded: boolean;
+  deck_config_skipped: boolean;
   match_rule?: string;
   /** Anki .apkg report: media references with no bytes in the package. */
   missing_media?: string[];

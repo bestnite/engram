@@ -114,6 +114,31 @@ func schedulingToleranceArchive(t *testing.T, modern bool, query string) []byte 
 	return out.Bytes()
 }
 
+func TestAnkiImportUnreadableReviewsDiscarded(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			for _, tc := range []struct {
+				name, query string
+			}{
+				{"real ease", `UPDATE revlog SET ease = 2.5`},
+				{"valid ease", `UPDATE revlog SET ease = 3`},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					raw := schedulingToleranceArchive(t, false, tc.query)
+					owner := seedUsers(t, db, "discarded_"+tc.name)[0]
+					report, err := NewDeckStore(db).ImportPackage(context.Background(), owner, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck, IncludeProgress: false, MediaRoot: t.TempDir()})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if report.ReviewsDiscarded != 1 || !report.ProgressDiscarded {
+						t.Fatalf("reviews discarded = %d, progress discarded = %v; want 1, true", report.ReviewsDiscarded, report.ProgressDiscarded)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestAnkiImportSchedulingTolerance(t *testing.T) {
 	tests := []struct {
 		name, query string

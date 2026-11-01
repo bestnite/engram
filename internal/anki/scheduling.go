@@ -30,6 +30,7 @@ func readReviews(db *gorm.DB, pkg *Package) error {
 		var r Review
 		var cidType, easeType, typeType string
 		if err := rows.Scan(&r.ID, &r.CardID, &r.USN, &r.Ease, &r.Interval, &r.LastInterval, &r.Factor, &r.Time, &r.Type, &cidType, &easeType, &typeType); err != nil {
+			pkg.ReviewsUnreadable++
 			if scanErr == nil {
 				scanErr = fmt.Errorf("%w: revlog: %v", ErrCorruptCollection, err)
 			}
@@ -43,6 +44,7 @@ func readReviews(db *gorm.DB, pkg *Package) error {
 			}
 		}
 		if realErr != nil {
+			pkg.ReviewsUnreadable++
 			if scanErr == nil {
 				scanErr = realErr
 			}

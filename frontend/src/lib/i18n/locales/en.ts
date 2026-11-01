@@ -1807,4 +1807,5 @@ export const en: LocaleCatalog = {
   'note_preview.position': '{current} / {total}',
   'note_preview.cloze_name': '{template} {ordinal}',
   'package.report.weights_invalid': 'Package weights rejected as invalid',
+  'package.report.deck_config_skipped': 'Package deck configuration could not be read; defaults were used',
 };
