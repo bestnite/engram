@@ -1,20 +1,15 @@
 package store
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
-	"io"
 	"math"
 	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/anki"
-	"github.com/klauspost/compress/zstd"
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
@@ -36,39 +31,6 @@ func skippedConfigArchive(t *testing.T, topBad, otherBad, single bool) []byte {
 			break
 		}
 	}
-	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	entries := map[string][]byte{}
-	for _, f := range zr.File {
-		r, err := f.Open()
-		if err != nil {
-			t.Fatal(err)
-		}
-		entries[f.Name], err = io.ReadAll(r)
-		r.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	dec, err := zstd.NewReader(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	collection, err := dec.DecodeAll(entries["collection.anki21b"], nil)
-	dec.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(t.TempDir(), "collection.sqlite")
-	if err := os.WriteFile(path, collection, 0600); err != nil {
-		t.Fatal(err)
-	}
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
 	var config []byte
 	addFloat := func(n protowire.Number, f float32) {
 		config = protowire.AppendTag(config, n, protowire.Fixed32Type)
@@ -84,17 +46,13 @@ func skippedConfigArchive(t *testing.T, topBad, otherBad, single bool) []byte {
 		addFloat(6, float32(w))
 	}
 	bad := []byte{0x32, 1, 0}
-	if _, err := db.Exec(`DELETE FROM deck_config`); err != nil {
-		t.Fatal(err)
-	}
+	statements := []fixtureSQL{{query: `DELETE FROM deck_config`}}
 	if !single {
 		data := config
 		if topBad {
 			data = bad
 		}
-		if _, err := db.Exec(`INSERT INTO deck_config (id, name, mtime_secs, usn, config) VALUES (?, ?, 0, 0, ?)`, configID, "Top", data); err != nil {
-			t.Fatal(err)
-		}
+		statements = append(statements, fixtureSQL{`INSERT INTO deck_config (id, name, mtime_secs, usn, config) VALUES (?, ?, 0, 0, ?)`, []any{configID, "Top", data}})
 	}
 	data := config
 	if !single {
@@ -105,37 +63,8 @@ func skippedConfigArchive(t *testing.T, topBad, otherBad, single bool) []byte {
 	if otherBad {
 		data = bad
 	}
-	if _, err := db.Exec(`INSERT INTO deck_config (id, name, mtime_secs, usn, config) VALUES (?, ?, 0, 0, ?)`, configID+10000, "Other", data); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	collection, err = os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	enc, err := zstd.NewWriter(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	entries["collection.anki21b"] = enc.EncodeAll(collection, nil)
-	enc.Close()
-	var out bytes.Buffer
-	zw := zip.NewWriter(&out)
-	for name, data := range entries {
-		w, err := zw.Create(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := w.Write(data); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return out.Bytes()
+	statements = append(statements, fixtureSQL{`INSERT INTO deck_config (id, name, mtime_secs, usn, config) VALUES (?, ?, 0, 0, ?)`, []any{configID + 10000, "Other", data}})
+	return mutateAnkiFixture(t, "stock.anki21b.apkg", statements...)
 }
 
 func TestAnkiImportSkippedDeckConfigs(t *testing.T) {

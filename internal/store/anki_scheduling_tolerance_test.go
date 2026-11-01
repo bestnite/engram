@@ -1,117 +1,24 @@
 package store
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
-	"database/sql"
-	"io"
-	"os"
-	"path/filepath"
+	"encoding/json"
+	"git.nite07.com/nite/engram/internal/anki"
+	"log/slog"
 	"testing"
-
-	"github.com/klauspost/compress/zstd"
 )
 
 func schedulingToleranceArchive(t *testing.T, modern bool, query string) []byte {
 	t.Helper()
-	fixture, collection := "stock.anki21.apkg", "collection.anki21"
+	fixture := "stock.anki21.apkg"
 	if modern {
-		fixture, collection = "stock.anki21b.apkg", "collection.anki21b"
+		fixture = "stock.anki21b.apkg"
 	}
-	raw, err := os.ReadFile(ankiFixturePath(fixture))
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	entries := make(map[string][]byte)
-	for _, f := range zr.File {
-		r, err := f.Open()
-		if err != nil {
-			t.Fatal(err)
-		}
-		entries[f.Name], err = io.ReadAll(r)
-		if closeErr := r.Close(); err == nil {
-			err = closeErr
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	data := entries[collection]
-	if modern {
-		decoder, err := zstd.NewReader(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		data, err = decoder.DecodeAll(data, nil)
-		decoder.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	path := filepath.Join(t.TempDir(), "collection.sqlite")
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		t.Fatal(err)
-	}
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var notes, cards int
-	if err := db.QueryRow(`SELECT count(*) FROM notes`).Scan(&notes); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.QueryRow(`SELECT count(*) FROM cards`).Scan(&cards); err != nil {
-		t.Fatal(err)
-	}
-	if notes == 0 || cards == 0 {
-		t.Fatal("fixture has no content")
-	}
-	if _, err := db.Exec(`INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) SELECT 1, id, 0, 3, 1, 1, 2500, 100, 1 FROM cards LIMIT 1`); err != nil {
-		t.Fatal(err)
-	}
-	result, err := db.Exec(query)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if affected, err := result.RowsAffected(); err != nil || affected == 0 {
-		t.Fatalf("mutation affected %d rows: %v", affected, err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	data, err = os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if modern {
-		encoder, err := zstd.NewWriter(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		data = encoder.EncodeAll(data, nil)
-		encoder.Close()
-	}
-	entries[collection] = data
-	var out bytes.Buffer
-	zw := zip.NewWriter(&out)
-	for name, data := range entries {
-		w, err := zw.Create(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := w.Write(data); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return out.Bytes()
+	return mutateAnkiFixture(t, fixture,
+		fixtureSQL{query: `INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) SELECT 1, id, 0, 3, 1, 1, 2500, 100, 1 FROM cards LIMIT 1`},
+		fixtureSQL{query: query},
+	)
 }
 
 func TestAnkiImportUnreadableReviewsDiscarded(t *testing.T) {
@@ -180,6 +87,70 @@ func TestAnkiImportSchedulingTolerance(t *testing.T) {
 					}
 					if notes != int64(len(golden.Notes)) || cards != int64(wantCards) {
 						t.Fatalf("stored: notes = %d, cards = %d; want %d, %d", notes, cards, len(golden.Notes), wantCards)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestAnkiImportReportsSkippedCard(t *testing.T) {
+	pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := mutateAnkiFixture(t, "stock.anki2.apkg",
+		fixtureSQL{query: "UPDATE cards SET queue = 1.5, type = 2 WHERE id = (SELECT MIN(id) FROM cards)"},
+		fixtureSQL{query: "DELETE FROM revlog"},
+		fixtureSQL{query: "INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) SELECT 1600000000000, MIN(id), 0, 3, 1, 0, 2500, 100, 1 FROM cards"},
+	)
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			for _, tc := range []struct {
+				name     string
+				progress bool
+			}{{"progress_on", true}, {"progress_off", false}} {
+				t.Run(tc.name, func(t *testing.T) {
+					user := seedUsers(t, db, "skipped_card_"+driver+"_"+tc.name)[0]
+					var logs bytes.Buffer
+					previous := slog.Default()
+					slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+					defer slog.SetDefault(previous)
+					report, err := NewDeckStore(db).ImportPackage(context.Background(), user, bytes.NewReader(archive), PackageImportOptions{Target: PackageTargetNewDeck, IncludeProgress: tc.progress, MediaRoot: t.TempDir()})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if report.CardsCreated != len(pkg.Cards)-1 {
+						t.Fatalf("cards_created = %d, want %d", report.CardsCreated, len(pkg.Cards)-1)
+					}
+					if report.CardsSkipped != 1 {
+						t.Fatalf("cards_skipped = %d", report.CardsSkipped)
+					}
+					if report.ReviewsDiscarded != 1 || report.ReviewsSkipped != 0 || report.ReviewsApplied != 0 {
+						t.Fatalf("report = %+v", report)
+					}
+					var count int64
+					if err := db.Model(&Review{}).Where("user_id = ?", user).Count(&count).Error; err != nil || count != 0 {
+						t.Fatalf("reviews = %d, error = %v", count, err)
+					}
+					if tc.progress {
+						var logEntry struct {
+							Level   string `json:"level"`
+							Message string `json:"msg"`
+							Reviews int    `json:"reviews_discarded"`
+							UserID  uint64 `json:"user_id"`
+						}
+						if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &logEntry); err != nil || logEntry.Level != "WARN" || logEntry.Message != "Anki import discarded reviews for skipped cards" || logEntry.Reviews != 1 || logEntry.UserID != user {
+							t.Fatalf("warn log = %q, error = %v", logs.String(), err)
+						}
+						t.Logf("warn: %s", bytes.TrimSpace(logs.Bytes()))
+					}
+					encoded, err := json.Marshal(report)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Contains(encoded, []byte(`"cards_skipped":1`)) {
+						t.Fatalf("report = %s", encoded)
 					}
 				})
 			}

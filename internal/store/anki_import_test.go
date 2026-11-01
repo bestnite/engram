@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,9 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/klauspost/compress/zstd"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 
 	"git.nite07.com/nite/engram/internal/anki"
 	"git.nite07.com/nite/engram/internal/notetype"
@@ -1126,121 +1126,96 @@ func TestAnkiImportSubdeckPaths(t *testing.T) {
 	}
 }
 
-// ankiModelsWithoutLastTemplate drops the last template of one legacy note type and returns the
-// rewritten col.models JSON plus the ordinal it dropped.
-func ankiModelsWithoutLastTemplate(t *testing.T, db *gorm.DB, modelID int64) (string, int) {
-	t.Helper()
-	var modelsJSON string
-	if err := db.Raw("SELECT models FROM col").Scan(&modelsJSON).Error; err != nil {
-		t.Fatalf("read col.models: %v", err)
-	}
-	var models map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(modelsJSON), &models); err != nil {
-		t.Fatalf("decode col.models: %v", err)
-	}
-	for key, rawModel := range models {
-		var model map[string]json.RawMessage
-		if err := json.Unmarshal(rawModel, &model); err != nil {
-			t.Fatalf("decode model %s: %v", key, err)
-		}
-		var id int64
-		if err := json.Unmarshal(model["id"], &id); err != nil || id != modelID {
-			continue
-		}
-		var templates []json.RawMessage
-		if err := json.Unmarshal(model["tmpls"], &templates); err != nil {
-			t.Fatalf("decode templates of model %d: %v", modelID, err)
-		}
-		if len(templates) < 2 {
-			t.Fatalf("model %d has %d templates, want at least two", modelID, len(templates))
-		}
-		dropped := len(templates) - 1
-		encodedTemplates, err := json.Marshal(templates[:dropped])
-		if err != nil {
-			t.Fatalf("encode templates of model %d: %v", modelID, err)
-		}
-		model["tmpls"] = encodedTemplates
-		encoded, err := json.Marshal(model)
-		if err != nil {
-			t.Fatalf("encode model %d: %v", modelID, err)
-		}
-		models[key] = encoded
-		encodedModels, err := json.Marshal(models)
-		if err != nil {
-			t.Fatalf("encode col.models: %v", err)
-		}
-		return string(encodedModels), dropped
-	}
-	t.Fatalf("model %d is not in the fixture collection", modelID)
-	return "", 0
+type fixtureSQL struct {
+	query string
+	args  []any
 }
 
-// ankiFixtureWithoutTemplate rebuilds a legacy fixture whose note type lost its last template.
-// Deleting a template in Anki takes the cards of that template with it, so the cards of the dropped
-// ordinal are removed as well and the package stays self-consistent: the only change left is the
-// note type's structure.
-func ankiFixtureWithoutTemplate(t *testing.T, modelID int64) []byte {
+// mutateAnkiFixture edits the collection without changing the fixture on disk.
+func mutateAnkiFixture(t *testing.T, fixture string, statements ...fixtureSQL) []byte {
 	t.Helper()
-	raw, err := os.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+	raw, err := os.ReadFile(ankiFixturePath(fixture))
 	if err != nil {
-		t.Fatalf("read fixture: %v", err)
+		t.Fatal(err)
 	}
 	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
 	if err != nil {
-		t.Fatalf("open fixture: %v", err)
+		t.Fatal(err)
 	}
 	entries := make(map[string][]byte, len(zr.File))
 	for _, f := range zr.File {
-		rc, err := f.Open()
+		r, err := f.Open()
 		if err != nil {
-			t.Fatalf("open entry %s: %v", f.Name, err)
+			t.Fatal(err)
 		}
-		data, err := io.ReadAll(rc)
-		rc.Close()
-		if err != nil {
-			t.Fatalf("read entry %s: %v", f.Name, err)
+		data, readErr := io.ReadAll(r)
+		closeErr := r.Close()
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if closeErr != nil {
+			t.Fatal(closeErr)
 		}
 		entries[f.Name] = data
 	}
-	collection, ok := entries["collection.anki2"]
-	if !ok {
-		t.Fatal("fixture carries no collection.anki2")
+	collection := ""
+	for _, name := range []string{"collection.anki21b", "collection.anki21", "collection.anki2"} {
+		if _, ok := entries[name]; ok {
+			collection = name
+			break
+		}
 	}
-
-	// The collection is a SQLite database; it is edited in a temporary file, never in the fixture.
-	file := filepath.Join(t.TempDir(), "collection.anki2")
-	if err := os.WriteFile(file, collection, 0o600); err != nil {
-		t.Fatalf("write collection: %v", err)
+	if collection == "" {
+		t.Fatal("fixture has no collection")
 	}
-	collectionDB, err := gorm.Open(sqlite.Open(file), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
+	data := entries[collection]
+	if collection == "collection.anki21b" {
+		dec, err := zstd.NewReader(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err = dec.DecodeAll(data, nil)
+		dec.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	file := filepath.Join(t.TempDir(), "collection.sqlite")
+	if err := os.WriteFile(file, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", file)
 	if err != nil {
-		t.Fatalf("open collection: %v", err)
+		t.Fatal(err)
 	}
-	modelsJSON, dropped := ankiModelsWithoutLastTemplate(t, collectionDB, modelID)
-	if err := collectionDB.Exec("UPDATE col SET models = ?", modelsJSON).Error; err != nil {
-		t.Fatalf("write col.models: %v", err)
+	for _, statement := range statements {
+		if _, err := db.Exec(statement.query, statement.args...); err != nil {
+			if closeErr := db.Close(); closeErr != nil {
+				t.Errorf("close collection: %v", closeErr)
+			}
+			t.Fatalf("execute %q: %v", statement.query, err)
+		}
 	}
-	if err := collectionDB.Exec("DELETE FROM cards WHERE ord = ? AND nid IN (SELECT id FROM notes WHERE mid = ?)", dropped, modelID).Error; err != nil {
-		t.Fatalf("delete cards of ordinal %d: %v", dropped, err)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
 	}
-	sqlDB, err := collectionDB.DB()
+	data, err = os.ReadFile(file)
 	if err != nil {
-		t.Fatalf("collection handle: %v", err)
+		t.Fatal(err)
 	}
-	// The bytes are read back only after the handle is closed, so every write is flushed to the file.
-	if err := sqlDB.Close(); err != nil {
-		t.Fatalf("close collection: %v", err)
+	if collection == "collection.anki21b" {
+		enc, err := zstd.NewWriter(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data = enc.EncodeAll(data, nil)
+		if err := enc.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
-	collection, err = os.ReadFile(file)
-	if err != nil {
-		t.Fatalf("read rewritten collection: %v", err)
-	}
-	entries["collection.anki2"] = collection
-
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
+	entries[collection] = data
+	var out bytes.Buffer
+	zw := zip.NewWriter(&out)
 	names := make([]string, 0, len(entries))
 	for name := range entries {
 		names = append(names, name)
@@ -1249,16 +1224,26 @@ func ankiFixtureWithoutTemplate(t *testing.T, modelID int64) []byte {
 	for _, name := range names {
 		w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Store})
 		if err != nil {
-			t.Fatalf("create entry %s: %v", name, err)
+			t.Fatal(err)
 		}
 		if _, err := w.Write(entries[name]); err != nil {
-			t.Fatalf("write entry %s: %v", name, err)
+			t.Fatal(err)
 		}
 	}
 	if err := zw.Close(); err != nil {
-		t.Fatalf("close archive: %v", err)
+		t.Fatal(err)
 	}
-	return buf.Bytes()
+	return out.Bytes()
+}
+
+// Deleting a template also deletes cards of its ordinal, keeping the fixture consistent.
+func ankiFixtureWithoutTemplate(t *testing.T, modelID int64) []byte {
+	t.Helper()
+	key := fmt.Sprintf("$.%q.tmpls", strconv.FormatInt(modelID, 10))
+	return mutateAnkiFixture(t, "stock.anki2.apkg",
+		fixtureSQL{`DELETE FROM cards WHERE nid IN (SELECT id FROM notes WHERE mid = ?) AND ord = (SELECT json_array_length(json_extract(models, ?)) - 1 FROM col)`, []any{modelID, key}},
+		fixtureSQL{`UPDATE col SET models = json_remove(models, ? || '[' || (json_array_length(json_extract(models, ?)) - 1) || ']')`, []any{key, key}},
+	)
 }
 
 // TestAnkiStructuralReimportRemovesStaleTemplateCards proves a moved note does not keep a card its
