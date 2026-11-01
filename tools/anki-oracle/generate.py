@@ -24,15 +24,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import struct
 import sys
 import tempfile
+import time
 import zipfile
 import zlib
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import zstandard
 from anki.collection import (
@@ -1976,7 +1980,34 @@ def build_weights_fixture(workdir: Path) -> None:
     rewrite_package(raw, OUT_DIR / "weights.anki21b.apkg", fmt="anki21b", workdir=workdir)
 
 
+def configure_memory_collection(col: Collection, label: str) -> None:
+    preferences = col.get_preferences()
+    preferences.scheduling.rollover = 4
+    preferences.scheduling.new_timezone = True
+    col.set_preferences(preferences)
+    actual = col.get_preferences().scheduling
+    assert actual.rollover == 4 and actual.new_timezone
+    print(f"memory-replay {label} configuration: TZ={os.environ['TZ']} "
+          f"rollover={actual.rollover} new_timezone={actual.new_timezone} "
+          f"timing={col.sched._timing_today()}")
+
+
 def build_memory_fixture(workdir: Path) -> None:
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = "Asia/Shanghai"
+    time.tzset()
+    try:
+        build_memory_fixture_in_timezone(workdir)
+        build_memory_controls(workdir)
+    finally:
+        if previous is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous
+        time.tzset()
+
+
+def build_memory_fixture_in_timezone(workdir: Path) -> None:
     """Keep the scheduling history in a deterministic legacy package."""
     package = OUT_DIR / "memory-replay.anki2.apkg"
     with zipfile.ZipFile(OUT_DIR / "stock.anki2.apkg") as archive:
@@ -2008,6 +2039,7 @@ def build_memory_fixture(workdir: Path) -> None:
     conn.commit()
     conn.close()
     col = Collection(str(db_path))
+    configure_memory_collection(col, "source")
     labels = ("review-lapses", "review-easy", "set-due", "forget", "relearning-start", "second-learning", "learning-reviews", "filtered-off", "review-set-due", "review-forget", "review-filtered-off", "subday")
     new_ids = {}
     for label in labels:
@@ -2075,6 +2107,7 @@ def build_memory_fixture(workdir: Path) -> None:
 
     col = Collection(str(workdir / "memory-import.anki2"))
     try:
+        configure_memory_collection(col, "import")
         col.import_anki_package(ImportAnkiPackageRequest(
             package_path=str(package), options=ImportAnkiPackageOptions(
                 with_scheduling=True, with_deck_configs=True)))
@@ -2092,6 +2125,80 @@ def build_memory_fixture(workdir: Path) -> None:
         write_json(OUT_DIR / "memory-replay.golden.json", result)
     finally:
         col.close()
+
+
+def build_memory_controls(workdir: Path) -> None:
+    zone = ZoneInfo("Asia/Shanghai")
+    start = datetime(2023, 11, 15, tzinfo=zone)
+    cases = []
+    for hour, minute in ((2, 0), (2, 30), (3, 0), (3, 30), (4, 0),
+                         (4, 30), (5, 0), (23, 30)):
+        first = start + timedelta(hours=hour, minutes=minute)
+        cases.append((f"hour-{hour:02d}{minute:02d}", first, first + timedelta(hours=1)))
+    first = start + timedelta(hours=6, minutes=13)
+    for label, hours in (("1h", 1), ("6h", 6), ("12h", 12), ("23h", 23),
+                         ("24h", 24), ("25h", 25), ("36h", 36), ("2d", 48), ("10d", 240)):
+        cases.append(("elapsed-" + label, first, first + timedelta(hours=hours)))
+    for label, a, b in (("030000-035959", (3, 0, 0), (3, 59, 59)),
+                        ("030000-040001", (3, 0, 0), (4, 0, 1)),
+                        ("040000-040001", (4, 0, 0), (4, 0, 1)),
+                        ("040001-050000", (4, 0, 1), (5, 0, 0)),
+                        ("035959-040000", (3, 59, 59), (4, 0, 0)),
+                        ("035959-040001", (3, 59, 59), (4, 0, 1))):
+        cases.append(("second-" + label, start.replace(hour=a[0], minute=a[1], second=a[2]),
+                      start.replace(hour=b[0], minute=b[1], second=b[2])))
+
+    with zipfile.ZipFile(OUT_DIR / "memory-replay.anki2.apkg") as archive:
+        original = {name: archive.read(name) for name in archive.namelist()}
+    results = {"source": SOURCE, "timezone": "Asia/Shanghai", "rollover": 4, "controls": {}}
+    for label, first, second in cases:
+        db_path = workdir / f"control-{label}.anki2"
+        db_path.write_bytes(original["collection.anki2"])
+        conn = connect(db_path)
+        cid, nid = conn.execute("select c.id, n.id from cards c join notes n on n.id=c.nid "
+                                "where n.flds like 'memory-subday%'").fetchone()
+        conn.execute("delete from revlog")
+        conn.execute("delete from cards where id != ?", (cid,))
+        conn.execute("delete from notes where id != ?", (nid,))
+        conn.execute("update notes set flds=? where id=?", (f"memory-control-{label}\x1f{label}", nid))
+        conn.execute("update cards set type=2, queue=2, ivl=30, factor=2500, data='{}' where id=?", (cid,))
+        stamps = [int(value.timestamp() * 1000) for value in (first, second)]
+        for stamp, ivl, last in ((stamps[0], 30, 10), (stamps[1], 30, 30)):
+            conn.execute("insert into revlog values (?, ?, -1, 3, ?, ?, 2500, 1000, 1)",
+                         (stamp, cid, ivl, last))
+        conn.commit()
+        conn.execute("vacuum")
+        conn.close()
+        source = Collection(str(db_path))
+        try:
+            configure_memory_collection(source, f"control-{label} source")
+        finally:
+            source.close()
+        package = OUT_DIR / f"memory-replay-control-{label}.anki2.apkg"
+        with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_STORED) as archive:
+            for name, contents in original.items():
+                info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
+                archive.writestr(info, db_path.read_bytes() if name == "collection.anki2" else contents)
+        col = Collection(str(workdir / f"control-import-{label}.anki2"))
+        try:
+            configure_memory_collection(col, f"control-{label} import")
+            col.import_anki_package(ImportAnkiPackageRequest(
+                package_path=str(package), options=ImportAnkiPackageOptions(
+                    with_scheduling=True, with_deck_configs=True)))
+            note_id = col.find_notes(f'"memory-control-{label}"')[0]
+            card = col.get_note(note_id).cards()[0]
+            data = json.loads(col.db.scalar("select data from cards where id=?", card.id))
+            assert "s" not in data and "d" not in data, data
+            rows = col.db.all("select id, ease, ivl, lastIvl, factor, type from revlog where cid=? order by id", card.id)
+            state = col.compute_memory_state(card.id)
+            results["controls"][label] = {"package": package.name, "local": [first.isoformat(), second.isoformat()],
+                                           "timestamps_ms": stamps, "stability": state.stability,
+                                           "difficulty": state.difficulty}
+            print(f"memory-replay control {label}: local={first.isoformat()},{second.isoformat()} "
+                  f"rows={rows} data={data} computed={state}")
+        finally:
+            col.close()
+    write_json(OUT_DIR / "memory-replay-controls.golden.json", results)
 
 
 def build_learning_due_fixture(workdir: Path) -> None:

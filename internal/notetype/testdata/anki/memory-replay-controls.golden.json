@@ -1,0 +1,306 @@
+{
+  "controls": {
+    "elapsed-10d": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T06:13:00+08:00",
+        "2023-11-25T06:13:00+08:00"
+      ],
+      "package": "memory-replay-control-elapsed-10d.anki2.apkg",
+      "stability": 48.76170349121094,
+      "timestamps_ms": [
+        1699999980000,
+        1700863980000
+      ]
+    },
+    "elapsed-12h": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T06:13:00+08:00",
+        "2023-11-15T18:13:00+08:00"
+      ],
+      "package": "memory-replay-control-elapsed-12h.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699999980000,
+        1700043180000
+      ]
+    },
+    "elapsed-1h": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T06:13:00+08:00",
+        "2023-11-15T07:13:00+08:00"
+      ],
+      "package": "memory-replay-control-elapsed-1h.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699999980000,
+        1700003580000
+      ]
+    },
+    "elapsed-23h": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T06:13:00+08:00",
+        "2023-11-16T05:13:00+08:00"
+      ],
+      "package": "memory-replay-control-elapsed-23h.anki2.apkg",
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699999980000,
+        1700082780000
+      ]
+    },
+    "elapsed-24h": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T06:13:00+08:00",
+        "2023-11-16T06:13:00+08:00"
+      ],
+      "package": "memory-replay-control-elapsed-24h.anki2.apkg",
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699999980000,
+        1700086380000
+      ]
+    },
+    "elapsed-25h": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T06:13:00+08:00",
+        "2023-11-16T07:13:00+08:00"
+      ],
+      "package": "memory-replay-control-elapsed-25h.anki2.apkg",
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699999980000,
+        1700089980000
+      ]
+    },
+    "elapsed-2d": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T06:13:00+08:00",
+        "2023-11-17T06:13:00+08:00"
+      ],
+      "package": "memory-replay-control-elapsed-2d.anki2.apkg",
+      "stability": 34.21629333496094,
+      "timestamps_ms": [
+        1699999980000,
+        1700172780000
+      ]
+    },
+    "elapsed-36h": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T06:13:00+08:00",
+        "2023-11-16T18:13:00+08:00"
+      ],
+      "package": "memory-replay-control-elapsed-36h.anki2.apkg",
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699999980000,
+        1700129580000
+      ]
+    },
+    "elapsed-6h": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T06:13:00+08:00",
+        "2023-11-15T12:13:00+08:00"
+      ],
+      "package": "memory-replay-control-elapsed-6h.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699999980000,
+        1700021580000
+      ]
+    },
+    "hour-0200": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T02:00:00+08:00",
+        "2023-11-15T03:00:00+08:00"
+      ],
+      "package": "memory-replay-control-hour-0200.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699984800000,
+        1699988400000
+      ]
+    },
+    "hour-0230": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T02:30:00+08:00",
+        "2023-11-15T03:30:00+08:00"
+      ],
+      "package": "memory-replay-control-hour-0230.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699986600000,
+        1699990200000
+      ]
+    },
+    "hour-0300": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:00:00+08:00",
+        "2023-11-15T04:00:00+08:00"
+      ],
+      "package": "memory-replay-control-hour-0300.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699988400000,
+        1699992000000
+      ]
+    },
+    "hour-0330": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:30:00+08:00",
+        "2023-11-15T04:30:00+08:00"
+      ],
+      "package": "memory-replay-control-hour-0330.anki2.apkg",
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699990200000,
+        1699993800000
+      ]
+    },
+    "hour-0400": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T04:00:00+08:00",
+        "2023-11-15T05:00:00+08:00"
+      ],
+      "package": "memory-replay-control-hour-0400.anki2.apkg",
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699992000000,
+        1699995600000
+      ]
+    },
+    "hour-0430": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T04:30:00+08:00",
+        "2023-11-15T05:30:00+08:00"
+      ],
+      "package": "memory-replay-control-hour-0430.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699993800000,
+        1699997400000
+      ]
+    },
+    "hour-0500": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T05:00:00+08:00",
+        "2023-11-15T06:00:00+08:00"
+      ],
+      "package": "memory-replay-control-hour-0500.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699995600000,
+        1699999200000
+      ]
+    },
+    "hour-2330": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T23:30:00+08:00",
+        "2023-11-16T00:30:00+08:00"
+      ],
+      "package": "memory-replay-control-hour-2330.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1700062200000,
+        1700065800000
+      ]
+    },
+    "second-030000-035959": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:00:00+08:00",
+        "2023-11-15T03:59:59+08:00"
+      ],
+      "package": "memory-replay-control-second-030000-035959.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699988400000,
+        1699991999000
+      ]
+    },
+    "second-030000-040001": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:00:00+08:00",
+        "2023-11-15T04:00:01+08:00"
+      ],
+      "package": "memory-replay-control-second-030000-040001.anki2.apkg",
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699988400000,
+        1699992001000
+      ]
+    },
+    "second-035959-040000": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:00+08:00"
+      ],
+      "package": "memory-replay-control-second-035959-040000.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699991999000,
+        1699992000000
+      ]
+    },
+    "second-035959-040001": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:01+08:00"
+      ],
+      "package": "memory-replay-control-second-035959-040001.anki2.apkg",
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699991999000,
+        1699992001000
+      ]
+    },
+    "second-040000-040001": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T04:00:00+08:00",
+        "2023-11-15T04:00:01+08:00"
+      ],
+      "package": "memory-replay-control-second-040000-040001.anki2.apkg",
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699992000000,
+        1699992001000
+      ]
+    },
+    "second-040001-050000": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T04:00:01+08:00",
+        "2023-11-15T05:00:00+08:00"
+      ],
+      "package": "memory-replay-control-second-040001-050000.anki2.apkg",
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699992001000,
+        1699995600000
+      ]
+    }
+  },
+  "rollover": 4,
+  "source": "anki==26.9.3",
+  "timezone": "Asia/Shanghai"
+}

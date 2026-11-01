@@ -50,20 +50,21 @@ uv pip install -r requirements.txt
 .venv/bin/python generate.py
 ```
 
-With no arguments or with `--memory-replay`, the generator writes only the memory-replay package
-and golden. Pass `--all` to regenerate the previous full set (except learning-due). From the
+With no arguments or with `--memory-replay`, the generator writes the memory-replay package,
+golden, and boundary-control packages and golden. Pass `--all` to regenerate the previous full set (except learning-due). From the
 repository root, the determinism check for the other fixtures is:
 
 ```bash
-find internal/notetype/testdata/anki -maxdepth 1 -type f ! -name 'memory-replay.anki2.apkg' -print0 | sort -z | xargs -0 sha256sum > /tmp/anki-oracle.sha
+find internal/notetype/testdata/anki -maxdepth 1 -type f ! -name 'memory-replay*.anki2.apkg' -print0 | sort -z | xargs -0 sha256sum > /tmp/opencode/anki-oracle.sha
 (cd tools/anki-oracle && .venv/bin/python generate.py --all)
-sha256sum -c /tmp/anki-oracle.sha
+sha256sum -c /tmp/opencode/anki-oracle.sha
 git status --short internal/notetype/testdata
 ```
 
-The checksum command must report every listed file as `OK`. The status command may report the
-memory-replay package: its runtime-generated IDs currently make it non-byte-deterministic. The
-memory-replay golden returned the same values in repeated runs in the current environment.
+The checksum command must report every listed file as `OK`, including both memory-replay
+goldens. All memory-replay packages contain runtime-generated IDs and are excluded from the
+byte-determinism check; validate their contents and imported behaviour semantically instead.
+The status command may report these packages even when their semantics are unchanged.
 
 The generator leaves `learning-due.anki21.apkg` and `learning-due.golden.json` untouched by default.
 Pass `--rebuild-learning-due` to regenerate the pair together when its rule changes. The golden
@@ -207,9 +208,34 @@ oracle result, while changing its interval or factor did. `review-lapses` produc
 The `subday` rows have Unix millisecond timestamps `1699920000000` and `1700002800000`
 (2023-11-14 00:00 and 23:00 UTC). Anki returns `7.315299987792969` and
 `2.1112141609191895`; the attempted Go replay with importing user timezone UTC and cutoff 00:00
-returned `2.3065` and `2.11121423578539`. That implementation was reverted. DeltaT remains unresolved. The observed current
-collection `next_day_at` was `1793563200`; that value does not prove the historical cutoff.
+returned `2.3065` and `2.11121423578539`. That implementation was reverted: its UTC-midnight
+boundary does not reproduce Anki's value for these rows. The controls below measure a 04:00
+local learning-day boundary in the configured Shanghai collection. The observed current collection
+`next_day_at` was `1793563200`; that value alone does not prove the historical cutoff. How the
+Go replay should handle the measured exact-04:00 ownership remains an implementation decision.
 The comparison tolerance remains `1e-4` and has not been relaxed.
+
+The memory replay generator fixes the process timezone to `Asia/Shanghai` and sets rollover to
+04:00 on the source and importing collections. It restores the process timezone afterward. Each
+`memory-replay-control-*.anki2.apkg` holds one control, so different cards can use the same exact
+revlog timestamp despite the revlog primary key. `memory-replay-controls.golden.json` maps each
+package to its local timestamps, Unix milliseconds, and imported `compute_memory_state()` result.
+Each control has two Good review rows, type 1, factor 2500, interval 30; the first row's last
+interval is 10 and the second's is 30. The card has type 2, queue 2, interval 30, factor 2500,
+and no stored memory state.
+
+On the pinned oracle, the one-hour controls beginning at 02:00, 02:30, 03:00, 04:30, 05:00,
+and 23:30 have stability 30; those beginning at 03:30 and 04:00 have stability
+32.14255905151367. For the controls beginning at 06:13, elapsed intervals of 1, 6 and 12 hours
+have stability 30; 23, 24, 25 and 36 hours have stability 32.14255905151367; 2 days have
+stability 34.21629333496094; and 10 days have stability 48.76170349121094. The six second
+controls measure 30 at 03:00:00→03:59:59 and
+03:59:59→04:00:00, 32.14255905151367 at 03:00:00→04:00:01,
+03:59:59→04:00:01 and 04:00:00→04:00:01, and 30 at 04:00:01→05:00:00.
+All controls measure difficulty 6.08253288269043. These results place exactly 04:00:00 on the
+earlier side for these histories. The proposed `floor((local_seconds - 4h) / 86400)` assigns that
+instant to the later side, and disagrees at 03:00→04:00 and 04:00→05:00. The controls do not
+establish a general rule for other timezones, daylight-saving transitions, or cutoff settings.
 
 One file per fixture group, UTF-8, keys sorted, two-space indent, one trailing newline.
 
