@@ -276,27 +276,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   present. *Acceptance:* section 2.7 of `AGENTS.md` names `reuse`, `copy` and `last_review_at`. Evidence
   is the `AGENTS.md` diff.
 
-- [ ] **M18-93 Decide what `progress_discarded` means with `include_progress` on** — the comment on
-  `PackageImportReport.ProgressDiscarded` in `internal/store/package_import.go` says that the flag means
-  "the package's card states or reviews were discarded during import". The only code that sets it is the
-  `include_progress`-off branch of `importAnkiProgress` in `internal/store/anki_import.go`. With
-  `include_progress` on, since `M18-65`, the review rows of a card the reader skipped are counted in
-  `reviews_discarded`, and the flag stays false. Reproduced on `main` on both drivers with the
-  skipped-card archive of `TestAnkiImportReportsSkippedCard`, imported with `include_progress` on: the
-  report holds `reviews_discarded` 1, `progress_discarded` false and `cards_skipped` 1. The Import page
-  then shows "Package progress not imported: No" two rows above "Reviews discarded: 1". Two rules are
-  possible. (a) The flag is true whenever `states_discarded` or `reviews_discarded` is above 0, with
-  `include_progress` on or off; the comment says so, and the catalog text of
-  `package.report.progress_discarded` says that some of the package's progress was not imported. (b) The
-  flag keeps its code. Its comment and the catalog text say that the flag reports an import with
-  `include_progress` off, and the Import page shows the row only when `include_progress` was off. Either
-  way, a catalog line keeps its key and position, and the two catalogs keep identical key sets.
-  *Acceptance:* a table test in `internal/store` imports the archive above through `ImportPackage` with
-  `include_progress` on and off on both drivers and checks the flag against the chosen rule; a component
-  test shows the row the chosen rule requires for both reports. Evidence is the raw scoped `go test` and
-  `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set, and the component test output.
-  *Do not start until the maintainer chooses (a) or (b).*
-
 - [ ] **M18-94 The `deck_config_skipped` row reads yes or no, and the `M18-68` fields carry comments** —
   `reportRows` in `frontend/src/lib/views/ImportView.svelte` pushes `['package.report.deck_config_skipped', 1]`,
   and the template converts only `dry_run`, `progress_discarded` and the `package.report.weights_` keys to
