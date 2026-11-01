@@ -691,7 +691,7 @@
             <HelpTip testId="presets-form-max-interval-help" label={$t('presets.form.max_interval')} text={$t('help.presets.max_interval')} />
           </div>
           <!-- No bind:value: binding a number input coerces the value to number, while the state here is a string,
-               validated as a "positive integer" by parseForm; only a hand-written value/oninput keeps the raw text. -->
+               validated as an integer from 1 to 36500 by parseForm; only a hand-written value/oninput keeps the raw text. -->
           <input
             id="presets-form-max-interval"
             type="number"

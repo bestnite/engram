@@ -7,13 +7,37 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
+
+func TestParsePresetRequestMaximumInterval(t *testing.T) {
+	for _, tc := range []struct {
+		interval int
+		wantCode string
+	}{
+		{0, "preset_max_interval_invalid"},
+		{1, ""},
+		{36500, ""},
+		{36501, "preset_max_interval_invalid"},
+	} {
+		t.Run(fmt.Sprint(tc.interval), func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			body := fmt.Sprintf(`{"name":"x","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":%d,"enable_fuzz":true}`, tc.interval)
+			c.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+			_, code := parsePresetRequest(c)
+			if code != tc.wantCode {
+				t.Errorf("parsePresetRequest code = %q, want %q", code, tc.wantCode)
+			}
+		})
+	}
+}
 
 // This file covers the SPA scheduling preset API (internal/web/presets_api.go).
 //

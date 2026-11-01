@@ -7,11 +7,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// repairPresetSchedulerLimits replaces intervals outside 1..36500 with 36500 and
-// retentions outside (0, 1] with the default because go-fsrs otherwise discards
-// every supplied parameter. It replaces invalid step lists with their defaults
-// because the scheduler cannot use them. It counts each changed row once and
-// leaves all other columns, including updated_at, intact.
+// repairPresetSchedulerLimits replaces maximum intervals outside 1..36500 with
+// 36500, desired retentions outside (0, 1] with 0.9, and step lists the scheduler
+// refuses with their defaults. Rewriting stored values is necessary because
+// go-fsrs replaces every parameter with its defaults for such a maximum interval
+// or a negative step, and the scheduler refuses a non-finite step; the preset is
+// unusable as stored. It counts each changed row once and leaves all other
+// columns, including updated_at, intact.
 func repairPresetSchedulerLimits(tx *gorm.DB) error {
 	if !tx.Migrator().HasTable("presets") {
 		return nil

@@ -27,11 +27,17 @@ func TestMigratedPresetSchedulerLimits(t *testing.T) {
 		}
 		ids = append(ids, p.ID)
 	}
-	migration := store.BuiltinMigrations[len(store.BuiltinMigrations)-1]
-	if migration.Name != "0020_repair_preset_scheduler_limits" {
-		t.Fatalf("unexpected migration %q", migration.Name)
+	var migrate func() error
+	for _, migration := range store.BuiltinMigrations {
+		if migration.Name == "0020_repair_preset_scheduler_limits" {
+			migrate = func() error { return migration.Up(db) }
+			break
+		}
 	}
-	if err := migration.Up(db); err != nil {
+	if migrate == nil {
+		t.Fatal("migration 0020_repair_preset_scheduler_limits not found")
+	}
+	if err := migrate(); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range ids {

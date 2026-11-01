@@ -155,7 +155,10 @@ var BuiltinMigrations = []Migration{
 		Up:   removeUnresolvableCards,
 	},
 	{
-		// Invalid stored scheduler settings are repaired explicitly rather than by additive schema migration.
+		// Rewrite maximum intervals outside 1..36500 to 36500, desired retentions outside (0, 1] to 0.9,
+		// and step lists the scheduler refuses to their defaults. Stored values need repair because go-fsrs
+		// replaces every parameter with its defaults for such a maximum interval or a negative step, and
+		// the scheduler refuses a non-finite step, so the preset is unusable as stored.
 		Name: "0020_repair_preset_scheduler_limits",
 		Up:   repairPresetSchedulerLimits,
 	},
