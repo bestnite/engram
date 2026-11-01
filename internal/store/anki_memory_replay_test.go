@@ -45,7 +45,7 @@ func TestAnkiReplayControls(t *testing.T) {
 		Stability  float64 `json:"stability"`
 		Difficulty float64 `json:"difficulty"`
 	}
-	for _, file := range []string{"memory-replay-controls.golden.json", "memory-replay-environments.golden.json"} {
+	for _, file := range []string{"memory-replay-controls.golden.json", "memory-replay-environments.golden.json", "memory-replay-rules.golden.json"} {
 		var golden struct {
 			Controls map[string]control `json:"controls"`
 		}

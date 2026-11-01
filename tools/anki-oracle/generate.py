@@ -2345,7 +2345,91 @@ def build_learning_due_fixture(workdir: Path) -> None:
         col.close()
 
 
+def build_memory_rules(workdir: Path) -> None:
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = "Asia/Shanghai"
+    time.tzset()
+    try:
+        build_memory_rules_in_timezone(workdir)
+    finally:
+        if previous is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous
+        time.tzset()
+
+
+def build_memory_rules_in_timezone(workdir: Path) -> None:
+    results = {"source": SOURCE, "controls": {}}
+    for label, rating, interval in (("negative-86399", 3, -86399),
+                                    ("negative-86400", 3, -86400),
+                                    ("negative-86401", 3, -86401),
+                                    ("fsrs-hard", 2, 2),
+                                    ("fsrs-good", 3, 2),
+                                    ("fsrs-easy", 4, 2)):
+        source = Collection(str(workdir / f"rules-source-{label}.anki2"))
+        configure_memory_collection(source, f"rules-{label} source")
+        note = source.new_note(source.models.by_name("Basic"))
+        note["Front"] = "memory-rule-" + label
+        note["Back"] = label
+        source.add_note(note, 1)
+        cid = note.cards()[0].id
+        if label.startswith("fsrs-"):
+            source.conf.set("fsrs", True)
+            source.sched.set_due_date([cid], "10!")
+            card = source.get_card(cid)
+            card.start_timer()
+            source.sched.answerCard(card, rating)
+            generated = source.db.all("select ease, ivl, lastIvl, factor, type from revlog where cid=? and ease>0", cid)
+            assert len(generated) == 1 and 100 <= generated[0][3] <= 1100, generated
+            print(f"memory-rule {label} FSRS generated: {generated}")
+            source.db.execute("delete from revlog where cid=?", cid)
+            rating, interval, last, factor, kind = generated[0]
+            assert interval >= 1 and kind == 1, generated
+        else:
+            last, factor, kind = 10, 2500, 1
+        source.db.execute("insert into revlog values (?, ?, -1, ?, ?, ?, ?, 1000, 1)",
+                          1700000000000, cid, rating, interval, last, factor)
+        source.db.execute("insert into revlog values (?, ?, -1, 3, 5, 2, 2500, 1000, 1)",
+                          1700864000000, cid)
+        source.db.execute("update cards set type=2, queue=2, ivl=30, factor=2500, data='{}' where id=?", cid)
+        package = OUT_DIR / f"memory-replay-rule-{label}.anki2.apkg"
+        exported = workdir / f"rules-{label}.apkg"
+        source.export_anki_package(out_path=str(exported), options=ExportAnkiPackageOptions(
+            with_scheduling=True, with_deck_configs=True, with_media=False, legacy=True), limit=ExportLimit())
+        source.close()
+        with zipfile.ZipFile(exported) as archive:
+            legacy = archive.read("collection.anki21")
+        with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr(zipfile.ZipInfo("collection.anki2", (1980, 1, 1, 0, 0, 0)), legacy)
+            archive.writestr(zipfile.ZipInfo("media", (1980, 1, 1, 0, 0, 0)), "{}")
+        col = Collection(str(workdir / f"rules-import-{label}.anki2"))
+        try:
+            configure_memory_collection(col, f"rules-{label} import")
+            col.import_anki_package(ImportAnkiPackageRequest(package_path=str(package), options=ImportAnkiPackageOptions(with_scheduling=True, with_deck_configs=True)))
+            card = col.get_note(col.find_notes(f'"memory-rule-{label}"')[0]).cards()[0]
+            data = json.loads(col.db.scalar("select data from cards where id=?", card.id))
+            assert "s" not in data and "d" not in data, data
+            rows = col.db.all("select id, ease, ivl, lastIvl, factor, type from revlog where cid=? order by id", card.id)
+            state = col.compute_memory_state(card.id)
+            now = int(time.time())
+            results["controls"][label] = {"package": package.name, "timezone": "Asia/Shanghai", "rollover": 4,
+                "now": now, "offset_seconds": 28800, "next_day_at": col.sched._timing_today().next_day_at,
+                "stability": state.stability, "difficulty": state.difficulty}
+            if label.startswith("fsrs-"):
+                results["controls"][label]["generated"] = generated
+            print(f"memory-rule {label}: rows={rows} data={data} computed={state}")
+        finally:
+            col.close()
+    write_json(OUT_DIR / "memory-replay-rules.golden.json", results)
+
+
 def main(argv: list[str]) -> int:
+    if argv == ["--memory-rules"]:
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="anki-oracle-rules-") as directory:
+            build_memory_rules(Path(directory))
+        return 0
     if len(argv) == 4 and argv[0] == "--memory-environment-worker":
         memory_environment_worker(Path(argv[1]), int(argv[2]), argv[3])
         return 0
@@ -2359,7 +2443,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     if not set(argv) <= {"--all", "--rebuild-learning-due"}:
-        raise ValueError("expected --memory-replay, --all, --rebuild-learning-due, or --table")
+        raise ValueError("expected --memory-replay, --memory-rules, --all, --rebuild-learning-due, or --table")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     workdir = Path(tempfile.mkdtemp(prefix="anki-oracle-"))
@@ -2421,6 +2505,7 @@ def main(argv: list[str]) -> int:
                 golden["import_note_types"] = imported[package.fixture]
             write_json(OUT_DIR / ("%s.golden.json" % package.fixture), golden)
         build_memory_fixture(workdir)
+        build_memory_rules(workdir)
         build_weights_fixture(workdir)
         if "--rebuild-learning-due" in argv:
             build_learning_due_fixture(workdir)

@@ -1,0 +1,92 @@
+{
+  "controls": {
+    "fsrs-easy": {
+      "difficulty": 1.0,
+      "generated": [
+        [
+          4,
+          6,
+          0,
+          100,
+          1
+        ]
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793534442,
+      "offset_seconds": 28800,
+      "package": "memory-replay-rule-fsrs-easy.anki2.apkg",
+      "rollover": 4,
+      "stability": 39.7951774597168,
+      "timezone": "Asia/Shanghai"
+    },
+    "fsrs-good": {
+      "difficulty": 2.109112501144409,
+      "generated": [
+        [
+          3,
+          2,
+          0,
+          224,
+          1
+        ]
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793534442,
+      "offset_seconds": 28800,
+      "package": "memory-replay-rule-fsrs-good.anki2.apkg",
+      "rollover": 4,
+      "stability": 23.6168155670166,
+      "timezone": "Asia/Shanghai"
+    },
+    "fsrs-hard": {
+      "difficulty": 5.103115081787109,
+      "generated": [
+        [
+          2,
+          1,
+          0,
+          557,
+          1
+        ]
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793534442,
+      "offset_seconds": 28800,
+      "package": "memory-replay-rule-fsrs-hard.anki2.apkg",
+      "rollover": 4,
+      "stability": 11.603586196899414,
+      "timezone": "Asia/Shanghai"
+    },
+    "negative-86399": {
+      "difficulty": 7.3596696853637695,
+      "next_day_at": 1793563200,
+      "now": 1793534442,
+      "offset_seconds": 28800,
+      "package": "memory-replay-rule-negative-86399.anki2.apkg",
+      "rollover": 4,
+      "stability": 5.0,
+      "timezone": "Asia/Shanghai"
+    },
+    "negative-86400": {
+      "difficulty": 8.202864646911621,
+      "next_day_at": 1793563200,
+      "now": 1793534442,
+      "offset_seconds": 28800,
+      "package": "memory-replay-rule-negative-86400.anki2.apkg",
+      "rollover": 4,
+      "stability": 6.0147705078125,
+      "timezone": "Asia/Shanghai"
+    },
+    "negative-86401": {
+      "difficulty": 8.202864646911621,
+      "next_day_at": 1793563200,
+      "now": 1793534442,
+      "offset_seconds": 28800,
+      "package": "memory-replay-rule-negative-86401.anki2.apkg",
+      "rollover": 4,
+      "stability": 6.0147705078125,
+      "timezone": "Asia/Shanghai"
+    }
+  },
+  "source": "anki==26.9.3"
+}

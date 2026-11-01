@@ -171,7 +171,9 @@ this file, and commit messages.
   measured Anki 26.09.3 selection and second-truncated age differences relative to the target's next
   rollover. The importing user's timezone offset at import time and `day_cutoff_hour` (default 4)
   supply that target context; ordinary `reviews.review_day` boundaries do not change. The 14 original
-  memory-replay goldens and 43 boundary/configuration controls match within `1e-4` on both databases.
+  memory-replay goldens, 43 boundary/configuration controls and six replay-rule controls match
+  within `1e-4` on both databases. The rule controls measure the -86400-second interday boundary
+  and incomplete-history initialization from Anki FSRS-generated revlog factors 100, 224 and 557.
   Historical retention remains 0.9, Anki's ignore-before setting is not modelled, and missing history
   still requires an SM-2 estimate. Selected history is replayed for row-level memory even when the
   card carries its final memory; undo refuses without writes when a non-new state cannot be restored
