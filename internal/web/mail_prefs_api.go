@@ -185,15 +185,10 @@ func (s *Server) notificationPrefsPatch(c *gin.Context) {
 		return
 	}
 
-	// The send hour lives on the users row and is updated separately from the preferences; re-read before changing so concurrent writes are not overwritten.
-	fresh, err := s.users.ByID(ctx, user.ID)
-	if err != nil {
-		s.logger.Error("load user for SPA email preferences failed", "user_id", user.ID, "error", err)
-		notificationPrefsError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
-		return
-	}
-	fresh.ReminderHour = req.ReminderHour
-	if err := s.users.Update(ctx, fresh); err != nil {
+	// The send hour lives on the users row and is updated separately from the preferences. Only that
+	// column is written, so this save cannot overwrite a concurrent profile edit or an administrator's
+	// role, status or quota change with the snapshot it just read.
+	if err := s.users.SetReminderHour(ctx, user.ID, req.ReminderHour); err != nil {
 		s.logger.Error("save SPA reminder send hour failed", "user_id", user.ID, "error", err)
 		notificationPrefsError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
 		return

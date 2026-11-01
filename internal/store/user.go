@@ -62,12 +62,47 @@ func (s *UserStore) ByEmail(ctx context.Context, email string) (*User, error) {
 	return &u, nil
 }
 
-// Update saves all of the user's fields; Save generates the right upsert on both databases.
-// PasswordHash is omitted: that column may only be written by the dedicated password methods, because a whole-row save from a request that
-// read the user before a first-password set would otherwise write the stale NULL back and remove the account's only credential.
-func (s *UserStore) Update(ctx context.Context, u *User) error {
-	if err := s.db.WithContext(ctx).Omit("PasswordHash").Save(u).Error; err != nil {
-		return fmt.Errorf("update user: %w", err)
+// UserProfileFields are the columns a user may change on their own account. Role, status, email,
+// email verification and the media quota are absent on purpose: each is written only by its own
+// setter (SetRole, SetStatus, SetEmail, SetEmailVerifiedAt, SetMediaQuota). A request that read the
+// row before an administrator changed one of those fields therefore cannot write the old value back.
+type UserProfileFields struct {
+	DisplayName       string
+	Locale            string
+	Timezone          string
+	DayCutoffHour     *int
+	LearnAheadMinutes *int
+}
+
+// UpdateProfile changes only the profile columns a user may edit on their own account.
+func (s *UserStore) UpdateProfile(ctx context.Context, id uint64, f UserProfileFields) error {
+	if err := s.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).Updates(map[string]any{
+		"display_name":        f.DisplayName,
+		"locale":              f.Locale,
+		"timezone":            f.Timezone,
+		"day_cutoff_hour":     f.DayCutoffHour,
+		"learn_ahead_minutes": f.LearnAheadMinutes,
+	}).Error; err != nil {
+		return fmt.Errorf("update user profile: %w", err)
+	}
+	return nil
+}
+
+// SetLocale changes only the locale column, so saving a language choice cannot overwrite a
+// concurrent write to any other column.
+func (s *UserStore) SetLocale(ctx context.Context, id uint64, locale string) error {
+	if err := s.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).
+		Update("locale", locale).Error; err != nil {
+		return fmt.Errorf("set user locale: %w", err)
+	}
+	return nil
+}
+
+// SetReminderHour changes only the reminder_hour column; nil means unset (fall back to the default).
+func (s *UserStore) SetReminderHour(ctx context.Context, id uint64, hour *int) error {
+	if err := s.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).
+		Update("reminder_hour", hour).Error; err != nil {
+		return fmt.Errorf("set user reminder hour: %w", err)
 	}
 	return nil
 }

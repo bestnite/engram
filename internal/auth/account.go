@@ -290,12 +290,7 @@ func (s *AccountService) SetInitialPasswordTx(ctx context.Context, tx *gorm.DB, 
 
 // DisableUser marks the account disabled and revokes all of its sessions; even if a session row were read back directly, the middleware rejects it because the status is no longer active.
 func (s *AccountService) DisableUser(ctx context.Context, userID uint64) error {
-	u, err := s.users.ByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("load user: %w", err)
-	}
-	u.Status = store.StatusDisabled
-	if err := s.users.Update(ctx, u); err != nil {
+	if err := s.users.SetStatus(ctx, userID, store.StatusDisabled); err != nil {
 		return err
 	}
 	return s.sessions.RevokeAllForUser(ctx, userID, s.now())
@@ -303,10 +298,5 @@ func (s *AccountService) DisableUser(ctx context.Context, userID uint64) error {
 
 // EnableUser re-enables the account; it restores no old sessions (the user has to log in again).
 func (s *AccountService) EnableUser(ctx context.Context, userID uint64) error {
-	u, err := s.users.ByID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("load user: %w", err)
-	}
-	u.Status = store.StatusActive
-	return s.users.Update(ctx, u)
+	return s.users.SetStatus(ctx, userID, store.StatusActive)
 }

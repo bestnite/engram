@@ -36,7 +36,7 @@ func TestUserStoreSetInitialPasswordHash(t *testing.T) {
 	}
 }
 
-func TestUserStoreUpdateDoesNotResurrectPasswordHash(t *testing.T) {
+func TestUserStoreProfileUpdateKeepsSecurityColumns(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
 			if err := db.AutoMigrate(AllModels()...); err != nil {
@@ -49,7 +49,8 @@ func TestUserStoreUpdateDoesNotResurrectPasswordHash(t *testing.T) {
 			if err := users.Create(ctx, u); err != nil {
 				t.Fatalf("Create() error = %v", err)
 			}
-			// Simulate a profile request that read the user while the hash was still NULL.
+			// A profile request reads the account, then an administrator changes the security columns
+			// before the profile write lands.
 			stale, err := users.ByID(ctx, u.ID)
 			if err != nil {
 				t.Fatalf("ByID() error = %v", err)
@@ -58,9 +59,31 @@ func TestUserStoreUpdateDoesNotResurrectPasswordHash(t *testing.T) {
 			if changed, err := users.SetInitialPasswordHash(ctx, u.ID, hash); err != nil || !changed {
 				t.Fatalf("SetInitialPasswordHash() = (%v, %v), want (true, nil)", changed, err)
 			}
+			verifiedAt := time.Now().UTC()
+			quota := int64(12_345)
+			for _, step := range []struct {
+				name string
+				err  error
+			}{
+				{"SetRole", users.SetRole(ctx, u.ID, RoleAdmin)},
+				{"SetStatus", users.SetStatus(ctx, u.ID, StatusDisabled)},
+				{"SetEmailVerifiedAt", users.SetEmailVerifiedAt(ctx, u.ID, &verifiedAt)},
+				{"SetMediaQuota", users.SetMediaQuota(ctx, u.ID, &quota)},
+			} {
+				if step.err != nil {
+					t.Fatalf("%s() error = %v", step.name, step.err)
+				}
+			}
+
 			stale.DisplayName = "Renamed"
-			if err := users.Update(ctx, stale); err != nil {
-				t.Fatalf("Update() error = %v", err)
+			if err := users.UpdateProfile(ctx, u.ID, UserProfileFields{
+				DisplayName:       stale.DisplayName,
+				Locale:            stale.Locale,
+				Timezone:          stale.Timezone,
+				DayCutoffHour:     stale.DayCutoffHour,
+				LearnAheadMinutes: stale.LearnAheadMinutes,
+			}); err != nil {
+				t.Fatalf("UpdateProfile() error = %v", err)
 			}
 			got, err := users.ByID(ctx, u.ID)
 			if err != nil {
@@ -70,7 +93,19 @@ func TestUserStoreUpdateDoesNotResurrectPasswordHash(t *testing.T) {
 				t.Errorf("DisplayName = %q, want Renamed", got.DisplayName)
 			}
 			if got.PasswordHash == nil || *got.PasswordHash != hash {
-				t.Fatalf("Update() resurrected the stale NULL hash: %v", got.PasswordHash)
+				t.Fatalf("UpdateProfile() resurrected the stale NULL hash: %v", got.PasswordHash)
+			}
+			if got.Role != RoleAdmin {
+				t.Errorf("role after stale profile write = %q, want %q", got.Role, RoleAdmin)
+			}
+			if got.Status != StatusDisabled {
+				t.Errorf("status after stale profile write = %q, want %q", got.Status, StatusDisabled)
+			}
+			if got.EmailVerifiedAt == nil || !got.EmailVerifiedAt.Truncate(time.Microsecond).Equal(verifiedAt.Truncate(time.Microsecond)) {
+				t.Errorf("email_verified_at after stale profile write = %v, want %v", got.EmailVerifiedAt, verifiedAt)
+			}
+			if got.MediaQuotaBytes == nil || *got.MediaQuotaBytes != quota {
+				t.Errorf("media_quota_bytes after stale profile write = %v, want %d", got.MediaQuotaBytes, quota)
 			}
 		})
 	}

@@ -57,8 +57,7 @@ func TestUserReminderHourRoundTrip(t *testing.T) {
 			}
 
 			// After changing to a non-zero value it reads back the original.
-			midnight.ReminderHour = Ptr(19)
-			if err := users.Update(ctx, midnight); err != nil {
+			if err := users.SetReminderHour(ctx, midnight.ID, Ptr(19)); err != nil {
 				t.Fatalf("update to 19: %v", err)
 			}
 			if got := *reload(midnight).ReminderHour; got != 19 {
@@ -66,8 +65,7 @@ func TestUserReminderHourRoundTrip(t *testing.T) {
 			}
 
 			// Changing back to unset: UPDATE must write NULL into the column rather than leaving the old value behind.
-			midnight.ReminderHour = nil
-			if err := users.Update(ctx, midnight); err != nil {
+			if err := users.SetReminderHour(ctx, midnight.ID, nil); err != nil {
 				t.Fatalf("update back to NULL: %v", err)
 			}
 			if got := reload(midnight).ReminderHour; got != nil {

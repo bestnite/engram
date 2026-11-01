@@ -452,13 +452,7 @@ func TestDigestUnsubscribeHeaders(t *testing.T) {
 // setUserSendHour changes users.reminder_hour directly in the database; nil means unset (falls back to the global default).
 func setUserSendHour(t *testing.T, db *gorm.DB, userID uint64, hour *int) {
 	t.Helper()
-	users := store.NewUserStore(db)
-	u, err := users.ByID(context.Background(), userID)
-	if err != nil {
-		t.Fatalf("load user %d: %v", userID, err)
-	}
-	u.ReminderHour = hour
-	if err := users.Update(context.Background(), u); err != nil {
+	if err := store.NewUserStore(db).SetReminderHour(context.Background(), userID, hour); err != nil {
 		t.Fatalf("update user %d: %v", userID, err)
 	}
 }

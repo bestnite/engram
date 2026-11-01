@@ -211,7 +211,13 @@ func (s *Server) profilePatch(c *gin.Context) {
 	fresh.Timezone = req.Timezone
 	fresh.DayCutoffHour = req.DayCutoffHour
 	fresh.LearnAheadMinutes = req.LearnAheadMinutes
-	if err := s.users.Update(c.Request.Context(), fresh); err != nil {
+	if err := s.users.UpdateProfile(c.Request.Context(), u.ID, store.UserProfileFields{
+		DisplayName:       req.DisplayName,
+		Locale:            req.Locale,
+		Timezone:          req.Timezone,
+		DayCutoffHour:     req.DayCutoffHour,
+		LearnAheadMinutes: req.LearnAheadMinutes,
+	}); err != nil {
 		s.logger.Error("update SPA profile failed", "user_id", u.ID, "error", err)
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": gin.H{
 			"code": api.CodeInternal, "message": api.ErrorMessage(c.Request.Context(), api.CodeInternal),
@@ -246,8 +252,7 @@ func (s *Server) localePatch(c *gin.Context) {
 		return
 	}
 	if fresh.Locale != locale {
-		fresh.Locale = locale
-		if err := s.users.Update(c.Request.Context(), fresh); err != nil {
+		if err := s.users.SetLocale(c.Request.Context(), u.ID, locale); err != nil {
 			s.logger.Error("update SPA locale failed", "user_id", u.ID, "error", err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": gin.H{
 				"code": api.CodeInternal, "message": api.ErrorMessage(c.Request.Context(), api.CodeInternal),

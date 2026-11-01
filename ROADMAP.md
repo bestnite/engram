@@ -261,7 +261,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   or a shared lock on the type for note writes and an exclusive one re-checked under the delete;
   a regression must show the two operations cannot both succeed leaving an orphan.
 
-- [ ] **M19-7 Saving your own profile writes back a stale role or status** — *should-fix.*
+- [x] **M19-7 Saving your own profile writes back a stale role or status** — *should-fix.*
   `UserStore.Update` omits only `PasswordHash` and saves the whole row (`internal/store/user.go:65-73`),
   and the profile/locale handlers load a user, change profile fields and save
   (`internal/web/profile.go:176-214,240-250`). A disable or demotion committed between the read and the
@@ -272,6 +272,38 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   profile, locale and reminder writes, with role, status, email verification and quota written only by
   their own methods; extend the existing "a stale snapshot must not clear `PasswordHash`" test to those
   security fields.
+  *Closed by the `fix(store): write profile, locale and reminder settings column by column` commit on
+  `main`.* `UserStore.Update` is removed, so there is no whole-row save left to write a stale snapshot
+  back. `UpdateProfile` (`internal/store/user.go:78`) writes display name, locale, timezone, day cutoff
+  and learn-ahead only; `SetLocale` (`:93`) and `SetReminderHour` (`:102`) write their single column.
+  The profile handler (`internal/web/profile.go:214`), the locale handler (`:255`), the notification
+  preferences handler (`internal/web/mail_prefs_api.go:191`) and `DisableUser`/`EnableUser`
+  (`internal/auth/account.go:292,300`, now `SetStatus`) use those setters; role, status, email, email
+  verification and quota already had their own setters and are not written anywhere else.
+  `TestUserStoreProfileUpdateKeepsSecurityColumns` (`internal/store/user_test.go`) replaces the older
+  password-hash test: it reads a snapshot, then writes the password hash, role, status, email
+  verification and quota through their setters, then saves the stale profile and asserts the profile
+  change landed while all five security columns survived. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestUserStoreProfileUpdateKeepsSecurityColumns -count=1 -v`:
+  ```
+  === RUN   TestUserStoreProfileUpdateKeepsSecurityColumns
+  === RUN   TestUserStoreProfileUpdateKeepsSecurityColumns/postgres
+  === RUN   TestUserStoreProfileUpdateKeepsSecurityColumns/sqlite
+  --- PASS: TestUserStoreProfileUpdateKeepsSecurityColumns (0.34s)
+      --- PASS: TestUserStoreProfileUpdateKeepsSecurityColumns/postgres (0.27s)
+      --- PASS: TestUserStoreProfileUpdateKeepsSecurityColumns/sqlite (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.354s
+  ```
+  The same scenario through the removed whole-row path (`Save` of the stale row, the body of the old
+  `Update`, in a temporary test that was not committed) printed
+  `role after stale whole-row save = "user", want "admin"`,
+  `status after stale whole-row save = "active", want "disabled"`,
+  `email_verified_at after stale whole-row save = <nil>` and
+  `media_quota_bytes after stale whole-row save = <nil>` on both drivers. The reminder and digest
+  test helpers now call `SetReminderHour`. `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -count=1`
+  passes in `93.098s`, `go test ./internal/web/ -count=1` in `12.728s`, and
+  `go test ./internal/auth/ ./internal/reminder/ ./internal/digest/ -count=1` passes.
 
 - [ ] **M19-8 The 0017 ruby migration rewrites already-converted content** — *should-fix.* The step
   applies a context-free string substitution to HTML that 0012 already produced
