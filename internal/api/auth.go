@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -118,6 +119,13 @@ func (a *Authenticator) Auth() gin.HandlerFunc {
 // AuthMiddleware exposes exactly the same auth middleware as /api/v1, for the built-in MCP /mcp endpoint to reuse
 // (MCP reuses user-level API keys instead of growing a second auth stack).
 func (a *API) AuthMiddleware() gin.HandlerFunc { return a.authn.Auth() }
+
+// UserByID re-reads an account row by primary key. A transport that keeps an identity
+// across requests calls it for every request, so a role or status change applies to the
+// next request instead of the row copied when the session started.
+func (a *API) UserByID(ctx context.Context, id uint64) (*store.User, error) {
+	return a.users.ByID(ctx, id)
+}
 
 // authenticateKey validates the bearer key and puts the user and the key into the context.
 func (a *Authenticator) authenticateKey(c *gin.Context, plaintext string) {

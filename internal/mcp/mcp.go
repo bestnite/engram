@@ -252,18 +252,23 @@ func IdentityFrom(ctx context.Context) (Identity, bool) {
 //
 // The SDK builds a Server only once when the session is established, and every later request in the same session reuses that Server and the handshake identity
 // in its closure. So a tool handler must not judge scope from the handshake identity; it must read the key carried by this request
-// (see the headers ServeHTTP writes). The key's owner has already been confirmed by ServeHTTP to match the handshake user, so the user
-// is taken straight from the handshake copy. When the header is missing or malformed it falls back to the handshake identity.
-func (s *Server) requestIdentity(handshake Identity, req sdkmcp.Request) Identity {
+// (see the headers ServeHTTP writes). The key's owner has already been confirmed by ServeHTTP to match the handshake user, so the
+// account is re-read from that user's id for this request: role and status changes then apply immediately, as they do for REST.
+// When the header is missing or malformed it falls back to the handshake identity.
+func (s *Server) requestIdentity(ctx context.Context, handshake Identity, req sdkmcp.Request) (Identity, error) {
 	extra := req.GetExtra()
 	if extra == nil || extra.Header == nil {
-		return handshake
+		return handshake, nil
 	}
 	keyID, err := strconv.ParseUint(extra.Header.Get(requestKeyIDHeader), 10, 64)
 	if err != nil || keyID == 0 {
-		return handshake
+		return handshake, nil
 	}
-	return Identity{User: handshake.User, KeyID: keyID, Scopes: extra.Header.Get(requestScopesHeader)}
+	user, err := s.api.UserByID(ctx, handshake.User.ID)
+	if err != nil {
+		return Identity{}, fmt.Errorf("reload mcp account %d: %w", handshake.User.ID, err)
+	}
+	return Identity{User: user, KeyID: keyID, Scopes: extra.Header.Get(requestScopesHeader)}, nil
 }
 
 // apiKeyID returns the id of this request's key; nil when there is no key.
@@ -363,7 +368,10 @@ func (s *Server) filterTools(handshake Identity) sdkmcp.Middleware {
 			if !ok {
 				return res, err
 			}
-			id := s.requestIdentity(handshake, req)
+			id, err := s.requestIdentity(ctx, handshake, req)
+			if err != nil {
+				return res, err
+			}
 			kept := make([]*sdkmcp.Tool, 0, len(lt.Tools))
 			for _, t := range lt.Tools {
 				scope, known := toolScopes[t.Name]
@@ -384,7 +392,10 @@ func addTool[In, Out any](s *Server, srv *sdkmcp.Server, handshake Identity, nam
 	tool := &sdkmcp.Tool{Name: name, Description: desc}
 	sdkmcp.AddTool[In, Out](srv, tool, func(ctx context.Context, req *sdkmcp.CallToolRequest, in In) (*sdkmcp.CallToolResult, Out, error) {
 		var zero Out
-		id := s.requestIdentity(handshake, req)
+		id, err := s.requestIdentity(ctx, handshake, req)
+		if err != nil {
+			return nil, zero, fmt.Errorf("%s: %s", api.CodeInternal, api.ErrorMessage(ctx, api.CodeInternal))
+		}
 		if !hasScope(id, scope) {
 			// Shares the same code and English copy as REST; the scope name is appended as detail.
 			return nil, zero, fmt.Errorf("%s: %s — %s", api.CodeScopeRequired, api.ErrorMessage(ctx, api.CodeScopeRequired), scope)

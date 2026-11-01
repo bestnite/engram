@@ -1720,7 +1720,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   through `GET /api/v1/review/due?deck=…` with no `limit`. *Acceptance:* the tool applies the REST default, and a test
   calls both transports without `limit` and asserts the same card set.
 
-- [ ] **M19-104 An MCP session keeps the account row it read at the handshake** — *should-fix.*
+- [x] **M19-104 An MCP session keeps the account row it read at the handshake** — *should-fix.*
   `internal/mcp/mcp.go:244-254` answers every tool call with `handshake.User`, which `build` fixed once per session
   (`:78-81`), so role and profile fields are judged from that snapshot while the REST middleware re-reads the row on
   every request; `ImportDeckPackage` derives `allow_others_progress` from that role (`internal/api/package.go:61-64`).
@@ -1728,6 +1728,27 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   ticket with `allow_others_progress=true`, while REST issuance by the same account issued `false`. *Acceptance:* each
   tool call uses the user row loaded for its own request, and a test changes the role between handshake and call and
   asserts the two transports take the same decision.
+  *Closed by this commit (`fix(mcp): judge every tool call from the current account row`).*
+  `requestIdentity` (`internal/mcp/mcp.go:258`) now takes the request context, resolves the key from the header as
+  before, and re-reads the account with `API.UserByID` (`internal/api/auth.go:126`) instead of reusing
+  `handshake.User`; both the tool-invocation wrapper (`:395`) and the tool-list filter (`:371`) use that identity, and
+  a failed reload answers the call with `internal_error` rather than falling back to the stale row. The handshake
+  copy remains only as the fallback when the internal identity headers are absent, which no HTTP request can produce.
+  `TestMcpSessionUsesTheCurrentAccountRow` (`internal/mcp/session_user_test.go`) opens a session as an administrator,
+  demotes the account to `user`, then has MCP and REST each issue an upload ticket with
+  `allow_others_progress=true`; both tickets must store `false`. Raw output of
+  `go test ./internal/mcp/ -run TestMcpSessionUsesTheCurrentAccountRow -count=1 -v`:
+  ```
+  === RUN   TestMcpSessionUsesTheCurrentAccountRow
+  --- PASS: TestMcpSessionUsesTheCurrentAccountRow (0.04s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/mcp	0.058s
+  ```
+  Before the change the same test failed with
+  `MCP ticket allow_others_progress = true, REST = false: the session kept the handshake role`.
+  `go vet ./internal/mcp/ ./internal/api/`, `go test ./internal/mcp/ -count=1`,
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/api/ -count=1` and
+  `go test ./internal/web/ -run 'TestMcp|TestMCP' -count=1` pass.
 
 - [ ] **M19-105 `GET /notes/{id}` answers 403 although its contract promises 404** — *should-fix.*
   `internal/api/service.go:454-467` states "An unknown id and a read without permission are both 404, never leaking
