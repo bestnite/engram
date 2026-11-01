@@ -497,18 +497,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   *Acceptance:* each new statement matches `importAnkiProgress` and `createAnkiPreset` in
   `internal/store/anki_import.go`. Evidence is the `README.md` diff.
 
-- [ ] **M18-67 The import page shows `cards_skipped`** — since `M18-26` the import report carries
-  `cards_skipped`, the number of package card rows that could not be read and were not imported.
-  `PackageImportReport` in `frontend/src/lib/api/types.ts` has no such field, and `reportRows` in
-  `frontend/src/lib/views/ImportView.svelte` does not list it, so a user who imports on the web page is
-  not told that cards are missing. The fix: `types.ts` gains `cards_skipped: number`. `reportRows` adds
-  one row keyed `package.report.cards_skipped` only when the value is above 0, the way it adds the
-  `weights_invalid` row. The key is appended at the end of `frontend/src/lib/i18n/locales/en.ts` and
-  `zh-CN.ts`, and the two key sets stay identical. Its text states that this many cards of the package
-  could not be read and were not imported. *Acceptance:* a component test shows the row with the count
-  for `cards_skipped` 2 and hides it for 0. Evidence is the component test output and the output of
-  `npm --prefix frontend run build`.
-
 - [ ] **M18-70 Comments state the reader's skip rules without a task ID** — the code of `M18-24` to
   `M18-27` carries four comment defects. First, the comment on `roundedIntegers` in
   `internal/anki/sqlite.go` gives as its reason "before M18-13 one such value rejected the whole package";
