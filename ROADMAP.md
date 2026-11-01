@@ -535,11 +535,15 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   timestamp due value come from the wall clock. Each regeneration produces different bytes and a
   different golden, so the regeneration check in `tools/anki-oracle/README.md` (`sha256sum -c
   /tmp/anki-oracle.sha`) fails for this pair even though no rule changed. Anki's own state decisions
-  are the part the golden must keep; only the time base drifts. The fix: after Anki builds the states,
-  shift the exported package and the golden to a fixed epoch (compute one offset from the package's
-  `crt`, apply it to `col.crt`, every card's `due`/`odue` that is a timestamp, every `revlog.id` and
-  the golden's timestamps), so a second run reproduces the same bytes, and state the rule in the
-  README. *Acceptance:* two runs of `generate.py` produce byte-identical `learning-due` files, the
+  are the part the golden must keep; only the time base drifts. Anki writes an intraday due as
+  `answer time + step`, so one offset from `col.crt` cannot align two runs: measured, the same `crt`
+  with dues 1793502968/1793502962/1793502969 and, three seconds later,
+  1793502964/1793502976/1793502969. The fix normalises each CARD's own timeline instead: after Anki
+  builds the states, shift every timestamp that belongs to one card (its `due` or `odue` timestamp,
+  its revlog ids) by `fixed base - that card's earliest timestamp`, renumber the revlog ids per card
+  so they stay unique and keep their spacing inside the card, set `col.crt` to the fixed base, apply
+  the same shifts to the golden, and state the rule in the README; cross-card relative timing is
+  dropped, and no scheduling decision depends on it. *Acceptance:* two runs of `generate.py` produce byte-identical `learning-due` files, the
   regeneration check passes for the whole directory, and `TestAnkiLearningDueOraclePackage` passes on
   both drivers. Evidence is the two `sha256sum` outputs and the raw scoped `go test` output.
 
