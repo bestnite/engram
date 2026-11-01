@@ -3071,7 +3071,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   With the handler changed to the unscoped `RevokeByID`, the same run failed with
   `DELETE another account's key = 200, want 404 (body {"id":"…","revoked":true})`; the scoped handler is restored.
 
-- [ ] **M19-109 The two `/mcp` refusals carry no stable code** — *nit.* `internal/mcp/mcp.go:103-116` answers a request
+- [x] **M19-109 The two `/mcp` refusals carry no stable code** — *nit.* `internal/mcp/mcp.go:103-116` answers a request
   without a key with `http.Error(..., 401, "api key required")` and a session/user mismatch with
   `403 "session user mismatch"`, both `text/plain` and neither carrying a `code`, while every other refusal in this
   domain uses `{"error":{"code","message"}}` or `ErrorText`; the 401 branch sits behind the middleware that already
@@ -3079,6 +3079,26 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   presenting another account's registered session id received `403 text/plain; charset=utf-8 "session user
   mismatch\n"`. *Acceptance:* both refusals use the shared envelope with a registered code (`unauthorized` for the
   missing key, `forbidden` for the mismatch) and a test asserts the body's code.
+  *Closed by this commit (`fix(mcp): answer the /mcp refusals with the shared error envelope`).*
+  `api.WriteErrorEnvelope` (`internal/api/errors.go:212`) now writes `{"error":{"code","message"}}` once for
+  both transports, and `abortError` delegates to it, so the REST and MCP exits cannot drift. `ServeHTTP`
+  (`internal/mcp/mcp.go:103`) answers a missing key with 401 `unauthorized` and a session/user mismatch with
+  403 `forbidden`. The 404 for an unregistered session is unchanged: it reports a session the SDK no longer
+  has rather than one of the two refusals the entry names.
+  `TestMcpRefusalsCarryStableCodes` (`internal/mcp/mcp_refusal_code_test.go`) calls `ServeHTTP` without an
+  identity and then presents another account's registered session id, and asserts the status,
+  `application/json` and the envelope code for each. Raw output of
+  `go test ./internal/mcp/ -run TestMcpRefusalsCarryStableCodes -count=1 -v`:
+  ```
+  === RUN   TestMcpRefusalsCarryStableCodes
+  --- PASS: TestMcpRefusalsCarryStableCodes (0.02s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/mcp	0.035s
+  ```
+  Before the change the same test failed with
+  `refusal content type = "text/plain; charset=utf-8", want application/json` and
+  `refusal body is not JSON (invalid character 'a' looking for beginning of value): "api key required\n"`.
+  `go test ./internal/mcp/ -count=1` and `go test ./internal/api/ -count=1` pass.
 
 ## 2. Release ledger
 

@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -202,9 +203,19 @@ func ErrorText(ctx context.Context, err error) string {
 // An empty message means "take the English text by code"; a non-empty one is dynamic detail supplied by the caller (e.g. a field name,
 // a limit value), appended after the English text and never replacing the code's text.
 func abortError(c *gin.Context, status int, code, message string) {
-	c.AbortWithStatusJSON(status, gin.H{"error": errorBody{
+	c.Abort()
+	WriteErrorEnvelope(c.Request.Context(), c.Writer, status, code, message)
+}
+
+// WriteErrorEnvelope writes the unified error envelope to a plain http.ResponseWriter.
+// The gin exits go through abortError; the MCP server uses this one where the refusal happens before any
+// gin context exists, so both transports answer the same body shape and stable code.
+func WriteErrorEnvelope(ctx context.Context, w http.ResponseWriter, status int, code, detail string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": errorBody{
 		Code:    code,
-		Message: formatErrorMessage(c.Request.Context(), code, message),
+		Message: formatErrorMessage(ctx, code, detail),
 	}})
 }
 

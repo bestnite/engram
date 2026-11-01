@@ -104,7 +104,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := IdentityFrom(r.Context())
 	if !ok || id.KeyID == 0 {
 		s.logger.Warn("mcp request rejected: an api key is required", "remote", r.RemoteAddr)
-		http.Error(w, "api key required", http.StatusUnauthorized)
+		api.WriteErrorEnvelope(r.Context(), w, http.StatusUnauthorized, api.CodeUnauthorized, "an api key is required")
 		return
 	}
 	sid := r.Header.Get(mcpSessionHeader)
@@ -122,7 +122,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !own {
 			s.logger.Warn("mcp session owner mismatch",
 				"session_id", sid, "key_id", id.KeyID, "user_id", id.User.ID)
-			http.Error(w, "session user mismatch", http.StatusForbidden)
+			api.WriteErrorEnvelope(r.Context(), w, http.StatusForbidden, api.CodeForbidden, "session user mismatch")
 			return
 		}
 	}
