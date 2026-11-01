@@ -11,16 +11,20 @@ import (
 //
 // 'Used media' = the sum of the bytes of the union of the two sets below, deduped by sha256:
 //  1. media referenced by notes this user created and that are not soft-deleted (via the media_notes mapping, maintained by the note write path);
-//  2. media this user uploaded but that **no note currently references** (pending uploads).
+//  2. media this user uploaded but that **no live note references** (pending uploads, including media only soft-deleted notes reference).
 //
 // Why count by 'reference': media is content-addressed by sha256, so the same bytes are stored only once instance-wide. Counting by uploader would attribute a shared
 // blob only to its first uploader, and would make 'deleting your own reference' unable to free quota. Counting by reference gives: deleting or replacing a
-// reference frees it (soft-deleting the note frees it too); one blob referenced several times by the same user counts once; when several users reference the same blob
-// it counts once for each (logical attribution — physically there is still one copy on disk, so the quota is not disk usage).
+// reference frees it; one blob referenced several times by the same user counts once; when several users reference the same blob it counts once for each
+// (logical attribution — physically there is still one copy on disk, so the quota is not disk usage).
 //
 // Why set 2 is counted too: counting only by reference would make a file uploaded and never inserted into any card free forever, so an account could
-// repeatedly upload 'unreferenced files' and fill the disk. Pending uploads are charged to the uploader until a note references them (which moves them into
+// repeatedly upload 'unreferenced files' and fill the disk. Pending uploads are charged to the uploader until a live note references them (which moves them into
 // set 1, charged to the referencer) or until media reclamation deletes them.
+//
+// Why set 2 looks past soft-deleted notes: reclamation keeps the media of a soft-deleted note so the note can be restored (see MarkOrphanedMedia), so that
+// media still occupies disk. Charging it to its uploader until a live note references it, or until reclamation removes it, is what keeps the quota a bound on
+// the disk a user can occupy across repeated upload/delete cycles. Releasing it at soft-delete time would leave the bytes uncharged and never collected.
 type MediaUsage struct {
 	// Bytes is the deduped number of used media bytes.
 	Bytes int64
@@ -40,7 +44,8 @@ func UserMediaUsage(ctx context.Context, db *gorm.DB, userID uint64) (MediaUsage
 		Where("n.created_by = ?", userID)
 	pending := db.Table("media_uploaders AS mu").Select("mu.media_sha").
 		Where("mu.user_id = ?", userID).
-		Where("NOT EXISTS (SELECT 1 FROM media_notes AS ref WHERE ref.media_sha = mu.media_sha)")
+		Where("NOT EXISTS (SELECT 1 FROM media_notes AS ref JOIN notes AS rn ON rn.id = ref.note_id " +
+			"WHERE ref.media_sha = mu.media_sha AND rn.deleted_at IS NULL)")
 	var rows []Media
 	if err := db.WithContext(ctx).Model(&Media{}).Select("sha256", "bytes").
 		Where("sha256 IN (?) OR sha256 IN (?)", referenced, pending).

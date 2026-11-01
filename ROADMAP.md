@@ -690,7 +690,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   'TestMediaGC|TestMediaNote|TestMediaName|TestClearOrphaned|TestBackfillNoteTypeMedia|TestExportAnkiPackageRefusesUnreadableTemplateMedia|TestMediaReadable' -count=1`
   passes on both drivers, and `go test ./internal/media/ -count=1` passes.
 
-- [ ] **M19-17 Soft-deleting a note frees its quota but keeps its media forever** — *should-fix.* The
+- [x] **M19-17 Soft-deleting a note frees its quota but keeps its media forever** — *should-fix.* The
   quota reference set ignores soft-deleted notes, the pending set counts nothing as long as any
   `media_notes` row exists, and the collector keeps the mappings so the media can be restored
   (`internal/store/media_quota.go:38-43`, `media_gc.go:13-24`). Media referenced only by soft-deleted
@@ -701,6 +701,48 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   — restorable content still needs a budget or a retention cap, or it becomes pending when only
   soft-deleted notes reference it, or restoration is explicitly not guaranteed once collected — plus a
   regression that runs several upload/soft-delete/collect rounds against a budget.
+  *Closed by this commit (`fix(store): charge media kept for restorable notes`).* The second policy in the
+  acceptance line was taken: media that only soft-deleted notes reference becomes pending, charged to the
+  user who supplied the bytes. `UserMediaUsage` (`internal/store/media_quota.go:41-45`) now defines the
+  pending set as "uploaded by this user and no live note references it" — the `media_notes` rows are joined
+  to `notes` with `deleted_at IS NULL` — so bytes the collector keeps for a restorable note stay charged
+  until a live note references them or reclamation removes them. Physical retention is unchanged: the
+  mapping and the media row still survive a soft delete, so restore still works, and the quota now follows
+  the bytes that stay on disk. The other two policies were not taken: a separate retention cap is a new
+  setting with no consumer, and "restoration is not guaranteed once collected" would let the collector
+  delete content a restore promises to keep. `TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes`
+  (`internal/store/media_quota_test.go:192`) runs three upload → reference → soft-delete → collect rounds
+  on both drivers, asserts the collector deletes nothing, and asserts the charge reaches 3000 bytes against
+  a 2500-byte budget so the next 1000-byte upload is refused. `TestMediaQuotaKeepsRetainedMediaCharged`
+  (`internal/web/media_quota_test.go:107`, replacing `TestMediaQuotaFreesAfterDeleteReference`) proves the
+  same through the upload handler: after the soft delete and a collect pass past the grace period, usage is
+  1500 and the next 1000-byte upload is refused with `media_quota_exceeded` 413. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes -count=1 -v`:
+  ```
+  === RUN   TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes
+  === RUN   TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes/sqlite
+  === RUN   TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes/postgres
+  --- PASS: TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes (0.34s)
+      --- PASS: TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes/sqlite (0.02s)
+      --- PASS: TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes/postgres (0.27s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.352s
+  ```
+  The same test before the change reproduced the report on both drivers: `round 1: usage after soft delete +
+  collect = 0, want 1000 (media retained for restore stays charged)`. Raw output of
+  `go test ./internal/web/ -run TestMediaQuotaKeepsRetainedMediaCharged -count=1 -v`:
+  ```
+  === RUN   TestMediaQuotaKeepsRetainedMediaCharged
+      media_quota_test.go:167: media kept for a soft-deleted note stays charged: usage 1500, next 1000 B upload refused with media_quota_exceeded
+  --- PASS: TestMediaQuotaKeepsRetainedMediaCharged (0.04s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.048s
+  ```
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -count=1` passes on both drivers,
+  `go test ./internal/web/ -run 'Media|Quota' -count=1` and `go test ./internal/api/ -run 'Quota|Package' -count=1`
+  pass. Follow-up not taken here: the localized `media.quota.exceeded` copy still advises "remove some media
+  you no longer use", which deleting a note no longer satisfies; whether that copy changes is a separate
+  decision.
 
 - [x] **M19-18 Two concurrent `into_deck` imports can point a note at another package's media** —
   *should-fix.* `renameAnkiMedia` reads a snapshot of the deck's names, then registers with

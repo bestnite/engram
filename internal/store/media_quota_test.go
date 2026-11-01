@@ -13,7 +13,8 @@ import (
 // TestUserMediaUsageDedupesAndReleases covers the accounting rule:
 //   - the same blob referenced by several notes / in several places of one user counts once (dedup);
 //   - different users referencing the same blob do not affect each other (each counts once, never twice for the same person);
-//   - removing a reference (soft-deleting the note) frees the quota;
+//   - removing a live reference (soft-deleting the note) frees the referencer's quota; bytes whose only remaining
+//     reference is a soft-deleted note stay charged to their uploader, because reclamation keeps them;
 //   - deck-package form references media/<sha>.<ext> are recognized too.
 func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	ctx := context.Background()
@@ -36,6 +37,13 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	}
 	if err := db.Create(&m2).Error; err != nil {
 		t.Fatalf("create media 2: %v", err)
+	}
+	// u2 supplied both files, so u1's charge comes only from its own references; bytes u1's
+	// soft-deleted notes leave behind stay charged to their uploader (u2).
+	for _, sha := range []string{sha1, sha2} {
+		if err := RecordMediaUploader(ctx, db, sha, u2); err != nil {
+			t.Fatalf("record uploader %s: %v", sha, err)
+		}
 	}
 
 	// u1's note: references both m1 (twice) and m2 as /media/<sha>.
@@ -96,7 +104,8 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 		t.Fatalf("u1 usage after sha-form note = %d, want 1500 (no double count)", usage1.Bytes)
 	}
 
-	// delete u1's two referencing notes (soft delete) → the quota is fully released; u2 is unaffected.
+	// delete u1's two referencing notes (soft delete) → u1's own charge is fully released; the bytes
+	// that only u1's soft-deleted notes referenced become pending to their uploader u2.
 	if err := db.Delete(&noteU1).Error; err != nil {
 		t.Fatalf("soft delete u1 note: %v", err)
 	}
@@ -112,8 +121,8 @@ func TestUserMediaUsageDedupesAndReleases(t *testing.T) {
 	if usage2, err = UserMediaUsage(ctx, db, u2); err != nil {
 		t.Fatalf("UserMediaUsage(u2) after u1 delete error = %v", err)
 	}
-	if usage2.Bytes != 1000 {
-		t.Fatalf("u2 usage after u1 delete = %d, want 1000 (unchanged)", usage2.Bytes)
+	if usage2.Bytes != 1500 {
+		t.Fatalf("u2 usage after u1 delete = %d, want 1500 (m1's live reference plus m2, which only the soft-deleted notes referenced)", usage2.Bytes)
 	}
 }
 
@@ -177,6 +186,77 @@ func TestUserMediaUsageCountsPendingUploads(t *testing.T) {
 	}
 	if got := usage(uploader); got != 700 {
 		t.Errorf("reference gone: uploader usage = %d, want 700 again", got)
+	}
+}
+
+// TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes pins the retention/charging policy for media that
+// only soft-deleted notes reference: the note write path keeps its media_notes mappings so the note can be
+// restored, the collector therefore keeps those media rows, and the uploader stays charged for them until a
+// live note references the bytes or reclamation removes them. Several upload/soft-delete/collect rounds must
+// therefore consume the budget instead of returning usage to zero.
+func TestUserMediaUsageChargesMediaRetainedForSoftDeletedNotes(t *testing.T) {
+	const budget = int64(2500)
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			if err := AutoMigrate(ctx, db); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			now := time.Now().UTC()
+			owner := seedUsers(t, db, "retained-media")[0]
+			deckID := seedDeck(t, db, owner)
+			noteTypeID := stockNoteTypeID(t, db, deckID, "basic")
+
+			usage := func() int64 {
+				t.Helper()
+				u, err := UserMediaUsage(ctx, db, owner)
+				if err != nil {
+					t.Fatalf("UserMediaUsage() error = %v", err)
+				}
+				return u.Bytes
+			}
+
+			for round := 1; round <= 3; round++ {
+				sha := fmt.Sprintf("%064d", round)
+				if err := db.Create(&Media{Sha256: sha, RelPath: sha[:2] + "/" + sha + ".png", Mime: "image/png", Bytes: 1000, CreatedAt: now}).Error; err != nil {
+					t.Fatalf("round %d: create media: %v", round, err)
+				}
+				if err := RecordMediaUploader(ctx, db, sha, owner); err != nil {
+					t.Fatalf("round %d: record uploader: %v", round, err)
+				}
+				note := &Note{
+					DeckID: deckID, NoteTypeID: Ptr(noteTypeID), TagsJSON: "[]",
+					FieldsJSON: fmt.Sprintf(`{"front":"<img src=\"%s.png\">","back":"x"}`, sha),
+					CreatedBy:  &owner, CreatedAt: now, UpdatedAt: now,
+				}
+				if err := db.Create(note).Error; err != nil {
+					t.Fatalf("round %d: create note: %v", round, err)
+				}
+				mapNote(t, db, note)
+				if got, want := usage(), int64(round)*1000; got != want {
+					t.Fatalf("round %d: usage with a live reference = %d, want %d", round, got, want)
+				}
+				if err := db.Delete(note).Error; err != nil {
+					t.Fatalf("round %d: soft delete note: %v", round, err)
+				}
+				if _, _, err := MarkOrphanedMedia(ctx, db, now); err != nil {
+					t.Fatalf("round %d: MarkOrphanedMedia() error = %v", round, err)
+				}
+				deleted, err := DeleteOrphanedMedia(ctx, db, now, 10)
+				if err != nil {
+					t.Fatalf("round %d: DeleteOrphanedMedia() error = %v", round, err)
+				}
+				if len(deleted) != 0 {
+					t.Fatalf("round %d: collector removed %d media that restorable notes still reference", round, len(deleted))
+				}
+				if got, want := usage(), int64(round)*1000; got != want {
+					t.Fatalf("round %d: usage after soft delete + collect = %d, want %d (media retained for restore stays charged)", round, got, want)
+				}
+			}
+			if got := usage(); got+1000 <= budget {
+				t.Fatalf("charged usage after three retained rounds = %d against budget %d, want the next 1000-byte upload refused", got, budget)
+			}
+		})
 	}
 }
 

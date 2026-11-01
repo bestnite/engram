@@ -104,8 +104,10 @@ func TestMediaQuotaExceededRejectedLocalized(t *testing.T) {
 	t.Logf("over-quota rejected: code=%s zh=%q en=%q", e.Error.Code, e.Error.Message, eEn.Error.Message)
 }
 
-// TestMediaQuotaFreesAfterDeleteReference acceptance: after the reference is deleted (note soft-deleted) the quota is released again.
-func TestMediaQuotaFreesAfterDeleteReference(t *testing.T) {
+// TestMediaQuotaKeepsRetainedMediaCharged acceptance: soft-deleting the referencing note keeps the media on
+// disk so the note can be restored, so the bytes stay charged and the next upload is still refused until
+// reclamation removes them.
+func TestMediaQuotaKeepsRetainedMediaCharged(t *testing.T) {
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	t.Setenv(envMediaUserQuotaBytes, "")
 	ctx := context.Background()
@@ -115,6 +117,9 @@ func TestMediaQuotaFreesAfterDeleteReference(t *testing.T) {
 	deck := seedDeck(t, db, ownerID, "quota deck")
 
 	first := uploadMedia(t, srv, cookies, csrf, "m1.png", "image/png", quotaPNG(1500))
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first upload status = %d, want 201 (body %s)", first.Code, first.Body.String())
+	}
 	var saved mediaUploadResp
 	if err := json.Unmarshal(first.Body.Bytes(), &saved); err != nil {
 		t.Fatalf("decode first upload: %v", err)
@@ -125,19 +130,41 @@ func TestMediaQuotaFreesAfterDeleteReference(t *testing.T) {
 		t.Fatalf("over-quota status = %d, want 413", rec.Code)
 	}
 
-	// Delete the note referencing it → usage back to zero → the same file should be accepted this time.
+	// Delete the reference and run the collector: the mapping is kept for restore, so the row must not be
+	// selected even when the grace period has long passed.
 	if err := db.Delete(note).Error; err != nil {
 		t.Fatalf("soft delete note: %v", err)
 	}
-	if usage, err := store.UserMediaUsage(ctx, db, ownerID); err != nil {
+	now := time.Now().UTC()
+	if _, _, err := store.MarkOrphanedMedia(ctx, db, now); err != nil {
+		t.Fatalf("MarkOrphanedMedia() error = %v", err)
+	}
+	deleted, err := store.DeleteOrphanedMedia(ctx, db, now.Add(7*24*time.Hour), 100)
+	if err != nil {
+		t.Fatalf("DeleteOrphanedMedia() error = %v", err)
+	}
+	if len(deleted) != 0 {
+		t.Fatalf("collector removed %d media kept for a restorable note", len(deleted))
+	}
+	usage, err := store.UserMediaUsage(ctx, db, ownerID)
+	if err != nil {
 		t.Fatalf("UserMediaUsage() error = %v", err)
-	} else if usage.Bytes != 0 {
-		t.Fatalf("usage after delete = %d, want 0", usage.Bytes)
 	}
-	if rec := uploadMedia(t, srv, cookies, csrf, "m2.png", "image/png", quotaPNG(1000)); rec.Code != http.StatusCreated {
-		t.Fatalf("post-delete upload status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
+	if usage.Bytes != 1500 {
+		t.Fatalf("usage after deleting the reference note = %d, want 1500 (retained for restore, so still charged)", usage.Bytes)
 	}
-	t.Logf("quota released after deleting the reference note: usage 1500 -> 0, upload of 1000 B accepted (201)")
+	rec := uploadMedia(t, srv, cookies, csrf, "m3.png", "image/png", quotaPNG(1000))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("post-delete upload status = %d, want 413 (body %s)", rec.Code, rec.Body.String())
+	}
+	var e mediaErrResp
+	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if e.Error.Code != media.CodeQuotaExceeded {
+		t.Fatalf("error code = %q, want %q", e.Error.Code, media.CodeQuotaExceeded)
+	}
+	t.Logf("media kept for a soft-deleted note stays charged: usage 1500, next 1000 B upload refused with %s", e.Error.Code)
 }
 
 // TestMediaQuotaDedupeDoesNotChargeTwice acceptance rule: when the same blob is already charged to that user,
