@@ -164,6 +164,25 @@ above, and it lands after `M18-49` and `M18-51`, which change the function it re
 after `M18-49`, which changes the replay its expected values come from, and never runs beside another
 entry that changes `internal/store/anki_progress_import_test.go`.
 
+`M18-87` to `M18-102` fix defects that a review of the commits `f22a626` to `027bd6a` found: the landed
+`M18-20`, `M18-21`, `M18-46`, `M18-52` to `M18-55`, `M18-59` to `M18-64`, `M18-67`, `M18-68`, `M18-70`
+to `M18-78` and `M18-81`, and the release ledger rows those commits wrote. `M18-87`, `M18-88`, `M18-89`
+and `M18-102` edit this file or `AGENTS.md`, so only the parent does them, with the maintainer present,
+and `M18-87` and `M18-88` land in one change. `M18-90` changes `README.md`, `internal/mcp/tools.go` and
+no other file. `M18-91` changes only `README.zh.md` and lands after `M18-90`, whose `README.md` text it
+follows. `M18-92` changes
+`internal/store/anki_import.go`, so it runs alone like the entries above; `M18-93` also runs alone when the
+maintainer's choice changes that file. `M18-93`, `M18-94` and `M18-95` all change
+`internal/store/package_import.go`, so no two of them run at the same time. `M18-93` and `M18-94` both
+change `frontend/src/lib/views/ImportView.svelte` and the locale catalogs, so they never run at the same
+time, and `M18-94` lands after `M18-93`. `M18-94` and `M18-95` both change `internal/anki`, so they never
+run at the same time. `M18-98` changes `frontend/src/lib/views/PresetsView.svelte`, so it never runs beside
+`M18-93` or `M18-94`. `M18-98` and `M18-99` both change `internal/store/migrate.go` and
+`internal/store/migrate_preset_limits.go`, so they never run at the same time, and `M18-99` lands after
+`M18-98`. `M18-96` and `M18-97` change only tests. `M18-100` and `M18-101` both
+change `tools/anki-oracle/generate.py` and `tools/anki-oracle/README.md`, so they never run at the same
+time. `M18-93` and `M18-99` wait for a maintainer decision.
+
 - [ ] **M18-49 The replay selects the rows Anki selects** — `deriveAnkiMemory` in
   `internal/store/anki_import.go` replays the kept rows from an empty state, except when the first kept
   row is a review row (revlog type 1): then it builds SM-2 from the card's `factor` and `ivl` and
@@ -241,6 +260,336 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   *Acceptance:* a note in the committed oracle README states the measured rule with the values that
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
+
+- [ ] **M18-87 The ledger rows state what landed from `f22a626` to `027bd6a`, and only that** — four
+  ledger rows disagree with the code or leave out a landed change. First, the `M18-2` row names
+  "`M18-47` to `M18-50`", which includes `M18-49`; `M18-49` is still open in section 1. Second, the same
+  row names "`M18-65` to `M18-71`" but states nothing for `M18-66`, `M18-67` and `M18-68`. Since `M18-66`,
+  a TEXT value in `cards.type`, `cards.queue`, `cards.odid` or `cards.flags` fails the import instead of
+  skipping the card, and the error for a refused REAL value names its column (`cards.nid holds a REAL
+  value`). Since `M18-68`, with `include_progress` off, `reviews_discarded` also counts the revlog rows
+  the reader could not read, and the report gains `deck_config_skipped`. Since `M18-67`, the Import page
+  shows `cards_skipped`. No ledger row names `deck_config_skipped`. Third, no row records migration
+  `0020_repair_preset_scheduler_limits` (`M18-59`), which rewrites stored presets on upgrade: a
+  `maximum_interval_days` above 36 500 becomes 36 500, and a learning or relearning step list that the
+  scheduler refuses becomes the default steps. The `M18-17` row also leaves out `M18-60`: the preset page
+  refuses a value above 36 500 before sending it. The `M18-1` row leaves out `M18-73`: an export with
+  `IncludeWeights` on now fails when the preset's `weights_json` is `[]`. Fourth, the row "Anki memory
+  state is approximate until the replay rule is measured" says that the importer takes the SM-2 state
+  "whenever a card's first kept revlog row is not a learning row". `deriveAnkiMemory` in
+  `internal/store/anki_import.go` takes it only when the first kept row is a review row (type 1) or the
+  card has no kept row. A history that begins with a relearning row (type 2) or a filtered-deck row
+  (type 3) is replayed from an empty state (see `M18-92`). The row's title also names `M18-49` and
+  `M18-79`, which are open, so the row reads as if they had shipped. The fix: the `M18-2` row names
+  `M18-47`, `M18-48` and `M18-50` one by one instead of the range, and states the `M18-66` and `M18-68`
+  changes and the `M18-67` page row. One row states migration `0020` and its two rewrites and is marked
+  "No — a versioned migration is added; stored preset values change", as the `M17-38` row is. The
+  `M18-17` row names `M18-60`. The `M18-1` row states the `[]` refusal and names `M18-73`. The
+  approximation row states the rule `deriveAnkiMemory` applies when this entry lands, and its title names
+  only landed IDs. Only the parent edits this file, with the maintainer present, in the same change as
+  `M18-88`. *Acceptance:* in the ledger section, `grep -n -E 'M18-(47|48|50|60|66|67|68|73)\b|deck_config_skipped|0020'`
+  prints at least one line for each alternative, and `grep -n -E 'M18-4[0-9] to M18-5|M18-(49|79)\b'`
+  prints nothing. Evidence is both outputs, limited to the ledger section and quoted in the closing
+  commit.
+
+- [ ] **M18-88 The ledger rows that later commits superseded are restated** — commits after `027bd6a`
+  changed behaviour that ledger rows written by `M18-22`, `M18-35`, `M18-45` and `M18-72` still describe.
+  First, the `M18-4` row says that a refused `preset_id` answers 400 `invalid_request`. Since `M18-82`
+  (`510b147`), every preset refusal carries the code `preset_selection_invalid`, still with status 400,
+  and no row names that code or `M18-82`. Second, no row records `M18-6` (`92830b1`): the Import page
+  offers `preset_mode` `new`, `reuse` and `copy`, the preset picker, the `include_progress` checkbox and
+  five more report counters. Third, the row "The `.edeck` deck package format is removed" (`M18-5`)
+  states that the `.edeck` reader and writer and the MCP export tool are gone, and
+  `internal/mcp/mcp.go` registers no `export_deck` tool. Yet the `M18-3` row says that the `export_deck`
+  MCP tool takes `format=apkg`; the `M18-19` row describes an `.edeck` import; the bold paragraph above
+  the table and the M17 "File format" item describe `.edeck` format 2; and the `M17-53` row says that the
+  `.edeck` reader keeps its in-memory caps. A release note built from these rows describes a format and
+  a tool that the release does not contain. The fix: the `M18-4` row states the
+  `preset_selection_invalid` code and names `M18-82`. A new row for `M18-6` states the page behaviour and
+  is marked not breaking. Each row or paragraph that describes `.edeck` behaviour or the `export_deck`
+  tool either states that `M18-5` removed it or is merged into the `M18-5` row, so no line of the ledger
+  describes an `.edeck` import, an `.edeck` export or `export_deck` as present in the release. Only the
+  parent edits this file, with the maintainer present, in the same change as `M18-87`. *Acceptance:* the
+  ledger section names `preset_selection_invalid`, `M18-82` and `M18-6`; every ledger line that contains
+  `.edeck` or `export_deck` also states the removal. Evidence is the output of
+  `grep -n -E 'preset_selection_invalid|M18-(6|82)\b|\.edeck|export_deck' ROADMAP.md`, limited to the
+  ledger section and quoted in the closing commit.
+
+- [ ] **M18-89 `AGENTS.md` section 2.7 states the preset modes and the re-import rule** — `M18-35` and
+  `M18-63` were closed (`f937c04`, `91933ee`) with only their ledger half done. Both closing commits say
+  that the `AGENTS.md` sentence "is proposed separately", but no commit changed `AGENTS.md`, and both
+  acceptances required the `AGENTS.md` diff. Section 2.7, under "Importing an `.apkg`", still says "the
+  package's deck configuration becomes the new deck's preset". Since `M18-4`, that holds only for
+  `preset_mode` `new`: `reuse` points the new deck at the caller's preset, and `copy` points it at a copy
+  of that preset. The same paragraph says that card states and the review log are applied "only when the
+  import asks for them", and does not state the rule `M18-15` and `M18-57` settled. A card whose
+  `last_review_at` in Engram is not earlier than the package's keeps the engram state; a NULL package
+  time counts as the oldest; and a package review is written only when it is later than the importer's
+  latest review of that card. The fix: the "Importing an `.apkg`" paragraph names the three modes and
+  states the re-import rule in those words. Only the parent edits `AGENTS.md`, with the maintainer
+  present. *Acceptance:* section 2.7 of `AGENTS.md` names `reuse`, `copy` and `last_review_at`. Evidence
+  is the `AGENTS.md` diff.
+
+- [ ] **M18-90 README names every entry that takes the preset choice, and lists only registered MCP
+  tools** — `M18-46` required that the commit landing `M18-6` add the Import page to the sentence on
+  line 49 of `README.md`, which lists the entries that take `preset_mode` and `preset_id`. `M18-6`
+  (`92830b1`) changed no README line. The Import page now sends both fields (`frontend/src/lib/api/client.ts`),
+  and the sentence still names only the three routes, the CLI flags and the two MCP tools. Line 60 says
+  that `apply_weights` is "allowed only with `new_deck` and `preset_mode` `new`". `ValidateImportPreset`
+  in `internal/store/package_import.go` refuses it with `reuse` and `copy`. With `into_deck` and
+  `replace_deck`, it accepts the option and the preset is left unchanged. "Allowed only" therefore has two
+  readings: refused elsewhere, or ignored elsewhere. The `apply_weights` jsonschema texts of
+  `importDeckIn` and `createImportUploadIn` in `internal/mcp/tools.go` say "(new_deck only)" and have the
+  same two readings. They also do not say that `reuse` and `copy` refuse it. Line 106 lists an
+  `export_deck` MCP tool, but `internal/mcp/mcp.go` registers none since `M18-84`, and line 93 states a
+  tool count. The fix: the line 49 sentence names the Import page. Line 60 and both jsonschema texts state
+  the two `apply_weights` rules separately: `reuse` and `copy` refuse it, and `into_deck` and
+  `replace_deck` ignore it. Line 106 lists only registered tools, and line 93 states the count of tools
+  that `internal/mcp/mcp.go` registers. *Acceptance:* each statement of the changed lines matches
+  `ValidateImportPreset`, `resolveAnkiTargetDeck`, `frontend/src/lib/api/client.ts` and the `addTool`
+  calls in `internal/mcp/mcp.go`; the scoped `go vet` and `go test` of `internal/mcp` pass. Evidence is
+  the diff and the raw scoped output.
+
+- [ ] **M18-91 `README.zh.md` describes the same import as `README.md`** — `M18-21`, `M18-46` and `M18-64`
+  changed only `README.md`. The import section of `README.zh.md` still says the opposite of the code. Line
+  43 offers two package formats, Engram's `.edeck` and Anki's `.apkg`, although `M18-5` removed `.edeck`.
+  Line 56 lists, under the parts of a package that are not imported, "调度状态与复习历史" ("imported cards
+  are always new"), which `M18-21` removed from `README.md` because `include_progress` imports them. The
+  section names no `preset_mode`, `preset_id`, `apply_weights`, `weights_invalid` or re-import progress
+  rule. Line 105 says that `export_deck` exports `.edeck`. A Chinese reader is therefore told that an
+  `.apkg` import never carries progress or deck options. The fix: the "导入卡组" section and the MCP tool
+  list of `README.zh.md` state, in Chinese, every rule that the matching parts of `README.md` state after
+  `M18-90` lands, and nothing that `README.md` does not state. *Acceptance:* each paragraph and list item
+  of the two sections matches its `README.md` counterpart statement for statement; `grep -n -E
+  'edeck|export_deck' README.zh.md` prints nothing. Evidence is the diff and the grep output.
+
+- [ ] **M18-92 The approximation warning covers every non-learning start, and its comment cites no task
+  ID** — `M18-80` required a warning "whenever [a card's] first kept revlog row is not a learning row".
+  `deriveAnkiMemory` in `internal/store/anki_import.go` increments the counter only in the SM-2 branch,
+  that is, when the first kept row is a review row (type 1) or the card has no kept row. A card whose
+  first kept row is a relearning row (type 2) or a filtered-deck row (type 3) is replayed from an empty
+  state and writes no warning. `M18-79` measured the type 2 case against Anki 26.09.3: Again then Good
+  (+1 day) gives Anki 1.00 and 8.216, and the importer 1.887 and 6.402. Reproduced on `main` on both
+  drivers with a temporary test: a review card with no `s`/`d`, a first row Again and a second row Good
+  (type 1, +1 day) stores stability 1.8868 and difficulty 6.4021, and the log stays empty, both when the
+  first row is type 2 and when it is type 3. Two
+  comment defects sit in the same function. The comment on the SM-2 branch says "ROADMAP.md M18-79
+  measures …", which points at a retired ID once `M18-79` closes, the defect `M18-70` removed from
+  `internal/anki`. The doc comment says that the function "writes replayed memory into rowMemory for kept
+  revlog rows". It writes every kept row only on the replay path; with usable package values, it writes
+  only the last kept row. The fix: the counter also counts a card whose memory is replayed from a history
+  whose first kept row is type 2 or type 3. The log message no longer says "SM-2", because it now covers a
+  replay too, and still states that the value is not aligned with Anki. The comment states the limitation
+  in its own words without a task ID. The doc comment states which rows `rowMemory` receives on each
+  path. *Acceptance:* `TestAnkiProgressApproximationWarn` gains a `relearning_first` and a
+  `filtered_first` case, each expecting the warning with `cards` 2, and its existing cases keep their
+  expected counts; `git grep -n 'M18-' -- internal/store/anki_import.go` prints nothing. Evidence is the
+  raw scoped `go test` and `go vet` output of `internal/store`, the PostgreSQL run with `TEST_PG_DSN` set,
+  and the captured log line.
+
+- [ ] **M18-93 Decide what `progress_discarded` means with `include_progress` on** — the comment on
+  `PackageImportReport.ProgressDiscarded` in `internal/store/package_import.go` says that the flag means
+  "the package's card states or reviews were discarded during import". The only code that sets it is the
+  `include_progress`-off branch of `importAnkiProgress` in `internal/store/anki_import.go`. With
+  `include_progress` on, since `M18-65`, the review rows of a card the reader skipped are counted in
+  `reviews_discarded`, and the flag stays false. Reproduced on `main` on both drivers with the
+  skipped-card archive of `TestAnkiImportReportsSkippedCard`, imported with `include_progress` on: the
+  report holds `reviews_discarded` 1, `progress_discarded` false and `cards_skipped` 1. The Import page
+  then shows "Package progress not imported: No" two rows above "Reviews discarded: 1". Two rules are
+  possible. (a) The flag is true whenever `states_discarded` or `reviews_discarded` is above 0, with
+  `include_progress` on or off; the comment says so, and the catalog text of
+  `package.report.progress_discarded` says that some of the package's progress was not imported. (b) The
+  flag keeps its code. Its comment and the catalog text say that the flag reports an import with
+  `include_progress` off, and the Import page shows the row only when `include_progress` was off. Either
+  way, a catalog line keeps its key and position, and the two catalogs keep identical key sets.
+  *Acceptance:* a table test in `internal/store` imports the archive above through `ImportPackage` with
+  `include_progress` on and off on both drivers and checks the flag against the chosen rule; a component
+  test shows the row the chosen rule requires for both reports. Evidence is the raw scoped `go test` and
+  `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set, and the component test output.
+  *Do not start until the maintainer chooses (a) or (b).*
+
+- [ ] **M18-94 The `deck_config_skipped` row reads yes or no, and the `M18-68` fields carry comments** —
+  `reportRows` in `frontend/src/lib/views/ImportView.svelte` pushes `['package.report.deck_config_skipped', 1]`,
+  and the template converts only `dry_run`, `progress_discarded` and the `package.report.weights_` keys to
+  the catalog's yes and no. The page therefore shows "Package deck configuration could not be read;
+  defaults were used | 1", the defect `M18-61` removed from the weight rows. The `M18-68` component test in
+  `frontend/src/tests/import-url.client.ts` checks only that the label appears, so it cannot catch this.
+  `anki.Package.ReviewsUnreadable` in `internal/anki/model.go` and `PackageImportReport.DeckConfigSkipped`
+  in `internal/store/package_import.go` have no comment, while their neighbours have one, the defect
+  `M18-61` and `M18-70` fixed for the other fields. The `describe` title in
+  `frontend/src/tests/import-url.client.ts` ends in `(M18-6)`, a retired ID. The fix: the row shows the
+  catalog's yes, the way the weight rows do; the row still appears only when the field is true.
+  `ReviewsUnreadable` gains a comment stating that it counts the revlog rows the reader skipped, and that
+  the import counts them in `reviews_discarded` when `include_progress` is off. `DeckConfigSkipped` gains
+  a comment stating its four conditions, as `resolveAnkiTargetDeck` sets them. The test title names the
+  behaviour it tests instead of the ID. *Acceptance:* the component test shows the row with the catalog's
+  yes text for `deck_config_skipped` true, and no row for false; the scoped `go vet` of `internal/anki`
+  and `internal/store` passes; `git grep -n 'M18-' -- frontend/src` prints nothing. Evidence is the
+  component test output, the output of `npm --prefix frontend run build`, the grep output and the raw
+  scoped `go vet` output.
+
+- [ ] **M18-95 The card skip comments state which columns skip and which fail** — the doc comment of
+  `readCards` in `internal/anki/sqlite.go` says "A card row with a REAL code value is skipped and
+  counted". The code fails the import with `ErrCorruptCollection` when `cards.nid`, `cards.did` or
+  `cards.ord` holds a REAL value, and skips and counts the row only when `cards.type`, `cards.queue`,
+  `cards.odid` or `cards.flags` holds one. `odid` is a deck identifier, not a code, so the sentence has two
+  readings for `odid`. The comment on `PackageImportReport.CardsSkipped` in
+  `internal/store/package_import.go` says that it "counts package card rows that were not imported". The
+  field copies `pkg.CardsSkipped`, so it does not count the cards of notes that `on_conflict` `skip` left
+  out, which are not imported either. The fix: the `readCards` comment names the three columns that fail
+  the import and the four columns that skip the row. The `CardsSkipped` comment states that it counts the
+  card rows the reader could not read, and that cards of skipped notes are not counted. This entry
+  changes comments only. *Acceptance:* each statement of both comments matches `readCards` and
+  `importAnkiInTx`; the scoped `go vet` of `internal/anki` and `internal/store` passes. Evidence is the
+  diff and the raw scoped `go vet` output.
+
+- [ ] **M18-96 Each condition of `deck_config_skipped` is tested** — `resolveAnkiTargetDeck` in
+  `internal/store/anki_import.go` sets `deck_config_skipped` only when four conditions hold: the target is
+  `new_deck`, `preset_mode` is `new`, `DeckConfigsSkipped` is true, and `ankiTopConfig` returned nil.
+  `TestAnkiImportSkippedDeckConfigs` in `internal/store/anki_skipped_config_test.go` always uses an empty
+  preset mode, and none of its cases has `ankiTopConfig` return nil without a skipped configuration.
+  Removing `opts.PresetMode == PackagePresetNew &&` or `pkg.DeckConfigsSkipped &&` from the condition
+  therefore fails no test. The behaviour is correct on `main`; a temporary test on both drivers reported
+  `true` for mode `new`, also as a dry run, and `false` for `reuse`, `copy` and `into_deck`. The fix adds
+  cases to that test. The `top invalid` package imported with `reuse` and with `copy` reports false; the
+  same package imported `into_deck` reports false; and a package with two valid configurations, neither
+  of which the top deck names, reports false. This entry changes tests only. *Acceptance:* the new cases
+  pass on both drivers; with either of the two clauses above removed for one run, at least one case
+  fails. Evidence is the raw scoped `go test` and `go vet` output of both runs, the PostgreSQL run with
+  `TEST_PG_DSN` set.
+
+- [ ] **M18-97 The store tests refuse every invalid preset selection again** — `M18-74` named the
+  refusal cases of `TestImportPresetModes` in `internal/store/package_preset_mode_test.go`. `f2adaab`
+  (`M18-83`) deleted that test with the legacy format, and the remaining `TestAnkiImportPresetModes` has
+  no refusal case. Two rules of `ValidateImportPreset` in `internal/store/package_import.go` are now
+  tested nowhere: a `preset_id` with `replace_deck`, and a `preset_id` with `into_deck` and mode `new`.
+  `git grep -n -E 'replace_deck.*preset|preset.*replace_deck' -- '*_test.go'` prints nothing. The API and
+  MCP refusal tests that remain run on SQLite only, so the owner-count query of `ValidateImportPreset`
+  no longer runs on PostgreSQL. The `M18-74` acceptance command now matches no test and passes without
+  running one. The fix: `internal/store/package_preset_mode_test.go` gains a table test, on both drivers,
+  that imports an `.apkg` through `ImportPackage` with each refused selection. For each of `reuse` and
+  `copy`, five cases: `new_deck` without `preset_id`; `new_deck` with another user's preset; `new_deck`
+  with the caller's preset and `apply_weights`; `into_deck` with the caller's preset; `replace_deck` with
+  the caller's preset. Mode `new` with the caller's preset, once for each of the three targets. An
+  unknown mode for `new_deck`. An empty mode with the caller's preset, once for `into_deck` and once for
+  `replace_deck`. Each refusal returns a
+  `PackageError` with code `preset_selection_invalid` and adds no deck, preset, note or card. Each case
+  name states its target, its mode, which preset it names and its weights flag. This entry changes tests
+  only. *Acceptance:* every case passes on both drivers; with the `targetKind != PackageTargetNewDeck &&
+  opts.PresetID != 0` check removed for one run, the two empty-mode cases fail, because only that check
+  refuses them. Evidence
+  is the raw scoped `go test` and `go vet` output of both runs, the PostgreSQL run with `TEST_PG_DSN` set.
+
+- [ ] **M18-98 The preset-limit tests measure their own layer, and the comments state the rules** — four
+  defects in the code `M18-59`, `M18-60` and `M18-81` landed. First,
+  `TestPresetWriteRejectsExcessiveMaximumInterval` in `internal/web/presets_api_test.go` passes with the
+  `> 36500` check removed from `parsePresetRequest` in `internal/web/presets_api.go`: `PresetStore.Create`
+  and `Update` refuse the value with `ErrInvalidMaximumInterval`, which `presetStoreCode` maps to the same
+  code, status and message. Measured with a temporary copy of `presets_api.go` through `go test -overlay`:
+  both subtests pass. The test therefore proves the store's refusal, not the handler's. Second,
+  `TestMigratedPresetSchedulerLimits` in `internal/schedule/migrate_preset_limits_test.go` takes the last
+  entry of `store.BuiltinMigrations` and fails unless its name is `0020_repair_preset_scheduler_limits`,
+  so the next migration that is appended fails it. Third, the doc comment of
+  `repairPresetSchedulerLimits` in `internal/store/migrate_preset_limits.go` and its `BuiltinMigrations`
+  entry in `internal/store/migrate.go` do not state which values the migration rewrites, or why a
+  migration may rewrite stored values. The reason is that go-fsrs v4 replaces every parameter with its
+  defaults for a maximum interval above 36 500 or a negative step, and the scheduler refuses a non-finite
+  step, so such a preset is unusable as stored. Fourth, the template comment above the maximum-interval
+  input in `frontend/src/lib/views/PresetsView.svelte` says that `parseForm` validates a "positive
+  integer"; since `M18-60`, it also refuses a value above 36 500. The fix: a table test in
+  `internal/web` calls `parsePresetRequest` directly with 0, 1, 36 500 and 36 501 and checks the returned
+  code. The schedule test looks the migration up by name. The two Go comments state the two rewrites and
+  the reason above. The template comment states the range 1 to 36 500. *Acceptance:* with the `> 36500`
+  check removed for one run, the new `internal/web` test fails, and without that change it passes;
+  `TestMigratedPresetSchedulerLimits` and `TestRepairPresetSchedulerLimits` pass on both drivers.
+  Evidence is the raw scoped `go test` and `go vet` output of `internal/web`, `internal/schedule` and
+  `internal/store` for both runs, the PostgreSQL run with `TEST_PG_DSN` set, and the diff.
+
+- [ ] **M18-99 Decide whether stored presets with other refused values are repaired** — migration `0020`
+  repairs a `maximum_interval_days` above 36 500 and refused step lists only. go-fsrs v4.0.0
+  `Parameters.Validate` also refuses a `MaximumInterval` of 0 or less and a `RequestRetention` of 0 or less
+  or above 1, and `NewFSRS` then replaces every parameter with `fsrs.DefaultParam()`. Measured on `main`
+  with a temporary test through `go test -overlay`: a preset with `maximum_interval_days` -5 keeps -5
+  after `0020` runs (`rows_changed=0`), and the scheduler built from it holds `MaximumInterval` 36500 and
+  `W[0]` 0.212 instead of the preset's 0.5. No write path stores such a value today: the REST and web
+  writes refuse it, and the `.apkg` import copies only a positive interval. Only a row written by hand
+  reaches this case. Two rules are possible. (a) A new versioned migration, numbered after the last entry
+  of `BuiltinMigrations` when the task starts, sets a `maximum_interval_days` of 0 or less to 36 500 and a
+  `desired_retention` of 0 or less or above 1 to `DefaultDesiredRetention`. It is idempotent, changes no other column,
+  and its comment states the rewrites and the reason. (b) No migration; the doc comment of
+  `repairPresetSchedulerLimits` states that these values are not repaired, and why. *Acceptance:* under
+  (a), a migration test in `internal/store` on both drivers seeds presets with an interval of -5 and 0,
+  retentions of 0 and 1.5, and one valid preset; afterwards the first four hold the repaired values, the
+  valid preset is unchanged, and a second run changes nothing. A test in `internal/schedule` shows that
+  the scheduler built from each repaired preset keeps the preset's first weight. Under (b), the diff of
+  the comment. Evidence is the raw scoped `go test` and `go vet` output, the PostgreSQL run with
+  `TEST_PG_DSN` set, or the diff under (b). *Do not start until the maintainer chooses (a) or (b).*
+
+- [ ] **M18-100 The schema-18 weights fixture is generated, documented and checked like every oracle
+  fixture** — `M18-20` added `internal/schedule/testdata/weights.anki21b.apkg` and
+  `tools/anki-oracle/weights_fixture.py`. The script writes only to that path; it has no output-directory
+  argument, so it cannot be run without overwriting the committed file. It applies none of the fixed ids,
+  guids, collection creation time and zip entry times that `generate.py` applies. The committed file
+  holds a wall-clock note id (`1793503045498`), a random guid and wall-clock zip entry times, so a rerun
+  cannot reproduce it. `tools/anki-oracle/README.md` names neither the script nor the fixture. Its
+  opening says that the tool writes to `internal/notetype/testdata/anki/`, and its determinism check
+  covers only that directory. Section 2.7 of `AGENTS.md` says that the fixtures under
+  `internal/notetype/testdata/anki/` are generated by `tools/anki-oracle` from the reference version, so a
+  fixture outside that directory escapes the rule and the check. `oldWeightsArchive` in
+  `internal/schedule/anki_weights_import_test.go` also discards the error of `reader.Close()`, the defect
+  `M18-71` removed from the store tests. The fix: `generate.py` builds the schema-18 weights package into
+  `internal/notetype/testdata/anki/` with the same fixed values it uses for its other packages, and
+  `weights_fixture.py` is deleted. `TestAnkiImportWeightsSchedule` reads the package from there. The
+  README's fixture catalogue lists it. `oldWeightsArchive` checks the `Close` error. *Acceptance:* the
+  README's determinism check reports the new package as `OK` after a regeneration;
+  `TestAnkiImportWeightsSchedule` passes on both drivers with its `schema_18` case;
+  `internal/schedule/testdata/weights.anki21b.apkg` and `tools/anki-oracle/weights_fixture.py` no longer
+  exist. Evidence is the oracle script's output, the `sha256sum -c` output and the raw scoped `go test`
+  and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set.
+
+- [ ] **M18-101 The `learning-due` regeneration rule is measured and the README check is consistent** —
+  `M18-78` asked for two runs of `generate.py` that produce byte-identical `learning-due` files. It was
+  closed (`10f8a14`) by a README paragraph instead. That paragraph says that Anki writes an intraday due
+  "from the time `answerCard` runs" and that no offset applied afterwards reproduces the file. The
+  committed fixture suggests another cause. Five intraday cards answered 1 ms apart, all with `ivl` -60,
+  have dues 62 214, 69 213, 66 212, 67 211 and 68 210 ms after their answer times. That spread of 7 s does
+  not follow the answer order, which timing alone cannot produce. It fits a learning-step fuzz seeded per
+  card, where the card id is itself a wall-clock value. The README's procedure also contradicts itself.
+  `generate.py` rebuilds the `learning-due` pair on every run, so "regenerated only when its rule changes"
+  is not enforced. After any run, `sha256sum -c` reports both files as `FAILED` and `git status --short`
+  lists them, while line 62 says that the two commands "must report every file as `OK` and print nothing".
+  The exception names only the `.apkg`, but `learning-due.golden.json` drifts with it. The fix has two
+  parts. First, measure with the oracle whether the due offsets repeat when the cards' ids and the
+  collection's creation time are fixed before `answerCard` runs; record the measured offsets of two runs
+  in the README. Second, if they repeat, `generate.py` fixes those values and the pair joins the
+  determinism check. If they do not repeat, `generate.py` leaves the committed pair untouched unless it is
+  given a flag that rebuilds it, and the README names both files, the flag and the check that then
+  passes. *Acceptance:* two runs of the README's determinism check, without the flag, report every file
+  as `OK` and print nothing; `TestAnkiLearningDueOraclePackage` passes on both drivers. Evidence is the
+  oracle's printed offsets for two runs, both `sha256sum -c` outputs and the raw scoped `go test` output,
+  the PostgreSQL run with `TEST_PG_DSN` set.
+
+- [ ] **M18-102 The closing evidence the reviewed tasks lack is recorded** — section 7 of `AGENTS.md`
+  lets an entry leave the backlog only with evidence, and these closing commits lack the evidence their
+  acceptance named. `M18-20` (`16b130f`) says the work landed in `63c508c`, a commit that no branch
+  contains; it landed in `c1f061a`. The commit also lacks the oracle script's output. `M18-53`
+  (`26378c3`) describes the run with the `duration = &value` assignment removed but quotes no output.
+  `M18-62` (`6227474`) has no run with the per-card `card_states` query. `M18-67` (`7c5e2e5`) has no
+  `npm --prefix frontend run build` output. `M18-71` (`1d69164`) has no `git grep -n 'zip.NewWriter'`
+  output. `M18-73` (`cb025dc`) has no grep output, and its PostgreSQL run used `-run
+  'TestPresetWeights|TestAnkiExport'`. That pattern matches neither `TestAnkiWeights` nor
+  `TestExportAnkiEmptyPresetWeights`, and for `internal/schedule` its output reads `no tests to run`.
+  `M18-75` (`39ab895`) and `M18-76` (`b2a4f9f`) have no PostgreSQL run. `M18-77` (`3abdd81`) paraphrases
+  its mutation run instead of quoting it. `M18-22`, `M18-28`, `M18-35`, `M18-45`, `M18-55`, `M18-63` and
+  `M18-72` quote none of the grep outputs their acceptance named. The review re-ran the code-level
+  commands on `main`, and each of them passed. Those runs are recorded nowhere. The fix: the parent re-runs
+  each listed acceptance command on `main`, the mutation runs through `go test -overlay` so that no tracked
+  file changes, and quotes the raw output in one `docs(roadmap)` commit that names every listed ID. A
+  command whose subject a later commit removed is named with that commit instead of output; `M18-74`'s
+  `TestImportPresetModes`, removed by `f2adaab`, is one such command, and `M18-97` replaces its cases. A
+  run that fails becomes a new entry and is not fixed under this ID. Only the parent does this, with the
+  maintainer present. *Acceptance:* the commit quotes, for each listed ID, the raw output of its
+  acceptance command or the commit that removed its subject. Evidence is that commit.
 
 
 
