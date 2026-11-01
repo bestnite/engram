@@ -23,15 +23,19 @@ const (
 // GradeMapping maps a score in [0,1] to a rating level. It mirrors the JSON
 // stored in preset.grade_mapping, so the caller can unmarshal the preset value
 // into this type and pass it in GradeContext.Mapping. A zero value falls back
-// to the defaults field by field.
+// to the defaults field by field; a nil threshold means "unset", so an
+// intentional 0 survives the defaults rule.
 type GradeMapping struct {
-	Version       int     `json:"version"`
-	Full          int     `json:"full"`
-	Partial       int     `json:"partial"`
-	None          int     `json:"none"`
-	FullThreshold float64 `json:"full_threshold,omitempty"`
-	NoneThreshold float64 `json:"none_threshold,omitempty"`
+	Version       int      `json:"version"`
+	Full          int      `json:"full"`
+	Partial       int      `json:"partial"`
+	None          int      `json:"none"`
+	FullThreshold *float64 `json:"full_threshold,omitempty"`
+	NoneThreshold *float64 `json:"none_threshold,omitempty"`
 }
+
+// thresholdPtr returns a pointer to v, for the threshold fields' "set" state.
+func thresholdPtr(v float64) *float64 { return &v }
 
 // DefaultGradeMapping returns the default mapping: all correct is Good, a
 // partial score is Hard, and all wrong is Again.
@@ -41,8 +45,8 @@ func DefaultGradeMapping() GradeMapping {
 		Full:          RatingGood,
 		Partial:       RatingHard,
 		None:          RatingAgain,
-		FullThreshold: 1,
-		NoneThreshold: 0,
+		FullThreshold: thresholdPtr(1),
+		NoneThreshold: thresholdPtr(0),
 	}
 }
 
@@ -81,8 +85,10 @@ func MarshalGradeMapping(mapping GradeMapping) (string, error) {
 // GradeMappingVersion is the structure version this package understands.
 const GradeMappingVersion = 1
 
-// validate checks the version, the rating range and the threshold ordering.
-// Errors name the offending value so a preset edit can show it.
+// validate checks the version, the rating range and the threshold domain: a
+// threshold must be finite, none_threshold within [0,1] and full_threshold
+// within (none_threshold,1]. Errors name the offending value so a preset edit
+// can show it.
 func (m GradeMapping) validate() error {
 	if m.Version != 0 && m.Version != GradeMappingVersion {
 		return fmt.Errorf("grade mapping: unsupported version %d", m.Version)
@@ -96,9 +102,19 @@ func (m GradeMapping) validate() error {
 			return fmt.Errorf("grade mapping: %s rating %d out of range 1-4", entry.name, entry.rating)
 		}
 	}
-	if resolved.FullThreshold <= resolved.NoneThreshold {
+	if resolved.FullThreshold == nil || resolved.NoneThreshold == nil {
+		return errors.New("grade mapping: thresholds must resolve to a value")
+	}
+	none, full := *resolved.NoneThreshold, *resolved.FullThreshold
+	if math.IsNaN(none) || math.IsInf(none, 0) || math.IsNaN(full) || math.IsInf(full, 0) {
+		return fmt.Errorf("grade mapping: thresholds must be finite (none_threshold %g, full_threshold %g)", none, full)
+	}
+	if none < 0 || full > 1 {
+		return fmt.Errorf("grade mapping: thresholds must lie in [0,1] (none_threshold %g, full_threshold %g)", none, full)
+	}
+	if full <= none {
 		return fmt.Errorf("grade mapping: full_threshold (%g) must be greater than none_threshold (%g)",
-			resolved.FullThreshold, resolved.NoneThreshold)
+			full, none)
 	}
 	return nil
 }
@@ -117,10 +133,10 @@ func (m GradeMapping) withDefaults() GradeMapping {
 	if m.None == 0 {
 		m.None = defaults.None
 	}
-	if m.FullThreshold <= 0 {
+	if m.FullThreshold == nil {
 		m.FullThreshold = defaults.FullThreshold
 	}
-	if m.NoneThreshold <= 0 {
+	if m.NoneThreshold == nil {
 		m.NoneThreshold = defaults.NoneThreshold
 	}
 	return m
@@ -135,9 +151,9 @@ func (m GradeMapping) RatingFor(score float64) int {
 	}
 	score = math.Max(0, math.Min(1, score))
 	switch {
-	case score >= resolved.FullThreshold:
+	case score >= *resolved.FullThreshold:
 		return resolved.Full
-	case score <= resolved.NoneThreshold:
+	case score <= *resolved.NoneThreshold:
 		return resolved.None
 	default:
 		return resolved.Partial

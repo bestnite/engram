@@ -1175,7 +1175,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   finding. Verified by tracing the three call sites; no command needed. *Acceptance:* resolve the default
   in `New` so the constant and the comment become true, or delete the constant and document ten minutes.
 
-- [ ] **M19-35 The grade-mapping thresholds are not range-checked, so a perfect score can map to `Again`** —
+- [x] **M19-35 The grade-mapping thresholds are not range-checked, so a perfect score can map to `Again`** —
   *nit.* `validate` checks version and rating range but not the threshold domain
   (`internal/answer/grade.go:86-104`), `withDefaults` treats every `<= 0` threshold as unset (`:106-127`),
   and `RatingFor` clamps the score into `[0,1]` (`:131-145`). Observed: `{"full_threshold":2}` makes
@@ -1186,6 +1186,54 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `grade_mapping_json` today — the preset request struct has no such field and the `.apkg` import carries
   none — so this is a latent validation gap, not a currently reachable defect. *Acceptance:* validate
   `0 <= none_threshold < full_threshold <= 1` and make "unset" explicit so an intentional 0 survives.
+  *Closed by this commit (`fix(answer): refuse a grade-mapping threshold outside its domain`).*
+  `GradeMapping.FullThreshold` and `NoneThreshold` are `*float64` (`internal/answer/grade.go:33-34`), so a nil
+  threshold means "unset" and an explicit `0` is kept; `withDefaults` (`:122`) substitutes only a nil value, and
+  `RatingFor` (`:147`) dereferences the resolved pair. `validate` (`:92`) now refuses a non-finite threshold, a
+  `none_threshold` below 0, a `full_threshold` above 1 and a `full_threshold` not greater than `none_threshold`,
+  naming both values. A mapping outside that domain therefore no longer parses into a rating, so the append-only
+  `reviews.rating` cannot be written from it. No transport writes `grade_mapping_json` today, so this closes the
+  latent gap the entry describes rather than a reachable request path.
+  `TestGradeMappingThresholdValidation`, `TestGradeMappingIntentionalZeroThreshold`,
+  `TestGradeMappingRefusesNonFiniteThreshold` and `TestGradeMappingDefaultsStillApply`
+  (`internal/answer/grade_threshold_test.go`) cover the five refused raw mappings, an explicit `0` surviving parse,
+  marshal and round trip with the ratings it produces, a NaN and an infinite threshold, and the absent-threshold
+  default. Raw output of `go test ./internal/answer/ -run 'TestGradeMapping' -count=1 -v`:
+  ```
+  === RUN   TestGradeMappingDefaults
+  --- PASS: TestGradeMappingDefaults (0.00s)
+  === RUN   TestGradeMappingCustom
+  --- PASS: TestGradeMappingCustom (0.00s)
+  === RUN   TestGradeMappingThresholdValidation
+  === RUN   TestGradeMappingThresholdValidation/full_threshold_above_one
+  === RUN   TestGradeMappingThresholdValidation/both_thresholds_above_one
+  === RUN   TestGradeMappingThresholdValidation/negative_none_threshold
+  === RUN   TestGradeMappingThresholdValidation/none_threshold_above_one
+  === RUN   TestGradeMappingThresholdValidation/full_threshold_not_above_none_threshold
+  --- PASS: TestGradeMappingThresholdValidation (0.00s)
+      --- PASS: TestGradeMappingThresholdValidation/full_threshold_above_one (0.00s)
+      --- PASS: TestGradeMappingThresholdValidation/both_thresholds_above_one (0.00s)
+      --- PASS: TestGradeMappingThresholdValidation/negative_none_threshold (0.00s)
+      --- PASS: TestGradeMappingThresholdValidation/none_threshold_above_one (0.00s)
+      --- PASS: TestGradeMappingThresholdValidation/full_threshold_not_above_none_threshold (0.00s)
+  === RUN   TestGradeMappingIntentionalZeroThreshold
+  --- PASS: TestGradeMappingIntentionalZeroThreshold (0.00s)
+  === RUN   TestGradeMappingRefusesNonFiniteThreshold
+  === RUN   TestGradeMappingRefusesNonFiniteThreshold/NaN
+  === RUN   TestGradeMappingRefusesNonFiniteThreshold/positive_infinity
+  --- PASS: TestGradeMappingRefusesNonFiniteThreshold (0.00s)
+      --- PASS: TestGradeMappingRefusesNonFiniteThreshold/NaN (0.00s)
+      --- PASS: TestGradeMappingRefusesNonFiniteThreshold/positive_infinity (0.00s)
+  === RUN   TestGradeMappingDefaultsStillApply
+  --- PASS: TestGradeMappingDefaultsStillApply (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/answer	0.002s
+  ```
+  With only the new domain block removed from `validate`, the same run failed on
+  all five refusal cases with `ParseGradeMapping(...) error = nil, want the threshold refused` and
+  `validate with none_threshold NaN error = nil, want it refused` for both non-finite cases.
+  `go vet ./internal/answer/`, `go test ./internal/answer/ -count=1`, `go test ./internal/store/ -run 'TestPreset'
+  -count=1` and `go test ./internal/api/ -run 'TestGrade|TestPreset|TestReview' -count=1` pass.
 
 - [ ] **M19-36 Three test defects that will not fail when the behaviour breaks** — *nit.*
   (a) `internal/schedule/actions_test.go:137-139` compares `restored.ScheduledDays` with `afterFirst`'s in a
