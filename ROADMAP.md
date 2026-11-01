@@ -10,6 +10,53 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 
 ## 1. Task backlog
 
+### M18 — Anki replay review follow-ups
+
+- [ ] **M18-108 Preserve memory on imported unselected grades** — In
+  `internal/store/anki_import.go`, carry the preceding selected row's memory onto written
+  unselected grades within or after the selected window, including cram rows. Preserve the
+  carried final memory through the last written grade. Add regression coverage in
+  `internal/schedule/anki_import_undo_test.go`.
+  *Acceptance:* importing a cram-tail package, submitting a native grade and undoing it succeeds
+  and restores the imported scheduling state on SQLite and PostgreSQL; an interior cram row
+  preserves its preceding memory; missing-memory undo remains fail-safe.
+  *Evidence:* raw output of targeted store replay and schedule imported-undo tests on both
+  databases, plus scoped vet and the reviewed diff, recorded when closing this entry.
+- [ ] **M18-109 Measure unpinned replay rules with Anki** — Extend
+  `tools/anki-oracle/generate.py` and regenerate oracle packages and goldens for incomplete
+  history starting with an interval of at most -86400 seconds and FSRS-produced revlog factors
+  at most 1100 with carried card memory removed. Update replay tests and measured-scope counts
+  in `AGENTS.md`, the oracle README and this release ledger.
+  *Acceptance:* Anki 26.9.3 `compute_memory_state()` supplies expected states; SQLite and
+  PostgreSQL match within 1e-4; targeted mutations of each rule fail its new fixture.
+  *Evidence:* oracle generation output, fixture input inspection, both database test outputs,
+  mutation failures and scoped vet, recorded when closing this entry.
+- [ ] **M18-110 Stop approximation warnings for aligned partial history** — In
+  `internal/store/anki_import.go`, count only genuinely approximate paths for the import's
+  "not aligned with Anki" warning; incomplete selected history alone is not approximation.
+  *Acceptance:* tests distinguish aligned incomplete history from the no-selected-history
+  fallback; carried memory does not spuriously warn; import replay behaviour is unchanged.
+  *Evidence:* raw targeted store test output on SQLite and PostgreSQL, scoped vet and the
+  reviewed diff, recorded when closing this entry.
+- [ ] **M18-111 Document last usable review and nullable durations** — Correct stale
+  last-kept-row comments in `internal/store/anki_import.go` and the scheduling release ledger
+  to state the `lastUsable` fallback, including cram rows after the last reset. Document that
+  `duration_days` outside the selected window is NULL and has no reader; keep that behaviour.
+  *Acceptance:* comments and ledger describe the implemented precedence and duration scope;
+  repository searches confirm no duration reader and no stale last-kept-time wording.
+  *Evidence:* search results, reviewed diff and targeted store progress tests, recorded when
+  closing this entry.
+- [ ] **M18-112 Make oracle reproduction instructions portable and precise** — Update
+  `tools/anki-oracle/README.md` to use a repository-local checksum path. Explain that
+  environment-0 through environment-5 all have stability 30 and do not distinguish timezone
+  through S/D; measured `next_day_at` assertions and New York winter/summer controls constrain
+  configuration behaviour.
+  *Acceptance:* the documented checksum command runs from the repository root without a
+  pre-existing external temporary directory; existing fixtures stay unchanged; the README
+  describes the actual assertions without claiming S/D distinguishes environments 0–5.
+  *Evidence:* checksum verification output, fixture/assertion inspection and the reviewed diff,
+  recorded when closing this entry.
+
 ### M10 — Future work (not part of the current release)
 
 These tasks are recorded so the design keeps room for them. They are not part of the current
