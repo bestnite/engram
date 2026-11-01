@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"os"
 	"strconv"
@@ -501,7 +502,9 @@ type mediaWrite struct {
 // cleanupMediaWrites deletes media files this import wrote to disk but which, because the transaction rolled back, have no metadata referencing them.
 //
 // It only deletes files this process wrote this time; if a (concurrent) other committed transaction already references the sha's metadata row,
-// the file is kept -- it is no longer an orphan. A failed delete is simply ignored (a file already gone or a permission problem does not affect correctness,
+// the file is kept -- it is no longer an orphan. Deletion requires proof of absence: a failed lookup proves nothing, so the file is kept and the
+// failed cleanup is reported, because the lookup often fails exactly when it matters (the context was cancelled after a concurrent commit).
+// A failed delete is simply ignored (a file already gone or a permission problem does not affect correctness,
 // the worst case is falling back to the behaviour from before the fix).
 func (s *DeckStore) cleanupMediaWrites(ctx context.Context, writes []mediaWrite) {
 	if len(writes) == 0 {
@@ -509,7 +512,12 @@ func (s *DeckStore) cleanupMediaWrites(ctx context.Context, writes []mediaWrite)
 	}
 	store := NewMediaStore(s.db)
 	for _, w := range writes {
-		if row, err := store.BySha256(ctx, w.sha); err == nil && row != nil {
+		row, err := store.BySha256(ctx, w.sha)
+		if err != nil {
+			slog.Warn("media cleanup kept a file whose metadata lookup failed", "sha256", w.sha, "path", w.abs, "error", err)
+			continue
+		}
+		if row != nil {
 			continue
 		}
 		if err := os.Remove(w.abs); err != nil && !errors.Is(err, os.ErrNotExist) {
