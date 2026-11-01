@@ -91,8 +91,9 @@ drift apart.
 | `typeanswer.anki21b.apkg` | `collection.anki21b` | type-in comparison (M17-11) |
 | `notetype-import.anki21b.apkg` | `collection.anki21b` | two note types, one of which no note uses (M17-54) |
 | `image-occlusion.anki21b.apkg` | `collection.anki21b` | one note per shape kind, a group of two shapes, and the inactive-mask mode (M17-62) |
+| `weights.anki21b.apkg` | `collection.anki21b`, schema 18 | one note and a deck configuration with non-default FSRS weights |
 
-Each package is imported back into a fresh collection at the end of the run, and the note guids
+Each rendering package is imported back into a fresh collection at the end of the run, and the note guids
 and card count must match its golden. A package that cannot be imported fails the run.
 
 `notetype-import` is the one fixture whose package is not written by the exporter untouched.
@@ -379,5 +380,5 @@ packages store note field values, not rendered output, so they carry no host nam
 - Template error codes. Anki renders its own English error text for an unknown field, an unclosed
   conditional or a missing cloze number, while the Go ports return stable error codes the caller
   localises. The error text is not a contract, so no fixture records it.
-- Scheduling beyond `memory-replay` and `learning-due`, deck configuration and browser-only
-  rendering. The other packages are exported without scheduling or deck configurations.
+- Scheduling beyond `memory-replay` and `learning-due`, deck configuration beyond the FSRS weights
+  in `weights`, and browser-only rendering. The rendering packages omit scheduling and deck configurations.

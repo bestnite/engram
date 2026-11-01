@@ -1952,6 +1952,30 @@ def print_table() -> None:
         print("| `%s` | %s | %s | `%s` |" % (rule, requirement, fixture, notes))
 
 
+def build_weights_fixture(workdir: Path) -> None:
+    """Export non-default FSRS parameters in a deterministic schema-18 package."""
+    weights = [0.5, 1.5, 2.5, 3.5, 4.5, 3.5, 3.5, 0.05, 1.0, 0.2, 0.8,
+               1.5, 0.06, 0.3, 1.6, 0.6, 1.9, 0.5, 0.1, 0.07, 0.15]
+    col = Collection(str(workdir / "weights-source.anki2"))
+    raw = workdir / "weights.raw.apkg"
+    try:
+        config = col.decks.get_config(1)
+        config["fsrsParams6"] = weights
+        col.decks.update_config(config)
+        stabilise_notetype_ids(col)
+        note = col.new_note(col.models.by_name("Basic"))
+        note.guid = "weights-one"
+        note["Front"] = "question"
+        note["Back"] = "answer"
+        col.add_note(note, 1)
+        col.export_anki_package(out_path=str(raw), options=ExportAnkiPackageOptions(
+            with_scheduling=True, with_deck_configs=True, with_media=False, legacy=False),
+            limit=ExportLimit())
+    finally:
+        col.close()
+    rewrite_package(raw, OUT_DIR / "weights.anki21b.apkg", fmt="anki21b", workdir=workdir)
+
+
 def build_memory_fixture(workdir: Path) -> None:
     """Keep the scheduling history in a deterministic legacy package."""
     package = OUT_DIR / "memory-replay.anki2.apkg"
@@ -2155,6 +2179,7 @@ def main(argv: list[str]) -> int:
                 golden["import_note_types"] = imported[package.fixture]
             write_json(OUT_DIR / ("%s.golden.json" % package.fixture), golden)
         build_memory_fixture(workdir)
+        build_weights_fixture(workdir)
         if "--rebuild-learning-due" in argv:
             build_learning_due_fixture(workdir)
     finally:

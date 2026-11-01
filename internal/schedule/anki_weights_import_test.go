@@ -37,7 +37,9 @@ func oldWeightsArchive(t *testing.T, input []byte, key string, weights []float64
 		if err != nil {
 			t.Fatal(err)
 		}
-		reader.Close()
+		if err := reader.Close(); err != nil {
+			t.Fatal(err)
+		}
 		if f.Name == "collection.anki21" {
 			path := filepath.Join(t.TempDir(), "collection.db")
 			if err := os.WriteFile(path, data, 0600); err != nil {
@@ -144,7 +146,7 @@ func TestAnkiImportWeightsSchedule(t *testing.T) {
 					}
 					if tc.modern {
 						var err error
-						data, err = os.ReadFile("testdata/weights.anki21b.apkg")
+						data, err = os.ReadFile("../notetype/testdata/anki/weights.anki21b.apkg")
 						if err != nil {
 							t.Fatal(err)
 						}
