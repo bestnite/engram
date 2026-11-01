@@ -538,12 +538,40 @@ func requestLogger(logger *slog.Logger) gin.HandlerFunc {
 		c.Next()
 		logger.Info("http request",
 			"method", c.Request.Method,
-			"path", c.Request.URL.Path,
+			"path", redactedRequestPath(c.Request.URL.Path),
 			"status", c.Writer.Status(),
 			"duration_ms", time.Since(start).Milliseconds(),
 			"client_ip", c.ClientIP(),
 		)
 	}
+}
+
+// redactedRequestPath replaces the path parameter that is itself a credential with a placeholder.
+//
+// The frame-media token authorizes a request without a session, and the package transfer tickets
+// authorize an upload or a download the same way, so writing either to the log would persist a
+// live bearer credential for its whole lifetime. The segments after the token stay in the line:
+// they name content, not authority, and keep the log useful.
+func redactedRequestPath(path string) string {
+	for _, prefix := range []string{
+		"/fm/",
+		"/api/v1/decks/import-uploads/",
+		"/api/v1/decks/export-downloads/",
+	} {
+		if !strings.HasPrefix(path, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(path, prefix)
+		token, tail, found := strings.Cut(rest, "/")
+		if token == "" {
+			return path
+		}
+		if !found {
+			return prefix + "<token>"
+		}
+		return prefix + "<token>/" + tail
+	}
+	return path
 }
 
 // recovery catches a handler panic, logs one line in English and returns 500, so a single request cannot take the process down.
