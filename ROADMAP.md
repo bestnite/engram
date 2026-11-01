@@ -5,6 +5,16 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 — the checkbox form, ID retirement, the acceptance evidence, the release cut — live in
 `AGENTS.md` section 7; read that first.
 
+- [ ] **M18-103 The `M18-77` mutation run is reproduced through `go test -overlay`** — `M18-77`
+  (`3abdd81`) claims that swapping the replay branch for the SM-2 branch turns sixteen cases red, and
+  `M18-102` could not reproduce that swap: the two branches live in the same function and the mutation
+  the closing commit describes is not written down anywhere a later run can apply it. The fix: express
+  the swap as an overlay patch of `deriveAnkiMemory` in `internal/store/anki_import.go`, run
+  `go test -overlay=... ./internal/schedule/ ./internal/store/ -run TestImportedAnkiMemoryPreview
+  -count=1`, and quote the raw failing output together with the passing run without the overlay.
+  *Acceptance:* the commit quotes both runs, and `git status --short` is empty afterwards, proving the
+  overlay touched no tracked file. Evidence is that commit.
+
 ---
 
 ## 1. Task backlog
@@ -275,31 +285,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   states the re-import rule in those words. Only the parent edits `AGENTS.md`, with the maintainer
   present. *Acceptance:* section 2.7 of `AGENTS.md` names `reuse`, `copy` and `last_review_at`. Evidence
   is the `AGENTS.md` diff.
-
-- [ ] **M18-102 The closing evidence the reviewed tasks lack is recorded** — section 7 of `AGENTS.md`
-  lets an entry leave the backlog only with evidence, and these closing commits lack the evidence their
-  acceptance named. `M18-20` (`16b130f`) says the work landed in `63c508c`, a commit that no branch
-  contains; it landed in `c1f061a`. The commit also lacks the oracle script's output. `M18-53`
-  (`26378c3`) describes the run with the `duration = &value` assignment removed but quotes no output.
-  `M18-62` (`6227474`) has no run with the per-card `card_states` query. `M18-67` (`7c5e2e5`) has no
-  `npm --prefix frontend run build` output. `M18-71` (`1d69164`) has no `git grep -n 'zip.NewWriter'`
-  output. `M18-73` (`cb025dc`) has no grep output, and its PostgreSQL run used `-run
-  'TestPresetWeights|TestAnkiExport'`. That pattern matches neither `TestAnkiWeights` nor
-  `TestExportAnkiEmptyPresetWeights`, and for `internal/schedule` its output reads `no tests to run`.
-  `M18-75` (`39ab895`) and `M18-76` (`b2a4f9f`) have no PostgreSQL run. `M18-77` (`3abdd81`) paraphrases
-  its mutation run instead of quoting it. `M18-22`, `M18-28`, `M18-35`, `M18-45`, `M18-55`, `M18-63` and
-  `M18-72` quote none of the grep outputs their acceptance named. The review re-ran the code-level
-  commands on `main`, and each of them passed. Those runs are recorded nowhere. The fix: the parent re-runs
-  each listed acceptance command on `main`, the mutation runs through `go test -overlay` so that no tracked
-  file changes, and quotes the raw output in one `docs(roadmap)` commit that names every listed ID. A
-  command whose subject a later commit removed is named with that commit instead of output; `M18-74`'s
-  `TestImportPresetModes`, removed by `f2adaab`, is one such command, and `M18-97` replaces its cases. A
-  run that fails becomes a new entry and is not fixed under this ID. Only the parent does this, with the
-  maintainer present. *Acceptance:* the commit quotes, for each listed ID, the raw output of its
-  acceptance command or the commit that removed its subject. Evidence is that commit.
-
-
-
 
 ---
 
