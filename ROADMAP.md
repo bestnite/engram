@@ -559,35 +559,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `M18-26` and `cards_skipped`; one ledger row names `M18-19`. Evidence is the output of
   `grep -n -E 'M18-(19|23|24|25|26)\b|cards_skipped' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-74 The `M18-42` refusal is tested on every transport, and the refusal cases carry names** —
-  `M18-42` named five entries that dropped a `preset_id` sent with an existing-deck target and no
-  `preset_mode`: the multipart route, the URL import, the upload ticket, and the `import_deck` and
-  `create_import_upload` MCP tools. The landed tests cover the multipart route
-  (`TestImportMultipartRejectsPresetOptions`) and the upload ticket (`TestImportUploadPresetModes`) only.
-  `TestImportURLPresetSelection` in `internal/api/package_url_test.go` and
-  `TestImportToolsRejectPresetOptions` in `internal/mcp/package_upload_test.go` have no such case. If one
-  of those entries stopped passing the request through `ValidateImportPreset`, it would drop the id again
-  and no test would fail. The behaviour itself is correct on `main`. Measured with a temporary test:
-  `POST /api/v1/decks/import-url` with `target` `into_deck:<public id>` of a deck the caller owns and the
-  caller's own `preset_id` answers 400 `invalid_request` and makes no fetcher call, and both MCP tools
-  answer `invalid_request: The request is invalid. — invalid preset selection`. Second, the refusal cases
-  of `TestImportPresetModes` in `internal/store/package_preset_mode_test.go` run as subtests named `#00`
-  to `#13`. `fmtOptions` encodes `PackageImportOptions` with `json.Marshal`, which fails on the `Now`
-  function field, and it discards the error. Every name is therefore empty, and a failing case cannot be
-  identified from the output. The fix adds and changes tests only. `TestImportURLPresetSelection` gains
-  a refused case with `target` `into_deck:<public id>` of a deck the caller owns, the caller's own
-  `preset_id` and no `preset_mode`. Like the existing refused cases, it is answered with 400
-  `invalid_request`, makes no fetcher call and spends no rate-limit quota. `TestImportToolsRejectPresetOptions`
-  gains, for both tools, a case with `target` `into_deck:<public id>` of a deck the caller owns, the
-  caller's own `preset_id` and no `preset_mode`. It is answered with `invalid_request` and changes none of
-  the row counts the test checks. Each refusal case of `TestImportPresetModes` gets a name that states its
-  target, its mode, which preset it names and its weights flag, and `fmtOptions` is deleted.
-  *Acceptance:* the new cases pass; the output of
-  `go test -count=1 -v -run TestImportPresetModes ./internal/store/` holds no subtest name that ends in
-  `#` followed by two digits; every existing case keeps its result. Evidence is that output and the raw
-  scoped `go test` and `go vet` output of `internal/store`, `internal/api` and `internal/mcp`, the
-  PostgreSQL run with `TEST_PG_DSN` set.
-
 - [ ] **M18-75 Preset-choice texts state the existing-deck rule, and the remaining preset errors are
   wrapped** — since `M18-42`, `ValidateImportPreset` in `internal/store/package_import.go` treats the two
   kinds of target differently. For `new_deck`, an empty `preset_mode` becomes `new`; `preset_id` is
