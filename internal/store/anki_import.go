@@ -1467,8 +1467,9 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 }
 
 // deriveAnkiMemory writes stability and difficulty into state, using the package
-// values, eligible history, or an SM-2 estimate in that order. It writes replayed
-// memory into rowMemory for kept revlog rows and the final state for the last row.
+// values, eligible history, or an SM-2 estimate in that order. Successful history
+// replay writes memory for each kept row; all paths write the final state for the
+// last kept row when both memory values are present.
 // If HistoricalMemoryStates fails, its error is discarded: the final state remains
 // usable, but earlier rows retain NULL memory because their states are unavailable.
 // The result says whether the card state is usable; false makes the caller skip it
@@ -1480,6 +1481,9 @@ func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *Car
 	if card.Type != 0 && !usableAnkiMemory(state.Stability, state.Difficulty) {
 		var memory *fsrs.MemoryState
 		var computeErr error
+		if len(history) == 0 || firstType != 0 {
+			*approximated++
+		}
 		if len(history) > 0 && firstType != 1 {
 			memory, computeErr = engine.MemoryState(history, nil)
 			if computeErr == nil {
@@ -1490,9 +1494,7 @@ func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *Car
 				}
 			}
 		} else {
-			// This SM-2 estimate is not aligned with Anki's memory state; ROADMAP.md
-			// M18-79 measures Anki's selection rule before replacing the approximation.
-			*approximated++
+			// This SM-2 estimate is not aligned with Anki's memory state.
 			interval := float64(card.Interval)
 			if interval < 0 {
 				interval = -interval / 86400
@@ -1530,7 +1532,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	approximated := 0
 	defer func() {
 		if approximated > 0 {
-			slog.Warn("Anki import SM-2 memory approximation is not aligned with Anki", "user_id", userID, "cards", approximated)
+			slog.Warn("Anki import memory approximation is not aligned with Anki", "user_id", userID, "cards", approximated)
 		}
 	}()
 	var user User

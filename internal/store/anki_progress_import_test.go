@@ -198,6 +198,8 @@ func TestAnkiProgressApproximationWarn(t *testing.T) {
 				wantCount int
 			}{
 				{name: "review_first", firstType: 1, wantCount: 2},
+				{name: "relearning_first", firstType: 2, wantCount: 2},
+				{name: "filtered_first", firstType: 3, wantCount: 2},
 				{name: "learning_first", firstType: 0},
 				{name: "no_history", noHistory: true, wantCount: 2},
 			} {
@@ -235,7 +237,7 @@ func TestAnkiProgressApproximationWarn(t *testing.T) {
 					if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &record); err != nil {
 						t.Fatalf("expected one log: %s: %v", logs.String(), err)
 					}
-					if record["level"] != "WARN" || record["msg"] != "Anki import SM-2 memory approximation is not aligned with Anki" || fmt.Sprint(record["user_id"]) != fmt.Sprint(user) || record["cards"] != float64(tc.wantCount) {
+					if record["level"] != "WARN" || record["msg"] != "Anki import memory approximation is not aligned with Anki" || fmt.Sprint(record["user_id"]) != fmt.Sprint(user) || record["cards"] != float64(tc.wantCount) {
 						t.Fatalf("unexpected log: %v", record)
 					}
 					t.Logf("captured warning: %s", bytes.TrimSpace(logs.Bytes()))
