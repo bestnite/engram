@@ -178,21 +178,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   an Anki collection is accepted, because the file name never decides the reader; the full-module gate
   passes. Evidence is the grep output, the test output, and a captured export-then-import round trip.
 
-- [ ] **M18-6 Import page: choose how the preset is created** — this is UI work and belongs to the
-  designer. The import page (`frontend/src/lib/views/ImportView.svelte`) offers the three
-  `preset_mode` values with a preset picker for reuse and copy, and shows the FSRS weight checkbox
-  only for new. The picker lists the caller's presets and sends `preset_id`; a refusal (another
-  user's preset, or weights with reuse or copy) appears as a localised error next to the control and
-  writes nothing. User-facing text comes from the catalog, with identical key sets in
-  `frontend/src/lib/i18n/locales/en.ts` and `zh-CN.ts`. The same page gains the `include_progress`
-  checkbox, off by default, which no page offers today although every other transport accepts it,
-  and the report lists `states_skipped`, `states_discarded`, `reviews_applied`, `reviews_skipped` and
-  `reviews_discarded`, which the page does not show today. *Acceptance:* the three modes are
-  selectable; reuse and copy reveal the picker and hide the weight checkbox; a refused combination
-  shows a localised error and leaves the server write count at zero; the progress checkbox sends
-  `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
-  each mode is reported. Evidence is the component test output and the captured states.
-
 - [ ] **M18-49 The replay selects the rows Anki selects** — `deriveAnkiMemory` in
   `internal/store/anki_import.go` replays the kept rows from an empty state, except when the first kept
   row is a review row (revlog type 1): then it builds SM-2 from the card's `factor` and `ivl` and
