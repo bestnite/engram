@@ -100,6 +100,10 @@ type Command struct {
 	Dir   string    // Working directory; empty means inherit the current process's
 	Env   []string  // Environment variables; nil means inherit the current process's
 	Stdin io.Reader // Standard input; nil means empty
+	// Cleanup releases what the builder created for this run (the optimizer's work directory and the exported
+	// review log). The Runner calls it once after the run reached any terminal state; Complete may already have
+	// removed the same path, so a cleanup must tolerate a missing target.
+	Cleanup func()
 }
 
 // Reporter lets a command builder report stage-level progress (written to jobs.stage).
@@ -457,6 +461,11 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 	if err != nil {
 		r.fail(persistCtx, job.ID, fmt.Sprintf("build command: %v", err), "")
 		return
+	}
+	// The builder may have created files for this run (the exported review log). Release them on every terminal
+	// path, including a failing process, a timeout and an administrator cancel, so they never outlive the run.
+	if cmd.Cleanup != nil {
+		defer cmd.Cleanup()
 	}
 	if strings.TrimSpace(cmd.Name) == "" {
 		r.fail(persistCtx, job.ID, ErrNoCommand.Error(), "")

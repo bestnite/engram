@@ -83,13 +83,20 @@ func NewOptimizer(deps OptimizerDeps) (*Optimizer, error) {
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	return &Optimizer{
+	o := &Optimizer{
 		db:     deps.DB,
 		logger: logger,
 		binary: ResolveOptimizerBinary(deps.Binary, deps.Executable),
 		now:    now,
 		root:   filepath.Join(os.TempDir(), fmt.Sprintf("engram-optimize-%d", os.Getpid())),
-	}, nil
+	}
+	// The work root is named after the process id, so a directory already there was left by an earlier process
+	// with the same id that never reached cleanup; clearing it at startup keeps no exported review log alive
+	// past the run that wrote it.
+	if err := os.RemoveAll(o.root); err != nil {
+		logger.Warn("remove stale optimizer root failed", "root", o.root, "error", err)
+	}
+	return o, nil
 }
 
 // Binary returns the adapter path that will actually be executed, for the startup log to show the "effective value".
@@ -160,18 +167,32 @@ func (o *Optimizer) CommandBuilder() CommandBuilder {
 		exportErr := store.NewReviewStore(o.db).ExportOptimizerLog(ctx, ownerID, *job.TargetID, f)
 		closeErr := f.Close()
 		if exportErr != nil {
+			// The work directory exists by now; do not leave the partial review log beside a failed job.
+			o.discardWorkDir(job)
 			return Command{}, fmt.Errorf("export review log: %w", exportErr)
 		}
 		if closeErr != nil {
+			o.discardWorkDir(job)
 			return Command{}, fmt.Errorf("close review log: %w", closeErr)
 		}
 
 		rep.SetStage(StageTraining)
 		return Command{
-			Name: o.binary,
-			Args: []string{logPath, "--out", filepath.Join(dir, "weights.json")},
-			Dir:  filepath.Dir(o.binary),
+			Name:    o.binary,
+			Args:    []string{logPath, "--out", filepath.Join(dir, "weights.json")},
+			Dir:     filepath.Dir(o.binary),
+			Cleanup: func() { o.discardWorkDir(job) },
 		}, nil
+	}
+}
+
+// discardWorkDir removes a job's working directory, which holds that user's exported review log. It is
+// best-effort: a removal failure is logged, because the caller is already on a terminal path and must not
+// replace the run's own outcome with a cleanup error.
+func (o *Optimizer) discardWorkDir(job *store.Job) {
+	dir := o.jobDir(job)
+	if err := os.RemoveAll(dir); err != nil {
+		o.logger.Warn("remove optimizer work dir failed", "job_id", job.ID, "dir", dir, "error", err)
 	}
 }
 
@@ -184,11 +205,7 @@ func (o *Optimizer) CommandBuilder() CommandBuilder {
 // and leaving zero values means "unavailable", so the page hides the conclusion instead of slandering it as "not improved".
 func (o *Optimizer) Complete(ctx context.Context, job *store.Job, _ Command, _ string) (store.OptimizeResult, error) {
 	dir := o.jobDir(job)
-	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			o.logger.Warn("remove optimizer work dir failed", "job_id", job.ID, "dir", dir, "error", err)
-		}
-	}()
+	defer o.discardWorkDir(job)
 
 	raw, err := readLimitedFile(filepath.Join(dir, "weights.json"), maxAdapterWeightsBytes)
 	if err != nil {

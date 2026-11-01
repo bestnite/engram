@@ -2280,7 +2280,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `NewResolver`, or delete the field and the two comments that promise it; a test sets it and asserts
   `Configured()` is true.
 
-- [ ] **M19-77 The exported review log survives every failed optimisation job** — *nit.* `CommandBuilder`
+- [x] **M19-77 The exported review log survives every failed optimisation job** — *nit.* `CommandBuilder`
   creates the job directory and writes the user's whole review history to `review-log.jsonl`
   (`internal/jobs/optimizer.go:149-167`) under a per-process root that carries the pid (`:91-92`), and only
   `Complete` removes that directory, in a deferred call (`:185-191`). Every other terminal path — the adapter
@@ -2290,6 +2290,36 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   disclosure. Verified by reading the three exit paths; no command was needed. *Acceptance:* remove the job
   directory on every terminal path (a defer in `execute`, or a cleanup call in `fail`) and sweep the per-pid
   roots at startup; a regression runs a failing job and asserts no `review-log.jsonl` remains.
+  *Closed by this commit (`fix(jobs): remove the exported review log on every terminal path`).*
+  `Command` gained `Cleanup func()` (`internal/jobs/jobs.go:106`), and `Runner.execute` defers it as soon as the
+  builder returns a command (`:468`), so an adapter exit code, a timeout, an administrator cancel and a failing
+  `Complete` all release the run's files. `Optimizer.CommandBuilder` sets it to `discardWorkDir`
+  (`internal/jobs/optimizer.go:184`), a best-effort `os.RemoveAll` that logs a failure without replacing the
+  run's outcome (`:192`); the two export-failure returns call the same helper, and `Complete`'s own defer uses it
+  instead of a second copy. `NewOptimizer` removes its per-pid work root at construction (`:97`), so a crash or a
+  restart with the same process id cannot leave an exported log there. A removal failure is still only logged;
+  the file stays until the next startup sweep.
+  `TestFailedJobRemovesTheExportedReviewLog`, `TestOptimizerBuilderRemovesTheWorkDirWhenTheExportFails` and
+  `TestNewOptimizerClearsAStaleRoot` (`internal/jobs/optimizer_cleanup_test.go`) cover a job whose process exits
+  non-zero, a review-log export that fails after the work directory exists, and a stale per-pid root. Raw output
+  of `go test ./internal/jobs/ -run
+  'TestFailedJobRemovesTheExportedReviewLog|TestOptimizerBuilderRemovesTheWorkDirWhenTheExportFails|TestNewOptimizerClearsAStaleRoot' -count=1 -v`:
+  ```
+  === RUN   TestFailedJobRemovesTheExportedReviewLog
+  --- PASS: TestFailedJobRemovesTheExportedReviewLog (0.02s)
+  === RUN   TestOptimizerBuilderRemovesTheWorkDirWhenTheExportFails
+  --- PASS: TestOptimizerBuilderRemovesTheWorkDirWhenTheExportFails (0.01s)
+  === RUN   TestNewOptimizerClearsAStaleRoot
+  --- PASS: TestNewOptimizerClearsAStaleRoot (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/jobs	0.055s
+  ```
+  (The middle case also prints the SQLite driver's `no such table: reviews` line, which is the injected export
+  failure.) With the deferred cleanup, the two builder cleanups and the startup sweep removed, the same run failed
+  with `work dir .../job-1 still exists after the failed job, want it removed`,
+  `work dir .../job-7 still exists after the export failed, want it removed` and
+  `stale root /tmp/engram-optimize-<pid> still exists after NewOptimizer, want it removed`.
+  `go vet ./internal/jobs/` and `go test ./internal/jobs/ -count=1` pass (`4.032s`).
 
 - [x] **M19-78 A note's `extra` can be written and preserved but never read back** — *should-fix.* The import
   schema advertises `extra` as "Free-form metadata kept as-is for the caller and round-tripped on export"
