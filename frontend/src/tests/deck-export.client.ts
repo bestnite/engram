@@ -5,6 +5,7 @@ import { apiClient } from '../lib/api';
 import type { Deck } from '../lib/api';
 import { routeStore, matchRoute } from '../lib/router';
 import { setLocale, formatMessage } from '../lib/i18n';
+import type { SupportedLocale } from '../lib/i18n/types';
 
 /**
  * Deck export dialog in DeckDetailView (package export options):
@@ -40,7 +41,7 @@ describe('DeckDetailView export dialog (package export options)', () => {
     flushSync();
   }
 
-  async function setup(locale = 'zh-CN'): Promise<ReturnType<typeof vi.spyOn>> {
+  async function setup(locale: SupportedLocale = 'zh-CN'): Promise<ReturnType<typeof vi.spyOn>> {
     setLocale(locale);
     window.history.replaceState({}, '', '/decks/d1');
     routeStore.set(matchRoute('/decks/d1'));

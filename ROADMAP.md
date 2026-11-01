@@ -1882,7 +1882,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   the four intervals under the rating buttons from that response, or remove the response field and the
   per-render call so neither the API comment nor the type describes a UI that does not exist.
 
-- [ ] **M19-62 `npm run check` fails on main, so the CI frontend gate is red** — *should-fix.* Eleven type
+- [x] **M19-62 `npm run check` fails on main, so the CI frontend gate is red** — *should-fix.* Eleven type
   errors in two test files: `frontend/src/tests/import-url.client.ts:345,365,394,417,438,466,519,552,588` build
   preset fixtures with the retired `gate: {threshold, current, eligible}` shape, while `OptimizeGate` now
   requires `reviews`, `min` and `shortfall` (`frontend/src/lib/api/types.ts:1376-1381`); the same file at `:464`
@@ -1891,6 +1891,26 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   files`, and `.github/workflows/ci.yml:70` runs that script under `set -euo pipefail`. The 585 tests still pass,
   so nothing else notices the drift. *Acceptance:* `npm run check` exits 0 against fixtures built from the
   current payload shapes.
+  *Closed by this commit (`fix(frontend): build test fixtures from the current payload shapes`).*
+  The two preset fixtures in `import-url.client.ts` carry the current `OptimizeGate` fields
+  (`gate: { reviews: 0, min: 1000, shortfall: 1000, eligible: false }`). Removing the stale `Deck.updated_at`
+  exposed the next missing field, so the same literal now carries the required `role: 'owner'`. In
+  `deck-export.client.ts` the remaining error was not the retired gate block the entry names: `setup(locale =
+  'zh-CN')` inferred `string`, which `setLocale` cannot take, so the parameter is typed
+  `SupportedLocale`. Raw output of `npm run check`:
+  ```
+  svelte-check found 0 errors and 0 warnings
+  ```
+  Before the change the same command ended `svelte-check found 11 errors and 0 warnings in 2 files`, listing
+  the nine `gate` mismatches, `Property 'role' is missing in type ... but required in type 'Deck'` at
+  `import-url.client.ts:464` (reported as `'updated_at' does not exist` while that key was present) and
+  `Argument of type 'string' is not assignable to parameter of type 'SupportedLocale'` at
+  `deck-export.client.ts:44`. The two affected suites pass:
+  `npm run test:client -- src/tests/import-url.client.ts src/tests/deck-export.client.ts` ends
+  ```
+   Test Files  2 passed (2)
+        Tests  44 passed (44)
+  ```
 
 - [ ] **M19-63 A failed privacy-policy read is displayed as "anyone may share with me"** — *should-fix.*
   `loadSharePolicy` swallows the error and leaves the initial value `sharePolicy = 'anyone'`

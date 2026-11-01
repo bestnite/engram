@@ -320,7 +320,7 @@ describe('ImportView — preset modes, progress and counters', () => {
       weights_review_count: null,
       weights_raw: null,
       job: null,
-      gate: { threshold: 1000, current: 0, eligible: false },
+      gate: { reviews: 0, min: 1000, shortfall: 1000, eligible: false },
     },
     {
       id: 'preset-2',
@@ -336,7 +336,7 @@ describe('ImportView — preset modes, progress and counters', () => {
       weights_review_count: null,
       weights_raw: null,
       job: null,
-      gate: { threshold: 1000, current: 0, eligible: false },
+      gate: { reviews: 0, min: 1000, shortfall: 1000, eligible: false },
     },
   ];
 
@@ -461,7 +461,7 @@ describe('ImportView — preset modes, progress and counters', () => {
 
   it('refuses combination: preset_id with an existing-deck target, showing localized error and write count stays 0', async () => {
     vi.spyOn(apiClient, 'getDecks').mockResolvedValue({
-      decks: [{ id: 'deck-42', name: 'Existing Deck', description: '', new_per_day: 20, reviews_per_day: 100, preset_id: 'preset-1', created_at: '', updated_at: '' }],
+      decks: [{ id: 'deck-42', name: 'Existing Deck', description: '', new_per_day: 20, reviews_per_day: 100, preset_id: 'preset-1', created_at: '', role: 'owner' }],
     });
     vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
     const importFile = vi.spyOn(apiClient, 'importDeckPackage');
