@@ -2006,6 +2006,54 @@ def build_memory_fixture(workdir: Path) -> None:
         conn.execute("insert into revlog values (?, ?, -1, ?, ?, ?, ?, 1000, ?)",
                      (stamp, cid, ease, ivl, last, factor, kind))
     conn.commit()
+    conn.close()
+    col = Collection(str(db_path))
+    labels = ("review-lapses", "review-easy", "set-due", "forget", "relearning-start", "second-learning", "learning-reviews", "filtered-off")
+    new_ids = {}
+    for label in labels:
+        note = col.new_note(col.models.by_name("Basic"))
+        note["Front"] = "memory-" + label
+        note["Back"] = label
+        col.add_note(note, 1)
+        new_ids[label] = note.cards()[0].id
+    for label in ("set-due", "forget", "filtered-off"):
+        cid = new_ids[label]
+        col.db.execute("update cards set type=2, queue=2, ivl=30, factor=2500, data='{}' where id=?", cid)
+        if label == "set-due":
+            col.sched.set_due_date([cid], "30!")
+        elif label == "forget":
+            col.sched.forgetCards([cid])
+        else:
+            did = col.decks.new_filtered("Memory filtered")
+            deck = col.decks.get(did)
+            deck["terms"] = [["memory-filtered-off", 100, 0]]
+            deck["resched"] = False
+            col.decks.save(deck)
+            assert col.sched.rebuild_filtered_deck(did).count == 1
+            card = col.get_card(cid)
+            card.start_timer()
+            col.sched.answerCard(card, 1)
+        special = col.db.all("select id, ease, ivl, lastIvl, factor, type from revlog where cid=?", cid)
+        assert len(special) == 1, (label, special)
+        col.db.execute("update revlog set id=? where id=?", base+4*day+labels.index(label), special[0][0])
+    col.close()
+    conn = connect(db_path)
+    histories = {
+        "review-lapses": [(0, 3, 30, 10, 2500, 1), (10, 1, -60, 30, 2500, 2), (11, 1, -60, -60, 2500, 2)],
+        "review-easy": [(0, 3, 30, 10, 2500, 1), (10, 4, 40, 30, 2500, 1), (40, 4, 60, 40, 2500, 1)],
+        "relearning-start": [(0, 1, -60, 30, 2500, 2), (1, 3, 1, -60, 2500, 2)],
+        "second-learning": [(0, 3, 1, 0, 2500, 0), (3, 3, 3, 1, 2500, 1), (20, 3, 20, 3, 2500, 1), (30, 1, -60, 20, 2500, 0), (31, 3, 1, -60, 2500, 0)],
+    }
+    learning = [(0, 3, 1, 0, 2500, 0), (3, 3, 3, 1, 2500, 1), (20, 3, 20, 3, 2500, 1)]
+    for label in ("set-due", "forget", "learning-reviews", "filtered-off"):
+        histories[label] = learning
+    for label, history in histories.items():
+        cid = new_ids[label]
+        conn.execute("update cards set type=2, queue=2, ivl=30, factor=2500, data='{}', odid=0, odue=0, did=1 where id=?", (cid,))
+        for days, ease, ivl, last, factor, kind in history:
+            stamp = base + days*day + 100 + labels.index(label)
+            conn.execute("insert into revlog values (?, ?, -1, ?, ?, ?, ?, 1000, ?)", (stamp, cid, ease, ivl, last, factor, kind))
+    conn.commit()
     conn.execute("vacuum")
     conn.close()
     entries["collection.anki2"] = db_path.read_bytes()
@@ -2020,14 +2068,15 @@ def build_memory_fixture(workdir: Path) -> None:
             package_path=str(package), options=ImportAnkiPackageOptions(
                 with_scheduling=True, with_deck_configs=True)))
         result = {"source": SOURCE, "cards": {}}
-        for name, guid in (("partial", "stock-basic-one"), ("reset", "stock-basic-two")):
-            nid = next(nid for nid in col.find_notes("") if col.get_note(nid).guid == guid)
+        for name in ("partial", "reset", *labels):
+            nid = next(nid for nid in col.find_notes("") if (col.get_note(nid).guid == {"partial": "stock-basic-one", "reset": "stock-basic-two"}.get(name) if name in ("partial", "reset") else col.get_note(nid)["Front"] == "memory-" + name))
             card = col.get_note(nid).cards()[0]
             data = json.loads(col.db.scalar("select data from cards where id=?", card.id))
             assert "s" not in data and "d" not in data, data
             state = col.compute_memory_state(card.id)
             result["cards"][name] = {"stability": state.stability, "difficulty": state.difficulty}
-            print(f"memory-replay {name}: data={data} computed={state}")
+            rows = col.db.all("select id, ease, ivl, lastIvl, factor, type from revlog where cid=? order by id", card.id)
+            print(f"memory-replay {name}: rows={rows} data={data} computed={state}")
         write_json(OUT_DIR / "memory-replay.golden.json", result)
     finally:
         col.close()

@@ -1,12 +1,44 @@
 {
   "cards": {
+    "filtered-off": {
+      "difficulty": 2.1043312549591064,
+      "stability": 63.200775146484375
+    },
+    "forget": {
+      "difficulty": 6.413895130157471,
+      "stability": 20.0
+    },
+    "learning-reviews": {
+      "difficulty": 2.1043312549591064,
+      "stability": 63.200775146484375
+    },
     "partial": {
       "difficulty": 3.7991995811462402,
       "stability": 300.0
     },
+    "relearning-start": {
+      "difficulty": 8.215851783752441,
+      "stability": 1.0
+    },
     "reset": {
       "difficulty": 6.4021148681640625,
       "stability": 1.8867881298065186
+    },
+    "review-easy": {
+      "difficulty": 3.0119054317474365,
+      "stability": 177.0900421142578
+    },
+    "review-lapses": {
+      "difficulty": 9.558306694030762,
+      "stability": 0.49299123883247375
+    },
+    "second-learning": {
+      "difficulty": 6.4021148681640625,
+      "stability": 1.8867881298065186
+    },
+    "set-due": {
+      "difficulty": 2.1043312549591064,
+      "stability": 63.200775146484375
     }
   },
   "source": "anki==26.9.3"
