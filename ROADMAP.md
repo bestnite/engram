@@ -1684,13 +1684,40 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go vet ./internal/auth/ ./internal/web/`, `go test ./internal/auth/ -run 'TestOIDCPending' -count=1` and
   `go test ./internal/web/ -run 'TestOIDC' -count=1` pass.
 
-- [ ] **M19-45 The batch export buffers every package in memory with no cap on the number of decks** —
+- [x] **M19-45 The batch export buffers every package in memory with no cap on the number of decks** —
   *should-fix.* `deckBatchExportZip` writes each package into a `bytes.Buffer`
   (`internal/web/package_web.go:84-85`), loops over the caller-supplied `req.DeckIDs` (`:89-127`) and sends
   the whole buffer at the end (`:137`). Neither the count nor the accumulated size is bounded, so a user
   with enough decks (or a repeated id list) makes the process hold the complete archive in memory. Verified
   by reading the handler; *Unverified:* no measurement. *Acceptance:* cap the deck count and the total bytes
   (413 when exceeded), stream the archive instead of buffering it, and add a test over the count cap.
+  *Closed by this commit (`fix(web): bound the batch export archive`).*
+  `deckBatchExportZip` (`internal/web/package_web.go:82`) now refuses more than `maxBatchExportDecks` (100)
+  ids with 413 and the `request_too_large` code before it resolves anything, and resolves every deck and the
+  caller's role before the first response byte, so a refused deck still answers 404/403 instead of a
+  started-but-empty archive (the old handler closed the zip writer and returned with whatever status was
+  already implied). The archive is written to a temporary file through `countingWriter` instead of a
+  `bytes.Buffer`, so it never sits in process memory; a batch whose packages or finished archive would
+  exceed `maxBatchExportBytes` (512 MiB) answers 413 before any byte is sent, and the finished file is
+  streamed with `c.DataFromReader`. `maxBatchExportBytes` is a variable only so a test can lower it.
+  `TestBatchExportRefusesTooManyDecks` and `TestBatchExportRefusesAnArchiveOverTheByteCap`
+  (`internal/web/package_web_test.go`) send `maxBatchExportDecks+1` ids and a one-deck batch with the byte
+  cap at 1, and assert 413, the `request_too_large` code and no attachment disposition. Raw output of
+  `go test ./internal/web/ -run 'TestBatchExport' -count=1 -v`:
+  ```
+  === RUN   TestBatchExportNamesEntriesAfterDecksWithoutCollisions
+  --- PASS: TestBatchExportNamesEntriesAfterDecksWithoutCollisions (0.03s)
+  === RUN   TestBatchExportRefusesTooManyDecks
+  --- PASS: TestBatchExportRefusesTooManyDecks (0.03s)
+  === RUN   TestBatchExportRefusesAnArchiveOverTheByteCap
+  --- PASS: TestBatchExportRefusesAnArchiveOverTheByteCap (0.02s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.096s
+  ```
+  The same 101-id request against the old handler was accepted:
+  `before fix: 101 deck ids -> status 200, body bytes 182305`.
+  `go test ./internal/web/ -run 'TestBatchExport|TestDeckPackage|TestImportPage' -count=1` passes; the
+  package-wide run still fails on the pre-existing session-rotation assertions recorded under M19-38.
 
 - [x] **M19-46 Any status action other than `disable` enables the account** — *should-fix.*
   `adminUserStatus` treats exactly `"disable"` as disable and every other string as enable

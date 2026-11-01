@@ -2,9 +2,10 @@ package web
 
 import (
 	"archive/zip"
-	"bytes"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 
@@ -66,6 +67,13 @@ type batchExportDeckRequest struct {
 	IncludeWeights  bool     `json:"include_weights"`
 }
 
+// A batch export is a convenience for a handful of decks, not a bulk transfer. Past these limits the
+// request is refused before the archive is built, so one caller cannot make the process hold or spool an
+// unbounded archive. maxBatchExportBytes is a variable so a test can lower it; production never changes it.
+const maxBatchExportDecks = 100
+
+var maxBatchExportBytes int64 = 512 << 20
+
 func (s *Server) deckBatchExportZip(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -80,22 +88,42 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 	if req.IncludeMedia != nil {
 		includeMedia = *req.IncludeMedia
 	}
+	if len(req.DeckIDs) > maxBatchExportDecks {
+		abortBatchExportTooLarge(c, fmt.Sprintf("at most %d decks can be exported at once", maxBatchExportDecks))
+		return
+	}
 
-	var zipBuf bytes.Buffer
-	zw := zip.NewWriter(&zipBuf)
-
-	ctx := c.Request.Context()
-	used := make(map[string]bool, len(req.DeckIDs))
+	// Resolve every deck and the caller's role before the first response byte, so a refused deck can
+	// still answer 403/404 instead of a truncated archive from an already-started response.
+	decks := make([]*store.Deck, 0, len(req.DeckIDs))
 	for _, deckPublicID := range req.DeckIDs {
 		deck, ok := s.deckByPublicID(c, deckPublicID)
 		if !ok {
-			zw.Close()
 			return
 		}
 		if _, ok := s.loadDeckForRole(c, user, deck.ID, store.RoleReader); !ok {
-			zw.Close()
 			return
 		}
+		decks = append(decks, deck)
+	}
+
+	// The archive is written to a temporary file instead of a bytes.Buffer: that keeps a large batch out
+	// of process memory and makes the total size known before the response starts, so an oversized
+	// archive answers 413 rather than streaming a download the client cannot tell is truncated.
+	tmp, err := os.CreateTemp("", "engram-deck-export-*.zip")
+	if err != nil {
+		s.logger.Error("create batch export temp file failed", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+
+	ctx := c.Request.Context()
+	counted := &countingWriter{w: tmp}
+	zw := zip.NewWriter(counted)
+	used := make(map[string]bool, len(decks))
+	for _, deck := range decks {
 		// As with the single export, this goes through the api service, which fills in the media root and clock uniformly.
 		pkg, err := s.api.ExportAnkiPackage(ctx, user.ID, deck.ID, store.PackageOptions{
 			IncludeMedia:    includeMedia,
@@ -105,8 +133,11 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 		})
 		if err != nil {
 			s.logger.Error("export deck package in batch failed", "deck_id", deck.ID, "error", err)
-			zw.Close()
 			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		if counted.n+int64(len(pkg)) > maxBatchExportBytes {
+			abortBatchExportTooLarge(c, "the archive is too large; export the decks one at a time")
 			return
 		}
 		// Every package inside the zip is named after the deck title too; when two decks share a title a sequence number is appended, so entries do not overwrite each other.
@@ -114,13 +145,11 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 		f, err := zw.Create(filename)
 		if err != nil {
 			s.logger.Error("create zip entry failed", "filename", filename, "error", err)
-			zw.Close()
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
 		if _, err := f.Write(pkg); err != nil {
 			s.logger.Error("write zip entry failed", "filename", filename, "error", err)
-			zw.Close()
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -131,10 +160,42 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	// The zip headers and the central directory add bytes beyond the packages themselves.
+	if counted.n > maxBatchExportBytes {
+		abortBatchExportTooLarge(c, "the archive is too large; export the decks one at a time")
+		return
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		s.logger.Error("rewind batch export failed", "error", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
 
-	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", `attachment; filename="engram-decks-export.zip"`)
-	c.Data(http.StatusOK, "application/zip", zipBuf.Bytes())
+	c.DataFromReader(http.StatusOK, counted.n, "application/zip", tmp, map[string]string{
+		"Content-Disposition": `attachment; filename="engram-decks-export.zip"`,
+	})
+}
+
+// abortBatchExportTooLarge answers a batch export past its deck-count or size cap; nothing has been
+// written to the response yet, so the client gets a 413 instead of a partial archive.
+func abortBatchExportTooLarge(c *gin.Context, detail string) {
+	c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": gin.H{
+		"code":    api.CodeRequestTooLarge,
+		"message": api.ErrorMessage(c.Request.Context(), api.CodeRequestTooLarge) + " " + detail,
+	}})
+}
+
+// countingWriter counts the bytes written through it while passing them on, so the archive's exact size
+// is known before it is sent.
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += int64(n)
+	return n, err
 }
 
 // uniqueEntryName registers and returns a unique zip entry name in used: on a collision it appends (2), (3)… before the extension.

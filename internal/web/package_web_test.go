@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"mime"
 	"net/http"
@@ -102,6 +103,53 @@ func TestBatchExportNamesEntriesAfterDecksWithoutCollisions(t *testing.T) {
 	want := []string{"Biology.apkg", "Biology (2).apkg", "a_b.apkg"}
 	if strings.Join(names, "|") != strings.Join(want, "|") {
 		t.Errorf("zip entries = %q, want %q", names, want)
+	}
+}
+
+// TestBatchExportRefusesTooManyDecks asserts the deck-count cap: a request past it is refused with 413
+// before any archive is built, and the body carries the stable code a client can branch on.
+func TestBatchExportRefusesTooManyDecks(t *testing.T) {
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Bulk")
+	ids := make([]string, maxBatchExportDecks+1)
+	for i := range ids {
+		ids[i] = deck.PublicID
+	}
+
+	rec := postJSONWithCSRF(t, srv, "/api/v1/decks/export-zip", map[string]any{"deck_ids": ids}, cookies, csrf)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("POST export-zip with %d decks = %d, want 413 (body %s)", len(ids), rec.Code, snippet(rec.Body.String()))
+	}
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode refusal body %q: %v", snippet(rec.Body.String()), err)
+	}
+	if envelope.Error.Code != "request_too_large" {
+		t.Errorf("refusal code = %q, want %q", envelope.Error.Code, "request_too_large")
+	}
+}
+
+// TestBatchExportRefusesAnArchiveOverTheByteCap asserts the size cap: a batch whose packages would exceed
+// the limit is refused with 413 before the response starts, so no truncated archive is sent.
+func TestBatchExportRefusesAnArchiveOverTheByteCap(t *testing.T) {
+	previous := maxBatchExportBytes
+	maxBatchExportBytes = 1
+	defer func() { maxBatchExportBytes = previous }()
+
+	srv, db, ownerID, cookies, csrf := newNotesServer(t)
+	deck := seedDeck(t, db, ownerID, "Oversize")
+	seedBasic(t, db, deck.ID, "Q1", "A1")
+
+	rec := postJSONWithCSRF(t, srv, "/api/v1/decks/export-zip", map[string]any{"deck_ids": []string{deck.PublicID}}, cookies, csrf)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("POST export-zip over the byte cap = %d, want 413 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if strings.Contains(rec.Header().Get("Content-Disposition"), "attachment") {
+		t.Errorf("refused export still carried an attachment disposition: %q", rec.Header().Get("Content-Disposition"))
 	}
 }
 
