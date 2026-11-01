@@ -2039,7 +2039,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   'TestAnki|TestMedia|TestPackage|TestExportAnki|TestLocalAnki' -count=1` passes on both drivers
   (`41.315s`).
 
-- [ ] **M19-51 Three public helpers have no caller, and one duplicates the frontend's occlusion grammar** —
+- [x] **M19-51 Three public helpers have no caller, and one duplicates the frontend's occlusion grammar** —
   *nit.* `ParseImageOcclusions` and the `ImageOcclusion`, `ImageOcclusionShape` and
   `ImageOcclusionProperty` types (`internal/notetype/cloze.go:407-426,632-668`) are called by nothing
   outside their own tests; the editor they describe parses the same field in TypeScript
@@ -2055,6 +2055,51 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go test ./internal/notetype/ -cover` and a module-wide `grep`. *Acceptance:* delete the two unused
   helpers and keep one implementation of the occlusion grammar, agreeing with the frontend on a stray
   backslash and on an unknown shape kind.
+  *Closed by this commit (`fix(notetype): keep one image-occlusion grammar`).*
+  `ParseImageOcclusions`, `ImageOcclusion` and `ImageOcclusionShape` are deleted; `ImageOcclusionProperty`
+  stays because the renderer's `parseImageCloze` returns it. `Config.Clone` (`internal/notetype/template.go`)
+  and `ExtractClozeHints` with its `collectClozeHints` helper (`internal/notetype/typeanswer.go`) are deleted,
+  so no callerless helper remains. `parseImageCloze` (`internal/notetype/cloze.go:424`) accepts only `rect`,
+  `ellipse`, `polygon` and `text`, and writes a backslash that does not escape `:` or `\` into the value
+  instead of ending the value there, which is what the editor's `decodePropertyValue` and `parseShapeBody` do.
+  `TestParseImageCloze` (`internal/notetype/filters_test.go:390`) gained the stray-backslash and unknown-kind
+  cases. Raw output of `go test ./internal/notetype/ -run 'TestParseImageCloze|TestImageOcclusionReveal|TestRenderGolden' -count=1 -v`:
+  ```
+  === RUN   TestImageOcclusionReveal
+  --- PASS: TestImageOcclusionReveal (0.00s)
+  === RUN   TestParseImageCloze
+  === RUN   TestParseImageCloze/rect
+  === RUN   TestParseImageCloze/escaped_colon
+  === RUN   TestParseImageCloze/a_lone_backslash_stays_in_the_value
+  === RUN   TestParseImageCloze/an_unknown_kind_is_not_a_shape
+  === RUN   TestParseImageCloze/not_an_image_occlusion
+  --- PASS: TestParseImageCloze (0.00s)
+      --- PASS: TestParseImageCloze/rect (0.00s)
+      --- PASS: TestParseImageCloze/escaped_colon (0.00s)
+      --- PASS: TestParseImageCloze/a_lone_backslash_stays_in_the_value (0.00s)
+      --- PASS: TestParseImageCloze/an_unknown_kind_is_not_a_shape (0.00s)
+      --- PASS: TestParseImageCloze/not_an_image_occlusion (0.00s)
+  === RUN   TestRenderGolden
+  === RUN   TestRenderGolden/stock
+      template_golden_test.go:84: stock: 6 note types, 8 notes, 11 cards
+  === RUN   TestRenderGolden/template-syntax
+      template_golden_test.go:84: template-syntax: 10 note types, 23 notes, 24 cards
+  === RUN   TestRenderGolden/template-filters
+      template_golden_test.go:84: template-filters: 8 note types, 8 notes, 8 cards
+  === RUN   TestRenderGolden/cloze
+      template_golden_test.go:84: cloze: 9 note types, 9 notes, 14 cards
+  --- PASS: TestRenderGolden (0.00s)
+      --- PASS: TestRenderGolden/stock (0.00s)
+      --- PASS: TestRenderGolden/template-syntax (0.00s)
+      --- PASS: TestRenderGolden/template-filters (0.00s)
+      --- PASS: TestRenderGolden/cloze (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/notetype	0.005s
+  ```
+  With only the parser's kind check and backslash branch reverted, the two new cases failed with
+  `properties = [{left 0.1} {fill #a}], want [{left 0.1} {fill #a\b} {width 0.3}]` and
+  `parseImageCloze("hexagon:left=0.1:top=0.2") ok = true, want false (shape "hexagon")`.
+  `go test ./internal/notetype/ -count=1` passes.
 
 - [ ] **M19-52 The type-in golden records rendered card HTML that no test compares** — *nit.*
   `internal/notetype/testdata/anki/typeanswer.golden.json` holds `question_nodes_text` and

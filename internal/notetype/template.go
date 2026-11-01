@@ -126,27 +126,6 @@ func CardTemplate(cfg Config, cardTemplate string) (Template, int, error) {
 	return Template{}, 0, fmt.Errorf("notetype: note type declares no template %q", cardTemplate)
 }
 
-// Clone returns a copy of the config whose slices can be modified without
-// affecting the receiver. The renderer and the store only read a config, so a
-// clone is needed only where a caller edits a decoded copy.
-func (c Config) Clone() Config {
-	clone := c
-	clone.Fields = append([]Field(nil), c.Fields...)
-	clone.Templates = make([]Template, len(c.Templates))
-	for i, template := range c.Templates {
-		clone.Templates[i] = template
-		if template.Answer != nil {
-			answer := *template.Answer
-			answer.Bindings = make(map[string]string, len(template.Answer.Bindings))
-			for role, fieldID := range template.Answer.Bindings {
-				answer.Bindings[role] = fieldID
-			}
-			clone.Templates[i].Answer = &answer
-		}
-	}
-	return clone
-}
-
 // Render expands one side of a card template.
 //
 // The front side is the question. The back side is the answer, and it renders

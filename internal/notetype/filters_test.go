@@ -390,12 +390,14 @@ func TestParseImageCloze(t *testing.T) {
 	tests := []struct {
 		name       string
 		text       string
+		valid      bool
 		shape      string
 		properties []ImageOcclusionProperty
 	}{
 		{
 			name:  "rect",
 			text:  "rect:left=0.1:top=0.2",
+			valid: true,
 			shape: "rect",
 			properties: []ImageOcclusionProperty{
 				{Name: "left", Value: "0.1"},
@@ -405,6 +407,7 @@ func TestParseImageCloze(t *testing.T) {
 		{
 			name:  "escaped colon",
 			text:  `rect:left=0.1:text=a\:b`,
+			valid: true,
 			shape: "rect",
 			properties: []ImageOcclusionProperty{
 				{Name: "left", Value: "0.1"},
@@ -412,22 +415,38 @@ func TestParseImageCloze(t *testing.T) {
 			},
 		},
 		{
+			name:  "a lone backslash stays in the value",
+			text:  `rect:left=0.1:fill=#a\b:width=0.3`,
+			valid: true,
+			shape: "rect",
+			properties: []ImageOcclusionProperty{
+				{Name: "left", Value: "0.1"},
+				{Name: "fill", Value: `#a\b`},
+				{Name: "width", Value: "0.3"},
+			},
+		},
+		{
+			name:  "an unknown kind is not a shape",
+			text:  "hexagon:left=0.1:top=0.2",
+			valid: false,
+		},
+		{
 			name:  "not an image occlusion",
 			text:  "rect",
-			shape: "",
+			valid: false,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			shape, properties, ok := parseImageCloze(test.text)
-			if shape == "" {
-				if ok {
-					t.Fatalf("parseImageCloze(%q) accepted a shape without a colon", test.text)
-				}
+			if ok != test.valid {
+				t.Fatalf("parseImageCloze(%q) ok = %v, want %v (shape %q)", test.text, ok, test.valid, shape)
+			}
+			if !ok {
 				return
 			}
-			if !ok || shape != test.shape {
-				t.Fatalf("shape = %q, %v, want %q, true", shape, ok, test.shape)
+			if shape != test.shape {
+				t.Fatalf("shape = %q, want %q", shape, test.shape)
 			}
 			if len(properties) != len(test.properties) {
 				t.Fatalf("properties = %v, want %v", properties, test.properties)

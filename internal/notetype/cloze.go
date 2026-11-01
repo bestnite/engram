@@ -8,9 +8,8 @@
 // The port covers the whole file: the tokenizer, the front/back reveal of one
 // cloze number (including nesting and image occlusions), the cloze and
 // cloze-only filters, the cloze-number set of a note's fields, the text a
-// type-in cloze answer is compared against, the LaTeX expansion used before
-// LaTeX is extracted, and the structured shapes the image-occlusion editor
-// reads.
+// type-in cloze answer is compared against, and the LaTeX expansion used before
+// LaTeX is extracted.
 //
 // `|` needs no special handling: Anki's tokenizer only recognises "{{c",
 // "::" and "}}" inside a cloze, so a pipe is ordinary text and the attribute
@@ -411,26 +410,19 @@ type ImageOcclusionProperty struct {
 	Value string
 }
 
-// ImageOcclusionShape is one shape of an image-occlusion cloze: its kind
-// ("rect", "ellipse", "polygon" or "text") and its attributes.
-type ImageOcclusionShape struct {
-	Shape      string
-	Properties []ImageOcclusionProperty
-}
-
-// ImageOcclusion holds every shape that belongs to one cloze number, which is
-// how the image-occlusion editor addresses a shape.
-type ImageOcclusion struct {
-	Ordinal int
-	Shapes  []ImageOcclusionShape
-}
-
 // parseImageCloze splits "rect:left=0.1:top=0.2" into the shape name and its
-// properties. A value may escape ":" and "\" with a backslash, and a shape
-// without a ":" separator is not an image occlusion at all.
+// properties. Only the four kinds the image-occlusion editor writes are
+// shapes; any other prefix is ordinary cloze text. A value may escape ":" and
+// "\" with a backslash, and a backslash before anything else is the character
+// itself, which is how the editor decodes it.
 func parseImageCloze(text string) (string, []ImageOcclusionProperty, bool) {
 	shape, _, found := strings.Cut(text, ":")
 	if !found {
+		return "", nil, false
+	}
+	switch shape {
+	case "rect", "ellipse", "polygon", "text":
+	default:
 		return "", nil, false
 	}
 	var properties []ImageOcclusionProperty
@@ -459,7 +451,9 @@ func parseImageCloze(text string) (string, []ImageOcclusionProperty, bool) {
 					index += 2
 					continue
 				}
-				break
+				value.WriteByte(c)
+				index++
+				continue
 			}
 			value.WriteByte(c)
 			index++
@@ -627,42 +621,4 @@ func expandClozesToRevealLatex(text string) string {
 		b.WriteString(revealClozeText(text, ordinal, false))
 	}
 	return b.String()
-}
-
-// ParseImageOcclusions returns the shapes of the image-occlusion clozes in
-// text, one entry per cloze number, ordered by number. A shape written as
-// "image-occlusion:<shape>:<attributes>" can be addressed by several numbers,
-// and then it appears under each of them. Nested image occlusions are not
-// walked, because Anki only reads the top-level deletions.
-func ParseImageOcclusions(text string) []ImageOcclusion {
-	shapes := make(map[int][]ImageOcclusionShape)
-	for _, node := range parseClozes(text) {
-		if node.cloze == nil {
-			continue
-		}
-		shapeText, isImage := node.cloze.imageOcclusionText()
-		if !isImage {
-			continue
-		}
-		shape, properties, ok := parseImageCloze(shapeText)
-		if !ok {
-			continue
-		}
-		for _, ordinal := range node.cloze.ordinals {
-			// Each entry owns its properties so a caller that edits one shape
-			// cannot change the shape of another number.
-			own := append([]ImageOcclusionProperty(nil), properties...)
-			shapes[ordinal] = append(shapes[ordinal], ImageOcclusionShape{Shape: shape, Properties: own})
-		}
-	}
-	ordinals := make([]int, 0, len(shapes))
-	for ordinal := range shapes {
-		ordinals = append(ordinals, ordinal)
-	}
-	sort.Ints(ordinals)
-	occlusions := make([]ImageOcclusion, len(ordinals))
-	for i, ordinal := range ordinals {
-		occlusions[i] = ImageOcclusion{Ordinal: ordinal, Shapes: shapes[ordinal]}
-	}
-	return occlusions
 }
