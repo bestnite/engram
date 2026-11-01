@@ -93,17 +93,36 @@ func (s *AccountService) prepareLocalUser(in CreateUserInput) (*store.User, erro
 	return newUserFromInput(in, &hash, s.now())
 }
 
-// CreateOIDCUser creates a pure OIDC account (password_hash = NULL).
+// CreateOIDCUser creates a pure OIDC account (password_hash = NULL) without an identity link.
 //
-// The only difference from CreateLocalUser is the credential: no password policy check and no hash derivation — an OIDC account logs in
-// through its bound external identity (onboarding flow, providing account creation). Username and email are still required,
-// otherwise the unique constraints and later recovery would lose their basis.
+// It is the account-only write, used to seed a passwordless account that is not reached through an external identity.
+// A first OIDC login uses CreateOIDCUserWithIdentity instead, because its account must never exist without the link
+// that reaches it.
 func (s *AccountService) CreateOIDCUser(ctx context.Context, in CreateUserInput) (*store.User, error) {
 	u, err := newUserFromInput(in, nil, s.now())
 	if err != nil {
 		return nil, err
 	}
 	if err := s.users.Create(ctx, u); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+	return u, nil
+}
+
+// CreateOIDCUserWithIdentity creates a pure OIDC account (password_hash = NULL) together with its external identity
+// link, in one transaction.
+//
+// The only difference from CreateLocalUser is the credential: no password policy check and no hash derivation — an OIDC account logs in
+// through its bound external identity (onboarding flow, providing account creation). Username and email are still required,
+// otherwise the unique constraints and later recovery would lose their basis. The account and the link are one write
+// because an account whose link failed is unreachable by the identity that created it. The link's UserID is filled in
+// by the store once the account row exists.
+func (s *AccountService) CreateOIDCUserWithIdentity(ctx context.Context, in CreateUserInput, ident *store.Identity) (*store.User, error) {
+	u, err := newUserFromInput(in, nil, s.now())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.users.CreateWithIdentity(ctx, u, ident); err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 	return u, nil

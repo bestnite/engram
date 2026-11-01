@@ -100,10 +100,12 @@ type IdentityLinkStore interface {
 	FindUserByID(ctx context.Context, id uint64) (*store.User, error)
 	// FindUserByEmail looks up an internal user by email; (nil, nil) when absent.
 	FindUserByEmail(ctx context.Context, email string) (*store.User, error)
+	// FindUserByUsername looks up an internal user by login name; (nil, nil) when absent.
+	FindUserByUsername(ctx context.Context, username string) (*store.User, error)
 	// LinkIdentity writes one link row.
 	LinkIdentity(ctx context.Context, ident *store.Identity) error
-	// CreateOIDCUser creates an internal account with no local password.
-	CreateOIDCUser(ctx context.Context, in CreateUserInput) (*store.User, error)
+	// CreateOIDCUserWithIdentity creates an internal account with no local password and its link, in one transaction.
+	CreateOIDCUserWithIdentity(ctx context.Context, in CreateUserInput, ident *store.Identity) (*store.User, error)
 }
 
 // IdentityLinkService chains the whole identity-linking flow: look up the link → auto-link → create an account per policy.
@@ -178,17 +180,20 @@ func (s *IdentityLinkService) Resolve(ctx context.Context, profile OAuthProfile,
 		return matched, decision, nil
 
 	case LinkDecisionCreateUser:
-		created, err := s.store.CreateOIDCUser(ctx, CreateUserInput{
+		in := CreateUserInput{
 			Username:    oidcUsername(profile),
 			Email:       oidcAccountEmail(profile),
 			DisplayName: oidcDisplayName(profile),
-		})
+		}
+		created, err := s.store.CreateOIDCUserWithIdentity(ctx, in, s.identityRow(profile, 0, email))
 		if err != nil {
-			return nil, decision, fmt.Errorf("create oidc user: %w", err)
+			return s.recoverCreatedUser(ctx, profile, in, email, decision, err)
 		}
-		if err := s.link(ctx, profile, created.ID, email); err != nil {
-			return nil, decision, err
-		}
+		s.recordLinkAudit(ctx, created.ID, map[string]any{
+			"provider":       profile.Provider,
+			"subject":        profile.Subject,
+			"email_verified": profile.EmailVerified,
+		})
 		return created, decision, nil
 
 	default:
@@ -257,8 +262,9 @@ func (s *IdentityLinkService) link(ctx context.Context, profile OAuthProfile, us
 	return nil
 }
 
-// createLink writes the identities row only; audit is the caller's job, because a self-bind and a first login record different details.
-func (s *IdentityLinkService) createLink(ctx context.Context, profile OAuthProfile, userID uint64, email string) error {
+// identityRow builds the identities row for one profile; the store fills in UserID when it writes the row with a
+// new account, and createLink passes an existing one.
+func (s *IdentityLinkService) identityRow(profile OAuthProfile, userID uint64, email string) *store.Identity {
 	ident := &store.Identity{
 		UserID:   userID,
 		Provider: profile.Provider,
@@ -268,10 +274,56 @@ func (s *IdentityLinkService) createLink(ctx context.Context, profile OAuthProfi
 	if email != "" {
 		ident.Email = &email
 	}
-	if err := s.store.LinkIdentity(ctx, ident); err != nil {
+	return ident
+}
+
+// createLink writes the identities row only; audit is the caller's job, because a self-bind and a first login record different details.
+func (s *IdentityLinkService) createLink(ctx context.Context, profile OAuthProfile, userID uint64, email string) error {
+	if err := s.store.LinkIdentity(ctx, s.identityRow(profile, userID, email)); err != nil {
 		return fmt.Errorf("link identity: %w", err)
 	}
 	return nil
+}
+
+// recoverCreatedUser handles a failed account creation for a first login.
+//
+// The failure usually means another writer already owns the account this identity names. A concurrent first login
+// writes the account and its link in one transaction, so its link identifies the account to return. An account an
+// earlier attempt created before this transaction existed has no link: it is recognised by the deterministic login
+// name, and its email must match as well, so a coincidental name collision cannot adopt an unrelated account.
+func (s *IdentityLinkService) recoverCreatedUser(ctx context.Context, profile OAuthProfile, in CreateUserInput, email string, decision LinkDecision, cause error) (*store.User, LinkDecision, error) {
+	again, err := s.store.FindIdentity(ctx, profile.Provider, profile.Subject)
+	if err != nil {
+		return nil, decision, fmt.Errorf("find identity: %w", err)
+	}
+	if again != nil {
+		u, err := s.store.FindUserByID(ctx, again.UserID)
+		if err != nil {
+			return nil, decision, fmt.Errorf("find user: %w", err)
+		}
+		if u == nil {
+			return nil, decision, fmt.Errorf("identity references a missing user: id=%d", again.UserID)
+		}
+		if u.Status != store.StatusActive {
+			return nil, decision, ErrUserDisabled
+		}
+		return u, LinkDecision{Kind: LinkDecisionExisting, UserID: u.ID}, nil
+	}
+
+	orphan, err := s.store.FindUserByUsername(ctx, in.Username)
+	if err != nil {
+		return nil, decision, fmt.Errorf("find user by username: %w", err)
+	}
+	if orphan == nil || !strings.EqualFold(orphan.Email, in.Email) {
+		return nil, decision, fmt.Errorf("create oidc user: %w", cause)
+	}
+	if orphan.Status != store.StatusActive {
+		return nil, decision, ErrUserDisabled
+	}
+	if err := s.link(ctx, profile, orphan.ID, email); err != nil {
+		return nil, decision, err
+	}
+	return orphan, decision, nil
 }
 
 // recordLinkAudit writes one identity.link row; an audit failure only logs in English and does not affect a link already made.
@@ -381,10 +433,18 @@ func (a *storeIdentityLinkStore) FindUserByEmail(ctx context.Context, email stri
 	return u, err
 }
 
+func (a *storeIdentityLinkStore) FindUserByUsername(ctx context.Context, username string) (*store.User, error) {
+	u, err := a.users.ByUsername(ctx, username)
+	if store.IsNotFound(err) {
+		return nil, nil
+	}
+	return u, err
+}
+
 func (a *storeIdentityLinkStore) LinkIdentity(ctx context.Context, ident *store.Identity) error {
 	return a.identities.Create(ctx, ident)
 }
 
-func (a *storeIdentityLinkStore) CreateOIDCUser(ctx context.Context, in CreateUserInput) (*store.User, error) {
-	return a.accounts.CreateOIDCUser(ctx, in)
+func (a *storeIdentityLinkStore) CreateOIDCUserWithIdentity(ctx context.Context, in CreateUserInput, ident *store.Identity) (*store.User, error) {
+	return a.accounts.CreateOIDCUserWithIdentity(ctx, in, ident)
 }

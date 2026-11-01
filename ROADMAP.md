@@ -1393,7 +1393,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `/home/nite/.hermes/cache/scratch/pgtest ./internal/web/ -run 'TestAdmin|TestOIDC|TestSMTP|TestRegistration' -count=1`
   and the same run without the PostgreSQL DSN pass.
 
-- [ ] **M19-43 OIDC first login creates the account and the identity in two writes, so a failed link leaves
+- [x] **M19-43 OIDC first login creates the account and the identity in two writes, so a failed link leaves
   an orphan** — *should-fix.* `Resolve` creates the user at `internal/auth/oauthlink.go:180-192` and inserts
   the identity afterwards (`:189`, `:248-274`) with no transaction. If the insert fails, the account has no
   link; on the next login the email lookup either finds it and denies because the claim is unverified
@@ -1404,6 +1404,41 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   the identity in one transaction (or remove the new user when the link fails), let `Resolve` recover by the
   derived username as well as by email, and add a regression that injects a link failure plus one that runs
   two first logins concurrently and expects both to succeed.
+  *Closed by this commit (`fix(auth): create the OIDC account and its identity in one write`).*
+  `UserStore.CreateWithIdentity` (`internal/store/user.go:40`) inserts the account and its `identities` row in
+  one transaction and fills the link's `UserID` from the new primary key, and `CreateOIDCUserWithIdentity`
+  (`internal/auth/account.go:112`) is what `Resolve`'s create branch now calls; a failed link rolls the
+  account back with it. The branch's audit row is written after the commit, so a rolled-back account leaves no
+  `identity.link` entry. `recoverCreatedUser` (`internal/auth/oauthlink.go:291`) handles the create failing
+  because another writer won: it re-reads the link first (a concurrent first login now commits both rows, so
+  its link names the account), and otherwise looks the deterministic login name up with
+  `FindUserByUsername` (`:313`) and adopts that account only when its email matches case-insensitively;
+  the retry then links it. `CreateOIDCUser` stays as the account-only write for a passwordless account not
+  reached through an identity. `TestResolveRollsBackTheAccountWhenTheLinkFails` and
+  `TestResolveAdoptsAnAccountWhoseLinkFailed` (`internal/auth/oauthlink_transaction_test.go`) install a SQLite
+  trigger that aborts the identity insert, assert no user and no identity row remain, then retry after
+  dropping it; the second seeds the orphan an earlier version left behind and asserts the retry adopts it.
+  `TestResolveConcurrentFirstLoginsBothSucceed` (PostgreSQL-only: two connections, a trigger that delays the
+  user insert) runs two `Resolve` calls for one identity and asserts both return the same account with one
+  user and one identity row. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/auth/ -run 'TestResolveRollsBackTheAccountWhenTheLinkFails|TestResolveAdoptsAnAccountWhoseLinkFailed|TestResolveConcurrentFirstLoginsBothSucceed' -count=1 -v`:
+  ```
+  === RUN   TestResolveRollsBackTheAccountWhenTheLinkFails
+  --- PASS: TestResolveRollsBackTheAccountWhenTheLinkFails (0.01s)
+  === RUN   TestResolveAdoptsAnAccountWhoseLinkFailed
+  --- PASS: TestResolveAdoptsAnAccountWhoseLinkFailed (0.01s)
+  === RUN   TestResolveConcurrentFirstLoginsBothSucceed
+  --- PASS: TestResolveConcurrentFirstLoginsBothSucceed (0.62s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/auth	0.654s
+  ```
+  With only `internal/auth/account.go`, `internal/auth/oauthlink.go` and `internal/store/user.go` reverted, the
+  same run failed with `users after the failed link = 1, want 0: the account must roll back with its identity`,
+  `Resolve() decision = "auto_link", want "create_user"`, `Resolve() error = create oidc user: create user:
+  create user: constraint failed: UNIQUE constraint failed: users.username (2067), want the existing account
+  adopted` and `concurrent Resolve() #1 error = ... duplicate key value violates unique constraint "idx_users_email"
+  (SQLSTATE 23505), want nil`. `go test ./internal/auth/ -count=1` and
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestUser|TestIdentity' -count=1` pass.
 
 - [x] **M19-44 Anyone can fill the global OIDC pending table and stop every OIDC login for ten minutes** —
   *should-fix.* `maxPendingAuth` caps the map at 1000 (`internal/auth/oidc.go:62-68`) and `PutPending` refuses

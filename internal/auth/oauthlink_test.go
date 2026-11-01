@@ -147,6 +147,12 @@ func newLinkEnv(t *testing.T) *linkEnv {
 	if err := db.AutoMigrate(store.AllModels()...); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
+	return newLinkEnvAt(t, db)
+}
+
+// newLinkEnvAt wires the real service around an already migrated database, so a PostgreSQL-gated case can reuse it.
+func newLinkEnvAt(t *testing.T, db *gorm.DB) *linkEnv {
+	t.Helper()
 	users := store.NewUserStore(db)
 	accounts, err := NewAccountService(users, store.NewSessionStore(db), store.NewAPIKeyStore(db), NewPasswordHasher(fastParams()))
 	if err != nil {

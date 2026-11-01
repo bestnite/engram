@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -27,6 +29,34 @@ func (s *UserStore) CreateTx(ctx context.Context, tx *gorm.DB, u *User) error {
 		return fmt.Errorf("create user: %w", err)
 	}
 	return nil
+}
+
+// CreateWithIdentity writes a new user and its external identity link in one transaction.
+//
+// A first OIDC login needs both rows: an account without its link can never be reached by the identity that created
+// it, and the next attempt cannot create the account again. Writing both in one transaction means a failed link
+// leaves neither row behind. The identity's UserID is overwritten with the new user's primary key, which exists
+// only after the insert.
+func (s *UserStore) CreateWithIdentity(ctx context.Context, u *User, ident *Identity) error {
+	if u == nil {
+		return errors.New("create user with identity: user is required")
+	}
+	if ident == nil {
+		return errors.New("create user with identity: identity is required")
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.CreateTx(ctx, tx, u); err != nil {
+			return err
+		}
+		ident.UserID = u.ID
+		if ident.LinkedAt.IsZero() {
+			ident.LinkedAt = time.Now().UTC()
+		}
+		if err := tx.WithContext(ctx).Create(ident).Error; err != nil {
+			return fmt.Errorf("create identity: %w", err)
+		}
+		return nil
+	})
 }
 
 // ByID fetches a user by primary key; returns gorm.ErrRecordNotFound when absent.
