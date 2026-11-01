@@ -77,26 +77,34 @@ but never reproduced — and the domain is being reviewed again from a rewrite t
 contract violations instead of intrusion steps. Every entry says whether it was reproduced or only read:
 "unverified" means neither "probably fine" nor "confirmed broken".
 
-- [ ] **M19-1 A preset identifier may be resolvable across accounts** — the review reported that a
-  request can name a preset belonging to another account and have it resolved rather than refused,
-  through the code path that turns a preset public id into a row. *Unverified:* the reviewer stopped
-  before writing the reproduction. *Acceptance:* a test in `internal/api` (or `internal/store` where the
+- [ ] **M19-1 A preset identifier is resolvable across accounts** — *Blocker.* The first pass reported
+  that a request can name a preset belonging to another account and have it resolved instead of refused;
+  the rewritten review **confirmed and reproduced** it. `POST /api/v1/decks` (and the MCP `create_deck`)
+  resolves the other account's preset public id with no owner check and creates the deck on it, echoing
+  that id back, while `ImportPresetID` refuses the same id with `invalid preset selection`
+  (`internal/api/decks.go:114`, `internal/api/tools.go:243`, `internal/store/publicid_resolver.go:53-62`).
+  *Acceptance:* a test in `internal/api` (or `internal/store` where the
   lookup lives) sends a write request naming another account's preset public id and shows that it is
   refused with the documented code and that no row is written; if the report turns out to be wrong, the
   test stays as the regression that pins the refusal. Evidence is the raw test output on both drivers.
 
 - [ ] **M19-2 Template media may be exportable by a caller who cannot read the deck** — the review
   reported that a deck export can carry media referenced only by a note type template, and that the
-  export path does not apply the same media-readable check the single-card write path applies. *Unverified:*
-  no reproduction. *Acceptance:* a test exports a deck containing templated media as a caller with read
+  export path does not apply the same media-readable check the single-card write path applies. The
+  rewritten review **confirmed it by reading, without executing**: note-type create and update write
+  `media_note_types` but never call `checkNewMediaRefs`, and `ankiMediaFiles` resolves name → sha → file
+  with no readability check (`internal/store/notetype.go:119-145`, `internal/store/anki_export.go:690-741`).
+  *Acceptance:* a test exports a deck containing templated media as a caller with read
   access and as a caller without it, and shows the second is refused (`media_not_readable` or the code
   the rules name) while the first succeeds; the export of an unreadable media name must not appear in
   the archive. Evidence is the raw test output.
 
-- [ ] **M19-3 An evicted MCP session may answer with stale identity** — the review reported that after
-  an MCP session is evicted (idle expiry or credential change), a later call on that session is answered
-  with the identity bound at creation instead of being re-authenticated or refused. *Unverified:* no
-  reproduction. *Acceptance:* a test evicts the session and shows the next tool call is refused with the
+- [ ] **M19-3 An evicted MCP session answers with the identity of the account that created it** —
+  *Blocker.* The first pass reported a stale identity; the rewritten review **confirmed and reproduced it,
+  and it is worse than stale identity: it is a cross-account read.** After the owner record is dropped by
+  the cap-eviction path, `sessionOwnerMismatch` returns false for the now-unregistered session id
+  (`internal/mcp/mcp.go:168-187`); a second account's key presenting that id was then served as the first
+  account and received that account's deck list with 200. *Acceptance:* a test evicts the session and shows the next tool call is refused with the
   documented code, and that a call carrying a revoked API key is refused even when the session object
   still exists. Evidence is the raw test output.
 
@@ -1103,6 +1111,96 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   .` returns nothing, and `uvx check-jsonschema` still reports the file valid. *Acceptance:* one Go test
   compiles both schema files and validates both shipped examples, so a schema change that invalidates an example
   fails the build.
+
+- [ ] **M19-100 A failed export is reported as an empty or truncated success** — *should-fix.* `internal/api/export.go:89-94`
+  logs the `ExportCards` error and then closes the JSON body with the rows written so far and `"count":<written>`;
+  `:106-112` does the same for CSV. The status is 200 either way, so a database failure, a page-scan failure and a
+  genuinely empty deck produce the same response, and no field says the export was cut short. *Reproduced:* with the
+  SQLite handle closed after the permission check, `streamJSON` answered `200 {"deck_ids":[…],"cards":[],"count":0}`
+  for a deck that holds one card. *Acceptance:* a failure before the first row returns the 5xx `internal_error`
+  envelope, a failure after it marks the truncation in the body, and a test forces a page read to fail and asserts
+  each of the two outcomes.
+
+- [ ] **M19-101 An unrecognised store failure on a write is answered 400 `invalid_request` with the driver's text** —
+  *should-fix.* `internal/api/service.go:764-772` (note update), `internal/api/note_types.go:322-335` (note type
+  write) and `internal/api/keys.go:67-70` (key creation) map every error that is not one of their named sentinels to
+  400 `invalid_request`, and the note and key paths put `err.Error()` into the envelope. A storage outage is
+  therefore reported as a client error, and the text that reaches the body is the driver's. The sibling resolver
+  `ImportPresetID` (`internal/api/publicid_resolver.go:46-63`) maps the same class to 500 `internal_error`, and
+  `internal/api/package_preset_mode_test.go:53-62` pins that behaviour. *Reproduced:* a SQLite `BEFORE UPDATE` trigger
+  on `notes` made `PATCH /api/v1/notes/{id}` answer `400 {"code":"invalid_request","message":"… — update note 1:
+  constraint failed: probe_internal_marker (1811)"}`. *Acceptance:* every unrecognised store error reaches the caller
+  as 500 `internal_error` with the code's static text, and a test that aborts a write inside the database asserts the
+  status and a body free of driver text.
+
+- [ ] **M19-102 A failed bulk-import row puts the driver's text into the 200 report** — *should-fix.*
+  `internal/api/service.go:709` copies `rowErr.Error()` into `ImportResponse.Errors[].reason`, and `:657` does the
+  same for a whole-batch failure; both reach the client in a 200 body, in the field whose purpose is to tell the
+  caller what is wrong with that row. *Reproduced:* an aborting `BEFORE INSERT` trigger on `notes` produced
+  `errors=[{0 "create note: constraint failed: probe_internal_marker (1811)"}]`. *Acceptance:* a per-row write failure
+  reports a stable code or a catalog-backed reason, the underlying error goes only to the log, and a test aborts an
+  insert and asserts the report carries no driver text.
+
+- [ ] **M19-103 The `get_due_cards` tool returns one card when `limit` is omitted** — *should-fix.*
+  `internal/mcp/tools.go:529` passes `in.Limit` unchanged, so an omitted argument is 0 and `DueCards`
+  (`internal/api/service.go:1130-1132`) clamps it to 1, while the REST handler substitutes 50
+  (`internal/api/review.go:53`). The same service call reached through two transports returns a different queue
+  length for the same request. *Reproduced:* five new cards in one deck gave one card through the tool and five
+  through `GET /api/v1/review/due?deck=…` with no `limit`. *Acceptance:* the tool applies the REST default, and a test
+  calls both transports without `limit` and asserts the same card set.
+
+- [ ] **M19-104 An MCP session keeps the account row it read at the handshake** — *should-fix.*
+  `internal/mcp/mcp.go:244-254` answers every tool call with `handshake.User`, which `build` fixed once per session
+  (`:78-81`), so role and profile fields are judged from that snapshot while the REST middleware re-reads the row on
+  every request; `ImportDeckPackage` derives `allow_others_progress` from that role (`internal/api/package.go:61-64`).
+  *Reproduced:* a session opened as an admin, followed by demotion of the account to `user`, still issued an upload
+  ticket with `allow_others_progress=true`, while REST issuance by the same account issued `false`. *Acceptance:* each
+  tool call uses the user row loaded for its own request, and a test changes the role between handshake and call and
+  asserts the two transports take the same decision.
+
+- [ ] **M19-105 `GET /notes/{id}` answers 403 although its contract promises 404** — *should-fix.*
+  `internal/api/service.go:454-467` states "An unknown id and a read without permission are both 404, never leaking
+  'this id exists but you may not see it'", but `GetNote` returns `RequireDeckRole`'s 403 `forbidden` with the detail
+  "insufficient role for this deck", so the two cases are distinguishable. *Reproduced:* a stranger reading an
+  existing note got `403 {"code":"forbidden",…}` and an unknown id got 404; `internal/api/note_read_test.go:162-168`
+  accepts either status while its own comment repeats the no-leak claim. *Acceptance:* an unreadable note answers the
+  same 404 `not_found` as an unknown id, and that test asserts the one status instead of a 403-or-404 set.
+
+- [ ] **M19-106 A multipart import spools the package before it validates the preset or the target role** —
+  *should-fix.* `internal/api/package.go:217-252` takes the slot and the body cap, then `c.FormFile` reads the
+  package part, and only afterwards run `ImportPresetID` (`:247`) and `authorizeImportTarget` (`:45`, inside
+  `ImportDeckPackage`); the direct-link and ticket entries state and follow the opposite order
+  (`internal/api/package_url.go:60-82`, `internal/api/package_upload.go:190-201`), and `internal/api/errors.go:80-83`
+  records "refused before its body is read, so nothing is spooled to a temporary file" as the rule for this surface.
+  *Unverified:* only read; the spool file was not measured. *Acceptance:* the multipart entry reads the form fields
+  and authorizes the target and preset before it consumes the archive part, and a test posts an oversized part with a
+  target deck the caller cannot edit and shows the request is refused without spooling.
+
+- [ ] **M19-107 A bad `on_conflict` is `package_bad_format` on import and `invalid_request` at ticket issuance** —
+  *should-fix.* `internal/store/package_import.go:432-434` wraps the option check in
+  `&PackageError{Code: CodePackageBadFormat}`, while `internal/api/package_upload.go:92-97` returns `InvalidRequest`
+  for the same value with the same text; a client branches on the code and reads `package_bad_format` as "the package
+  itself is corrupt". *Reproduced:* `import_deck` with `on_conflict=bogus` answered `package_bad_format: The package
+  format is invalid. — on_conflict must be one of skip, update, fail`, and `create_import_upload` with the same value
+  answered `invalid_request: …` with the identical detail. *Acceptance:* every import entry reports a bad request
+  option as 400 `invalid_request` and keeps the package codes for archive content, and a table test feeds the invalid
+  option to each entry and asserts one code.
+
+- [ ] **M19-108 The key-revocation handler has no test of its own scoping** — *nit.* `internal/api/keys.go:80-109`
+  resolves any key by public id and then revokes it scoped to the caller; the ownership refusal exists only at the
+  store layer (`internal/store/apikey_test.go:193`), and no test in `internal/api` or `internal/web` calls
+  `DELETE /api/v1/keys/{id}`. *Reproduced:* `grep -rn '"/api/v1/keys' internal/*/*_test.go` lists GET and POST calls
+  only. *Acceptance:* an `httptest` case revokes the caller's own key (200, row carries `revoked_at`) and another
+  user's key id (404, that key still active), so the handler's scoping is pinned where it is enforced.
+
+- [ ] **M19-109 The two `/mcp` refusals carry no stable code** — *nit.* `internal/mcp/mcp.go:103-116` answers a request
+  without a key with `http.Error(..., 401, "api key required")` and a session/user mismatch with
+  `403 "session user mismatch"`, both `text/plain` and neither carrying a `code`, while every other refusal in this
+  domain uses `{"error":{"code","message"}}` or `ErrorText`; the 401 branch sits behind the middleware that already
+  answers in the envelope, and the 403 branch is the one a client actually meets. *Reproduced:* a second account
+  presenting another account's registered session id received `403 text/plain; charset=utf-8 "session user
+  mismatch\n"`. *Acceptance:* both refusals use the shared envelope with a registered code (`unauthorized` for the
+  missing key, `forbidden` for the mismatch) and a test asserts the body's code.
 
 ## 2. Release ledger
 
