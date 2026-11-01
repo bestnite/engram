@@ -360,18 +360,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   writes no `review.undo` audit row. Evidence is the raw scoped `go test` and `go vet` output.
   *Do not start until the maintainer chooses between (B) and (A) with (B).*
 
-- [ ] **M18-52 The `M18-36` tests pass on PostgreSQL, with the output recorded** — the commit that
-  closed `M18-36` (`56b787e`) contains no PostgreSQL output. It says the postgres subtests passed "in
-  the subagent run recorded at" a file under `/tmp`. That file is not in the repository: item 7 of the
-  definition of done in section 4 of `AGENTS.md` forbids citing it, and section 7 requires the evidence
-  to be output. `TestAnkiProgressCarriedMemoryValidation` in `internal/store` and
-  `TestImportedAnkiMemoryPreview` in `internal/schedule` both have a postgres branch. This task runs
-  tests and changes no file. A PostgreSQL case that fails is recorded as a new entry that names the
-  failure; it is not fixed under this ID. *Acceptance:*
-  `go test -count=1 -v -run 'TestAnkiProgressCarriedMemoryValidation|TestImportedAnkiMemoryPreview' ./internal/store/ ./internal/schedule/`
-  with `TEST_PG_DSN` set passes, and its output shows the `postgres` subtests of both tests as `PASS`,
-  none as `SKIP`. Evidence is that raw output, quoted in the closing commit.
-
 - [ ] **M18-53 The round trip compares a `duration_days` that is not NULL** — `M18-10` required
   `TestExportAnkiPackageRoundTrip` to compare `interval_days` and `duration_days`. The landed change
   removed `DurationDays: Ptr(24.0)` from the only review `seedAnkiExportDeck` seeds in
