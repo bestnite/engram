@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"path"
 	"regexp"
@@ -1496,7 +1497,7 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 // about the retention the card's SM-2 intervals aimed at. An unusable state skips
 // the card instead of failing the import: storing it would make every preview
 // and submission fail, so the card stays new for the importer.
-func deriveAnkiMemory(card anki.Card, state *CardState, engine *fsrs.FSRS, history fsrs.ReviewEntries, firstType int, keptIDs []int64, rowMemory map[int64]fsrs.MemoryState) (*int64, bool, error) {
+func deriveAnkiMemory(card anki.Card, state *CardState, engine *fsrs.FSRS, history fsrs.ReviewEntries, firstType int, keptIDs []int64, rowMemory map[int64]fsrs.MemoryState, approximated *int) (*int64, bool, error) {
 	var data struct {
 		Stability  *float64 `json:"s"`
 		Difficulty *float64 `json:"d"`
@@ -1521,6 +1522,9 @@ func deriveAnkiMemory(card anki.Card, state *CardState, engine *fsrs.FSRS, histo
 				}
 			}
 		} else {
+			// This SM-2 estimate is not aligned with Anki's memory state; ROADMAP.md
+			// M18-79 measures Anki's selection rule before replacing the approximation.
+			*approximated++
 			interval := float64(card.Interval)
 			if interval < 0 {
 				interval = -interval / 86400
@@ -1551,6 +1555,12 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		report.ProgressDiscarded = report.StatesDiscarded > 0 || report.ReviewsDiscarded > 0
 		return nil
 	}
+	approximated := 0
+	defer func() {
+		if approximated > 0 {
+			slog.Warn("Anki import SM-2 memory approximation is not aligned with Anki", "user_id", userID, "cards", approximated)
+		}
+	}()
 	var user User
 	if err := tx.WithContext(ctx).First(&user, userID).Error; err != nil {
 		return fmt.Errorf("import Anki progress: load user: %w", err)
@@ -1674,7 +1684,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			}
 			state.DueAt = &due
 		}
-		lastReview, usable, err := deriveAnkiMemory(card, &state, engine, histories[card.ID], firstType[card.ID], keptIDs[card.ID], rowMemory)
+		lastReview, usable, err := deriveAnkiMemory(card, &state, engine, histories[card.ID], firstType[card.ID], keptIDs[card.ID], rowMemory, &approximated)
 		if err != nil {
 			return err
 		}

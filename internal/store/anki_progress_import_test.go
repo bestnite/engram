@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -21,6 +22,63 @@ import (
 
 	"git.nite07.com/nite/engram/internal/anki"
 )
+
+func TestAnkiProgressApproximationWarn(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			for _, tc := range []struct {
+				name      string
+				firstType int
+				noHistory bool
+				wantCount int
+			}{
+				{name: "review_first", firstType: 1, wantCount: 2},
+				{name: "learning_first", firstType: 0},
+				{name: "no_history", noHistory: true, wantCount: 2},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					user := seedUsers(t, db, "approx_"+driver+"_"+tc.name)[0]
+					deck, notes := seedPackageDeck(t, db, user)
+					pkg := &anki.Package{CreatedAt: 1600000000}
+					ids := make(map[int64]uint64)
+					for i, noteID := range notes[:2] {
+						var card Card
+						if err := db.Where("note_id = ?", noteID).First(&card).Error; err != nil {
+							t.Fatal(err)
+						}
+						ankiID := int64(i + 1)
+						ids[ankiID] = card.ID
+						pkg.Cards = append(pkg.Cards, anki.Card{ID: ankiID, Type: 2, Queue: 2, Factor: 2500, Interval: 10})
+						if !tc.noHistory {
+							pkg.Reviews = append(pkg.Reviews, anki.Review{ID: 1600000000000 + int64(i), CardID: ankiID, Ease: 3, Type: tc.firstType})
+						}
+					}
+					var logs bytes.Buffer
+					previous := slog.Default()
+					slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+					defer slog.SetDefault(previous)
+					if err := importAnkiProgress(context.Background(), db, user, deck, pkg, ids, PackageImportOptions{IncludeProgress: true}, &PackageImportReport{}, time.Now()); err != nil {
+						t.Fatal(err)
+					}
+					if tc.wantCount == 0 {
+						if logs.Len() != 0 {
+							t.Fatalf("unexpected log: %s", logs.String())
+						}
+						return
+					}
+					var record map[string]any
+					if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &record); err != nil {
+						t.Fatalf("expected one log: %s: %v", logs.String(), err)
+					}
+					if record["level"] != "WARN" || record["msg"] != "Anki import SM-2 memory approximation is not aligned with Anki" || fmt.Sprint(record["user_id"]) != fmt.Sprint(user) || record["cards"] != float64(tc.wantCount) {
+						t.Fatalf("unexpected log: %v", record)
+					}
+					t.Logf("captured warning: %s", bytes.TrimSpace(logs.Bytes()))
+				})
+			}
+		})
+	}
+}
 
 func TestAnkiImportFilteredHomeDeck(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
