@@ -1906,7 +1906,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Acceptance:* parse the address with one implementation that treats `+` as a space, and add a round-trip test
   for a filter and a tag containing a space, a plus and a percent sign.
 
-- [ ] **M19-57 A malformed percent-encoded path throws during bootstrap and blanks the app** — *should-fix.*
+- [x] **M19-57 A malformed percent-encoded path throws during bootstrap and blanks the app** — *should-fix.*
   `matchRoute` calls `decodeURIComponent` on each path segment and each query part with no guard
   (`frontend/src/lib/router/index.ts:21,65`), and the route store is initialised from the current address at
   module load (`:107`), so an address such as `/decks/%E0%A4%A` throws before the app mounts. *Reproduced* by
@@ -1916,6 +1916,26 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   (`frontend/src/lib/return-to.ts:27-30`), so an editor link with a malformed return path crashes the editor
   too. *Acceptance:* a decode failure yields the 404 route or drops the parameter instead of throwing, with
   tests for a malformed path, a malformed query value and a malformed return value.
+  *Closed by this commit (`fix(frontend): treat a malformed percent-escape as an absent component`).*
+  `decodeComponent` (`frontend/src/lib/router/index.ts:8`) runs `decodeURIComponent` under a recover and
+  returns null on a broken escape. `parseQuery` (`:33`) drops a pair whose key or value does not decode, so a
+  malformed filter is absent instead of taking the page down. `matchRoute` (`:58`) leaves a dynamic route
+  unmatched when its segment does not decode, so the address renders the 404 route. `safeReturnPath`
+  (`frontend/src/lib/return-to.ts:27`) needs no change: it accepts a value only when `matchRoute` finds a
+  route, and a malformed return path now finds none, so it is dropped and the caller falls back to its
+  default.
+  `router.test.ts` gained the malformed query-pair and malformed path-segment cases, and
+  `return-to.test.ts` gained `/decks/%E0%A4%A` in its reject table. Raw output of
+  `npx vitest run src/tests/router.test.ts src/tests/return-to.test.ts`:
+  ```
+   Test Files  2 passed (2)
+        Tests  34 passed (34)
+  ```
+  With only `frontend/src/lib/router/index.ts` reverted, the same run failed with
+  `AssertionError: expected [Function] to not throw an error but 'URIError: URI malformed' was thrown` for
+  both router cases and `URIError: URI malformed` from the return-path case. `npm run check` ends
+  `svelte-check found 0 errors and 0 warnings`, `npm run test:client` passes 534 tests in 61 files and
+  `npx vitest run` passes 591 tests in 58 files.
 
 - [ ] **M19-58 The create-deck dialog re-requests the preset list forever when that read fails** — *should-fix.*
   The effect reads `createPresets.length` and, on a failed fetch, assigns a new empty array

@@ -6,6 +6,21 @@ import { authStore } from '../auth';
 import { LANGUAGE_PARAM, readLanguageFromURL } from '../i18n/url';
 
 /**
+ * Decode one percent-encoded component, returning null when the escape is malformed.
+ *
+ * The address is user-controlled (a bookmark, a pasted link, a `return=` value), and `decodeURIComponent`
+ * throws a URIError on a broken escape such as `%E0%A4%A`. That throw during module load would abort
+ * bootstrap before the app mounts and leave a blank page, so a malformed component is treated as absent.
+ */
+function decodeComponent(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Parse a query string into a key/value object
  */
 export function parseQuery(queryString: string): Record<string, string> {
@@ -16,10 +31,13 @@ export function parseQuery(queryString: string): Record<string, string> {
   const pairs = search.split('&');
   for (const pair of pairs) {
     if (!pair) continue;
-    const [key, value] = pair.split('=');
-    if (key) {
-      query[decodeURIComponent(key)] = value ? decodeURIComponent(value) : '';
-    }
+    const [rawKey, rawValue] = pair.split('=');
+    if (!rawKey) continue;
+    const key = decodeComponent(rawKey);
+    const value = rawValue ? decodeComponent(rawValue) : '';
+    // A malformed key or value cannot be named or shown: drop the pair rather than the whole page.
+    if (key === null || value === null) continue;
+    query[key] = value;
   }
   return query;
 }
@@ -62,7 +80,13 @@ export function matchRoute(pathname: string, routeList: RouteDefinition[] = rout
 
         if (rPart.startsWith(':')) {
           const paramName = rPart.slice(1);
-          params[paramName] = decodeURIComponent(pPart);
+          const decoded = decodeComponent(pPart);
+          // A malformed escape cannot name an entity: leave the route unmatched so the 404 page renders.
+          if (decoded === null) {
+            matched = false;
+            break;
+          }
+          params[paramName] = decoded;
         } else if (rPart !== pPart) {
           matched = false;
           break;

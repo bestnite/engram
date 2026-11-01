@@ -9,6 +9,21 @@ describe('SPA router matching and query parsing', () => {
     expect(parseQuery('lang=zh-CN')).toEqual({ lang: 'zh-CN' });
   });
 
+  it('drops a malformed percent-encoded query pair instead of throwing', () => {
+    // A broken escape used to throw a URIError out of decodeURIComponent, and the route store is built at
+    // module load, so one bad bookmark blanked the whole app.
+    expect(() => parseQuery('?q=%E0%A4%A&deck=5')).not.toThrow();
+    expect(parseQuery('?q=%E0%A4%A&deck=5')).toEqual({ deck: '5' });
+    expect(parseQuery('?%E0%A4%A=1&deck=5')).toEqual({ deck: '5' });
+  });
+
+  it('renders the 404 route for a malformed path segment instead of throwing', () => {
+    expect(() => matchRoute('/decks/%E0%A4%A')).not.toThrow();
+    const match = matchRoute('/decks/%E0%A4%A');
+    expect(match.route).toBeNull();
+    expect(match.path).toBe('/decks/%E0%A4%A');
+  });
+
   it('matches exact routes and returns params and query', () => {
     const dummyComponent = {} as unknown as RouteDefinition['component'];
     const testRoutes: RouteDefinition[] = [

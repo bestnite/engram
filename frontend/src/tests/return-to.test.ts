@@ -24,6 +24,7 @@ describe('safeReturnPath', () => {
     ['an absolute URL', 'https://example.com/review'],
     ['a script URL', 'javascript:alert(1)'],
     ['a server-only path', '/api/v1/notes'],
+    ['a malformed percent-encoded path', '/decks/%E0%A4%A'],
   ])('rejects %s', (_name, raw) => {
     expect(safeReturnPath(raw)).toBeNull();
   });
