@@ -27,8 +27,7 @@ import (
 // Stable error codes (AGENTS.md §2.1: identifiers in English). The upload endpoint maps them to HTTP status codes;
 // callers decide by code, never by matching message.
 const (
-	CodeTooLarge      = "media_too_large"
-	CodeMagicMismatch = "media_magic_mismatch"
+	CodeTooLarge = "media_too_large"
 	// CodeQuotaExceeded means this upload would exceed that user's total media quota.
 	// Usage is the deduplicated sum of "media referenced by that user's notes ∪ that user's uploads not yet referenced by anyone",
 	// computed by the routing layer before writing to disk; see UserMediaUsage in internal/store.
@@ -46,9 +45,6 @@ func (e *Error) Error() string { return e.Code + ": " + e.Msg }
 var (
 	// ErrTooLarge means the file exceeds the administrator-configured upload limit.
 	ErrTooLarge = &Error{Code: CodeTooLarge, Msg: "file exceeds the configured upload limit"}
-	// ErrMagicMismatch means the file has no detectable content (it is empty). Every non-empty file is accepted and
-	// classified; the browser's declared Content-Type never rejects a valid file.
-	ErrMagicMismatch = &Error{Code: CodeMagicMismatch, Msg: "file has no detectable content"}
 	// ErrNotFound means the media does not exist.
 	ErrNotFound = &Error{Code: "media_not_found", Msg: "media not found"}
 )
@@ -211,9 +207,6 @@ func (s *Store) Save(ctx context.Context, r io.Reader, opts SaveOptions) (*store
 	}
 	if written > limit {
 		return nil, ErrTooLarge
-	}
-	if written == 0 {
-		return nil, ErrMagicMismatch
 	}
 	if err := tmp.Sync(); err != nil {
 		return nil, fmt.Errorf("media: sync temp file: %w", err)

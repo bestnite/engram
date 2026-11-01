@@ -260,23 +260,26 @@ func TestMediaUploadRejectsOversized(t *testing.T) {
 	}
 }
 
-// TestMediaUploadRejectsEmptyFile covers the one refusal left: a file with no content gets a stable error code.
-func TestMediaUploadRejectsEmptyFile(t *testing.T) {
+// TestMediaUploadStoresEmptyFile covers the one content boundary: a file with no bytes is a real,
+// empty attachment (Anki keeps one too), not a refusal.
+func TestMediaUploadStoresEmptyFile(t *testing.T) {
 	srv, _, _, cookies, csrf := newNotesServer(t)
 	rec := uploadMedia(t, srv, cookies, csrf, "empty.png", "image/png", nil)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("magic mismatch status = %d, want 422 (body %s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("empty upload status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
 	}
-	var env struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
+	var body struct {
+		Bytes  int64  `json:"bytes"`
+		Sha256 string `json:"sha256"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
-		t.Fatalf("decode error body: %v", err)
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode upload body: %v", err)
 	}
-	if env.Error.Code == "" {
-		t.Errorf("error body has no stable code: %s", rec.Body.String())
+	if body.Bytes != 0 {
+		t.Errorf("empty upload bytes = %d, want 0", body.Bytes)
+	}
+	if body.Sha256 != sha256Hex(nil) {
+		t.Errorf("empty upload sha = %q, want %q", body.Sha256, sha256Hex(nil))
 	}
 }
 

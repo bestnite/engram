@@ -1657,7 +1657,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go test ./internal/web/ -run 'TestReview|TestNote' -count=1` and
   `go test ./internal/store/ -run 'TestNoteSearch|TestPlainText|TestSearch' -count=1` pass.
 
-- [ ] **M19-50 A zero-byte media file is dropped as missing, though Anki keeps it** — *nit.* The package
+- [x] **M19-50 A zero-byte media file is dropped as missing, though Anki keeps it** — *nit.* The package
   importer treats an entry with no bytes as a missing file rather than an empty one
   (`internal/store/anki_import.go:293-303,307-316,1301`), and a direct upload of an empty file fails with
   `ErrMagicMismatch`, whose message is "file has no detectable content" (`internal/media/media.go:215-217`).
@@ -1667,6 +1667,44 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   Anki and loses the file, reported as missing media, in engram. Verified by reading both paths and by the
   Anki run above. *Acceptance:* keep a named zero-byte entry as a file on import and accept an empty upload,
   with one test that imports such a package and reads the entry back.
+  *Closed by this commit (`fix(media): keep a zero-byte file as an empty attachment`).*
+  The import no longer reads "no bytes" as "file missing": `ankiMediaNameIndex`, `ankiMissingMedia`,
+  `ankiRawMediaSizes`, `placeAnkiMedia`, the media-row loop, `registerAnkiMediaNames` and `renameAnkiMedia`
+  (`internal/store/anki_import.go`) now treat a zero-byte entry like any other entry, so its name resolves,
+  it is not reported missing, its bytes (none) are placed at the content address, its `media` row is written
+  and its deck name is registered. A zero-byte sha contributes no quota bytes, and `ankiUnplayableVideo`
+  still skips it because an empty file is not a video. On the upload side `media.Save` no longer refuses
+  a zero-byte body with `ErrMagicMismatch`; that error, its `media_magic_mismatch` code and the matching
+  422 branch in `internal/web/media.go` are removed, so an empty upload is stored and served at 0 bytes.
+  `TestAnkiImportKeepsZeroByteMedia` (`internal/store/anki_import_empty_media_test.go`) imports a fixture
+  whose only media entry is a 0-byte `empty.txt` and asserts the report does not list it as missing, the
+  deck name resolves to the sha256 of the empty string, the media row is 0 bytes and the file exists at its
+  content address with 0 bytes. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestAnkiImportKeepsZeroByteMedia -count=1 -v`:
+  ```
+  --- PASS: TestAnkiImportKeepsZeroByteMedia (0.33s)
+      --- PASS: TestAnkiImportKeepsZeroByteMedia/sqlite (0.01s)
+      --- PASS: TestAnkiImportKeepsZeroByteMedia/postgres (0.03s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.339s
+  ```
+  With only `internal/store/anki_import.go` reverted, the same run failed on both drivers with
+  `imported media names = [], want empty.txt`. The upload half is pinned by
+  `TestSaveAcceptsEmptyFile` (`internal/media/media_test.go`) and by
+  `TestEditorMediaUploadRejectsOversizedAndKeepsEmpty` / `TestMediaUploadStoresEmptyFile`
+  (`internal/web/media_editor_test.go`, `internal/web/media_test.go`), which send no bytes and assert 201,
+  the empty-string sha256 and a 0-byte read back. Raw output of
+  `go test ./internal/web/ -run 'TestEditorMediaUploadRejectsOversizedAndKeepsEmpty|TestMediaUploadStoresEmptyFile' -count=1 -v`:
+  ```
+  --- PASS: TestEditorMediaUploadRejectsOversizedAndKeepsEmpty (0.02s)
+  --- PASS: TestMediaUploadStoresEmptyFile (0.02s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.089s
+  ```
+  Before the change those uploads answered 422 `media_magic_mismatch`. `go test ./internal/media/ -count=1`
+  passes, and `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run
+  'TestAnki|TestMedia|TestPackage|TestExportAnki|TestLocalAnki' -count=1` passes on both drivers
+  (`41.315s`).
 
 - [ ] **M19-51 Three public helpers have no caller, and one duplicates the frontend's occlusion grammar** —
   *nit.* `ParseImageOcclusions` and the `ImageOcclusion`, `ImageOcclusionShape` and

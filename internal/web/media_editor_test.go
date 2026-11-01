@@ -3,6 +3,8 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -178,9 +180,10 @@ func TestEditorMediaUploadInsertsAndSurvivesReload(t *testing.T) {
 	}
 }
 
-// TestEditorMediaUploadRejectsOversizedAndEmpty covers the negative cases of upload validation:
-// above the admin-configured limit -> 413 + media_too_large; an empty file -> 422 + media_magic_mismatch.
-func TestEditorMediaUploadRejectsOversizedAndEmpty(t *testing.T) {
+// TestEditorMediaUploadRejectsOversizedAndKeepsEmpty covers the two boundary cases of upload
+// validation: above the admin-configured limit -> 413 + media_too_large; an empty file is a real
+// attachment (Anki keeps one too) -> 201, stored at 0 bytes and readable back.
+func TestEditorMediaUploadRejectsOversizedAndKeepsEmpty(t *testing.T) {
 	t.Setenv("MEDIA_MAX_BYTES", "1024")
 	srv, db, ownerID, cookies, csrf := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Limits deck")
@@ -196,14 +199,28 @@ func TestEditorMediaUploadRejectsOversizedAndEmpty(t *testing.T) {
 		t.Errorf("oversized upload did not return the stable code: %s", over.Body.String())
 	}
 
-	// Empty file: there is no content to classify or store.
-	bad := uploadMediaTo(t, srv, cookies, deckPath+"/media", csrfOrEmpty(csrf), "empty.png", "image/png", nil)
-	if bad.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("empty upload status = %d, want 422 (body %s)", bad.Code, bad.Body.String())
+	// Empty file: stored as a zero-byte attachment.
+	empty := uploadMediaTo(t, srv, cookies, deckPath+"/media", csrfOrEmpty(csrf), "empty.png", "image/png", nil)
+	if empty.Code != http.StatusCreated {
+		t.Fatalf("empty upload status = %d, want 201 (body %s)", empty.Code, empty.Body.String())
 	}
-	if !strings.Contains(bad.Body.String(), "media_magic_mismatch") {
-		t.Errorf("empty upload did not return the stable code: %s", bad.Body.String())
+	var saved mediaUploadResp
+	if err := json.Unmarshal(empty.Body.Bytes(), &saved); err != nil {
+		t.Fatalf("decode empty upload: %v", err)
 	}
+	if saved.Sha256 != sha256Hex(nil) {
+		t.Errorf("empty upload sha = %q, want %q", saved.Sha256, sha256Hex(nil))
+	}
+	read := getWithCookies(t, srv, "/media/"+saved.Sha256, cookies)
+	if read.Code != http.StatusOK || read.Body.Len() != 0 {
+		t.Fatalf("read back empty media = %d with %d bytes, want 200 with 0", read.Code, read.Body.Len())
+	}
+}
+
+// sha256Hex is the content address of b, used to name the empty file's digest in the upload test.
+func sha256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // TestEditorMediaUploadRequiresEditorRoleAndCSRF covers the negative cases for permission and CSRF:

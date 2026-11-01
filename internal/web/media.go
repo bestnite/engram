@@ -218,8 +218,6 @@ func mediaErrorResponse(err error) (status int, code, msg string) {
 		switch me.Code {
 		case media.CodeTooLarge:
 			return http.StatusRequestEntityTooLarge, me.Code, me.Msg
-		case media.CodeMagicMismatch:
-			return http.StatusUnprocessableEntity, me.Code, me.Msg
 		}
 		return http.StatusBadRequest, me.Code, me.Msg
 	}

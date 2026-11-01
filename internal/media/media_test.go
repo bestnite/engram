@@ -79,12 +79,23 @@ func TestSaveRejectsOversized(t *testing.T) {
 	}
 }
 
-// TestSaveRejectsEmptyFile covers the one rejection left: a file with no detectable content.
-func TestSaveRejectsEmptyFile(t *testing.T) {
+// TestSaveAcceptsEmptyFile covers the one file Anki also keeps: an empty attachment has no bytes
+// to classify but is still a stored file, not a missing one.
+func TestSaveAcceptsEmptyFile(t *testing.T) {
 	s := newTestStore(t)
-	_, err := s.Save(context.Background(), bytes.NewReader(nil), SaveOptions{Name: "empty.png"})
-	if !errors.Is(err, ErrMagicMismatch) {
-		t.Fatalf("Save() error = %v, want ErrMagicMismatch", err)
+	saved, err := s.Save(context.Background(), bytes.NewReader(nil), SaveOptions{Name: "empty.png"})
+	if err != nil {
+		t.Fatalf("Save() error = %v, want the empty file stored", err)
+	}
+	if saved.Bytes != 0 {
+		t.Fatalf("stored bytes = %d, want 0", saved.Bytes)
+	}
+	raw, err := os.ReadFile(filepath.Join(s.Root(), filepath.FromSlash(saved.RelPath)))
+	if err != nil {
+		t.Fatalf("read stored empty file: %v", err)
+	}
+	if len(raw) != 0 {
+		t.Fatalf("stored file = %d bytes, want 0", len(raw))
 	}
 }
 

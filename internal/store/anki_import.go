@@ -290,26 +290,20 @@ func (h *headBuffer) Write(p []byte) (int, error) {
 }
 
 // ankiRawMediaSizes indexes the bytes each media entry carries by sha256, for the quota check.
-// An entry without bytes is a missing file, not an empty file: it contributes no bytes.
+// A zero-byte entry is an empty file, not a missing one, and contributes no bytes.
 func ankiRawMediaSizes(files []ankiMediaFile) map[string]int64 {
 	out := make(map[string]int64, len(files))
 	for i := range files {
-		if files[i].size == 0 {
-			continue
-		}
 		out[files[i].sha256hex] = files[i].size
 	}
 	return out
 }
 
-// ankiMediaNameIndex indexes the package's media names after the clash rename. Only entries with
-// bytes are indexed: a name without bytes is reported as missing instead of resolving a reference.
+// ankiMediaNameIndex indexes the package's media names after the clash rename. A zero-byte entry
+// is an empty file, so its name resolves a reference just like a non-empty one.
 func ankiMediaNameIndex(files []ankiMediaFile) map[string]bool {
 	idx := make(map[string]bool, len(files))
 	for i := range files {
-		if files[i].size == 0 {
-			continue
-		}
 		idx[normaliseMediaName(files[i].entry.Name)] = true
 	}
 	return idx
@@ -357,9 +351,6 @@ func ankiMissingMedia(pkg *anki.Package, files []ankiMediaFile) []string {
 	names := ankiMediaNameIndex(files)
 	shas := map[string]bool{}
 	for i := range files {
-		if files[i].size == 0 {
-			continue
-		}
 		shas[files[i].sha256hex] = true
 	}
 	var missing []string
@@ -954,7 +945,7 @@ func (s *DeckStore) placeAnkiMedia(ctx context.Context, files []ankiMediaFile, o
 	var writtenMedia []mediaWrite
 	for i := range files {
 		file := &files[i]
-		if file.size == 0 || seen[file.sha256hex] {
+		if seen[file.sha256hex] {
 			continue
 		}
 		seen[file.sha256hex] = true
@@ -1306,7 +1297,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 	// neither a file nor a row.
 	for i := range files {
 		file := &files[i]
-		if opts.MediaRoot == "" || file.size == 0 {
+		if opts.MediaRoot == "" {
 			continue
 		}
 		mstore := NewMediaStore(tx)
@@ -1991,9 +1982,6 @@ func validAnkiSteps(steps []float64) bool {
 func registerAnkiMediaNames(ctx context.Context, tx *gorm.DB, deckID uint64, files []ankiMediaFile) error {
 	names := NewMediaNameStore(tx)
 	for i := range files {
-		if files[i].size == 0 {
-			continue
-		}
 		name := normaliseMediaName(files[i].entry.Name)
 		if name == "" {
 			continue
@@ -2032,9 +2020,6 @@ func renameAnkiMedia(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *anki.
 	renames := map[string]string{}
 	for i := range files {
 		file := &files[i]
-		if file.size == 0 {
-			continue
-		}
 		oldName := normaliseMediaName(file.entry.Name)
 		newName := addDataToFolderUniquely(existing, oldName, file.sha256hex, file.sha1hex)
 		if newName != oldName {
