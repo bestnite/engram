@@ -910,20 +910,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
 
-- [ ] **M18-80 Until the replay rule is measured, the approximation says so** — `deriveAnkiMemory` in
-  `internal/store/anki_import.go` starts a card's memory state from `MemoryStateFromSM2` whenever its
-  first kept revlog row is not a learning row, following `M18-37`. Anki computes those states
-  differently (see `M18-79`), so the imported stability and difficulty can be wrong and the card can be
-  scheduled earlier or later than Anki would schedule it. The fix: that branch writes one English
-  `slog.Warn` line per import run carrying the importing user's id, the number of cards that took the
-  approximation, and a statement that the value is not aligned with Anki. The branch's comment
-  states the same limitation and names `M18-79`. When `M18-49` lands, the warning and the limitation go
-  with it. *Acceptance:* a test captures the warning for a history whose first kept row is not a
-  learning row, and a history whose first kept row is a learning row writes none. Evidence is the raw
-  scoped `go test` and `go vet` output and the captured log line.
-
-
-
 ---
 
 ## 2. Release ledger
