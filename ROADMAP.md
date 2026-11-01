@@ -262,6 +262,23 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
 
+- [ ] **M18-106 Settle the subday replay DeltaT before closing memory-state alignment** —
+  the `subday` card in `internal/notetype/testdata/anki/memory-replay.anki2.apkg` has two Good
+  rows: type 0 at Unix milliseconds `1699920000000` and type 1 at `1700002800000`, both on
+  2023-11-14 UTC, at 00:00 and 23:00. Anki 26.09.3 `compute_memory_state()` returns stability
+  `7.315299987792969` and difficulty `2.1112141609191895`, recorded in the golden. The attempted
+  M18-49 implementation used the importing user's UTC timezone and midnight cutoff and returned
+  `2.3065` and `2.11121423578539`; that implementation was reverted after the mismatch. The
+  observed collection `next_day_at=1793563200` is not evidence of the historical cutoff. Determine
+  how Anki constructs DeltaT for these rows and add oracle controls that distinguish elapsed-time
+  rounding from review-day boundaries. Keep the `1e-4` tolerance. Update the oracle README with
+  the measured rule, then add this case to `TestAnkiProgressReplayStart` and fix the replay.
+  This blocks closing M18-49 and M18-79; M18-51 still follows M18-49. *Acceptance:* regenerated
+  subday and boundary-control goldens match the imported memory states within `1e-4` on SQLite
+  and PostgreSQL; the existing replay cases still pass. Evidence is raw memory-replay-only oracle
+  output, scoped `go test ./internal/store/ -run '^TestAnkiProgressReplayStart$' -count=1` output
+  on both drivers, and `go vet ./internal/store/` output. Do not run a whole-module gate.
+
 
 ---
 

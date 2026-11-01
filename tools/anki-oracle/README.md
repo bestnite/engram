@@ -50,16 +50,20 @@ uv pip install -r requirements.txt
 .venv/bin/python generate.py
 ```
 
-From the repository root, the determinism check is:
+With no arguments or with `--memory-replay`, the generator writes only the memory-replay package
+and golden. Pass `--all` to regenerate the previous full set (except learning-due). From the
+repository root, the determinism check for the other fixtures is:
 
 ```bash
-sha256sum internal/notetype/testdata/anki/* > /tmp/anki-oracle.sha
-(cd tools/anki-oracle && .venv/bin/python generate.py)
+find internal/notetype/testdata/anki -maxdepth 1 -type f ! -name 'memory-replay.anki2.apkg' -print0 | sort -z | xargs -0 sha256sum > /tmp/anki-oracle.sha
+(cd tools/anki-oracle && .venv/bin/python generate.py --all)
 sha256sum -c /tmp/anki-oracle.sha
 git status --short internal/notetype/testdata
 ```
 
-The checksum command must report every file as `OK`. The status command must print nothing.
+The checksum command must report every listed file as `OK`. The status command may report the
+memory-replay package: its runtime-generated IDs currently make it non-byte-deterministic. The
+memory-replay golden returned the same values in repeated runs in the current environment.
 
 The generator leaves `learning-due.anki21.apkg` and `learning-due.golden.json` untouched by default.
 Pass `--rebuild-learning-due` to regenerate the pair together when its rule changes. The golden
@@ -101,7 +105,7 @@ Anki's exporter keeps only the note types an exported note refers to, so a packa
 carries an unused one. Packages written by older exporters did carry them, and the note types an
 importer creates from such a package is what this fixture pins. The generator therefore copies the
 unused note type's rows from the source collection into the exported database before the ids,
-timestamps and ZIP are normalised, so the fixture is as deterministic as every other package.
+timestamps and ZIP are normalised, so that rendering fixture is deterministic.
 
 The media files (`placeholder.png`, `placeholder2.png`, `placeholder.wav`, `placeholder2.wav`)
 are generated as fixed bytes. A package carries only the media its own notes reference.
@@ -181,10 +185,31 @@ a note that carries it on its shapes is in "hide all, guess one" mode, and a not
 
 ## Golden JSON
 
-`memory-replay.anki2.apkg` is the scheduling exception: it carries two histories
-and no FSRS memory state. After import Anki leaves `cards.data` as `{}`; the
-golden records `compute_memory_state()` on each imported card, not stored values.
-The package is a deterministic legacy fixture derived from the stock package.
+`memory-replay.anki2.apkg` is a legacy scheduling fixture derived from the stock package. It
+carries partial review, reset, lapse, relearning, repeated-learning, manual scheduling,
+filtered-deck and subday histories without stored FSRS memory states. The Set due date, Forget
+and filtered-off control rows come from Anki operations. After import Anki leaves `cards.data`
+as `{}`; the golden records
+`compute_memory_state()` on each imported card, not stored values.
+
+Measured on the pinned oracle, `review-easy` produces stability `177.0900421142578` and difficulty
+`3.0119054317474365`; SM-2 initialized from its first row's interval 30 and factor 2500, followed
+by the remaining Easy ratings at 10 and 30 days, produces `177.08998536439944` and
+`3.0119035440777` with go-fsrs. Changing that first row's `lastIvl` or rating did not change the
+oracle result, while changing its interval or factor did. `review-lapses` produces
+`0.49299123883247375` and `9.558306694030762`; the same SM-2 start followed by Again at 10 and
+1 days produces `0.49299134736533484` and `9.558306728603702`. `relearning-start` produces
+`1.0` and `8.215851783752441`: its first row has a negative interval and its second has interval
+1 and factor 2500. In the measured histories, `set-due` and `filtered-off` match
+`learning-reviews` at `63.200775146484375` and `2.1043312549591064`; `forget` produces
+`20.0` and `6.413895130157471`. These measurements do not establish full replay alignment.
+
+The `subday` rows have Unix millisecond timestamps `1699920000000` and `1700002800000`
+(2023-11-14 00:00 and 23:00 UTC). Anki returns `7.315299987792969` and
+`2.1112141609191895`; the attempted Go replay with importing user timezone UTC and cutoff 00:00
+returned `2.3065` and `2.11121423578539`. That implementation was reverted. DeltaT remains unresolved. The observed current
+collection `next_day_at` was `1793563200`; that value does not prove the historical cutoff.
+The comparison tolerance remains `1e-4` and has not been relaxed.
 
 One file per fixture group, UTF-8, keys sorted, two-space indent, one trailing newline.
 

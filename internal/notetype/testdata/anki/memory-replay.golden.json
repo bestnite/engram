@@ -28,9 +28,21 @@
       "difficulty": 3.0119054317474365,
       "stability": 177.0900421142578
     },
+    "review-filtered-off": {
+      "difficulty": 3.0119054317474365,
+      "stability": 177.0900421142578
+    },
+    "review-forget": {
+      "difficulty": 4.451839447021484,
+      "stability": 130.8785400390625
+    },
     "review-lapses": {
       "difficulty": 9.558306694030762,
       "stability": 0.49299123883247375
+    },
+    "review-set-due": {
+      "difficulty": 3.0119054317474365,
+      "stability": 177.0900421142578
     },
     "second-learning": {
       "difficulty": 6.4021148681640625,
@@ -39,6 +51,10 @@
     "set-due": {
       "difficulty": 2.1043312549591064,
       "stability": 63.200775146484375
+    },
+    "subday": {
+      "difficulty": 2.1112141609191895,
+      "stability": 7.315299987792969
     }
   },
   "source": "anki==26.9.3"

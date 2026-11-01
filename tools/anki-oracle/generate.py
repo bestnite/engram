@@ -2008,7 +2008,7 @@ def build_memory_fixture(workdir: Path) -> None:
     conn.commit()
     conn.close()
     col = Collection(str(db_path))
-    labels = ("review-lapses", "review-easy", "set-due", "forget", "relearning-start", "second-learning", "learning-reviews", "filtered-off")
+    labels = ("review-lapses", "review-easy", "set-due", "forget", "relearning-start", "second-learning", "learning-reviews", "filtered-off", "review-set-due", "review-forget", "review-filtered-off", "subday")
     new_ids = {}
     for label in labels:
         note = col.new_note(col.models.by_name("Basic"))
@@ -2016,17 +2016,17 @@ def build_memory_fixture(workdir: Path) -> None:
         note["Back"] = label
         col.add_note(note, 1)
         new_ids[label] = note.cards()[0].id
-    for label in ("set-due", "forget", "filtered-off"):
+    for label in ("set-due", "forget", "filtered-off", "review-set-due", "review-forget", "review-filtered-off"):
         cid = new_ids[label]
         col.db.execute("update cards set type=2, queue=2, ivl=30, factor=2500, data='{}' where id=?", cid)
-        if label == "set-due":
+        if label.endswith("set-due"):
             col.sched.set_due_date([cid], "30!")
-        elif label == "forget":
+        elif label.endswith("forget"):
             col.sched.forgetCards([cid])
         else:
             did = col.decks.new_filtered("Memory filtered")
             deck = col.decks.get(did)
-            deck["terms"] = [["memory-filtered-off", 100, 0]]
+            deck["terms"] = [[f'"memory-{label}"', 100, 0]]
             deck["resched"] = False
             col.decks.save(deck)
             assert col.sched.rebuild_filtered_deck(did).count == 1
@@ -2037,6 +2037,7 @@ def build_memory_fixture(workdir: Path) -> None:
         assert len(special) == 1, (label, special)
         col.db.execute("update revlog set id=? where id=?", base+4*day+labels.index(label), special[0][0])
     legacy = workdir / "memory-legacy.apkg"
+    print(f"memory-replay source timing: {col.sched._timing_today()}")
     col.export_anki_package(out_path=str(legacy), options=ExportAnkiPackageOptions(
         with_scheduling=True, with_deck_configs=True, with_media=False, legacy=True), limit=ExportLimit())
     col.close()
@@ -2052,12 +2053,17 @@ def build_memory_fixture(workdir: Path) -> None:
     learning = [(0, 3, 1, 0, 2500, 0), (3, 3, 3, 1, 2500, 1), (20, 3, 20, 3, 2500, 1)]
     for label in ("set-due", "forget", "learning-reviews", "filtered-off"):
         histories[label] = learning
+    for label in ("review-set-due", "review-forget", "review-filtered-off"):
+        histories[label] = [(0, 3, 30, 10, 2500, 1), (10, 4, 40, 30, 2500, 1), (40, 4, 60, 40, 2500, 1)]
+    histories["subday"] = []
     for label, history in histories.items():
         cid = new_ids[label]
         conn.execute("update cards set type=2, queue=2, ivl=30, factor=2500, data='{}', odid=0, odue=0, did=1 where id=?", (cid,))
         for days, ease, ivl, last, factor, kind in history:
             stamp = base + days*day + 100 + labels.index(label)
             conn.execute("insert into revlog values (?, ?, -1, ?, ?, ?, ?, 1000, ?)", (stamp, cid, ease, ivl, last, factor, kind))
+    for stamp, ivl, last, kind in [(1699920000000, 1, 0, 0), (1700002800000, 3, 1, 1)]:
+        conn.execute("insert into revlog values (?, ?, -1, 3, ?, ?, 2500, 1000, ?)", (stamp, new_ids["subday"], ivl, last, kind))
     conn.commit()
     conn.execute("vacuum")
     conn.close()
@@ -2073,6 +2079,7 @@ def build_memory_fixture(workdir: Path) -> None:
             package_path=str(package), options=ImportAnkiPackageOptions(
                 with_scheduling=True, with_deck_configs=True)))
         result = {"source": SOURCE, "cards": {}}
+        print(f"memory-replay imported timing: {col.sched._timing_today()}")
         for name in ("partial", "reset", *labels):
             nid = next(nid for nid in col.find_notes("") if (col.get_note(nid).guid == {"partial": "stock-basic-one", "reset": "stock-basic-two"}.get(name) if name in ("partial", "reset") else col.get_note(nid)["Front"] == "memory-" + name))
             card = col.get_note(nid).cards()[0]
@@ -2172,6 +2179,14 @@ def main(argv: list[str]) -> int:
     if "--table" in argv:
         print_table()
         return 0
+
+    if not argv or argv == ["--memory-replay"]:
+        with tempfile.TemporaryDirectory(prefix="anki-oracle-") as directory:
+            build_memory_fixture(Path(directory))
+        return 0
+
+    if not set(argv) <= {"--all", "--rebuild-learning-due"}:
+        raise ValueError("expected --memory-replay, --all, --rebuild-learning-due, or --table")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     workdir = Path(tempfile.mkdtemp(prefix="anki-oracle-"))
