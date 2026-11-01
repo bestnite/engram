@@ -693,3 +693,112 @@ func assertAnkiSubDayRevlog(t *testing.T, raw []byte, label string) {
 		}
 	}
 }
+
+// seedBulkNotes writes count notes with one card each directly, for the bind-cap test.
+func seedBulkNotes(t *testing.T, db *gorm.DB, fixture ankiExportFixture, count int) {
+	t.Helper()
+	now := time.Now().UTC()
+	notes := make([]Note, count)
+	for i := range notes {
+		notes[i] = Note{
+			PublicID: NewPublicID(), DeckID: fixture.deckID, NoteTypeID: Ptr(fixture.basicTypeID),
+			FieldsJSON: `{"front":"front","back":"back"}`, SearchText: "front back",
+			TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
+		}
+	}
+	if err := db.CreateInBatches(&notes, 500).Error; err != nil {
+		t.Fatalf("create %d notes: %v", count, err)
+	}
+	cards := make([]Card, count)
+	for i := range cards {
+		cards[i] = Card{
+			PublicID: NewPublicID(), NoteID: notes[i].ID, Template: "forward",
+			Ordinal: 0, CreatedAt: now,
+		}
+	}
+	if err := db.CreateInBatches(&cards, 500).Error; err != nil {
+		t.Fatalf("create %d cards: %v", count, err)
+	}
+}
+
+// seedBulkCards writes notes notes and cardsPerNote cards each, so the card-id lists
+// exceed the bind cap while the note-id list stays small.
+func seedBulkCards(t *testing.T, db *gorm.DB, fixture ankiExportFixture, notes, cardsPerNote int) {
+	t.Helper()
+	now := time.Now().UTC()
+	noteRows := make([]Note, notes)
+	for i := range noteRows {
+		noteRows[i] = Note{
+			PublicID: NewPublicID(), DeckID: fixture.deckID, NoteTypeID: Ptr(fixture.basicTypeID),
+			FieldsJSON: `{"front":"front","back":"back"}`, SearchText: "front back",
+			TagsJSON: "[]", CreatedAt: now, UpdatedAt: now,
+		}
+	}
+	if err := db.CreateInBatches(&noteRows, 500).Error; err != nil {
+		t.Fatalf("create %d notes: %v", notes, err)
+	}
+	cards := make([]Card, 0, notes*cardsPerNote)
+	for i := range noteRows {
+		for j := 0; j < cardsPerNote; j++ {
+			cards = append(cards, Card{
+				PublicID: NewPublicID(), NoteID: noteRows[i].ID, Template: fmt.Sprintf("t%d", j),
+				Ordinal: j, CreatedAt: now,
+			})
+		}
+	}
+	if err := db.CreateInBatches(&cards, 500).Error; err != nil {
+		t.Fatalf("create %d cards: %v", len(cards), err)
+	}
+}
+
+// TestExportAnkiPackageAboveSQLiteBindCap exports a deck whose note-id list and a deck
+// whose card-id list each exceed SQLite's bind-parameter cap. The export used to pass
+// both lists as IN parameters and fail on a legal deck; the subqueries keep them on the
+// database side. This is SQLite-only: the cap is the SQLite one.
+func TestExportAnkiPackageAboveSQLiteBindCap(t *testing.T) {
+	db := testDatabases(t)["sqlite"]
+	if err := db.AutoMigrate(AllModels()...); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	ctx := context.Background()
+	owner := seedUsers(t, db, "anki_bind_cap_owner")[0]
+	opts := PackageOptions{IncludeProgress: true, IncludeReviews: true}
+
+	t.Run("many notes", func(t *testing.T) {
+		const count = 33000
+		fixture := seedAnkiExportDeck(t, db, owner)
+		seedBulkNotes(t, db, fixture, count)
+
+		raw, err := NewDeckStore(db).ExportAnkiPackage(ctx, owner, fixture.deckID, opts)
+		if err != nil {
+			t.Fatalf("ExportAnkiPackage over the note-id bind cap: %v", err)
+		}
+		col := readAnkiCollection(t, raw)
+		var got int
+		if err := col.QueryRow(`SELECT count(*) FROM notes`).Scan(&got); err != nil {
+			t.Fatalf("count exported notes: %v", err)
+		}
+		if got < count {
+			t.Errorf("exported %d notes, want at least %d", got, count)
+		}
+	})
+
+	t.Run("many cards from few notes", func(t *testing.T) {
+		const noteCount, cardsPerNote = 10, 3300
+		fixture := seedAnkiExportDeck(t, db, owner)
+		seedBulkCards(t, db, fixture, noteCount, cardsPerNote)
+
+		raw, err := NewDeckStore(db).ExportAnkiPackage(ctx, owner, fixture.deckID, opts)
+		if err != nil {
+			t.Fatalf("ExportAnkiPackage over the card-id bind cap: %v", err)
+		}
+		col := readAnkiCollection(t, raw)
+		var got int
+		if err := col.QueryRow(`SELECT count(*) FROM cards`).Scan(&got); err != nil {
+			t.Fatalf("count exported cards: %v", err)
+		}
+		if got < noteCount*cardsPerNote {
+			t.Errorf("exported %d cards, want at least %d", got, noteCount*cardsPerNote)
+		}
+	})
+}

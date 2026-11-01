@@ -762,7 +762,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   -count=1`, `go test ./internal/api/ -run 'TestBulkNotes|TestReviewTags' -count=1` and
   `go test ./internal/mcp/ -run 'Tag' -count=1` pass.
 
-- [ ] **M19-22 A large but legal deck cannot be exported** — *should-fix.* Export expands every note
+- [x] **M19-22 A large but legal deck cannot be exported** — *should-fix.* Export expands every note
   and card ID into one `IN` list with no batching (`internal/store/anki_export.go:68-71,122-125,135-138`).
   SQLite's bind cap is reached at 33,000 notes, and one collection entry can hold any number of notes,
   so the zip entry limit is no protection. *Reproduced* with 33,000 real notes: `export anki package:
@@ -771,6 +771,35 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   an error rather than crashing. *Acceptance:* join or subquery the deck inside the database, or load in
   fixed batches preserving order and dedup, at all three sites; a regression exports a deck above the
   SQLite bind cap and one with few notes but many cards.
+  *Closed by this commit (`fix(store): keep the deck's id lists on the database side when exporting`).*
+  `ExportAnkiPackage` (`internal/store/anki_export.go:55`) no longer builds `noteIDs` or binds `cardIDs`
+  into `IN` lists. Cards are selected with `note_id IN (?)` over a `notes` subquery for the deck, and the
+  progress and revlog queries (`:126,139`) use `card_id IN (?)` over a `cards` subquery that itself
+  selects the deck's notes. Orders are unchanged, the subqueries inherit the soft-delete scope of the
+  original `Find` calls, and the id slices that remain are only used for length checks and archive
+  mapping.
+  `TestExportAnkiPackageAboveSQLiteBindCap` (`internal/store/anki_export_test.go`) is SQLite-only
+  because the cap is SQLite's: one deck has 33,000 notes (33,000 note ids and 33,000 card ids), and a
+  second has 10 notes with 3,300 cards each (a small note-id list and a 33,000 card-id list). Both
+  exports run with `IncludeProgress` and `IncludeReviews`, and the archive must carry at least the
+  seeded notes and cards. Raw output of
+  `go test ./internal/store/ -run TestExportAnkiPackageAboveSQLiteBindCap -count=1 -v`:
+  ```
+  === RUN   TestExportAnkiPackageAboveSQLiteBindCap
+      anki_export_test.go:759: TEST_PG_DSN not set: skipping the PostgreSQL path on this machine
+  === RUN   TestExportAnkiPackageAboveSQLiteBindCap/many_notes
+  === RUN   TestExportAnkiPackageAboveSQLiteBindCap/many_cards_from_few_notes
+  --- PASS: TestExportAnkiPackageAboveSQLiteBindCap (5.34s)
+      --- PASS: TestExportAnkiPackageAboveSQLiteBindCap/many_notes (4.03s)
+      --- PASS: TestExportAnkiPackageAboveSQLiteBindCap/many_cards_from_few_notes (1.30s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	5.357s
+  ```
+  With only `internal/store/anki_export.go` reverted, the same run failed in both subtests, the first
+  with `export anki package: list cards: SQL logic error: too many SQL variables (1)` and the second
+  with `export anki package: list progress: SQL logic error: too many SQL variables (1)`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestExportAnkiPackage|TestAnkiExport|TestImportPackage|TestPackageImport|TestMedia' -count=1`
+  passes on both drivers.
 
 - [ ] **M19-23 The due forecast uses a fixed 24 hours in place of the local day boundary** — *should-fix.*
   `stats.go` builds forecast buckets from `start+24h` while the review-day code uses local `AddDate`

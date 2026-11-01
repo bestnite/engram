@@ -59,13 +59,14 @@ func (s *DeckStore) ExportAnkiPackage(ctx context.Context, actorUserID, deckID u
 	if err := s.db.WithContext(ctx).Where("deck_id = ?", deckID).Order("id ASC").Find(&notes).Error; err != nil {
 		return nil, fmt.Errorf("export anki package: list notes: %w", err)
 	}
-	noteIDs := make([]uint64, len(notes))
-	for i := range notes {
-		noteIDs[i] = notes[i].ID
+	// The deck's note ids stay inside the database: a list long enough to name a very large deck
+	// exceeds SQLite's bind-parameter cap, so the cards and progress queries use a subquery instead.
+	notesOfDeck := func() *gorm.DB {
+		return s.db.WithContext(ctx).Model(&Note{}).Select("id").Where("deck_id = ?", deckID)
 	}
 	var cards []Card
-	if len(noteIDs) > 0 {
-		if err := s.db.WithContext(ctx).Where("note_id IN ?", noteIDs).
+	if len(notes) > 0 {
+		if err := s.db.WithContext(ctx).Where("note_id IN (?)", notesOfDeck()).
 			Order("note_id ASC, ordinal ASC, id ASC").Find(&cards).Error; err != nil {
 			return nil, fmt.Errorf("export anki package: list cards: %w", err)
 		}
@@ -73,6 +74,9 @@ func (s *DeckStore) ExportAnkiPackage(ctx context.Context, actorUserID, deckID u
 	cardIDs := make([]uint64, len(cards))
 	for i := range cards {
 		cardIDs[i] = cards[i].ID
+	}
+	cardsOfDeck := func() *gorm.DB {
+		return s.db.WithContext(ctx).Model(&Card{}).Select("id").Where("note_id IN (?)", notesOfDeck())
 	}
 
 	cfg := ankiWriteConfig{
@@ -119,7 +123,7 @@ func (s *DeckStore) ExportAnkiPackage(ctx context.Context, actorUserID, deckID u
 
 	if opts.IncludeProgress && len(cardIDs) > 0 {
 		var states []CardState
-		if err := s.db.WithContext(ctx).Where("user_id = ? AND card_id IN ?", actorUserID, cardIDs).
+		if err := s.db.WithContext(ctx).Where("user_id = ? AND card_id IN (?)", actorUserID, cardsOfDeck()).
 			Order("card_id ASC").Find(&states).Error; err != nil {
 			return nil, fmt.Errorf("export anki package: list progress: %w", err)
 		}
@@ -132,7 +136,7 @@ func (s *DeckStore) ExportAnkiPackage(ctx context.Context, actorUserID, deckID u
 
 	if opts.IncludeReviews && len(cardIDs) > 0 {
 		var reviews []Review
-		if err := s.db.WithContext(ctx).Where("user_id = ? AND card_id IN ?", actorUserID, cardIDs).
+		if err := s.db.WithContext(ctx).Where("user_id = ? AND card_id IN (?)", actorUserID, cardsOfDeck()).
 			Order("id ASC").Find(&reviews).Error; err != nil {
 			return nil, fmt.Errorf("export anki package: list reviews: %w", err)
 		}
