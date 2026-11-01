@@ -2992,9 +2992,9 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Acceptance:* CONTRIBUTING restates the note-type/answer-control rule and the three coverage targets in the
   words `AGENTS.md` uses.
   *Closed by this commit (`docs(contributing): restate the note-type rule and the coverage targets`).*
-  `CONTRIBUTING.md:174-175` now reads "**Note types are data. Answer controls are registered:** adding one
+  `CONTRIBUTING.md:178-179` now reads "**Note types are data. Answer controls are registered:** adding one
   means adding one file and registering it; core code must not change.", the sentence `AGENTS.md:74-75`
-  keeps, and `CONTRIBUTING.md:198` now names `internal/schedule`, `internal/notetype` and `internal/answer`,
+  keeps, and `CONTRIBUTING.md:202` now names `internal/schedule`, `internal/notetype` and `internal/answer`,
   the three packages `AGENTS.md:111-113` names. That the registration the rule describes is the answer-control
   registry is visible in the code it points at: `Register` (`internal/answer/answer.go:100`) plus one
   `init()` per control (`internal/answer/choice_multi.go:25`). Raw output of the checks that the old text
