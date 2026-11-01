@@ -261,37 +261,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
 
-- [ ] **M18-87 The ledger rows state what landed from `f22a626` to `027bd6a`, and only that** — four
-  ledger rows disagree with the code or leave out a landed change. First, the `M18-2` row names
-  "`M18-47` to `M18-50`", which includes `M18-49`; `M18-49` is still open in section 1. Second, the same
-  row names "`M18-65` to `M18-71`" but states nothing for `M18-66`, `M18-67` and `M18-68`. Since `M18-66`,
-  a TEXT value in `cards.type`, `cards.queue`, `cards.odid` or `cards.flags` fails the import instead of
-  skipping the card, and the error for a refused REAL value names its column (`cards.nid holds a REAL
-  value`). Since `M18-68`, with `include_progress` off, `reviews_discarded` also counts the revlog rows
-  the reader could not read, and the report gains `deck_config_skipped`. Since `M18-67`, the Import page
-  shows `cards_skipped`. No ledger row names `deck_config_skipped`. Third, no row records migration
-  `0020_repair_preset_scheduler_limits` (`M18-59`), which rewrites stored presets on upgrade: a
-  `maximum_interval_days` above 36 500 becomes 36 500, and a learning or relearning step list that the
-  scheduler refuses becomes the default steps. The `M18-17` row also leaves out `M18-60`: the preset page
-  refuses a value above 36 500 before sending it. The `M18-1` row leaves out `M18-73`: an export with
-  `IncludeWeights` on now fails when the preset's `weights_json` is `[]`. Fourth, the row "Anki memory
-  state is approximate until the replay rule is measured" says that the importer takes the SM-2 state
-  "whenever a card's first kept revlog row is not a learning row". `deriveAnkiMemory` in
-  `internal/store/anki_import.go` takes it only when the first kept row is a review row (type 1) or the
-  card has no kept row. A history that begins with a relearning row (type 2) or a filtered-deck row
-  (type 3) is replayed from an empty state (see `M18-92`). The row's title also names `M18-49` and
-  `M18-79`, which are open, so the row reads as if they had shipped. The fix: the `M18-2` row names
-  `M18-47`, `M18-48` and `M18-50` one by one instead of the range, and states the `M18-66` and `M18-68`
-  changes and the `M18-67` page row. One row states migration `0020` and its two rewrites and is marked
-  "No — a versioned migration is added; stored preset values change", as the `M17-38` row is. The
-  `M18-17` row names `M18-60`. The `M18-1` row states the `[]` refusal and names `M18-73`. The
-  approximation row states the rule `deriveAnkiMemory` applies when this entry lands, and its title names
-  only landed IDs. Only the parent edits this file, with the maintainer present, in the same change as
-  `M18-88`. *Acceptance:* in the ledger section, `grep -n -E 'M18-(47|48|50|60|66|67|68|73)\b|deck_config_skipped|0020'`
-  prints at least one line for each alternative, and `grep -n -E 'M18-4[0-9] to M18-5|M18-(49|79)\b'`
-  prints nothing. Evidence is both outputs, limited to the ledger section and quoted in the closing
-  commit.
-
 - [ ] **M18-88 The ledger rows that later commits superseded are restated** — commits after `027bd6a`
   changed behaviour that ledger rows written by `M18-22`, `M18-35`, `M18-45` and `M18-72` still describe.
   First, the `M18-4` row says that a refused `preset_id` answers 400 `invalid_request`. Since `M18-82`
