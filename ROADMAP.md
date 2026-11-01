@@ -381,23 +381,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   Evidence is the output of `grep -n -E 'M18-(10|11|12|36|37)\b' ROADMAP.md` limited to the ledger
   section.
 
-- [ ] **M18-60 The preset page and API state the 36 500-day bound** — since `M18-17` the store refuses a
-  maximum interval above 36 500. The layers in front of it still describe the old rule.
-  `parsePresetRequest` in `internal/web/presets_api.go` refuses only `<= 0`, and its doc comment says
-  "maximum interval a positive integer". The English fallback message for `preset_max_interval_invalid`
-  says "The maximum interval must be a positive number of days." `frontend/src/lib/views/PresetsView.svelte`
-  refuses only `<= 0` on the client. It shows `presets.form.error.max_interval` ("Maximum interval must
-  be a positive whole number of days." / "最大间隔必须是正整数天数。") for the server's
-  `preset_max_interval_invalid` as well. A user who types 40 000 therefore sees a message that 40 000
-  satisfies. The fix: `parsePresetRequest` returns `preset_max_interval_invalid` for a value above
-  36 500 as well, and its doc comment says so. The fallback message and both catalogs' text for
-  `presets.form.error.max_interval` state the range 1 to 36 500. `PresetsView.svelte` refuses a value
-  above 36 500 before sending. The catalog lines keep their keys and their positions; only their text
-  changes, and the two catalogs keep identical key sets. *Acceptance:* a handler test in
-  `internal/web/presets_api_test.go` shows that 36 501 is refused with the new message on create and on
-  update. A component test shows that 36 501 displays the error and sends no request, and that 36 500
-  is sent. Evidence is the raw scoped `go test` and `go vet` output and the component test output.
-
 - [ ] **M18-61 The import report labels say what an `.apkg` import did** — `M18-14` made
   `progress_discarded` true for an `.apkg` import that carries progress and has `include_progress` off.
   `frontend/src/lib/views/ImportView.svelte` labels that row `package.report.progress_discarded`, which
