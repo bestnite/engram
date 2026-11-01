@@ -3182,7 +3182,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `internal/answer` in the import list of both `internal/api` and `internal/web`; neither documented row has it.
   *Acceptance:* regenerating with the command in the file yields a table that equals the file.
 
-- [ ] **M19-89 No test validates the shipped note-import example against its schema** — *nit.* The bulk example
+- [x] **M19-89 No test validates the shipped note-import example against its schema** — *nit.* The bulk example
   is validated against its schema by `internal/api/note_bulk_schema_test.go:58-68`, and the import side validates
   only hand-written bodies (`internal/api/schema_test.go:27-58`); no test or CI step reads
   `schema/examples/note-import.example.json`, which is the only complete payload the schema README points an
@@ -3192,6 +3192,23 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   .` returns nothing, and `uvx check-jsonschema` still reports the file valid. *Acceptance:* one Go test
   compiles both schema files and validates both shipped examples, so a schema change that invalidates an example
   fails the build.
+  *Closed by this commit (`test(api): validate the shipped schema examples`).*
+  `TestShippedSchemaExamplesValidate` (`internal/api/schema_examples_test.go`) is a two-row table that compiles
+  `schema/note-import.schema.json` and `schema/note-bulk.schema.json` and validates
+  `schema/examples/note-import.example.json` and `schema/examples/note-bulk.example.json` against them. Raw output
+  of `go test ./internal/api/ -run TestShippedSchemaExamplesValidate -count=1 -v`:
+  ```
+  === RUN   TestShippedSchemaExamplesValidate
+  === RUN   TestShippedSchemaExamplesValidate/note-import
+  === RUN   TestShippedSchemaExamplesValidate/note-bulk
+  --- PASS: TestShippedSchemaExamplesValidate (0.00s)
+      --- PASS: TestShippedSchemaExamplesValidate/note-import (0.00s)
+      --- PASS: TestShippedSchemaExamplesValidate/note-bulk (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.011s
+  ```
+  With `schema/examples/note-import.example.json` replaced by `{}` the same run failed on that row with
+  `missing property 'notes'`, so the test does fail when an example stops matching its schema.
 
 - [x] **M19-100 A failed export is reported as an empty or truncated success** — *should-fix.* `internal/api/export.go:89-94`
   logs the `ExportCards` error and then closes the JSON body with the rows written so far and `"count":<written>`;
