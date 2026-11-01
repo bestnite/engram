@@ -2012,7 +2012,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   fetch once per dialog opening (a flag or a promise held outside the tracked state), show the failure in the
   dialog, and add a client test asserting exactly one request when the call rejects.
 
-- [ ] **M19-59 An older note-list response overwrites the newer filter and rewrites the address** — *should-fix.*
+- [x] **M19-59 An older note-list response overwrites the newer filter and rewrites the address** — *should-fix.*
   `loadData` has no request generation or abort (`frontend/src/lib/views/DeckDetailView.svelte:273-309`): it
   assigns `notes`, `total`, `page` and `appliedFilters` and then calls `replaceAddress(listAddress)`
   (`:297-301`) whichever response lands last, and the debounced filter input (`:345-348`), pagination
@@ -2021,6 +2021,23 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   showing `ab` while the list showed `OLD-A` and the address became `/decks/d1?q=a`. *Acceptance:* keep one
   in-flight generation per list (bump a counter and drop stale results, or abort the previous request) and add a
   client regression with two out-of-order filter responses that must end on the newest result and address.
+  *Closed by this commit (`fix(frontend): drop a stale note-list response`).*
+  `loadData` (`frontend/src/lib/views/DeckDetailView.svelte:277`) now takes a generation before its first
+  await and applies the notes, total, page, filters and address only while that generation is still the
+  newest; the error and the loading flag are guarded the same way. The debounced input, paging and the
+  post-bulk reload therefore keep whatever the latest request returned.
+  `frontend/src/tests/deck-notes-generation.client.ts` resolves the newer `q=ab` request first and the older
+  `q=a` request afterwards, then asserts the list still carries the newer row, the input still reads `ab` and
+  the address is still `/decks/d1?q=ab`. Raw output of
+  `npx vitest run --config vitest.config.client.ts src/tests/deck-notes-generation.client.ts`:
+  ```
+   Test Files  1 passed (1)
+        Tests  1 passed (1)
+  ```
+  With only the generation guards removed, the same run failed with
+  `AssertionError: expected ' Deck list Vocabulary ... OLD-A ...' to contain 'NEW'`. The eight client suites
+  covering the deck list and its neighbours end `Test Files 8 passed (8)` / `Tests 22 passed (22)`, and
+  `npm run check` ends `svelte-check found 0 errors and 0 warnings`.
 
 - [x] **M19-60 The sidebar shows the previous account's deck names after a 401 session switch** — *should-fix.*
   `refreshSidebarDecks` returns without a request inside its 15-second throttle

@@ -139,6 +139,9 @@
   // address must describe the list the user sees, not the half-typed next one.
   let appliedFilters = $state({ q: '', tag: '' });
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Every list load gets a generation. Filter typing, paging and the post-bulk reload can overlap, so a
+  // response that lands after a newer load has started is dropped instead of overwriting that newer list.
+  let listGeneration = 0;
 
   // Study by tag: tags are only selectable within this deck (a same-named tag in another deck is not the same category); multiple selections take the union.
   let tagReviewOpen = $state(false);
@@ -272,6 +275,7 @@
    */
   async function loadData(targetPage = 1): Promise<void> {
     if (!deckId) return;
+    const generation = ++listGeneration;
     loading = true;
     error = null;
     page = targetPage;
@@ -285,6 +289,7 @@
         try {
           deck = await apiClient.getDeck(deckId);
         } catch {}
+        if (generation !== listGeneration) return;
       }
 
       const res = await apiClient.getDeckNotes(deckId, {
@@ -293,6 +298,7 @@
         q: filters.q || undefined,
         tag: filters.tag || undefined,
       });
+      if (generation !== listGeneration) return;
 
       notes = res.notes;
       total = res.total;
@@ -300,9 +306,10 @@
       appliedFilters = filters;
       replaceAddress(listAddress);
     } catch (err) {
+      if (generation !== listGeneration) return;
       error = err instanceof Error ? err : new Error(String(err));
     } finally {
-      loading = false;
+      if (generation === listGeneration) loading = false;
     }
   }
 
