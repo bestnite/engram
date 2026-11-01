@@ -151,6 +151,17 @@ because both add a row to the same report list. `M18-71` changes only tests and 
 and `M18-68`, so that their tests use the helper it adds. `M18-72` edits this file, so only the parent
 does it, with the maintainer present, in the same change as `M18-22`, `M18-28`, `M18-55` and `M18-63`.
 
+`M18-73` to `M18-77` fix defects that a review of the landed `M18-38`, `M18-39`, `M18-40`, `M18-41`,
+`M18-42` and `M18-44` (commits `b072db7` to `1b8a651`) found. They also land before `M18-5`. `M18-73`
+changes `internal/store/preset_weights.go` and `internal/store/preset_weights_test.go`, so it never runs
+beside `M18-69`, which changes the same file. `M18-74` and `M18-77` change only tests. `M18-75` changes
+`internal/store/package_import.go`, so it never runs beside `M18-58`, `M18-61`, `M18-69` or `M18-70`,
+which change the same file, and it lands before `M18-46`, whose `README.md` sentence must match the texts
+`M18-75` changes. `M18-76` changes `internal/store/anki_import.go`, so it runs alone like the entries
+above, and it lands after `M18-49` and `M18-51`, which change the function it reshapes. `M18-77` lands
+after `M18-49`, which changes the replay its expected values come from, and never runs beside another
+entry that changes `internal/store/anki_progress_import_test.go`.
+
 - [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
   half of `internal/store/package_import.go`, `internal/store/package_document.go`,
   `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
@@ -857,6 +868,167 @@ does it, with the maintainer present, in the same change as `M18-22`, `M18-28`, 
   `M18-63`. *Acceptance:* the ledger row that names `M18-2` also names `M18-23`, `M18-24`, `M18-25`,
   `M18-26` and `cards_skipped`; one ledger row names `M18-19`. Evidence is the output of
   `grep -n -E 'M18-(19|23|24|25|26)\b|cards_skipped' ROADMAP.md` limited to the ledger section.
+
+- [ ] **M18-73 The export follows the scheduler's weight rule, and the rule is stated where it lives** —
+  `M18-38` moved the scheduler's weight rule into `PresetWeights` in `internal/store/preset_weights.go`.
+  `ankiWeights` in `internal/store/anki_export.go` still decodes the same column with its own copy of the
+  rule, and the two copies disagree on one value. `PresetWeights` passes an empty JSON array `[]` to
+  `fsrs.MigrateWeights`, which refuses it, so no scheduler can be built from that preset. `ankiWeights`
+  returns no weights for `[]`, so the export succeeds. The comment `M18-39` wrote on `ankiWeights` says
+  that the export refuses a value "because the scheduler refuses the same value"; for `[]` the scheduler
+  refuses and the export accepts. Reproduced on `main` on both drivers: the preset of `seedAnkiExportDeck`
+  with `weights_json` set to `[]`, exported with `IncludeWeights` and `IncludeDeckConfigs` on, returns no
+  error, while `PresetWeights` on the same text returns `store: migrate preset weights: fsrs: invalid
+  weights slice length: must be 17, 19, or 21`. No write path in the current code stores `[]`, so only a
+  row written by hand or by an earlier release reaches this case. Three comment and error gaps sit beside
+  it. First, the doc comment of `PresetWeights` names NULL, empty and `null`, but not a whitespace-only
+  value, which the code also treats as the defaults. It also does not say why the function lives in
+  `internal/store`: the progress import derives a memory state that the scheduler later continues from,
+  so both must decode the weights with one rule, and `internal/schedule` imports `internal/store`, so the
+  rule cannot live in the scheduler. Second, the comments on `NewScheduler` and `Parameters` in
+  `internal/schedule/scheduler.go` say that the default weights apply "when NULL" and name no other value.
+  Third, `Parameters` returns the error of `PresetWeights` without context, so a scheduler failure reads
+  `store: migrate preset weights: …`, while every other error of that function begins with `schedule:`.
+  The fix: `ankiWeights` keeps returning no weights for an empty string and for `null`, both after
+  trimming, and passes every other value to `PresetWeights`, returning its error wrapped with `%w`.
+  `ankiWeights` then calls neither `json.Unmarshal` nor `fsrs.MigrateWeights` itself, and `[]` fails the
+  export. The comment of `ankiWeights` states that the export accepts exactly the values the scheduler
+  accepts, and that the empty string and `null` write no weights. The `PresetWeights` comment names the
+  whitespace-only value and states the reason above. The `NewScheduler` and `Parameters` comments name
+  the four values that give the default weights: NULL, an empty string, a whitespace-only string and
+  `null`. `Parameters` wraps the error as `schedule: preset weights: %w`. `presetToPackage` in
+  `internal/store/package.go`, the `.edeck` export, keeps its own rule, because `M18-5` deletes it.
+  *Acceptance:* `grep -nE 'fsrs\.MigrateWeights\(|json\.Unmarshal\(' internal/store/anki_export.go`
+  prints nothing. A table test in `internal/store/preset_weights_test.go` calls `ankiWeights` with `""`,
+  `" null "`, `[]`, a 21-value set, a 17-value set, `[1,2,3]` and `not json`. It gets no weights and no
+  error for the first two, an error for `[]`, the `fsrs.MigrateWeights` result for the two sets, and an
+  error for the last two. A test in the same file exports the `seedAnkiExportDeck` deck with `weights_json`
+  `[]` on both drivers: with `IncludeWeights` on it gets an error, and with `IncludeWeights` off it gets a
+  package. A test in `internal/schedule` builds a scheduler from a preset whose `weights_json` is
+  `not json` and gets an error whose text begins with `schedule:`. `TestPresetWeights` and
+  `TestExportAnkiPackageRoundTrip` keep their results. Evidence is the grep output and the raw scoped
+  `go test` and `go vet` output of `internal/store` and `internal/schedule`, the PostgreSQL run with
+  `TEST_PG_DSN` set.
+
+- [ ] **M18-74 The `M18-42` refusal is tested on every transport, and the refusal cases carry names** —
+  `M18-42` named five entries that dropped a `preset_id` sent with an existing-deck target and no
+  `preset_mode`: the multipart route, the URL import, the upload ticket, and the `import_deck` and
+  `create_import_upload` MCP tools. The landed tests cover the multipart route
+  (`TestImportMultipartRejectsPresetOptions`) and the upload ticket (`TestImportUploadPresetModes`) only.
+  `TestImportURLPresetSelection` in `internal/api/package_url_test.go` and
+  `TestImportToolsRejectPresetOptions` in `internal/mcp/package_upload_test.go` have no such case. If one
+  of those entries stopped passing the request through `ValidateImportPreset`, it would drop the id again
+  and no test would fail. The behaviour itself is correct on `main`. Measured with a temporary test:
+  `POST /api/v1/decks/import-url` with `target` `into_deck:<public id>` of a deck the caller owns and the
+  caller's own `preset_id` answers 400 `invalid_request` and makes no fetcher call, and both MCP tools
+  answer `invalid_request: The request is invalid. — invalid preset selection`. Second, the refusal cases
+  of `TestImportPresetModes` in `internal/store/package_preset_mode_test.go` run as subtests named `#00`
+  to `#13`. `fmtOptions` encodes `PackageImportOptions` with `json.Marshal`, which fails on the `Now`
+  function field, and it discards the error. Every name is therefore empty, and a failing case cannot be
+  identified from the output. The fix adds and changes tests only. `TestImportURLPresetSelection` gains
+  a refused case with `target` `into_deck:<public id>` of a deck the caller owns, the caller's own
+  `preset_id` and no `preset_mode`. Like the existing refused cases, it is answered with 400
+  `invalid_request`, makes no fetcher call and spends no rate-limit quota. `TestImportToolsRejectPresetOptions`
+  gains, for both tools, a case with `target` `into_deck:<public id>` of a deck the caller owns, the
+  caller's own `preset_id` and no `preset_mode`. It is answered with `invalid_request` and changes none of
+  the row counts the test checks. Each refusal case of `TestImportPresetModes` gets a name that states its
+  target, its mode, which preset it names and its weights flag, and `fmtOptions` is deleted.
+  *Acceptance:* the new cases pass; the output of
+  `go test -count=1 -v -run TestImportPresetModes ./internal/store/` holds no subtest name that ends in
+  `#` followed by two digits; every existing case keeps its result. Evidence is that output and the raw
+  scoped `go test` and `go vet` output of `internal/store`, `internal/api` and `internal/mcp`, the
+  PostgreSQL run with `TEST_PG_DSN` set.
+
+- [ ] **M18-75 Preset-choice texts state the existing-deck rule, and the remaining preset errors are
+  wrapped** — since `M18-42`, `ValidateImportPreset` in `internal/store/package_import.go` treats the two
+  kinds of target differently. For `new_deck`, an empty `preset_mode` becomes `new`; `preset_id` is
+  required with `reuse` and `copy` and refused with `new`. For `into_deck` and `replace_deck`, an empty
+  mode and `new` are accepted and change nothing; `reuse`, `copy`, any other mode and any non-zero
+  `preset_id` are refused. Five texts do not state this, and four errors are returned unwrapped. First, the
+  `jsonschema` texts that `M18-44` wrote for `preset_mode` and `preset_id` of `importDeckIn` and
+  `createImportUploadIn` in `internal/mcp/tools.go` say "for new_deck only" and "refused for any other
+  mode". An agent cannot tell from them whether a `preset_id` sent with `into_deck` is ignored or refused.
+  It is refused whatever the mode is, and the silent drop of that id was the `M18-42` defect. The
+  `preset_mode` text also omits that an empty value means `new`. The Go comments of the four fields do not
+  state the existing-deck rule either. Second, the help texts of `--preset-mode` and `--preset-id` in
+  `cmd/engram/package.go` read "preset mode: new, reuse or copy" and "public id of the preset to reuse or
+  copy", and state no target rule. Third, `M18-44` replaced the comment of `ValidateImportPreset`, and the
+  new comment no longer says that the function writes `new` into `opts.PresetMode` for `new_deck`.
+  Callers depend on that write: `selectImportPreset` calls the create function only when the mode equals
+  `new`, so an empty mode that skipped validation would reach the preset lookup with `PresetID` 0 and be
+  refused. Fourth, the comment `M18-44` added to `validateImportPreset` in `internal/api/package_upload.go`
+  says when the check runs but not why, and the `M18-44` entry asked for the reason. The reason is that a
+  request the import would refuse must not spend rate-limit quota, an import slot or an outbound download,
+  and must not obtain an upload ticket that the upload would refuse. Fifth, the comment of
+  `ImportDeckPackageURL` in `internal/api/package_url.go` says that the authorization `ImportDeckPackage`
+  repeats after the download preserves "the invariant that authorization precedes fetching bytes". The
+  authorization before the download keeps that invariant. The repeated one re-checks a decision that a
+  role change during the download could have invalidated. The unwrapped errors: `ValidateImportPreset`
+  returns the error of its preset count as it is, and `selectImportPreset` returns the errors of its preset
+  lookup, of `uniqueOwnerName` and of the copy's `Create` as they are; section 2.4 of `AGENTS.md` requires
+  wrapping with `%w`. The fix: the two `jsonschema` texts and the four Go comments state the `new_deck`
+  rule and the existing-deck rule separately. They say that an empty mode means `new` for `new_deck`, and
+  that a `preset_id` sent with `into_deck` or `replace_deck` is refused whatever the mode is. The two CLI
+  help texts state the same two rules. The `ValidateImportPreset` comment states the write into
+  `opts.PresetMode` and why `selectImportPreset` needs it. The `validateImportPreset` comment states the
+  reason above. The `ImportDeckPackageURL` comment states that the first authorization keeps the invariant
+  and why the second one runs. The four errors are wrapped with `%w` and an English context; a
+  `PackageError` is still returned unwrapped, so the transports keep answering it with 400. No status code
+  and no error code changes. *Acceptance:* each statement of each changed text and comment matches
+  `ValidateImportPreset`, `selectImportPreset`, `ImportDeckPackageURL` and `CreateImportUpload`;
+  `TestImportPresetModes`, `TestImportPresetID`, `TestImportUploadPresetModes`,
+  `TestImportMultipartRejectsPresetOptions`, `TestImportURLPresetSelection` and
+  `TestImportToolsRejectPresetOptions` keep their results. Evidence is the diff and the raw scoped
+  `go test` and `go vet` output of `internal/store`, `internal/api`, `internal/mcp` and `cmd/engram`, the
+  PostgreSQL run with `TEST_PG_DSN` set.
+
+- [ ] **M18-76 `deriveAnkiMemory` derives memory only, and its comment states its contract** — `M18-40`
+  moved the memory-state derivation of `importAnkiProgress` in `internal/store/anki_import.go` into
+  `deriveAnkiMemory`. That function also decodes `cards.data` and returns the card's `lrt`. The `lrt`
+  feeds the last-review chain of `importAnkiProgress` and is not part of the memory state. The function
+  returns `lrt` on the skip path too, where the caller discards it. Its comment states the order of the
+  rules but not the contract. It does not say that the function writes the card's stability and
+  difficulty into `state`, that it writes entries into `rowMemory` for the card's kept revlog rows, or
+  what its three results mean. It says the function "skips a card", but the function returns false and
+  the caller skips the card and counts it in `states_skipped`. Two more statements are missing or
+  misplaced. When `HistoricalMemoryStates` fails, the function discards the error and the card's earlier
+  rows keep NULL memory; the comment does not say so or why. The sentence about `DeltaT` describes code in
+  the revlog loop of `importAnkiProgress`, not code in this function. The fix: `importAnkiProgress`
+  decodes `cards.data` before it calls `deriveAnkiMemory`, keeps the error text `import Anki card %d data:
+  %w`, and passes the decoded stability and difficulty. `deriveAnkiMemory` returns only whether the card's
+  state is usable. Its comment states what it writes into `state` and into `rowMemory`, what the result
+  means, and what happens when `HistoricalMemoryStates` fails, as the code then has it. The `DeltaT`
+  sentence moves to the revlog loop. Behaviour does not change. *Acceptance:* `deriveAnkiMemory` returns
+  one `bool` and contains no `json.Unmarshal` call; the progress tests in `internal/store` and
+  `internal/schedule` keep their results on both drivers. Evidence is the diff and the raw scoped
+  `go test` and `go vet` output of `internal/store` and `internal/schedule`, the PostgreSQL run with
+  `TEST_PG_DSN` set.
+
+- [ ] **M18-77 The `M18-41` tests check which rule produced the state, and one preview test covers both
+  drivers** — `M18-41` added four cases to `TestAnkiProgressMissingMemory` in
+  `internal/store/anki_progress_import_test.go`: `relearning history`, `relearning SM2`,
+  `review stability only` and `review difficulty only`. Like the four older cases, they check only that
+  stability is at least 0.001 and that difficulty lies from 1 to 10. Any rule that yields a value in that
+  range passes. A relearning card with history that took the SM-2 path would pass, and so would a card
+  whose single package value was kept. Measured on `main` with the default weights: the three new cases
+  with history store stability 11.6875 and difficulty 1.0000, the replay of Good and Easy one day apart;
+  `relearning SM2` stores stability 7.0000 and difficulty 7.1498, the result of
+  `MemoryStateFromSM2(2.5, 7, 0.9)`. Second, `M18-41` moved `TestAnkiImportedMemoryPreview` into
+  `internal/schedule/anki_memory_import_test.go`, beside `TestImportedAnkiMemoryPreview` in
+  `internal/schedule/anki_memory_preview_test.go`, which `M18-36` added. The two names differ only in word
+  order. Both import a package and check that `Preview` accepts each stored state. The moved test runs on
+  SQLite only, while its sibling also runs on PostgreSQL. The moved test's four card shapes repeat the
+  first four cases of `TestAnkiProgressMissingMemory`. The fix changes tests only. Each case of
+  `TestAnkiProgressMissingMemory` that is not skipped compares the stored stability and difficulty, within
+  1e-4, with the value its rule gives, computed in the test with go-fsrs. For a case with history, that
+  value is the replay of the case's revlog rows. For a case without history, it is `MemoryStateFromSM2`
+  from the case's factor and interval with retention 0.9. The cases of `TestAnkiImportedMemoryPreview`
+  become cases of `TestImportedAnkiMemoryPreview`, which runs them on both drivers, and
+  `internal/schedule/anki_memory_import_test.go` is deleted. *Acceptance:* in one run with the replay
+  branch of `deriveAnkiMemory` replaced by the SM-2 branch, `TestAnkiProgressMissingMemory` fails;
+  without that change it passes. `TestImportedAnkiMemoryPreview` passes and its output shows a `postgres`
+  subtest for each moved case. `internal/schedule/anki_memory_import_test.go` no longer exists. Evidence is
+  the raw scoped `go test` and `go vet` output of both runs, the PostgreSQL run with `TEST_PG_DSN` set.
 
 ---
 
