@@ -564,7 +564,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   passes on both drivers, and `go test ./internal/api/ -run TestNoteType -count=1` and
   `go test ./internal/web/ -run TestNoteType -count=1` pass.
 
-- [ ] **M19-14 A tag filter matches different notes on SQLite and PostgreSQL** — *should-fix.* Stored
+- [x] **M19-14 A tag filter matches different notes on SQLite and PostgreSQL** — *should-fix.* Stored
   `tags_json` is folded by SQL `LOWER`, the query string by Go `strings.ToLower`
   (`internal/store/note.go:847-861`); SQLite's built-in `LOWER` only folds ASCII, so a tag stored as
   `Été` matches nothing on SQLite even with its own spelling. The same predicate serves note listing and
@@ -572,6 +572,52 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `postgres: query "été" -> 1 row(s); query "ÉTÉ" -> 1 row(s)`. *Acceptance:* one Unicode normalisation
   rule on both the stored and the queried side (a derived normalised tag column with a backfill is the
   obvious shape), with a two-driver regression covering accented and non-ASCII case folding.
+  *Closed by the `fix(store): fold tag matching over the whole of Unicode on SQLite` commit.*
+  No schema change or backfill was needed: the comparison folds the stored column as it is queried, so
+  existing rows already match and `tags_json` keeps the case the user typed. `WhereNoteTagsAny`
+  (`internal/store/note.go:847`) still folds the query pattern with `strings.ToLower`
+  (`tagLikePattern`, `:866`) and now picks the SQL folding expression from the dialect: PostgreSQL
+  keeps `LOWER`, which folds all of Unicode, while SQLite compares through `engram_lower`, a
+  deterministic scalar function the package registers on every SQLite connection (`sqlite_lower.go:20`)
+  and which runs `strings.ToLower` itself (`:11`), so the stored side and the queried side of that
+  comparison use one rule. The note list and tag-scoped study share the predicate unchanged.
+  `TestWhereNoteTagsAny` (`internal/store/note_tags_test.go:13`) gained one note per case and three
+  cases: a tag stored as `Été` is found by `été` and by `ÉTÉ`, and `Привет` is found by `ПРИВЕТ`; the
+  existing ASCII, JSON-escaping and wildcard cases still run on both drivers. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestWhereNoteTagsAny/(sqlite|postgres)/(accented_tag|non-ASCII)' -count=1 -v`:
+  ```
+  === RUN   TestWhereNoteTagsAny
+  === RUN   TestWhereNoteTagsAny/sqlite
+  === RUN   TestWhereNoteTagsAny/sqlite/accented_tag_in_its_lower-case_spelling
+  === RUN   TestWhereNoteTagsAny/sqlite/accented_tag_in_upper_case
+  === RUN   TestWhereNoteTagsAny/sqlite/non-ASCII_case_folding
+  === RUN   TestWhereNoteTagsAny/postgres
+  === RUN   TestWhereNoteTagsAny/postgres/accented_tag_in_its_lower-case_spelling
+  === RUN   TestWhereNoteTagsAny/postgres/accented_tag_in_upper_case
+  === RUN   TestWhereNoteTagsAny/postgres/non-ASCII_case_folding
+  --- PASS: TestWhereNoteTagsAny (0.30s)
+      --- PASS: TestWhereNoteTagsAny/sqlite (0.02s)
+          --- PASS: TestWhereNoteTagsAny/sqlite/accented_tag_in_its_lower-case_spelling (0.00s)
+          --- PASS: TestWhereNoteTagsAny/sqlite/accented_tag_in_upper_case (0.00s)
+          --- PASS: TestWhereNoteTagsAny/sqlite/non-ASCII_case_folding (0.00s)
+      --- PASS: TestWhereNoteTagsAny/postgres (0.23s)
+          --- PASS: TestWhereNoteTagsAny/postgres/accented_tag_in_its_lower-case_spelling (0.00s)
+          --- PASS: TestWhereNoteTagsAny/postgres/accented_tag_in_upper_case (0.00s)
+          --- PASS: TestWhereNoteTagsAny/postgres/non-ASCII_case_folding (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.312s
+  ```
+  With only `internal/store/note.go` reverted, the same cases failed on SQLite with
+  `WhereNoteTagsAny(["été"]) matched [], want [accent]`, `WhereNoteTagsAny(["ÉTÉ"]) matched [], want
+  [accent]` and `WhereNoteTagsAny(["ПРИВЕТ"]) matched [], want [cyrillic]`, while PostgreSQL still
+  passed. `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run
+  'TestWhereNoteTagsAny|TestDeckTag|TestNoteList|TestNoteTag|TestConcurrentAddTags|TestConcurrentRemoveTags'
+  -count=1` passes on both drivers in `2.696s`, and so do
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/schedule/ -run
+  'TestBuildFiltersByTags|TestTagQueueSharesDeckBudget' -count=1` and
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/api/ -run
+  'TestDueCardsFiltersByTagREST|TestDueCardsTagScopeNegatives|TestReviewTags|TestListDeckTagsREST'
+  -count=1`.
 
 - [x] **M19-15 Deleting a deck leaves the note-type and media rows behind, so the files are never
   collected** — *should-fix.* The cascade clears notes and cards but not `note_types`, `media_names`

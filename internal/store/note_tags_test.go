@@ -12,15 +12,17 @@ import (
 // and that tags containing quotes, backslashes, <>& and LIKE wildcards also hit -- those characters are stored JSON-escaped in tags_json.
 func TestWhereNoteTagsAny(t *testing.T) {
 	tagSets := map[string][]string{
-		"plain":   {"文化传承"},
-		"prefix":  {"文化传承类"},
-		"two":     {"创新", "高频"},
-		"quote":   {`say "hi"`},
-		"slash":   {`a\b`},
-		"html":    {"<x>&y"},
-		"percent": {"50%_off"},
-		"upper":   {"Go"},
-		"none":    {},
+		"plain":    {"文化传承"},
+		"prefix":   {"文化传承类"},
+		"two":      {"创新", "高频"},
+		"quote":    {`say "hi"`},
+		"slash":    {`a\b`},
+		"html":     {"<x>&y"},
+		"percent":  {"50%_off"},
+		"upper":    {"Go"},
+		"accent":   {"Été"},
+		"cyrillic": {"Привет"},
+		"none":     {},
 	}
 	cases := []struct {
 		name string
@@ -35,6 +37,9 @@ func TestWhereNoteTagsAny(t *testing.T) {
 		{"like wildcards are literal", []string{"50%_off"}, []string{"percent"}},
 		{"wildcard does not match others", []string{"%"}, nil},
 		{"case insensitive", []string{"go"}, []string{"upper"}},
+		{"accented tag in its lower-case spelling", []string{"été"}, []string{"accent"}},
+		{"accented tag in upper case", []string{"ÉTÉ"}, []string{"accent"}},
+		{"non-ASCII case folding", []string{"ПРИВЕТ"}, []string{"cyrillic"}},
 		{"substring does not match", []string{"高"}, nil},
 	}
 	for driver, db := range testDatabases(t) {

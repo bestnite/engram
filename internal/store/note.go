@@ -841,15 +841,21 @@ func TagsOrEmpty(raw string) []string {
 // with a LIKE on its JSON encoding that has quoted boundaries: quotes inside an element are always escaped to \", bare quotes only appear at the boundaries,
 // so "a" never hits inside "ab". The pattern is generated with the same JSON encoding used to write tags_json (covering quotes,
 // backslashes and the <>& escapes); hand-assembling "tag" would make tags containing those characters unmatchable forever.
-// Case-insensitive (LOWER on both sides); note list filtering and study-by-tag share this one rule.
+// Case-insensitive on both sides, with the same Unicode-aware rule on each: PostgreSQL's LOWER folds all of Unicode, while
+// SQLite's built-in LOWER folds ASCII only, so SQLite compares through the Go function registered in sqlite_lower.go.
+// The query pattern is folded with strings.ToLower, which is that same rule. Note list filtering and study-by-tag share it.
 func WhereNoteTagsAny(q *gorm.DB, tags []string) *gorm.DB {
 	if len(tags) == 0 {
 		return q
 	}
+	fold := "LOWER(notes.tags_json)"
+	if q.Dialector.Name() == "sqlite" {
+		fold = sqliteLowerFunc + "(notes.tags_json)"
+	}
 	conds := make([]string, 0, len(tags))
 	args := make([]any, 0, len(tags))
 	for _, tag := range tags {
-		conds = append(conds, "LOWER(notes.tags_json) LIKE ? ESCAPE '\\'")
+		conds = append(conds, fold+" LIKE ? ESCAPE '\\'")
 		args = append(args, tagLikePattern(tag))
 	}
 	// Parentheses are explicit: when the OR is combined with outer AND conditions we cannot rely on GORM wrapping it automatically.
