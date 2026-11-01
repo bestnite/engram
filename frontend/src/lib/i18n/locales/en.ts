@@ -190,6 +190,7 @@ export const en: LocaleCatalog = {
   'decks.create.description_invalid': 'Enter a valid description (up to 2,000 characters).',
   'decks.create.invalid_request': 'Please check the deck information and try again.',
   'decks.create.failed': 'Failed to create deck. Please try again.',
+  'decks.create.preset_failed': 'Could not load the preset list; the default preset will be used.',
   'decks.delete.action': 'Delete deck',
   'decks.delete.confirm_title': 'Delete this deck?',
   'decks.delete.confirm_desc': 'The deck "{name}" and all its cards will be permanently deleted. This cannot be undone.',

@@ -2002,7 +2002,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `svelte-check found 0 errors and 0 warnings`, `npm run test:client` passes 534 tests in 61 files and
   `npx vitest run` passes 591 tests in 58 files.
 
-- [ ] **M19-58 The create-deck dialog re-requests the preset list forever when that read fails** — *should-fix.*
+- [x] **M19-58 The create-deck dialog re-requests the preset list forever when that read fails** — *should-fix.*
   The effect reads `createPresets.length` and, on a failed fetch, assigns a new empty array
   (`frontend/src/lib/views/DecksView.svelte:163-180`, the assignment at `:177`); the new array invalidates the
   state the same effect tracks, so the effect runs again at once and starts another request. *Reproduced* by
@@ -2011,6 +2011,23 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   loop for as long as the dialog stays open, and the dialog never reports why the list is empty. *Acceptance:*
   fetch once per dialog opening (a flag or a promise held outside the tracked state), show the failure in the
   dialog, and add a client test asserting exactly one request when the call rejects.
+  *Closed by this commit (`fix(frontend): fetch the create-deck presets once per dialog`).*
+  The effect (`frontend/src/lib/views/DecksView.svelte:166`) is guarded by `presetFetchInFlight`, a plain
+  variable rather than reactive state, so a failed read no longer assigns a fresh array that re-triggers
+  the effect. The attempt stays one per dialog opening, and `presetFetchFailed` renders
+  `decks.create.preset_failed` under the preset select while creation still falls back to the server's
+  default preset. The new key exists in both locales.
+  `frontend/src/tests/decks-create-preset.client.ts` mounts the real view with `listPresets` rejecting,
+  opens the dialog and flushes six rounds, then asserts one call and the visible error line. Raw output of
+  `npx vitest run --config vitest.config.client.ts src/tests/decks-create-preset.client.ts`:
+  ```
+   Test Files  1 passed (1)
+        Tests  1 passed (1)
+  ```
+  With only the effect reverted to the tracked version, the same run failed with
+  `AssertionError: expected "listPresets" to be called 1 times, but got 42 times`. The eight client suites
+  covering the deck list and its neighbours end `Test Files 8 passed (8)` / `Tests 22 passed (22)`, and
+  `npm run check` ends `svelte-check found 0 errors and 0 warnings`.
 
 - [x] **M19-59 An older note-list response overwrites the newer filter and rewrites the address** — *should-fix.*
   `loadData` has no request generation or abort (`frontend/src/lib/views/DeckDetailView.svelte:273-309`): it

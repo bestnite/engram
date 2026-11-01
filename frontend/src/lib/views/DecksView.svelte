@@ -38,6 +38,10 @@
   let createPresetId = $state('');
   let creating = $state(false);
   let createError = $state<string | null>(null);
+  // The preset read is guarded by a plain flag, not reactive state: assigning an empty list on failure
+  // must not re-run the effect and start the request again.
+  let presetFetchInFlight = false;
+  let presetFetchFailed = $state(false);
 
   // Bulk selection and export state. The export options match the single-deck export defaults: media included, personal progress and weights excluded.
   let selectedDeckIds = $state<string[]>([]);
@@ -161,22 +165,27 @@
 
   /** Fetch the preset list only when the dialog opens: most users never open this dialog, so there is no reason to fetch it every time. */
   $effect(() => {
-    if (showCreateModal && createPresets.length === 0) {
-      apiClient
-        .listPresets()
-        .then((response) => {
-          const { options, selected } = presetSelectOptions(response.presets, $t);
-          createPresets = options;
-          createPresetDefault = selected;
-          if (!createPresetId) {
-            createPresetId = selected;
-          }
-        })
-        .catch(() => {
-          // Failing to get the preset list does not block deck creation: leaving it empty falls back to the server's default preset.
-          createPresets = [];
-        });
-    }
+    if (!showCreateModal || createPresets.length > 0 || presetFetchInFlight) return;
+    presetFetchInFlight = true;
+    presetFetchFailed = false;
+    apiClient
+      .listPresets()
+      .then((response) => {
+        const { options, selected } = presetSelectOptions(response.presets, $t);
+        createPresets = options;
+        createPresetDefault = selected;
+        if (!createPresetId) {
+          createPresetId = selected;
+        }
+      })
+      .catch(() => {
+        // Failing to get the preset list does not block deck creation: leaving it empty falls back to the
+        // server's default preset, and the dialog says so instead of silently retrying forever.
+        presetFetchFailed = true;
+      })
+      .finally(() => {
+        presetFetchInFlight = false;
+      });
   });
 
   async function createDeck(event: SubmitEvent): Promise<void> {
@@ -705,6 +714,11 @@
               onValueChange={(value: string) => (createPresetId = value)}
               options={createPresets}
             />
+            {#if presetFetchFailed}
+              <p role="alert" data-testid="deck-create-preset-error" class="mt-1 text-sm text-destructive-foreground">
+                {$t('decks.create.preset_failed')}
+              </p>
+            {/if}
           </div>
         </div>
 

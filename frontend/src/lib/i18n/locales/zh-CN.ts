@@ -190,6 +190,7 @@ export const zhCN: LocaleCatalog = {
   'decks.create.description_invalid': '请输入有效的描述（最多 2000 个字符）。',
   'decks.create.invalid_request': '请检查卡组信息后重试。',
   'decks.create.failed': '创建卡组失败，请重试。',
+  'decks.create.preset_failed': '无法加载调度预设列表，将使用默认预设。',
   'decks.delete.action': '删除卡组',
   'decks.delete.confirm_title': '确定删除该卡组？',
   'decks.delete.confirm_desc': '卡组「{name}」及其包含的所有卡片将被永久删除，此操作不可撤销。',
