@@ -440,12 +440,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
 
-- [ ] **M18-81 The `validSteps` comment describes the maximum interval** — in
-  `frontend/src/lib/views/PresetsView.svelte` the comment above `validSteps` describes the maximum
-  interval rather than the learning-step rule the function checks, so a reader is told the wrong rule.
-  Found while working on `M18-60`. The fix states what `validSteps` checks and why, in its own words.
-  *Acceptance:* the comment matches the function's code. Evidence is the diff.
-
 
 ---
 
