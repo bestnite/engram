@@ -260,8 +260,10 @@ func readNotes(db *gorm.DB) ([]Note, error) {
 }
 
 // readCards reads the cards table. Schema 11 and schema 18 use the same
-// columns, so both layouts share this query. A card row with a REAL code value
-// is skipped and counted.
+// columns, so both layouts share this query. A REAL value in cards.nid, cards.did
+// or cards.ord fails the import because rounding would invent a reference or
+// ordinal. A REAL value in cards.type, cards.queue, cards.odid or cards.flags
+// skips and counts the row because its scheduling fields are ambiguous.
 func readCards(db *gorm.DB, pkg *Package) ([]Card, error) {
 	rows, err := db.Raw("SELECT id, " + rejectRealIntegers("nid", "did", "ord") + ", " + roundedIntegers("mod", "usn", "due", "ivl", "factor", "reps", "lapses", "left", "odue") + ", data, type, queue, odid, flags, typeof(nid), typeof(did), typeof(ord), typeof(type), typeof(queue), typeof(odid), typeof(flags) FROM cards ORDER BY id").Rows()
 	if err != nil {

@@ -269,7 +269,9 @@ type PackageImportReport struct {
 	NotesUpdated int    `json:"notes_updated"`
 	NotesSkipped int    `json:"notes_skipped"`
 	CardsCreated int    `json:"cards_created"`
-	// CardsSkipped counts package card rows that were not imported.
+	// CardsSkipped counts card rows the reader could not read. It does not count
+	// readable cards of notes left out by on_conflict skip, because the count
+	// comes from the reader rather than conflict handling.
 	CardsSkipped    int `json:"cards_skipped"`
 	MediaNew        int `json:"media_new"`
 	MediaMissing    int `json:"media_missing"`
