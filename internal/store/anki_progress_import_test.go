@@ -1080,8 +1080,33 @@ func TestAnkiProgressMissingMemory(t *testing.T) {
 					}
 					return
 				}
-				if len(states) != 1 || states[0].Stability == nil || *states[0].Stability < .001 || states[0].Difficulty == nil || *states[0].Difficulty < 1 || *states[0].Difficulty > 10 {
+				if len(states) != 1 || states[0].Stability == nil || states[0].Difficulty == nil {
 					t.Fatalf("states=%+v report=%+v", states, report)
+				}
+				engine := fsrs.NewFSRS(fsrs.DefaultParam())
+				var want *fsrs.MemoryState
+				if tc.history {
+					entries := make(fsrs.ReviewEntries, 0, len(pkg.Reviews))
+					for i, review := range pkg.Reviews {
+						entry := fsrs.ReviewEntry{Rating: fsrs.Rating(review.Ease)}
+						if i > 0 {
+							entry.DeltaT = float64((review.ID - pkg.Reviews[i-1].ID) / 86400000)
+						}
+						entries = append(entries, entry)
+					}
+					want, err = engine.MemoryState(entries, nil)
+				} else {
+					interval := float64(tc.interval)
+					if interval < 0 {
+						interval = -interval / 86400
+					}
+					want, err = engine.MemoryStateFromSM2(float64(tc.factor)/1000, interval, 0.9)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !(math.Abs(*states[0].Stability-want.Stability) <= 1e-4) || !(math.Abs(*states[0].Difficulty-want.Difficulty) <= 1e-4) {
+					t.Fatalf("got stability=%g difficulty=%g, want stability=%g difficulty=%g", *states[0].Stability, *states[0].Difficulty, want.Stability, want.Difficulty)
 				}
 			})
 		}

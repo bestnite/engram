@@ -27,6 +27,62 @@ func TestImportedAnkiMemoryPreview(t *testing.T) {
 			if err := db.Create(&user).Error; err != nil {
 				t.Fatal(err)
 			}
+			for _, tc := range []struct {
+				name                   string
+				kind, factor, interval int
+				history, skipped       bool
+			}{
+				{"review_history", 2, 2500, 7, true, false},
+				{"learning_history", 1, 0, -600, true, false},
+				{"review_sm2", 2, 2500, 7, false, false},
+				{"learning_invalid_sm2", 1, 0, -600, false, true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					pkg := anki.WritePackage{Collection: anki.WriteCollection{
+						CreatedAt:   1600000000,
+						NoteTypes:   []anki.WriteNoteType{{ID: 10, Name: "Basic", Fields: []anki.Field{{Name: "Front"}}, Templates: []anki.Template{{Name: "Card", QFormat: "{{Front}}", AFormat: "{{Front}}"}}}},
+						Decks:       []anki.WriteDeck{{ID: 20, Name: "Memory", ConfigID: 30}},
+						DeckConfigs: []anki.WriteDeckConfig{{ID: 30, Name: "Memory", DesiredRetention: .9, LearningSteps: []float64{1, 10}, RelearningSteps: []float64{10}, MaximumIntervalDays: 36500}},
+						Notes:       []anki.WriteNote{{ID: 40, GUID: "40", NoteTypeID: 10, Fields: []string{"question"}}},
+						Cards:       []anki.WriteCard{{ID: 50, NoteID: 40, DeckID: 20, Type: tc.kind, Queue: tc.kind, Ivl: tc.interval, Factor: tc.factor}},
+					}}
+					if tc.history {
+						pkg.Collection.Reviews = []anki.WriteReview{{ID: 1600000000000, CardID: 50, Ease: 3, Type: 0}, {ID: 1600086400000, CardID: 50, Ease: 4, Type: 1}}
+					}
+					var archive bytes.Buffer
+					if err := anki.WriteArchive(&archive, &pkg); err != nil {
+						t.Fatal(err)
+					}
+					report, err := store.NewDeckStore(db).ImportPackage(t.Context(), user.ID, &archive, store.PackageImportOptions{Target: store.PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
+					if err != nil {
+						t.Fatal(err)
+					}
+					var states []store.CardState
+					if err := db.Joins("JOIN cards ON cards.id = card_states.card_id").Joins("JOIN notes ON notes.id = cards.note_id").Where("notes.deck_id = ? AND card_states.user_id = ?", report.DeckID, user.ID).Find(&states).Error; err != nil {
+						t.Fatal(err)
+					}
+					want, skipped := 1, 0
+					if tc.skipped {
+						want, skipped = 0, 1
+					}
+					if len(states) != want || report.StatesSkipped != skipped {
+						t.Fatalf("states=%+v report=%+v", states, report)
+					}
+					var deck store.Deck
+					if err := db.First(&deck, report.DeckID).Error; err != nil {
+						t.Fatal(err)
+					}
+					var preset store.Preset
+					if err := db.First(&preset, deck.PresetID).Error; err != nil {
+						t.Fatal(err)
+					}
+					for i := range states {
+						if _, err := mustScheduler(t, &preset).Preview(&states[i], time.Unix(1700000000, 0)); err != nil {
+							t.Fatalf("state %+v: %v", states[i], err)
+						}
+					}
+				})
+			}
 			for i, tc := range []struct{ s, d float64 }{{0, 5}, {5, 0}, {-1, 5}, {5, 11}, {5, 5}} {
 				for _, history := range []bool{false, true} {
 					t.Run(fmt.Sprintf("case_%d/history_%t", i, history), func(t *testing.T) {
