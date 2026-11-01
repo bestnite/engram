@@ -69,13 +69,15 @@ func TestImportToolsRejectPresetOptions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	deck := seedDeck(t, db, u.ID)
 	for _, tool := range []string{"import_deck", "create_import_upload"} {
 		for _, tc := range []struct {
-			name, id string
-			weights  bool
+			name, id, mode, target string
+			weights                bool
 		}{
-			{"foreign preset", foreign.PublicID, false},
-			{"copy weights", owned.PublicID, true},
+			{"foreign preset", foreign.PublicID, "copy", "", false},
+			{"copy weights", owned.PublicID, "copy", "", true},
+			{"existing deck preset without mode", owned.PublicID, "", "into_deck:" + deck.PublicID, false},
 		} {
 			t.Run(tool+"/"+tc.name, func(t *testing.T) {
 				models := []any{&store.Deck{}, &store.Preset{}, &store.ActionToken{}, &store.Note{}, &store.Card{}}
@@ -85,7 +87,13 @@ func TestImportToolsRejectPresetOptions(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				args := map[string]any{"preset_mode": "copy", "preset_id": tc.id, "apply_weights": tc.weights}
+				args := map[string]any{"preset_id": tc.id, "apply_weights": tc.weights}
+				if tc.mode != "" {
+					args["preset_mode"] = tc.mode
+				}
+				if tc.target != "" {
+					args["target"] = tc.target
+				}
 				if tool == "import_deck" {
 					args["package"] = base64.StdEncoding.EncodeToString(mcpMinimalPackageZip(t))
 				}

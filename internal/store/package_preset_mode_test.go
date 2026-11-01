@@ -173,7 +173,14 @@ func TestImportPresetModes(t *testing.T) {
 				{Target: replaceTarget, PresetID: source.ID}, {Target: replaceTarget, PresetMode: "new", PresetID: source.ID},
 			}
 			for _, opts := range cases {
-				t.Run(fmtOptions(opts), func(t *testing.T) {
+				preset := "none"
+				if opts.PresetID == source.ID {
+					preset = "owned"
+				} else if opts.PresetID == foreign.ID {
+					preset = "foreign"
+				}
+				name := fmt.Sprintf("target=%q_mode=%q_preset=%s_weights=%t", opts.Target, opts.PresetMode, preset, opts.ApplyWeights)
+				t.Run(name, func(t *testing.T) {
 					var decks, presets, decksAfter, presetsAfter int64
 					db.Model(&Deck{}).Count(&decks)
 					db.Model(&Preset{}).Count(&presets)
@@ -203,8 +210,6 @@ func TestImportPresetModes(t *testing.T) {
 		})
 	}
 }
-
-func fmtOptions(o PackageImportOptions) string { b, _ := json.Marshal(o); return string(b) }
 
 func TestImportReportPresetByTarget(t *testing.T) {
 	apkg, err := os.ReadFile(ankiFixturePath("stock.anki21.apkg"))

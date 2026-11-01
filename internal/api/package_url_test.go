@@ -205,6 +205,7 @@ func TestImportURLPresetSelection(t *testing.T) {
 	if err := env.db.Create(&preset).Error; err != nil {
 		t.Fatal(err)
 	}
+	existing := seedDeck(t, env.db, user.ID)
 	f := &stubFetcher{body: minimalPackageZip(t)}
 	env.api.fetcher = f
 	for _, mode := range []string{"reuse", "copy"} {
@@ -234,12 +235,13 @@ func TestImportURLPresetSelection(t *testing.T) {
 		})
 	}
 	for _, tc := range []struct{ name, options string }{
-		{"bogus", `"preset_mode":"bogus"`},
-		{"reuse_weights", fmt.Sprintf(`"preset_mode":"reuse","preset_id":%q,"apply_weights":true`, preset.PublicID)},
+		{"bogus", `"target":"new_deck","preset_mode":"bogus"`},
+		{"reuse_weights", fmt.Sprintf(`"target":"new_deck","preset_mode":"reuse","preset_id":%q,"apply_weights":true`, preset.PublicID)},
+		{"existing_deck_preset_without_mode", fmt.Sprintf(`"target":"into_deck:%s","preset_id":%q`, existing.PublicID, preset.PublicID)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := f.calls
-			body := fmt.Sprintf(`{"url":"https://example.com/deck.edeck","target":"new_deck",%s}`, tc.options)
+			body := fmt.Sprintf(`{"url":"https://example.com/deck.edeck",%s}`, tc.options)
 			for i := 0; i < importURLRateLimit+1; i++ {
 				rec := postImportURL(t, env, k.Plaintext, body)
 				if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != CodeInvalidRequest {
