@@ -281,6 +281,9 @@ func loadNoteTypesForNotes(ctx context.Context, tx *gorm.DB, notes []Note) (map[
 // A mapping may permute template ids among a note's live cards, because every card carries its own original template
 // into the move.
 //
+// A cloze note type has no template plan: a card's identity is the cloze number in its template, which the field content
+// carries across the change, so every live card keeps its row and its progress and no card is reported as removed.
+//
 // A dry run and an unconfirmed removal both roll back, so they write nothing; the returned impact belongs to both.
 func (s *NoteStore) ChangeNoteType(ctx context.Context, deckID, sourceID, targetID uint64, opts NoteTypeChangeOptions) (NoteTypeChangeImpact, error) {
 	var impact NoteTypeChangeImpact
@@ -331,7 +334,7 @@ func (s *NoteStore) ChangeNoteType(ctx context.Context, deckID, sourceID, target
 				return err
 			}
 
-			moved, stale, err := moveNoteCards(tx, note.ID, templatePlan, now)
+			moved, stale, err := moveNoteCards(tx, note.ID, templatePlan, tgtCfg.Kind, now)
 			if err != nil {
 				return err
 			}
@@ -512,6 +515,10 @@ func remapNoteFields(tgtCfg notetype.Config, plan map[string]string, values map[
 // It returns the number of moved cards and the ids of the cards it soft-deleted, so the caller can count the review
 // rows those cards kept.
 //
+// A cloze card is named by the number in its template, and the field content carries that number across a type change:
+// nothing is moved or stale, and every live card keeps its row. They are counted as moved, so the report does not claim
+// a removal that does not happen.
+//
 // A target template that another row of the same note keeps is refused with ErrNoteTypeMappingInvalid: both databases
 // enforce the (note_id, template) unique index over every row, soft-deleted ones included, so the move could not be
 // written. A target that only a card moving away from that template holds is not a conflict, because the two cards
@@ -522,11 +529,21 @@ func remapNoteFields(tgtCfg notetype.Config, plan map[string]string, values map[
 // transaction: first to a temporary template value derived from its own id, then to its target. The temporary value is
 // picked so that no other row of the note holds it, which keeps the index satisfied after each single statement. The
 // temporary value is never visible outside the transaction.
-func moveNoteCards(tx *gorm.DB, noteID uint64, plan map[string]templateMove, now time.Time) (moved int, stale []uint64, err error) {
+func moveNoteCards(tx *gorm.DB, noteID uint64, plan map[string]templateMove, kind notetype.Kind, now time.Time) (moved int, stale []uint64, err error) {
 	// Unscoped: a soft-deleted row still occupies the (note_id, template) unique key.
 	var cards []Card
 	if err := tx.Unscoped().Where("note_id = ?", noteID).Find(&cards).Error; err != nil {
 		return 0, nil, fmt.Errorf("load cards of note %d: %w", noteID, err)
+	}
+	if kind == notetype.KindCloze {
+		// The cloze number is the card's identity and lives in the field content, so the card keeps its row.
+		// The sync below only restores or creates cards by that number.
+		for i := range cards {
+			if !cards[i].DeletedAt.Valid {
+				moved++
+			}
+		}
+		return moved, nil, nil
 	}
 	// vacated holds the templates the live cards of this move leave behind, so a target equal to one of them is not a
 	// conflict even though that row still holds the template when the first write runs.

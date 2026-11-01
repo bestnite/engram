@@ -857,3 +857,84 @@ func cardVisible(t *testing.T, db *gorm.DB, cardID uint64) bool {
 	}
 	return count == 1
 }
+
+// TestChangeNoteTypeClozeKeepsCards is the acceptance for a cloze-to-cloze change: a card's identity is the
+// cloze number inside its template, and the field content carries that number across the change. Nothing is
+// removed, so the change needs no removal confirmation, and every card keeps its id and its progress.
+func TestChangeNoteTypeClozeKeepsCards(t *testing.T) {
+	for driver, db := range testDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(AllModels()...); err != nil {
+				t.Fatalf("AutoMigrate() error = %v", err)
+			}
+			ctx := context.Background()
+			owner := seedUsers(t, db, "cloze_change_owner")[0]
+			deckID := seedDeck(t, db, owner)
+			source := createType(t, db, deckID, "Cloze source", clozeConfig())
+			target := createType(t, db, deckID, "Cloze target", clozeConfig())
+			notes := NewNoteStore(db)
+
+			note := Note{DeckID: deckID, NoteTypeID: &source.ID}
+			cards, err := notes.Create(ctx, &note, map[string]any{
+				"Text":       "{{c1::Capital}} of {{c2::France}}",
+				"Back Extra": "",
+			})
+			if err != nil {
+				t.Fatalf("create note: %v", err)
+			}
+			byTemplate := cardTemplates(cards)
+			if len(byTemplate) != 2 || byTemplate["cloze:1"] == 0 || byTemplate["cloze:2"] == 0 {
+				t.Fatalf("created cards = %v, want cloze:1 and cloze:2", byTemplate)
+			}
+			for _, cardID := range byTemplate {
+				seedProgress(t, db, owner, cardID)
+			}
+
+			opts := NoteTypeChangeOptions{
+				FieldMapping: map[string]string{"c-text": "c-text", "c-extra": "c-extra"},
+				DryRun:       true,
+			}
+			impact, err := notes.ChangeNoteType(ctx, deckID, source.ID, target.ID, opts)
+			if err != nil {
+				t.Fatalf("dry run error = %v", err)
+			}
+			if impact.CardsMoved != 2 || impact.CardsAdded != 0 || impact.CardsRemoved != 0 {
+				t.Errorf("dry-run impact = %+v, want 2 moved, 0 added, 0 removed", impact)
+			}
+
+			// No ConfirmCardRemoval: a cloze change removes nothing and must not demand confirmation.
+			opts.DryRun = false
+			impact, err = notes.ChangeNoteType(ctx, deckID, source.ID, target.ID, opts)
+			if err != nil {
+				t.Fatalf("ChangeNoteType() error = %v, want success without confirmation", err)
+			}
+			if impact.CardsMoved != 2 || impact.CardsAdded != 0 || impact.CardsRemoved != 0 {
+				t.Errorf("impact = %+v, want 2 moved, 0 added, 0 removed", impact)
+			}
+			if got := currentNoteTypeID(t, db, note.ID); got != target.ID {
+				t.Errorf("note type after change = %d, want %d", got, target.ID)
+			}
+			live := liveCardTemplates(t, db, note.ID)
+			if len(live) != 2 || live[0] != "cloze:1" || live[1] != "cloze:2" {
+				t.Errorf("live cards after change = %v, want [cloze:1 cloze:2]", live)
+			}
+			var after []Card
+			if err := db.Where("note_id = ?", note.ID).Find(&after).Error; err != nil {
+				t.Fatalf("load cards after change: %v", err)
+			}
+			afterByTemplate := cardTemplates(after)
+			for template, cardID := range byTemplate {
+				if afterByTemplate[template] != cardID {
+					t.Errorf("card %q id after change = %d, want %d", template, afterByTemplate[template], cardID)
+				}
+				if !cardVisible(t, db, cardID) {
+					t.Errorf("card %q is no longer visible", template)
+				}
+				state, review := cardProgressAt(t, db, cardID)
+				if !state || !review {
+					t.Errorf("card %q lost progress: state %v review %v, want both true", template, state, review)
+				}
+			}
+		})
+	}
+}

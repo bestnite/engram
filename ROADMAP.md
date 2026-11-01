@@ -433,7 +433,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   type; regressions clone a real imported type and a custom-CSS type and show the clone still renders
   after the source deck is deleted.
 
-- [ ] **M19-12 A cloze→cloze change reports card removals that do not happen** — *should-fix.* Cloze
+- [x] **M19-12 A cloze→cloze change reports card removals that do not happen** — *should-fix.* Cloze
   produces an empty template plan, so every card is first listed as stale and soft-deleted, then the
   sync restores the same IDs (`internal/store/note_type_change.go:450-456,334-354,560-568,619-628`).
   The report counts the same cards in both `CardsAdded` and `CardsRemoved`, breaking the documented
@@ -443,6 +443,33 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   id=2`. *Acceptance:* plan cards from the cloze numbers each note actually keeps, count surviving cards
   as moved/kept, and add a regression that a cloze→cloze change succeeds without confirmation and leaves
   IDs and progress untouched.
+  *Closed by this commit (`fix(store): keep cloze cards across a cloze-to-cloze change`).*
+  `moveNoteCards` (`internal/store/note_type_change.go:532`) now handles a cloze target before it builds a
+  move plan: a cloze card's identity is the number inside its template, and the field content carries that
+  number across the change, so every live card is counted as moved and nothing is returned as stale. The card
+  sync then only restores or creates cards by that number, so no card is soft-deleted and no progress moves.
+  A cloze change therefore needs no `confirm_card_removal`, and `CardsAdded`/`CardsRemoved` no longer count
+  the same cards. `TestChangeNoteTypeClozeKeepsCards` (`internal/store/note_type_change_test.go`) creates a
+  note with two cloze numbers, seeds progress on both cards, runs a dry run and then the change without
+  confirmation, and asserts 2 moved / 0 added / 0 removed, the same card ids, the same live cards and both
+  progress rows. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestChangeNoteTypeClozeKeepsCards -count=1 -v`:
+  ```
+  === RUN   TestChangeNoteTypeClozeKeepsCards
+  === RUN   TestChangeNoteTypeClozeKeepsCards/sqlite
+  === RUN   TestChangeNoteTypeClozeKeepsCards/postgres
+  --- PASS: TestChangeNoteTypeClozeKeepsCards (0.30s)
+      --- PASS: TestChangeNoteTypeClozeKeepsCards/sqlite (0.02s)
+      --- PASS: TestChangeNoteTypeClozeKeepsCards/postgres (0.23s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.308s
+  ```
+  With only `internal/store/note_type_change.go` reverted, the same test failed on both drivers with
+  `dry-run impact = {NotesMoved:1 CardsMoved:0 CardsAdded:2 CardsRemoved:2 ReviewsOnRemovedCards:2}, want 2
+  moved, 0 added, 0 removed` and `ChangeNoteType() error = note type update would remove cards without
+  confirmation: 2 card(s) would be removed, want success without confirmation`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestChangeNoteType|TestCleanupEmptyCards|TestNoteType' -count=1`
+  passes and `go test ./internal/api/ -run TestNoteType -count=1` passes.
 
 - [x] **M19-13 Editing a note type leaves the search index stale** — *should-fix.* The update rebuilds
   media references and cards but never recomputes `notes.search_text`, which depends on the field set
