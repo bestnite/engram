@@ -51,6 +51,38 @@ func TestCreateAnkiPresetSchedulerLimits(t *testing.T) {
 	}
 }
 
+func TestCreateAnkiPresetNonFiniteWeights(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			owner := seedUsers(t, db, "anki_nonfinite_weights")[0]
+			for _, tc := range []struct {
+				name  string
+				value float64
+			}{{"nan", math.NaN()}, {"positive infinity", math.Inf(1)}, {"negative infinity", math.Inf(-1)}} {
+				t.Run(tc.name, func(t *testing.T) {
+					weights := packageTestWeights()
+					weights[0] = tc.value
+					report := &PackageImportReport{}
+					preset, err := createAnkiPreset(context.Background(), db, owner, tc.name, &anki.DeckConfig{Weights: weights}, true, report)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if preset.WeightsJSON != nil || report.WeightsApplied || !report.WeightsInvalid {
+						t.Fatalf("preset=%+v report=%+v", preset, report)
+					}
+					stored, err := NewPresetStore(db).ByID(context.Background(), preset.ID)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if stored.WeightsJSON != nil {
+						t.Fatalf("stored weights: %v", *stored.WeightsJSON)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestAnkiImportWeightsInvalid(t *testing.T) {
 	cases := []struct {
 		name    string
