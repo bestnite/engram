@@ -220,36 +220,6 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   naming `M18-4`; the sentence in `AGENTS.md` section 2.7 names `reuse` and `copy`. Evidence is the
   output of `grep -n 'M18-4\b' ROADMAP.md` limited to the ledger section and the `AGENTS.md` diff.
 
-- [ ] **M18-44 Preset-choice comments state what the code does** — the `M18-33` fix asked for a comment
-  on every preset field and function that states its rule and why. The landed code leaves five comment
-  gaps and one unwrapped error. First, the comment on `PackageImportOptions.PresetID` in
-  `internal/store/package_import.go` says the field is "preventing cross-owner selection"; a field
-  prevents nothing, and the owner is checked by `ValidateImportPreset` and again by
-  `selectImportPreset`. Second, the comment on `selectImportPreset` says the second owner check stops a
-  preset "removed or transferred after validation"; no code changes `presets.owner_user_id`, so only
-  removal can happen. Third, `PresetMode` and `PresetID` of `importDeckIn` and of `createImportUploadIn`
-  in `internal/mcp/tools.go` still carry no Go comment, although the `M18-33` fix named both structs and
-  their neighbouring fields carry one. Their `jsonschema` texts also omit two rules: the choice applies
-  to `new_deck` only, as the `apply_weights` text states for itself, and `preset_id` is required by
-  `reuse` and `copy` and refused with any other mode. Fourth, `validateImportPreset` in
-  `internal/api/package_upload.go`, the helper `M18-31` added, carries no comment, although it is the
-  check that the URL import and the upload ticket run before authorization, the rate limiter and the
-  download. Fifth, the comment on `ImportDeckPackageURL` in `internal/api/package_url.go` says to
-  "resolve the target deck and authorize first", but since `d3938d5` the preset check runs before
-  authorization. The unwrapped error: `ImportPresetID` in `internal/api/publicid_resolver.go` returns the error of
-  `presets.ByPublicID` unwrapped, while section 2.4 of `AGENTS.md` requires wrapping with `%w`. The
-  fix: the `PresetID` comment says which functions check the owner; the `selectImportPreset` comment
-  names removal only; the four MCP fields gain a Go comment, and their `jsonschema` texts state both
-  rules; `validateImportPreset` gains a comment that states why it runs first; the
-  `ImportDeckPackageURL` comment lists the steps in the order the code runs them: preset check,
-  authorization, rate limiter, import slot, download; `ImportPresetID` wraps the store error with `%w`
-  and an English context. The status codes stay unchanged. This entry lands after `M18-42`, because
-  the `jsonschema` texts state the refusal rule that `M18-42` settles. *Acceptance:* each statement of
-  each changed comment and `jsonschema` text matches the code it describes; `TestImportPresetID` still
-  gets a `ServiceError` with status 500 and code `internal` for the closed database, and its message
-  contains the added context. Evidence is the diff and the raw scoped `go test` and `go vet` output of
-  `internal/store`, `internal/api` and `internal/mcp`.
-
 - [ ] **M18-45 The `M18-4` ledger row states what `M18-29` to `M18-33` changed** — `M18-35` was
   written before `M18-29` to `M18-33` landed. It describes the import report as gaining
   `preset_mode` and `preset_name`, it names only `M18-29` to `M18-31`, and it names no refusal. Since
