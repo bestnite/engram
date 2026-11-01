@@ -192,14 +192,23 @@ func regenerateNoteTypeCards(tx *gorm.DB, noteTypeID uint64, typeName string, cf
 	var impact NoteTypeCardImpact
 	var removedIDs []uint64
 	for i := range notes {
+		values := NoteFieldValues(notes[i].FieldsJSON)
 		data := notetype.RenderData{
-			Fields:   NoteFieldValues(notes[i].FieldsJSON),
+			Fields:   values,
 			Tags:     TagsOrEmpty(notes[i].TagsJSON),
 			TypeName: typeName,
 		}
 		wanted, err := notetype.GenerateCards(cfg, data)
 		if err != nil {
 			return NoteTypeCardImpact{}, fmt.Errorf("note %d: generate cards: %w", notes[i].ID, err)
+		}
+		// search_text is derived from the config's field set and its search flags, so the same
+		// transaction that stores the new config must recompute it; otherwise a field keeps its
+		// old text searchable, or stays unsearchable after it is re-included.
+		if text := noteSearchText(cfg, values); text != notes[i].SearchText {
+			if err := tx.Model(&Note{}).Where("id = ?", notes[i].ID).UpdateColumn("search_text", text).Error; err != nil {
+				return NoteTypeCardImpact{}, fmt.Errorf("update note %d search text: %w", notes[i].ID, err)
+			}
 		}
 		_, change, err := syncCardsWithChangeKeeping(tx, notes[i].ID, wanted, keep, now)
 		if err != nil {

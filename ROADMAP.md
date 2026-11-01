@@ -444,7 +444,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   as moved/kept, and add a regression that a cloze→cloze change succeeds without confirmation and leaves
   IDs and progress untouched.
 
-- [ ] **M19-13 Editing a note type leaves the search index stale** — *should-fix.* The update rebuilds
+- [x] **M19-13 Editing a note type leaves the search index stale** — *should-fix.* The update rebuilds
   media references and cards but never recomputes `notes.search_text`, which depends on the field set
   and `exclude_from_search` (`internal/store/notetype.go:234-238`, `card.go:186-215`, derivation in
   `note_search.go:47-58`). Excluding a field leaves its old text searchable; re-including one does not
@@ -452,6 +452,32 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `search_text after exclude_from_search on A = "alpha\nbeta"` and `List(alpha) total=1`. *Acceptance:*
   recompute affected notes' `search_text` in the same transaction as the config version, with a
   regression that excluding, including and deleting a field each change the search result immediately.
+  *Closed by this commit (`fix(store): recompute note search text on a note type edit`).*
+  `regenerateNoteTypeCards` (`internal/store/card.go:194`) now computes each note's field values once and,
+  in the same transaction as the config write, rewrites `search_text` through `noteSearchText` (`:206`)
+  whenever the derived value differs. The loop's scope is unchanged, so it covers the live notes of the
+  type — the same notes a card regeneration already walks; a soft-deleted note keeps its stored text until
+  it is restored, which this entry does not cover. Excluding a field removes its text from the index,
+  re-including it puts the text back, and deleting the field drops the text for good.
+  `TestNoteTypeUpdateRewritesSearchText` (`internal/store/notetype_search_test.go`) creates a two-field
+  type holding `alpha`/`beta`, then searches after each of the three edits: exclude the front (front 0
+  rows, back 1), re-include it (front 1), and delete the back field (back 0, front 1). Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestNoteTypeUpdateRewritesSearchText -count=1 -v`:
+  ```
+  === RUN   TestNoteTypeUpdateRewritesSearchText
+  === RUN   TestNoteTypeUpdateRewritesSearchText/sqlite
+  === RUN   TestNoteTypeUpdateRewritesSearchText/postgres
+  --- PASS: TestNoteTypeUpdateRewritesSearchText (0.33s)
+      --- PASS: TestNoteTypeUpdateRewritesSearchText/sqlite (0.02s)
+      --- PASS: TestNoteTypeUpdateRewritesSearchText/postgres (0.26s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.337s
+  ```
+  Before the change the same test failed on both drivers with
+  `search for an excluded field = 1 rows, want 0` and `search for a deleted field = 1 rows, want 0`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestNoteType|TestNoteSearch|TestNoteList|TestNoteWrite|TestBackfillNoteSearchText' -count=1`
+  passes on both drivers, and `go test ./internal/api/ -run TestNoteType -count=1` and
+  `go test ./internal/web/ -run TestNoteType -count=1` pass.
 
 - [ ] **M19-14 A tag filter matches different notes on SQLite and PostgreSQL** — *should-fix.* Stored
   `tags_json` is folded by SQL `LOWER`, the query string by Go `strings.ToLower`
