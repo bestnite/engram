@@ -138,6 +138,19 @@ lands after `M18-56` and `M18-57`, which change the code it measures. `M18-63` e
 `M18-55`. `M18-64` changes only `README.md`, lands after `M18-21`, `M18-46` and `M18-57`, and never runs
 beside `M18-21` or `M18-46`, which edit the same file.
 
+`M18-65` to `M18-72` fix defects that a review of the landed `M18-19`, `M18-23`, `M18-24`, `M18-25`,
+`M18-26` and `M18-27` (commits `00de153` to `ed75945`) found. They also land before `M18-5`. `M18-65`,
+`M18-68` and `M18-69` change `internal/store/anki_import.go`, so each runs alone like the entries above.
+`M18-65` and `M18-68` wait for a maintainer decision. `M18-66`, `M18-68` and `M18-70` all change
+`internal/anki`, so no two of them run at the same time, and `M18-70` lands after `M18-66` and `M18-68`,
+whose code it comments. `M18-69` and `M18-70` both change `internal/store/package_import.go`, so they
+never run at the same time, and neither runs beside `M18-58` or `M18-61`, which change the same file.
+`M18-67` and `M18-68` both change `frontend/src/lib/views/` and the locale catalogs, so they never run at
+the same time, neither runs beside `M18-6`, `M18-60` or `M18-61`, and `M18-68` lands after `M18-67`,
+because both add a row to the same report list. `M18-71` changes only tests and lands before `M18-65`
+and `M18-68`, so that their tests use the helper it adds. `M18-72` edits this file, so only the parent
+does it, with the maintainer present, in the same change as `M18-22`, `M18-28`, `M18-55` and `M18-63`.
+
 - [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
   half of `internal/store/package_import.go`, `internal/store/package_document.go`,
   `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
@@ -672,6 +685,178 @@ beside `M18-21` or `M18-46`, which edit the same file.
   entry lands after `M18-21`, `M18-46` and `M18-57`, and never runs beside `M18-21` or `M18-46`.
   *Acceptance:* each new statement matches `importAnkiProgress` and `createAnkiPreset` in
   `internal/store/anki_import.go`. Evidence is the `README.md` diff.
+
+- [ ] **M18-65 Decide what happens to a skipped card's review rows with `include_progress` on** — since `M18-26`, `readCards` in `internal/anki/sqlite.go` skips a card row whose `type`, `queue`, `odid`
+  or `flags` holds a REAL value and counts it in `Package.CardsSkipped`. The revlog rows of that card are
+  still readable, but `importAnkiProgress` in `internal/store/anki_import.go` finds no engram card for
+  them, counts them in `reviews_skipped` and writes no `reviews` row. `M18-23` fails an import that has
+  `include_progress` on when one revlog row cannot be read, because a dropped review row cannot be
+  recovered later and the review log is the only input to parameter optimisation. A skipped card loses
+  its readable review rows in the same way, yet the import succeeds. Reproduced on `main` on both
+  drivers: the schema-11 stock package with one revlog row, whose card has `queue` = 1.5 and `type` = 2,
+  imported with `include_progress` on, reports `cards_skipped` 1, `reviews_skipped` 1 and
+  `reviews_applied` 0, and the importer has no `reviews` row. The `M18-26` rule says that the rest of the
+  import continues; it does not say whether that also holds with `include_progress` on. The maintainer has
+  decided rule (b), with one addition: the import continues with `include_progress` on, the skipped card's
+  review rows are counted in `reviews_discarded` and logged at warn level so they are visible rather than
+  silently gone, and the comment on the skip in `readCards` states that neither the card nor its review
+  rows are imported. Rule (a) was rejected because `M18-26` exists precisely so that one corrupt row does
+  not stop a content import, and a card row that cannot be read is as unrecoverable as an unreadable
+  revlog row — refusing the whole package for it would reintroduce the failure `M18-13` removed.
+  *Acceptance:* under rule (a),
+  a table test in `internal/store` imports the package above through `ImportPackage`. With
+  `include_progress` on it returns a `PackageError` with code `package_bad_format` and adds no deck, note,
+  card, `card_states` or `reviews` row and no media file. With `include_progress` off it creates every
+  other card of the package and reports `cards_skipped` 1. Under rule (b), the same test shows that with
+  `include_progress` on the import succeeds and reports `reviews_skipped` 1. Evidence is the raw scoped
+  `go test` and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set.
+
+- [ ] **M18-66 Only a REAL value skips a card, and a refused REAL value names its column** — the
+  `M18-26` rule makes a REAL value in `cards.type`, `cards.queue`, `cards.odid` or `cards.flags` skip the
+  card row. `readCards` in `internal/anki/sqlite.go` scans those four columns into `any` and then into
+  `sql.NullInt64`, and skips the row whenever that scan fails or yields NULL. A TEXT value that is not a
+  number therefore skips the card too, although the rule names REAL only; before `M18-26` such a value
+  failed the import. The quantity columns kept the old behaviour, so the two kinds of column disagree.
+  Reproduced on `main` on both drivers with the schema-11 stock package: `cards.flags` = `'x'` imports
+  with `cards_skipped` 1, while `cards.due` = `'x'` fails with `package_bad_format`. Second defect:
+  `rejectRealIntegers` turns a REAL value into NULL, so the error text that reaches the client describes a
+  NULL. Reproduced on `main`: a REAL `cards.nid` fails with the message `not a valid Anki package: anki
+  package: cannot decode collection: cards table: sql: Scan error on column index 1, name "CASE WHEN
+  typeof(nid) = 'real' THEN NULL ELSE nid END": converting NULL to int64 is unsupported`, and a REAL
+  `revlog.ease` with `include_progress` on fails with the same kind of text. The fix: a card row is
+  skipped only when one of the four code columns holds a REAL value; any other value the scan refuses
+  fails the import with `ErrCorruptCollection`, as before `M18-26`. A REAL value in `cards.nid`,
+  `cards.did`, `cards.ord`, `revlog.cid`, `revlog.ease` or `revlog.type` yields an `ErrCorruptCollection`
+  error whose text names the table and the column and says that the value is REAL, in the form
+  `cards.nid holds a REAL value`. The `M18-26` rule itself does not change. *Acceptance:* the table of
+  `TestRealColumnRules` in `internal/anki/scheduling_test.go` gains a TEXT `'x'` case for each of the
+  four code columns, which returns `ErrCorruptCollection` from `readCards` and leaves `CardsSkipped` at
+  0. Each `fail` case and each `revlog` case checks that the error text contains `<table>.<column>` and
+  `REAL` and does not contain `NULL`. Every existing case keeps its result. Evidence is the raw scoped
+  `go test` and `go vet` output.
+
+- [ ] **M18-67 The import page shows `cards_skipped`** — since `M18-26` the import report carries
+  `cards_skipped`, the number of package card rows that could not be read and were not imported.
+  `PackageImportReport` in `frontend/src/lib/api/types.ts` has no such field, and `reportRows` in
+  `frontend/src/lib/views/ImportView.svelte` does not list it, so a user who imports on the web page is
+  not told that cards are missing. The fix: `types.ts` gains `cards_skipped: number`. `reportRows` adds
+  one row keyed `package.report.cards_skipped` only when the value is above 0, the way it adds the
+  `weights_invalid` row. The key is appended at the end of `frontend/src/lib/i18n/locales/en.ts` and
+  `zh-CN.ts`, and the two key sets stay identical. Its text states that this many cards of the package
+  could not be read and were not imported. *Acceptance:* a component test shows the row with the count
+  for `cards_skipped` 2 and hides it for 0. Evidence is the component test output and the output of
+  `npm --prefix frontend run build`.
+
+- [ ] **M18-68 The report says what the reader dropped** — the reader drops data in two more places, and
+  the report shows neither. First, `readReviews` in `internal/anki/scheduling.go` keeps no count of the
+  revlog rows it skips. With `include_progress` off, `importAnkiProgress` in
+  `internal/store/anki_import.go` sets `reviews_discarded` to `len(pkg.Reviews)`, which leaves the
+  unreadable rows out, and `progress_discarded` follows that count. Reproduced on `main` on both drivers:
+  the schema-11 stock package whose only revlog row has `ease` = 2.5, imported with `include_progress`
+  off, reports `reviews_discarded` 0 and `progress_discarded` false. Second, when the top deck's
+  configuration was skipped, `ankiTopConfig` returns nil (since `M18-24`) and the new preset holds the
+  `NewPreset` values. `resolveAnkiTargetDeck` then reports `weights_applied`, `weights_discarded` and
+  `weights_invalid` all false, which is the report of a package without weights, also when
+  `apply_weights` was on. No field says that the package's deck options were not read. The maintainer has
+  decided the second point too: the report gains the field — it is additive, the values are lies without
+  it, and the alternative (reusing the weights flags) would overload three flags with a meaning they do
+  not have. The fix has three parts. First, `anki.Package` in `internal/anki/model.go` gains
+  `ReviewsUnreadable int`, which `readReviews` increments for each row it skips, and with
+  `include_progress` off `reviews_discarded` is `len(pkg.Reviews) + pkg.ReviewsUnreadable`. Second, the
+  report gains `DeckConfigSkipped` (JSON `deck_config_skipped`), which is true only when the target is
+  `new_deck`, `preset_mode` is `new`, `DeckConfigsSkipped` is true and `ankiTopConfig` returned nil.
+  Third, `frontend/src/lib/api/types.ts` gains the field, and `ImportView.svelte` shows one catalog line
+  when it is true; the key `package.report.deck_config_skipped` is appended at the end of both catalogs,
+  and the two key sets stay identical. *Acceptance:* a table test in `internal/store` imports through
+  `ImportPackage`. The package above, with `include_progress` off, reports `reviews_discarded` 1 and
+  `progress_discarded` true. The `top invalid` package of `TestAnkiImportSkippedDeckConfigs` reports
+  `deck_config_skipped` true; its `other invalid` and `both valid` packages report it false. A component
+  test shows the line for true and hides it for false. Evidence is the raw scoped `go test` and `go vet`
+  output, the PostgreSQL run with `TEST_PG_DSN` set, and the component test output.
+
+- [ ] **M18-69 One weight check serves both package formats** — `M18-19` checks `.edeck` weights twice.
+  The closure that `resolveTargetDeck` in `internal/store/package_import.go` passes to
+  `selectImportPreset` calls `fsrs.MigrateWeights` to set `weights_invalid`, and `createPresetFromPackage`
+  calls it again, unconditionally, to decide whether to write the weights. `createAnkiPreset` in
+  `internal/store/anki_import.go` holds the same rule a third time, together with the `slog.Warn` line that
+  `M18-18` requires. The `.edeck` path writes no such line, so a refused `.edeck` weight set leaves no
+  trace in the log. The doc comment of `createPresetFromPackage` says only that `applyWeights` false keeps
+  the weights out; it does not say that a refused set is kept out too. The fix: one function in
+  `internal/store/preset_weights.go` takes the owner, the package's weight list, `apply_weights` and the
+  report. It returns the JSON text to store, or nil. It sets `weights_invalid` when `apply_weights` is on
+  and `fsrs.MigrateWeights` refuses a non-empty list, and then writes the `slog.Warn` line carrying the
+  user id and the error. `createAnkiPreset` and `createPresetFromPackage` both call it. The closure in
+  `resolveTargetDeck` only calls `createPresetFromPackage`. `createPresetFromPackage` writes
+  `weights_review_count` and `weights_optimized_at` only when the function returned weights, and its doc
+  comment states that rule. If `M18-5` lands first, this entry is deleted with a commit message that
+  names `M18-5`. *Acceptance:* `git grep -n 'fsrs.MigrateWeights' -- internal/store/anki_import.go
+  internal/store/package_import.go` prints nothing; every case of `TestImportPackageApplyWeights` in
+  `internal/store/package_weights_test.go` and of the weights table in
+  `internal/store/anki_preset_validation_test.go` keeps its result; a test captures the `slog.Warn` line
+  for a refused `.edeck` set. Evidence is the grep output and the raw scoped `go test` and `go vet`
+  output.
+
+- [ ] **M18-70 Comments state the reader's skip rules without a task ID** — the code of `M18-24` to
+  `M18-27` carries four comment defects. First, the comment on `roundedIntegers` in
+  `internal/anki/sqlite.go` gives as its reason "before M18-13 one such value rejected the whole package";
+  `M18-13` is a retired ID that no committed file defines any more, so the reason resolves only through
+  `git log`. Second, `rejectRealIntegers` has no doc comment, and the doc comment of `readCards` does not
+  say that a card row is skipped and counted. Third, in `internal/anki/model.go`, `Package.CardsSkipped`
+  and `Package.DeckConfigsSkipped` have no comment, while `RevlogErr` beside them has one. Fourth, in
+  `internal/store/package_import.go`, `PackageImportReport.CardsSkipped` has no comment, so nothing says
+  that it counts package card rows that were not imported. The fix: the `roundedIntegers` comment states
+  the reason in its own words, namely that one REAL value would otherwise reject a package whose content
+  is readable, and cites no task ID. `rejectRealIntegers` gains a doc comment that begins with its name
+  and states why a REAL value in an identifier or code column is refused instead of rounded: rounding it
+  invents a reference, a rating or a state. `readCards` states the skip rule. The three fields gain one
+  comment each. This entry changes comments only. *Acceptance:* `git grep -n 'M18-' -- internal/anki`
+  prints nothing; the scoped `go vet` of `internal/anki` and `internal/store` passes. Evidence is the grep
+  output, the diff and the raw scoped `go vet` output.
+
+- [ ] **M18-71 The import tests share one fixture helper and record what they measure** — the commits of
+  `M18-23` to `M18-27` added four copies of one procedure: open a fixture `.apkg`, run SQL on its
+  collection, and write the archive again. Two copies are inline in `TestAnkiImportReportsSkippedCard` and
+  `TestAnkiImportUnreadableRevlog` in `internal/store/anki_progress_import_test.go`; the others are
+  `schedulingToleranceArchive` in `internal/store/anki_scheduling_tolerance_test.go` and
+  `skippedConfigArchive` in `internal/store/anki_skipped_config_test.go`. `ankiFixtureWithoutTemplate` in
+  `internal/store/anki_import_test.go` is a fifth, older copy. The copies differ:
+  `TestAnkiImportReportsSkippedCard` and `skippedConfigArchive` ignore the error of `Close`.
+  `TestAnkiImportUnreadableRevlog` has two more defects. It expects `len(pkg.Decks)` new decks, but an
+  import creates exactly one deck, so a fixture with a second package deck fails it for a reason unrelated
+  to the revlog. Its `t.Logf` line prints the expected counts under the label `deltas`, not the measured
+  ones, so the evidence in the commit that closed `M18-23` (`19a2505`) is the expectation, not a
+  measurement. `TestAnkiImportReportsSkippedCard` checks only the count; it does not check that the
+  package's other cards were created. The fix: one helper in `internal/store/anki_import_test.go` takes a
+  fixture name and SQL statements, handles the three collection layouts, checks every `Close` error and
+  returns the archive bytes, and the five sites call it. `TestAnkiImportUnreadableRevlog` expects one new
+  deck and logs the measured counts. `TestAnkiImportReportsSkippedCard` moves to
+  `internal/store/anki_scheduling_tolerance_test.go` and also checks that `cards_created` equals the
+  package's card count minus 1. This entry changes tests only. *Acceptance:* in
+  `internal/store/anki_*_test.go`, `zip.NewWriter` appears only in the new helper and in
+  `minimalPackageZipForTest`; every test named here passes on both drivers. Evidence is the output of
+  `git grep -n 'zip.NewWriter' -- 'internal/store/anki_*_test.go'` and the raw scoped `go test` and
+  `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set.
+
+- [ ] **M18-72 The release ledger records `M18-19` and what `M18-23` to `M18-26` changed** — `M18-28` asks
+  the `M18-2` ledger row to name each of `M18-23` to `M18-26` that has landed, but not to state what they
+  changed, and no entry asks for a row for `M18-19`. All five have landed, and each changes what an import
+  does through the HTTP API, the MCP tools and the CLI. The `M18-2` row would leave out four points.
+  First, with `include_progress` on, a revlog row that cannot be read fails the import with
+  `package_bad_format` (`M18-23`). Second, when the top deck's configuration is not found and at least one
+  deck configuration of the package was skipped, the new preset holds the defaults instead of the
+  package's single remaining configuration (`M18-24`). Third, one malformed entry of a schema-11
+  `col.dconf` drops that entry only (`M18-25`). Fourth, a REAL value in `cards.nid`, `cards.did` or
+  `cards.ord` fails the import with `package_bad_format`; a REAL value in `revlog.cid`, `revlog.ease` or
+  `revlog.type` makes that revlog row unreadable; a REAL value in `cards.type`, `cards.queue`,
+  `cards.odid` or `cards.flags` leaves that card out; and the report gains `cards_skipped` (`M18-26`). A
+  new row for `M18-19` states that an `.edeck` import with `apply_weights` on writes the package's weights
+  only when `fsrs.MigrateWeights` accepts them, and that `weights_invalid` then describes an `.edeck`
+  import too. Each row marks a breaking change as section 7 of `AGENTS.md` requires; the new report field
+  is additive. The rows also name each of `M18-65` to `M18-71` that has landed by then. Only the parent
+  edits this file, with the maintainer present, in the same change as `M18-22`, `M18-28`, `M18-55` and
+  `M18-63`. *Acceptance:* the ledger row that names `M18-2` also names `M18-23`, `M18-24`, `M18-25`,
+  `M18-26` and `cards_skipped`; one ledger row names `M18-19`. Evidence is the output of
+  `grep -n -E 'M18-(19|23|24|25|26)\b|cards_skipped' ROADMAP.md` limited to the ledger section.
 
 ---
 
