@@ -21,7 +21,135 @@ import (
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/anki"
+	"git.nite07.com/nite/engram/internal/pgtest"
 )
+
+func TestAnkiProgressLocksExistingState(t *testing.T) {
+	db, ok := pgtest.Open(t)
+	if !ok {
+		return
+	}
+	t.Run("postgres", func(t *testing.T) {
+		if err := db.AutoMigrate(AllModels()...); err != nil {
+			t.Fatal(err)
+		}
+		user := seedUsers(t, db, "progress_lock")[0]
+		deck, notes := seedPackageDeck(t, db, user)
+		var card Card
+		if err := db.Where("note_id = ?", notes[0]).First(&card).Error; err != nil {
+			t.Fatal(err)
+		}
+		local := time.Unix(1500000000, 0).UTC()
+		if err := db.Model(&CardState{}).Where("card_id = ? AND user_id = ?", card.ID, user).Update("last_review_at", local).Error; err != nil {
+			t.Fatal(err)
+		}
+		pkg := &anki.Package{CreatedAt: 1500000000, Cards: []anki.Card{{ID: 1, Type: 2, Queue: 2, Reps: 7, Data: `{"s":4.5,"d":6.2,"lrt":1600000000}`}}}
+		result := make(chan *gorm.DB, 1)
+		started := make(chan struct{})
+		called := false
+		if err := db.Callback().Query().After("gorm:query").Register("test:progress_lock", func(tx *gorm.DB) {
+			if called || tx.Statement.Table != "card_states" {
+				return
+			}
+			called = true
+			states := tx.Statement.Dest.(*[]CardState)
+			if len(*states) != 1 {
+				t.Errorf("loaded states = %d", len(*states))
+				return
+			}
+			version := (*states)[0].Version
+			go func() {
+				close(started)
+				result <- db.Exec("UPDATE card_states SET version = version + 1 WHERE card_id = ? AND user_id = ? AND version = ?", card.ID, user, version)
+			}()
+			<-started
+			time.Sleep(200 * time.Millisecond)
+			select {
+			case r := <-result:
+				t.Errorf("update completed before import commit: rows=%d error=%v", r.RowsAffected, r.Error)
+				result <- r
+			default:
+			}
+		}); err != nil {
+			t.Fatal(err)
+		}
+		defer db.Callback().Query().Remove("test:progress_lock")
+		report := &PackageImportReport{}
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			return importAnkiProgress(context.Background(), tx, user, deck, pkg, map[int64]uint64{1: card.ID}, PackageImportOptions{IncludeProgress: true}, report, time.Now())
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if !called {
+			t.Fatal("state load callback was not called")
+		}
+		select {
+		case r := <-result:
+			if r.Error != nil || r.RowsAffected != 0 {
+				t.Fatalf("update rows=%d error=%v", r.RowsAffected, r.Error)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("update did not complete after commit")
+		}
+		var state CardState
+		if err := db.Where("card_id = ? AND user_id = ?", card.ID, user).First(&state).Error; err != nil {
+			t.Fatal(err)
+		}
+		if state.Reps != 7 || state.Version != 3 || state.LastReviewAt == nil || state.LastReviewAt.Unix() != 1600000000 || report.ProgressApplied != 1 {
+			t.Fatalf("state=%+v report=%+v", state, report)
+		}
+	})
+}
+
+func TestAnkiProgressConcurrentStateCreate(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			user := seedUsers(t, db, "progress_create_"+driver)[0]
+			deck, notes := seedPackageDeck(t, db, user)
+			var card Card
+			if err := db.Where("note_id = ?", notes[1]).First(&card).Error; err != nil {
+				t.Fatal(err)
+			}
+			pkg := &anki.Package{CreatedAt: 1500000000, Cards: []anki.Card{{ID: 1, Type: 2, Queue: 2, Reps: 7, Data: `{"s":4.5,"d":6.2,"lrt":1600000000}`}}, Reviews: []anki.Review{{ID: 1600000000000, CardID: 1, Ease: 3, Type: 1}}}
+			called := false
+			if err := db.Callback().Query().After("gorm:query").Register("test:progress_create_race", func(tx *gorm.DB) {
+				if called || tx.Statement.Table != "card_states" {
+					return
+				}
+				called = true
+				if len(*tx.Statement.Dest.(*[]CardState)) != 0 {
+					t.Error("expected no loaded states")
+				}
+				if err := tx.Session(&gorm.Session{NewDB: true}).Create(&CardState{CardID: card.ID, UserID: user, State: "learning", Reps: 99, Version: 5}).Error; err != nil {
+					tx.AddError(err)
+				}
+			}); err != nil {
+				t.Fatal(err)
+			}
+			defer db.Callback().Query().Remove("test:progress_create_race")
+			report := &PackageImportReport{}
+			if err := db.Transaction(func(tx *gorm.DB) error {
+				return importAnkiProgress(context.Background(), tx, user, deck, pkg, map[int64]uint64{1: card.ID}, PackageImportOptions{IncludeProgress: true}, report, time.Now())
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if !called {
+				t.Fatal("state load callback was not called")
+			}
+			var state CardState
+			if err := db.Where("card_id = ? AND user_id = ?", card.ID, user).First(&state).Error; err != nil {
+				t.Fatal(err)
+			}
+			var count int64
+			if err := db.Model(&Review{}).Where("card_id = ? AND user_id = ?", card.ID, user).Count(&count).Error; err != nil {
+				t.Fatal(err)
+			}
+			if state.State != "learning" || state.Reps != 99 || state.Version != 5 || count != 0 || report.StatesSkipped != 1 || report.ProgressApplied != 0 || report.ReviewsSkipped != 1 || report.ReviewsApplied != 0 {
+				t.Fatalf("state=%+v reviews=%d report=%+v", state, count, report)
+			}
+		})
+	}
+}
 
 func TestAnkiResetStateBefore(t *testing.T) {
 	const start int64 = 1600000000000

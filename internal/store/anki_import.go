@@ -22,6 +22,7 @@ import (
 
 	fsrs "github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"git.nite07.com/nite/engram/internal/anki"
 	"git.nite07.com/nite/engram/internal/mediatype"
@@ -1602,12 +1603,17 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		rating int
 	}
 	oldStates := map[uint64]CardState{}
+	conflictedStates := map[uint64]bool{}
 	reviewKeys := map[reviewKey]bool{}
 	latestReview := map[uint64]time.Time{}
 	for start := 0; start < len(ids); start += 500 {
 		end := min(start+500, len(ids))
 		var states []CardState
-		if err := tx.WithContext(ctx).Where("user_id = ? AND card_id IN ?", userID, ids[start:end]).Find(&states).Error; err != nil {
+		query := tx.WithContext(ctx)
+		if tx.Dialector.Name() == "postgres" {
+			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+		}
+		if err := query.Where("user_id = ? AND card_id IN ?", userID, ids[start:end]).Find(&states).Error; err != nil {
 			return fmt.Errorf("load Anki card state: %w", err)
 		}
 		for _, state := range states {
@@ -1749,8 +1755,16 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			if err := tx.WithContext(ctx).Model(&CardState{}).Where("card_id = ? AND user_id = ?", id, userID).Select("*").Updates(&state).Error; err != nil {
 				return fmt.Errorf("update Anki card state: %w", err)
 			}
-		} else if err := tx.WithContext(ctx).Create(&state).Error; err != nil {
-			return fmt.Errorf("create Anki card state: %w", err)
+		} else {
+			result := tx.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&state)
+			if result.Error != nil {
+				return fmt.Errorf("create Anki card state: %w", result.Error)
+			}
+			if result.RowsAffected == 0 {
+				conflictedStates[id] = true
+				report.StatesSkipped++
+				continue
+			}
 		}
 		oldStates[id] = state
 		report.ProgressApplied++
@@ -1780,7 +1794,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			continue
 		}
 		id, ok := cardIDs[r.CardID]
-		if !ok || r.Ease < 1 || r.Ease > 4 {
+		if !ok || conflictedStates[id] || r.Ease < 1 || r.Ease > 4 {
 			report.ReviewsSkipped++
 			continue
 		}
