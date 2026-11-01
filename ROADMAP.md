@@ -686,28 +686,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   test shows the line for true and hides it for false. Evidence is the raw scoped `go test` and `go vet`
   output, the PostgreSQL run with `TEST_PG_DSN` set, and the component test output.
 
-- [ ] **M18-69 One weight check serves both package formats** — `M18-19` checks `.edeck` weights twice.
-  The closure that `resolveTargetDeck` in `internal/store/package_import.go` passes to
-  `selectImportPreset` calls `fsrs.MigrateWeights` to set `weights_invalid`, and `createPresetFromPackage`
-  calls it again, unconditionally, to decide whether to write the weights. `createAnkiPreset` in
-  `internal/store/anki_import.go` holds the same rule a third time, together with the `slog.Warn` line that
-  `M18-18` requires. The `.edeck` path writes no such line, so a refused `.edeck` weight set leaves no
-  trace in the log. The doc comment of `createPresetFromPackage` says only that `applyWeights` false keeps
-  the weights out; it does not say that a refused set is kept out too. The fix: one function in
-  `internal/store/preset_weights.go` takes the owner, the package's weight list, `apply_weights` and the
-  report. It returns the JSON text to store, or nil. It sets `weights_invalid` when `apply_weights` is on
-  and `fsrs.MigrateWeights` refuses a non-empty list, and then writes the `slog.Warn` line carrying the
-  user id and the error. `createAnkiPreset` and `createPresetFromPackage` both call it. The closure in
-  `resolveTargetDeck` only calls `createPresetFromPackage`. `createPresetFromPackage` writes
-  `weights_review_count` and `weights_optimized_at` only when the function returned weights, and its doc
-  comment states that rule. If `M18-5` lands first, this entry is deleted with a commit message that
-  names `M18-5`. *Acceptance:* `git grep -n 'fsrs.MigrateWeights' -- internal/store/anki_import.go
-  internal/store/package_import.go` prints nothing; every case of `TestImportPackageApplyWeights` in
-  `internal/store/package_weights_test.go` and of the weights table in
-  `internal/store/anki_preset_validation_test.go` keeps its result; a test captures the `slog.Warn` line
-  for a refused `.edeck` set. Evidence is the grep output and the raw scoped `go test` and `go vet`
-  output.
-
 - [ ] **M18-70 Comments state the reader's skip rules without a task ID** — the code of `M18-24` to
   `M18-27` carries four comment defects. First, the comment on `roundedIntegers` in
   `internal/anki/sqlite.go` gives as its reason "before M18-13 one such value rejected the whole package";
