@@ -371,28 +371,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `M18-26` and `cards_skipped`; one ledger row names `M18-19`. Evidence is the output of
   `grep -n -E 'M18-(19|23|24|25|26)\b|cards_skipped' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-76 `deriveAnkiMemory` derives memory only, and its comment states its contract** — `M18-40`
-  moved the memory-state derivation of `importAnkiProgress` in `internal/store/anki_import.go` into
-  `deriveAnkiMemory`. That function also decodes `cards.data` and returns the card's `lrt`. The `lrt`
-  feeds the last-review chain of `importAnkiProgress` and is not part of the memory state. The function
-  returns `lrt` on the skip path too, where the caller discards it. Its comment states the order of the
-  rules but not the contract. It does not say that the function writes the card's stability and
-  difficulty into `state`, that it writes entries into `rowMemory` for the card's kept revlog rows, or
-  what its three results mean. It says the function "skips a card", but the function returns false and
-  the caller skips the card and counts it in `states_skipped`. Two more statements are missing or
-  misplaced. When `HistoricalMemoryStates` fails, the function discards the error and the card's earlier
-  rows keep NULL memory; the comment does not say so or why. The sentence about `DeltaT` describes code in
-  the revlog loop of `importAnkiProgress`, not code in this function. The fix: `importAnkiProgress`
-  decodes `cards.data` before it calls `deriveAnkiMemory`, keeps the error text `import Anki card %d data:
-  %w`, and passes the decoded stability and difficulty. `deriveAnkiMemory` returns only whether the card's
-  state is usable. Its comment states what it writes into `state` and into `rowMemory`, what the result
-  means, and what happens when `HistoricalMemoryStates` fails, as the code then has it. The `DeltaT`
-  sentence moves to the revlog loop. Behaviour does not change. *Acceptance:* `deriveAnkiMemory` returns
-  one `bool` and contains no `json.Unmarshal` call; the progress tests in `internal/store` and
-  `internal/schedule` keep their results on both drivers. Evidence is the diff and the raw scoped
-  `go test` and `go vet` output of `internal/store` and `internal/schedule`, the PostgreSQL run with
-  `TEST_PG_DSN` set.
-
 - [ ] **M18-77 The `M18-41` tests check which rule produced the state, and one preview test covers both
   drivers** — `M18-41` added four cases to `TestAnkiProgressMissingMemory` in
   `internal/store/anki_progress_import_test.go`: `relearning history`, `relearning SM2`,
