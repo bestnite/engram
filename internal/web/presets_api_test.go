@@ -187,6 +187,9 @@ func TestPresetWriteRejectsInvalidInput(t *testing.T) {
 		{"max interval zero", `{"name":"x","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":0,"enable_fuzz":true}`, "preset_max_interval_invalid"},
 		{"negative steps", `{"name":"x","desired_retention":0.9,"learning_steps":"-5m","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true}`, "preset_steps_invalid"},
 		{"unparsable steps", `{"name":"x","desired_retention":0.9,"learning_steps":"1m,zzz","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true}`, "preset_steps_invalid"},
+		{"steps one day over the cap", `{"name":"x","desired_retention":0.9,"learning_steps":"36501d","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true}`, "preset_steps_invalid"},
+		{"steps overflow the cap after scaling", `{"name":"x","desired_retention":0.9,"learning_steps":"1e308d","relearning_steps":"10m","maximum_interval_days":100,"enable_fuzz":true}`, "preset_steps_invalid"},
+		{"relearning steps over the cap", `{"name":"x","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"200000d","maximum_interval_days":100,"enable_fuzz":true}`, "preset_steps_invalid"},
 		{"missing enable_fuzz", `{"name":"x","desired_retention":0.9,"learning_steps":"1m","relearning_steps":"10m","maximum_interval_days":100}`, "invalid_request"},
 		{"bad json", `{`, "invalid_request"},
 	}

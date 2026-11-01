@@ -184,6 +184,11 @@ func TestParseSteps(t *testing.T) {
 		{"1h", []float64{60}, false},
 		{"1d", []float64{1440}, false},
 		{"5", []float64{5}, false},
+		{"36500d", []float64{36500 * 24 * 60}, false},
+		{"36501d", nil, true},
+		{"200000d", nil, true},
+		{"1e308d", nil, true},
+		{"NaNd", nil, true},
 		{"abc", nil, true},
 		{"1x", nil, true},
 	}

@@ -10,6 +10,7 @@ package schedule
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -217,7 +218,13 @@ func parseSteps(spec string) ([]float64, error) {
 	return steps, nil
 }
 
-// stepMinutes converts a single step (e.g. "10m") into minutes.
+// maxStepMinutes is the largest learning or relearning step the scheduler accepts: 36 500 days.
+// go-fsrs turns a step into a time.Duration; a larger value overflows the nanosecond count and
+// produces a due date in the past while the card claims a far larger scheduled interval.
+const maxStepMinutes = 36500 * 24 * 60
+
+// stepMinutes converts a single step (e.g. "10m") into minutes and refuses a value the scheduler
+// cannot represent: a non-finite number, or one that exceeds maxStepMinutes after the unit scaling.
 func stepMinutes(part string) (float64, error) {
 	idx := len(part)
 	for idx > 0 {
@@ -232,18 +239,23 @@ func stepMinutes(part string) (float64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid step %q", part)
 	}
+	var minutes float64
 	switch unit {
 	case "", "m", "min":
-		return v, nil
+		minutes = v
 	case "s", "sec":
-		return v / 60, nil
+		minutes = v / 60
 	case "h", "hr":
-		return v * 60, nil
+		minutes = v * 60
 	case "d":
-		return v * 1440, nil
+		minutes = v * 1440
 	default:
 		return 0, fmt.Errorf("invalid step unit in %q", part)
 	}
+	if math.IsNaN(minutes) || math.IsInf(minutes, 0) || minutes > maxStepMinutes {
+		return 0, fmt.Errorf("step %q exceeds the supported range", part)
+	}
+	return minutes, nil
 }
 
 // cardFromState converts a database row into go-fsrs's Card.
@@ -287,7 +299,11 @@ func (s *Scheduler) Preview(st *store.CardState, now time.Time) ([]Outcome, erro
 	order := []Rating{Again, Hard, Good, Easy}
 	out := make([]Outcome, 0, len(order))
 	for _, rating := range order {
-		out = append(out, outcomeFrom(rating, log[fsrs.Rating(rating)], now))
+		outcome, err := outcomeFrom(rating, log[fsrs.Rating(rating)], now)
+		if err != nil {
+			return nil, fmt.Errorf("schedule: preview card %d: %w", st.CardID, err)
+		}
+		out = append(out, outcome)
 	}
 	return out, nil
 }
@@ -305,7 +321,11 @@ func (s *Scheduler) Next(st *store.CardState, now time.Time, rating Rating) (Out
 	if err != nil {
 		return Outcome{}, fmt.Errorf("schedule: next card %d: %w", st.CardID, err)
 	}
-	return outcomeFrom(rating, info, now), nil
+	outcome, err := outcomeFrom(rating, info, now)
+	if err != nil {
+		return Outcome{}, fmt.Errorf("schedule: next card %d: %w", st.CardID, err)
+	}
+	return outcome, nil
 }
 
 // Retrievability returns the card's recall probability at instant now, used for queue ordering; learning/new cards return 0.
@@ -318,16 +338,26 @@ func (s *Scheduler) Retrievability(st *store.CardState, now time.Time) (float64,
 }
 
 // outcomeFrom flattens the go-fsrs result into the integer-oriented Outcome.
-func outcomeFrom(rating Rating, info fsrs.SchedulingInfo, now time.Time) Outcome {
+//
+// A non-New card whose computed due date is before now is an error, not a zero interval: the
+// review row records interval_days from this value, and a clamped zero would silently claim the
+// grade scheduled nothing while the card state says it scheduled a large interval.
+func outcomeFrom(rating Rating, info fsrs.SchedulingInfo, now time.Time) (Outcome, error) {
 	due := info.Card.Due.UTC()
-	interval := due.Sub(now.UTC()).Hours() / 24
+	state := stateFromFSRS(info.Card.State)
+	now = now.UTC()
+	if state != StateNew && due.Before(now) {
+		return Outcome{}, fmt.Errorf("rating %d produced due date %s before now %s in state %s",
+			int(rating), due.Format(time.RFC3339), now.Format(time.RFC3339), state)
+	}
+	interval := due.Sub(now).Hours() / 24
 	if interval < 0 {
 		interval = 0
 	}
 	return Outcome{
 		Rating:         rating,
 		Due:            due,
-		State:          stateFromFSRS(info.Card.State),
+		State:          state,
 		Stability:      info.Card.Stability,
 		Difficulty:     info.Card.Difficulty,
 		ScheduledDays:  int(info.Card.ScheduledDays),
@@ -335,7 +365,7 @@ func outcomeFrom(rating Rating, info fsrs.SchedulingInfo, now time.Time) Outcome
 		Lapses:         int(info.Card.Lapses),
 		RemainingSteps: info.Card.RemainingSteps,
 		IntervalDays:   interval,
-	}
+	}, nil
 }
 
 func derefTime(t *time.Time) time.Time {

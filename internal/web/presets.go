@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"math"
 	"strconv"
 	"strings"
 
@@ -44,7 +45,8 @@ func (s *Server) optimizeJobFor(ctx context.Context, presetID uint64, raw string
 
 // validStepSpec reports whether a learn/relearn step string can be parsed; an empty string is valid (steps off).
 // The grammar matches internal/schedule's parseSteps (comma-separated, s/m/h/d suffixes, minutes by default),
-// but it additionally requires every step to be positive: the scheduler accepts negatives like "-5m" as valid input, and acceptance requires refusing them here.
+// but it additionally requires every step to be positive and to stay within 36 500 days after the unit
+// scaling, which is the range the scheduler can turn into a due date without overflowing.
 // This only decides "parsable" and does not copy the scheduling logic — the scheduler still uses its own parseSteps when reading from the database.
 func validStepSpec(spec string) bool {
 	spec = strings.TrimSpace(spec)
@@ -66,12 +68,22 @@ func validStepSpec(spec string) bool {
 		}
 		num, unit := part[:idx], strings.ToLower(part[idx:])
 		value, err := strconv.ParseFloat(num, 64)
-		if err != nil || value <= 0 {
+		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
 			return false
 		}
+		minutes := value
 		switch unit {
-		case "", "m", "min", "s", "sec", "h", "hr", "d":
+		case "", "m", "min":
+		case "s", "sec":
+			minutes = value / 60
+		case "h", "hr":
+			minutes = value * 60
+		case "d":
+			minutes = value * 1440
 		default:
+			return false
+		}
+		if math.IsInf(minutes, 0) || minutes > 36500*24*60 {
 			return false
 		}
 	}

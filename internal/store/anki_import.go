@@ -1971,7 +1971,8 @@ func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName s
 
 func validAnkiSteps(steps []float64) bool {
 	for _, step := range steps {
-		if math.IsNaN(step) || math.IsInf(step, 0) || step < 0 {
+		if math.IsNaN(step) || math.IsInf(step, 0) || step < 0 ||
+			step > float64(DefaultMaximumIntervalDays*24*60) {
 			return false
 		}
 	}

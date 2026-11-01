@@ -31,6 +31,7 @@ func TestRepairPresetSchedulerLimits(t *testing.T) {
 				{"negative steps", "-1m", "-2m", 1000, DefaultLearningSteps, DefaultRelearningSteps, 1000, .9, .9},
 				{"nan", "NaNm", "NaNm", 1000, DefaultLearningSteps, DefaultRelearningSteps, 1000, .9, .9},
 				{"infinity", "+Infm", "+Infm", 1000, DefaultLearningSteps, DefaultRelearningSteps, 1000, .9, .9},
+				{"over the step cap", "36501d", "36501d", 1000, DefaultLearningSteps, DefaultRelearningSteps, 1000, .9, .9},
 				{"invalid", "1m,broken", "broken", 1000, DefaultLearningSteps, DefaultRelearningSteps, 1000, .9, .9},
 				{"legal", " 2m, ,10m ", "", 36500, " 2m, ,10m ", "", 36500, 1, 1},
 			}

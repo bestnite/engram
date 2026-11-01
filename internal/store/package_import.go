@@ -683,7 +683,8 @@ func validPackageSteps(steps string) bool {
 			continue
 		}
 		minutes, ok := ankiStepMinutes(part)
-		if !ok || minutes < 0 || math.IsNaN(minutes) || math.IsInf(minutes, 0) {
+		if !ok || minutes < 0 || math.IsNaN(minutes) || math.IsInf(minutes, 0) ||
+			minutes > float64(DefaultMaximumIntervalDays*24*60) {
 			return false
 		}
 	}

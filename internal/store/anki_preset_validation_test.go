@@ -26,6 +26,7 @@ func TestCreateAnkiPresetSchedulerLimits(t *testing.T) {
 		{"nan learning", []float64{math.NaN()}, []float64{3}, 1000, DefaultLearningSteps, "3m", 1000},
 		{"infinite relearning", []float64{2}, []float64{math.Inf(1)}, 1000, "2m", DefaultRelearningSteps, 1000},
 		{"negative relearning", []float64{2}, []float64{-1}, 1000, "2m", DefaultRelearningSteps, 1000},
+		{"learning over the step cap", []float64{36501 * 24 * 60}, []float64{3}, 1000, DefaultLearningSteps, "3m", 1000},
 		{"empty steps", nil, nil, 36500, "", "", 36500},
 	}
 	for driver, db := range packageDatabases(t) {
