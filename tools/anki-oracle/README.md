@@ -61,6 +61,13 @@ git status --short internal/notetype/testdata
 
 The last two commands must report every file as `OK` and print nothing.
 
+`learning-due.anki21.apkg` is the one exception to that check: Anki writes an intraday due date
+from the time `answerCard` runs, and the interval between a card's review time and its due time
+differs between runs (measured 64950 ms and, seconds later, 72560 ms for the same card), so no
+offsetting after the fact reproduces the file. It is regenerated only when its rule changes, its
+golden stays the recorded oracle for the committed fixture, and `sha256sum -c` covers every other
+file.
+
 `generate.py --table` prints the rule table below, so the table and the fixture catalogue cannot
 drift apart.
 
