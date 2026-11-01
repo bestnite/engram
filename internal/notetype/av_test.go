@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // latexDisabledNotice is the text Anki's collection layer appends when LaTeX
@@ -317,6 +318,18 @@ func TestExtractAVTags(t *testing.T) {
 			side:     "q",
 			wantHTML: "[SOUND:x.wav]",
 		},
+		{
+			name:     "each directive takes its own closing tag",
+			input:    "[anki:foo a=1]x[/anki:foo][anki:foo b=2]y[/anki:foo]",
+			side:     "q",
+			wantHTML: "[anki:foo a=1]x[/anki:foo][anki:foo b=2]y[/anki:foo]",
+		},
+		{
+			name:     "an unclosed directive does not consume a later body",
+			input:    "[anki:foo]open [anki:bar b=2]y[/anki:bar]",
+			side:     "q",
+			wantHTML: "[anki:foo]open [anki:bar b=2]y[/anki:bar]",
+		},
 	}
 
 	for _, test := range tests {
@@ -476,5 +489,28 @@ func TestRenderAnswerExcludesFrontSideAudio(t *testing.T) {
 	}
 	if len(answerTags) != 1 || answerTags[0].Side != "a" || answerTags[0].Name != "back.mp3" {
 		t.Errorf("answer tags = %+v, want only the answer's own sound", answerTags)
+	}
+}
+
+// TestExtractAVTagsUnclosedMarkersStayLinear pins the parser's cost on a field
+// full of unclosed markers. Looking up each candidate's closing tag by scanning
+// the whole remainder made the work grow with the square of the input.
+func TestExtractAVTagsUnclosedMarkersStayLinear(t *testing.T) {
+	const marker = "[anki:tts lang=en_US]"
+	const count = 40000
+	input := strings.Repeat(marker, count)
+
+	start := time.Now()
+	html, tags := ExtractAVTags(input, "q")
+	elapsed := time.Since(start)
+
+	if html != input {
+		t.Fatalf("html length = %d, want the %d-byte input unchanged: an unclosed marker is text", len(html), len(input))
+	}
+	if len(tags) != 0 {
+		t.Errorf("tags = %d, want 0: an unclosed marker is not a tag", len(tags))
+	}
+	if budget := time.Second; elapsed > budget {
+		t.Errorf("ExtractAVTags on %d unclosed markers took %v, want under %v", count, elapsed, budget)
 	}
 }

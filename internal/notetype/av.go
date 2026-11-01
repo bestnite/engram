@@ -28,6 +28,7 @@ package notetype
 
 import (
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -241,9 +242,11 @@ func stripHTMLForTTS(html string) string {
 // parseAVNodes splits txt into nodes until nothing is left. Every step consumes
 // at least one byte, so the loop always terminates.
 func parseAVNodes(txt string) []avNode {
+	closings := newAVClosingIndex(txt)
+	full := txt
 	var nodes []avNode
 	for txt != "" {
-		node, rest, ok := parseAVNode(txt)
+		node, rest, ok := parseAVNode(txt, closings, len(full)-len(txt))
 		if !ok {
 			break
 		}
@@ -253,12 +256,51 @@ func parseAVNodes(txt string) []avNode {
 	return nodes
 }
 
-// parseAVNode parses one node: a sound tag, a directive, or literal text.
-func parseAVNode(txt string) (avNode, string, bool) {
+// avClosingPrefix starts every directive's closing tag.
+const avClosingPrefix = "[/anki:"
+
+// avClosingIndex holds the offset of every directive's closing tag, by name, in
+// document order. One pass over the text builds it, so a candidate's closing tag
+// is a binary search instead of a scan of the whole remainder; scanning made a
+// field of unclosed markers cost the square of its length.
+type avClosingIndex map[string][]int
+
+// newAVClosingIndex collects the closing tags of txt.
+func newAVClosingIndex(txt string) avClosingIndex {
+	index := avClosingIndex{}
+	for pos := 0; pos < len(txt); {
+		found := strings.Index(txt[pos:], avClosingPrefix)
+		if found < 0 {
+			break
+		}
+		start := pos + found
+		after := start + len(avClosingPrefix)
+		name, nameLength, ok := avDirectiveName(txt[after:])
+		if ok && after+nameLength < len(txt) && txt[after+nameLength] == ']' {
+			index[name] = append(index[name], start)
+		}
+		pos = after
+	}
+	return index
+}
+
+// at returns the offset of the first closing tag for name at or after from.
+func (index avClosingIndex) at(name string, from int) (int, bool) {
+	offsets := index[name]
+	next := sort.SearchInts(offsets, from)
+	if next == len(offsets) {
+		return 0, false
+	}
+	return offsets[next], true
+}
+
+// parseAVNode parses one node: a sound tag, a directive, or literal text. offset
+// is txt's position in the whole document, which the closing index is keyed by.
+func parseAVNode(txt string, closings avClosingIndex, offset int) (avNode, string, bool) {
 	if node, rest, ok := parseAVSoundNode(txt); ok {
 		return node, rest, true
 	}
-	if node, rest, ok := parseAVTagNode(txt); ok {
+	if node, rest, ok := parseAVTagNode(txt, closings, offset); ok {
 		return node, rest, true
 	}
 	return parseAVTextNode(txt)
@@ -281,7 +323,7 @@ func parseAVSoundNode(txt string) (avNode, string, bool) {
 
 // parseAVTagNode parses [anki:name option=value ...]body[/anki:name]. A missing
 // or mismatched closing tag makes the whole thing plain text, as in Anki.
-func parseAVTagNode(txt string) (avNode, string, bool) {
+func parseAVTagNode(txt string, closings avClosingIndex, offset int) (avNode, string, bool) {
 	const prefix = "[anki:"
 	if !strings.HasPrefix(txt, prefix) {
 		return avNode{}, txt, false
@@ -292,16 +334,19 @@ func parseAVTagNode(txt string) (avNode, string, bool) {
 	}
 	rest := trimAVSpace(txt[len(prefix)+nameLength:])
 	options, rest, _ := parseAVOptions(rest)
+	open := offset + len(txt) - len(rest)
 	if !strings.HasPrefix(rest, "]") {
 		return avNode{}, txt, false
 	}
 	rest = rest[1:]
-	closing := "[/anki:" + name + "]"
-	end := strings.Index(rest, closing)
-	if end < 0 {
+	bodyStart := open + 1
+	end, found := closings.at(name, bodyStart)
+	if !found {
 		return avNode{}, txt, false
 	}
-	return avNode{kind: nodeDirective, name: name, text: rest[:end], options: options}, rest[end+len(closing):], true
+	textEnd := end - bodyStart
+	closingLength := len(avClosingPrefix) + len(name) + 1
+	return avNode{kind: nodeDirective, name: name, text: rest[:textEnd], options: options}, rest[textEnd+closingLength:], true
 }
 
 // parseAVTextNode consumes at least one character and stops at the "[" that may

@@ -1546,7 +1546,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `AGENTS.md` §2.7 and `write.go` that the key survives engram-to-engram traffic only and report the loss
   on import.
 
-- [ ] **M19-49 An unclosed `[anki:` marker makes audio-tag parsing quadratic, so one note field can stall a
+- [x] **M19-49 An unclosed `[anki:` marker makes audio-tag parsing quadratic, so one note field can stall a
   review** — *should-fix.* `parseAVTagNode` looks for the closing tag of each candidate with
   `strings.Index(rest, closing)` (`internal/notetype/av.go:300`) and, finding none, reports "not a
   directive"; `parseAVTextNode` then advances one `[` and the next candidate scans the whole remainder again
@@ -1559,6 +1559,30 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   minutes of CPU per request. *Unverified:* no request was timed end to end. *Acceptance:* resolve every
   closing tag in one pass instead of rescanning the remainder per candidate, and add a test that renders a
   field holding thousands of unclosed markers within a time budget.
+  *Closed by this commit (`fix(notetype): resolve audio-tag closings in one pass`).*
+  `parseAVNodes` (`internal/notetype/av.go:245`) now builds `newAVClosingIndex` (`:265`) once per field: one
+  scan collects the offset of every `[/anki:<name>]` into a per-name list, and `avClosingIndex.at` (`:294`)
+  binary-searches it, so a candidate's lookup no longer rescans the remainder. The parser carries the
+  current absolute `offset` through `parseAVNode` and `parseAVTagNode` so the index and the returned
+  remainder agree, and the matched closing is still the first one for that name at or after the opening
+  tag's `]`, which keeps the previous grammar. Cost is now one pass plus one `O(log n)` lookup per
+  candidate: the reported 840 KB field dropped from ~5 s to ~20 ms.
+  `TestExtractAVTagsUnclosedMarkersStayLinear` (`internal/notetype/av_test.go:490`) renders 40,000 unclosed
+  `[anki:tts lang=en_US]` markers, asserts the text comes back unchanged with no tag extracted, and holds
+  the call to a one-second budget; the `TestExtractAVTags` table gained a case for two directives taking
+  their own closings and one showing an unclosed directive does not consume a later directive's body. Raw
+  output of `go test ./internal/notetype/ -run TestExtractAVTagsUnclosedMarkersStayLinear -count=1 -v`:
+  ```
+  === RUN   TestExtractAVTagsUnclosedMarkersStayLinear
+  --- PASS: TestExtractAVTagsUnclosedMarkersStayLinear (0.02s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/notetype	0.019s
+  ```
+  With only `internal/notetype/av.go` reverted, the same run failed with
+  `av_test.go:502: ExtractAVTags on 40000 unclosed markers took 4.985885648s, want under 1s` and
+  `--- FAIL: TestExtractAVTagsUnclosedMarkersStayLinear (4.99s)`. `go test ./internal/notetype/ -count=1`,
+  `go test ./internal/web/ -run 'TestReview|TestNote' -count=1` and
+  `go test ./internal/store/ -run 'TestNoteSearch|TestPlainText|TestSearch' -count=1` pass.
 
 - [ ] **M19-50 A zero-byte media file is dropped as missing, though Anki keeps it** — *nit.* The package
   importer treats an entry with no bytes as a missing file rather than an empty one
