@@ -279,17 +279,18 @@ type PackageImportReport struct {
 	Target     string `json:"target"`
 	DryRun     bool   `json:"dry_run"`
 	// DeckID is the internal numeric primary key, for internal uses such as audit; what is exposed externally is DeckPublicID.
-	DeckID          uint64 `json:"-"`
-	DeckPublicID    string `json:"deck_id,omitempty"`
-	NotesCreated    int    `json:"notes_created"`
-	NotesUpdated    int    `json:"notes_updated"`
-	NotesSkipped    int    `json:"notes_skipped"`
-	CardsCreated    int    `json:"cards_created"`
-	CardsSkipped    int    `json:"cards_skipped"`
-	MediaNew        int    `json:"media_new"`
-	MediaMissing    int    `json:"media_missing"`
-	ProgressApplied int    `json:"progress_applied"`
-	ProgressSkipped int    `json:"progress_skipped"`
+	DeckID       uint64 `json:"-"`
+	DeckPublicID string `json:"deck_id,omitempty"`
+	NotesCreated int    `json:"notes_created"`
+	NotesUpdated int    `json:"notes_updated"`
+	NotesSkipped int    `json:"notes_skipped"`
+	CardsCreated int    `json:"cards_created"`
+	// CardsSkipped counts package card rows that were not imported.
+	CardsSkipped    int `json:"cards_skipped"`
+	MediaNew        int `json:"media_new"`
+	MediaMissing    int `json:"media_missing"`
+	ProgressApplied int `json:"progress_applied"`
+	ProgressSkipped int `json:"progress_skipped"`
 	// ProgressDiscarded means an .edeck's other-user progress was refused, or an
 	// .apkg's card states or reviews were discarded during import.
 	ProgressDiscarded bool   `json:"progress_discarded"`

@@ -260,7 +260,8 @@ func readNotes(db *gorm.DB) ([]Note, error) {
 }
 
 // readCards reads the cards table. Schema 11 and schema 18 use the same
-// columns, so both layouts share this query.
+// columns, so both layouts share this query. A card row with a REAL code value
+// is skipped and counted.
 func readCards(db *gorm.DB, pkg *Package) ([]Card, error) {
 	rows, err := db.Raw("SELECT id, " + rejectRealIntegers("nid", "did", "ord") + ", " + roundedIntegers("mod", "usn", "due", "ivl", "factor", "reps", "lapses", "left", "odue") + ", data, type, queue, odid, flags, typeof(nid), typeof(did), typeof(ord), typeof(type), typeof(queue), typeof(odid), typeof(flags) FROM cards ORDER BY id").Rows()
 	if err != nil {
@@ -309,6 +310,9 @@ func readCards(db *gorm.DB, pkg *Package) ([]Card, error) {
 	return cards, nil
 }
 
+// rejectRealIntegers substitutes a placeholder for REAL values so callers can
+// refuse them: rounding an identifier or code would invent a reference, a
+// rating or a state.
 func rejectRealIntegers(columns ...string) string {
 	expressions := make([]string, len(columns))
 	for i, column := range columns {
@@ -318,8 +322,8 @@ func rejectRealIntegers(columns ...string) string {
 }
 
 // roundedIntegers rounds REAL values in integer columns: Anki collections can contain
-// them, and before M18-13 one such value rejected the whole package. Integers stay
-// exact and invalid values remain available for Scan to reject.
+// them, and otherwise one such value would reject a package whose content is readable.
+// Integers stay exact and invalid values remain available for Scan to reject.
 func roundedIntegers(columns ...string) string {
 	expressions := make([]string, len(columns))
 	for i, column := range columns {

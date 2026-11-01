@@ -5,18 +5,20 @@ import "io"
 // Package is one decoded .apkg package. Slices are ordered deterministically:
 // note types, decks, notes and cards by ID, media by the archive index.
 type Package struct {
-	Format            Format
-	NoteTypes         []NoteType
-	Decks             []Deck
-	Notes             []Note
-	Cards             []Card
+	Format    Format
+	NoteTypes []NoteType
+	Decks     []Deck
+	Notes     []Note
+	Cards     []Card
+	// CardsSkipped counts card rows skipped because a scheduling field is REAL.
 	CardsSkipped      int
 	SkippedCardIDs    map[int64]bool
 	Reviews           []Review
 	ReviewsUnreadable int
 	// RevlogErr records an incomplete review log without preventing content import.
-	RevlogErr          error
-	DeckConfigs        []DeckConfig
+	RevlogErr   error
+	DeckConfigs []DeckConfig
+	// DeckConfigsSkipped reports that deck configuration data could not be decoded.
 	DeckConfigsSkipped bool
 	CreatedAt          int64
 	Media              []MediaEntry
