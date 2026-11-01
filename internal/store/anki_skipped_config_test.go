@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"reflect"
@@ -13,7 +14,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
-func skippedConfigArchive(t *testing.T, topBad, otherBad, single bool) []byte {
+func skippedConfigArchive(t *testing.T, topBad, otherBad, single, noTop bool) []byte {
 	t.Helper()
 	raw, err := os.ReadFile(ankiFixturePath("stock.anki21b.apkg"))
 	if err != nil {
@@ -52,7 +53,11 @@ func skippedConfigArchive(t *testing.T, topBad, otherBad, single bool) []byte {
 		if topBad {
 			data = bad
 		}
-		statements = append(statements, fixtureSQL{`INSERT INTO deck_config (id, name, mtime_secs, usn, config) VALUES (?, ?, 0, 0, ?)`, []any{configID, "Top", data}})
+		id := configID
+		if noTop {
+			id += 20000
+		}
+		statements = append(statements, fixtureSQL{`INSERT INTO deck_config (id, name, mtime_secs, usn, config) VALUES (?, ?, 0, 0, ?)`, []any{id, "Top", data}})
 	}
 	data := config
 	if !single {
@@ -81,7 +86,7 @@ func TestAnkiImportSkippedDeckConfigs(t *testing.T) {
 				{"single different id", false, false, true, false},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					raw := skippedConfigArchive(t, tc.topBad, tc.otherBad, tc.single)
+					raw := skippedConfigArchive(t, tc.topBad, tc.otherBad, tc.single, false)
 					report, err := NewDeckStore(db).ImportPackage(context.Background(), owner, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck, ApplyWeights: true, MediaRoot: t.TempDir()})
 					if err != nil {
 						t.Fatal(err)
@@ -114,6 +119,30 @@ func TestAnkiImportSkippedDeckConfigs(t *testing.T) {
 					}
 					if !reflect.DeepEqual(weights, want) {
 						t.Fatalf("weights = %v, want %v", weights, want)
+					}
+				})
+			}
+			presetID := seedPresetRow(t, db, owner)
+			deckID := seedPresetDeck(t, db, owner)
+			for _, tc := range []struct {
+				name, target, mode string
+				presetID           uint64
+				noTop              bool
+			}{
+				{"top invalid reuse", PackageTargetNewDeck, PackagePresetReuse, presetID, false},
+				{"top invalid copy", PackageTargetNewDeck, PackagePresetCopy, presetID, false},
+				{"top invalid into deck", fmt.Sprintf("into_deck:%d", deckID), "", 0, false},
+				{"two valid neither top", PackageTargetNewDeck, PackagePresetNew, 0, true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					raw := skippedConfigArchive(t, !tc.noTop, false, false, tc.noTop)
+					opts := PackageImportOptions{Target: tc.target, PresetMode: tc.mode, PresetID: tc.presetID, MediaRoot: t.TempDir()}
+					report, err := NewDeckStore(db).ImportPackage(context.Background(), owner, bytes.NewReader(raw), opts)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if report.DeckConfigSkipped {
+						t.Fatal("DeckConfigSkipped = true, want false")
 					}
 				})
 			}
