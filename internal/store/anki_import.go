@@ -1475,8 +1475,8 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 // backward to the latest learning run or the earliest interday grade after a
 // reset, ignoring cramming. Incomplete history starts from that grade's SM-2
 // interval and factor; the grade itself is not replayed. Successful history
-// replay writes memory for each selected row; all paths write the final state for the
-// last kept row when both memory values are present.
+// replay writes memory for each selected row. The caller propagates it to subsequent
+// unselected grades and writes final memory to the last usable grade when available.
 // If HistoricalMemoryStates fails, its error is discarded: the final state remains
 // usable, but earlier rows retain NULL memory because their states are unavailable.
 // The result says whether the card state is usable; false makes the caller skip it
@@ -1654,6 +1654,9 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	for cid, rows := range allHistory {
 		selected, history, complete := selectAnkiReplay(rows, nextDay)
 		selectedHistory[cid], histories[cid], completeHistory[cid] = selected, history, complete
+		// Durations measure fractional days between selected rows, not replay age buckets.
+		// The first selected row and rows outside this window retain NULL duration_days;
+		// no scheduling or statistics reader currently consumes that field.
 		for _, r := range selected {
 			ids := keptIDs[cid]
 			if len(ids) > 0 {
@@ -1724,7 +1727,8 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			rowMemory[id] = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}
 		}
 		// Prefer lrt because it records the card's last review even when the log is
-		// incomplete; otherwise use the last kept revlog row as direct evidence.
+		// incomplete; otherwise use lastUsable: the last graded type 0-3 row after
+		// the last reset, including cram rows excluded from memory replay.
 		// For review and relearning cards, due minus ivl is the remaining estimate.
 		// Leave learning cards NULL without either timestamp because their step due
 		// date and interval do not reliably reconstruct the last review.
@@ -1847,8 +1851,9 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		// interval_days, days since the previous review in duration_days, and the
 		// resulting memory state in stability and difficulty. Anki's ivl supplies
 		// the interval (negative values are seconds); duration uses fractional days
-		// since the previous kept row. Memory comes from replay when available, with
-		// the card's final memory state used for its last kept row when available.
+		// since the previous selected row, or NULL outside the selected window.
+		// Memory comes from replay or propagation from a preceding selected grade, with
+		// the card's final memory state used for its last usable grade when available.
 		elapsed := r.Time
 		interval := float64(r.Interval)
 		if interval < 0 {
