@@ -5,15 +5,6 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 — the checkbox form, ID retirement, the acceptance evidence, the release cut — live in
 `AGENTS.md` section 7; read that first.
 
-- [ ] **M18-103 The `M18-77` mutation run is reproduced through `go test -overlay`** — `M18-77`
-  (`3abdd81`) claims that swapping the replay branch for the SM-2 branch turns sixteen cases red, and
-  `M18-102` could not reproduce that swap: the two branches live in the same function and the mutation
-  the closing commit describes is not written down anywhere a later run can apply it. The fix: express
-  the swap as an overlay patch of `deriveAnkiMemory` in `internal/store/anki_import.go`, run
-  `go test -overlay=... ./internal/schedule/ ./internal/store/ -run TestImportedAnkiMemoryPreview
-  -count=1`, and quote the raw failing output together with the passing run without the overlay.
-  *Acceptance:* the commit quotes both runs, and `git status --short` is empty afterwards, proving the
-  overlay touched no tracked file. Evidence is that commit.
 
 ---
 
