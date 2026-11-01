@@ -360,18 +360,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   writes no `review.undo` audit row. Evidence is the raw scoped `go test` and `go vet` output.
   *Do not start until the maintainer chooses between (B) and (A) with (B).*
 
-- [ ] **M18-53 The round trip compares a `duration_days` that is not NULL** — `M18-10` required
-  `TestExportAnkiPackageRoundTrip` to compare `interval_days` and `duration_days`. The landed change
-  removed `DurationDays: Ptr(24.0)` from the only review `seedAnkiExportDeck` seeds in
-  `internal/store/anki_export_test.go`. The source value and the imported value are therefore both
-  NULL, and the comparison passes whatever duration the importer computes. The fix: the seed gives the
-  card two reviews by the owner. The second review's `duration_days` equals the fractional number of
-  days between the two `reviewed_at` values. The round trip compares `interval_days` and
-  `duration_days` of both rows, the second row's `duration_days` not NULL. Every other assertion of the
-  test keeps its meaning. *Acceptance:* the test passes on both drivers; with the `duration =
-  &value` assignment in `importAnkiProgress` removed for one run, the test fails. Evidence is the raw
-  scoped `go test` and `go vet` output of both runs, the PostgreSQL one with `TEST_PG_DSN` set.
-
 - [ ] **M18-54 Comments state the imported progress rules** — the code `M18-10`, `M18-11` and `M18-36`
   added states its rules without saying why, and `M18-11` left one comment and one error text stale. The
   gaps are four. First, `usableAnkiMemory` in `internal/store/anki_import.go` has no doc comment. The
