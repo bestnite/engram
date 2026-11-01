@@ -39,6 +39,7 @@ function reportFixture(overrides: Partial<PackageImportReport> = {}): PackageImp
     notes_updated: 0,
     notes_skipped: 0,
     cards_created: 1,
+    cards_skipped: 0,
     media_new: 0,
     media_missing: 0,
     progress_applied: 0,
@@ -198,6 +199,27 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
 });
 
 describe('ImportView — package weights', () => {
+  it.each([2, 0])('shows unread cards only when the count is positive: %s', async (count) => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(reportFixture({ cards_skipped: count }));
+    mountView();
+    await flush();
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+    const report = reportSection();
+    expect(report).toBeTruthy();
+    const row = Array.from(report!.querySelectorAll('dt')).find(
+      (el) => el.textContent === formatMessage('zh-CN', 'package.report.cards_skipped')
+    );
+    if (count > 0) {
+      expect(row?.nextElementSibling?.textContent).toBe(String(count));
+    } else {
+      expect(row).toBeUndefined();
+    }
+  });
+
   it.each([true, false])('shows skipped deck configuration only when reported: %s', async (skipped) => {
     vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
     vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(reportFixture({ deck_config_skipped: skipped }));

@@ -1807,4 +1807,5 @@ export const zhCN: LocaleCatalog = {
   'note_preview.cloze_name': '{template} {ordinal}',
   'package.report.weights_invalid': '包内权重无效，未采用',
   'package.report.deck_config_skipped': '无法读取包内牌组配置，已使用默认值',
+  'package.report.cards_skipped': '包内无法读取且未导入的卡片数',
 };

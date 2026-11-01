@@ -1808,4 +1808,5 @@ export const en: LocaleCatalog = {
   'note_preview.cloze_name': '{template} {ordinal}',
   'package.report.weights_invalid': 'Package weights rejected as invalid',
   'package.report.deck_config_skipped': 'Package deck configuration could not be read; defaults were used',
+  'package.report.cards_skipped': 'Cards in the package could not be read and were not imported',
 };
