@@ -2051,7 +2051,17 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   check circular. *Acceptance:* carry the spec in something Anki preserves and pin it with a golden that
   imports an engram package through Anki and reads the spec back out of Anki's own collection, or state in
   `AGENTS.md` §2.7 and `write.go` that the key survives engram-to-engram traffic only and report the loss
-  on import.
+  on import. *Blocked on a maintainer decision; no code changed.* Retested with `anki==26.9.3` on a
+  package written by `anki.WriteArchive` (one `numeric` spec, note type not named after a stock type).
+  Anki's `import_anki_package` keeps the key, so the entry's "`collection.models.all()` came back
+  without the key" is wrong: `models.all()` returns `"engram"` on the imported note type. Anki's legacy
+  export (`export_anki_package(..., legacy=True)`, `collection.anki21`) also keeps it, and
+  `anki.ReadFile` returns `map[Card 1:{numeric map[value:Back]}]`. The loss is specific to Anki's
+  default modern export: `collection.anki21b` stores note types as protobuf, and `anki.ReadFile`
+  returns the note type with no answer specs. Both acceptance branches need the maintainer: moving the
+  spec to a place the modern layout preserves changes the export format and falsifies the `AGENTS.md`
+  §2.7 export paragraph, while the alternative branch edits `AGENTS.md` §2.7 and adds the loss to the
+  `PackageImportReport` contract.
 
 - [x] **M19-49 An unclosed `[anki:` marker makes audio-tag parsing quadratic, so one note field can stall a
   review** — *should-fix.* `parseAVTagNode` looks for the closing tag of each candidate with
@@ -3311,7 +3321,16 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `.goreleaser.yaml:89` and `docker-compose.yaml:20`, and the module path in `go.mod`, the Go imports and
   `CONTRIBUTING.md:299`, which the rule allows. *Acceptance:* either the publication exceptions (release image, live demo, community
   link) are written into `AGENTS.md` §2.2 and `CONTRIBUTING.md`, naming exactly those cases, or the values are
-  replaced with placeholders and the demo credentials are no longer committed.
+  replaced with placeholders and the demo credentials are no longer committed. *Blocked on a maintainer
+  decision; no file changed.* The exception branch edits `AGENTS.md` §2.2 and `CONTRIBUTING.md`, which the
+  maintainer owns. The placeholder branch cannot stay inside the READMEs: `README.md:5,98,127` and
+  `README.zh.md:5,98,127` document the image that `.goreleaser.yaml:88-89,106,150` and
+  `.github/workflows/release.yml:9-13` actually publish, so placeholderising only the READMEs leaves the
+  real names committed and documents a non-existent image, while placeholderising the release targets
+  breaks publishing unless the image name moves to an environment variable and a release run validates
+  it. Removing the live demo (and its `test` / `testdemo` credentials) and the community link is also a
+  product decision. Need a choice: document the three publication exceptions, or approve removing the
+  demo and parameterising the image name.
 
 - [x] **M19-85 CONTRIBUTING states the review log is append-only and omits the one deletion the code performs** —
   *should-fix.* `CONTRIBUTING.md:167-168` restates the invariant as "**`reviews` is append-only.** Every column is
