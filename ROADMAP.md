@@ -833,6 +833,135 @@ fine", and it does not mean "confirmed broken".
   three assignments, or render the state as the result banner its name promises.
 
 
+- [ ] **M19-69 A failed outbox status write re-sends the same batch without end** — *Blocker.* `drain` loops
+  "select the due batch → deliver each → stop when the batch is short" (`internal/mail/outbox.go:264-285`) with
+  no claim, lease or in-memory attempt counter; `deliver` sends first and records the outcome afterwards
+  (`:299-317`), so a row whose `MarkOutboxSent` write failed still matches the next SELECT
+  (`internal/store/outbox.go:84-96`). With a full batch the second pass selects the same rows again and the
+  only exit is context cancellation. *Reproduced* with two queued mails, `BatchSize: 2` and an injected failure
+  on the `sent` update: `2 mails queued, MarkOutboxSent fails: 3551 deliveries in 300ms` — each of the two mails
+  re-delivered about 5 900 times a second, every one a real SMTP transaction. The failure that starts it is "reads
+  work, writes fail", which is what a full database volume produces, and that is also the state in which a
+  restart cannot help. `MarkOutboxRetry` and `MarkOutboxFailed` failing cause the same loop (`:111-135`).
+  *Acceptance:* stop the round when a status write fails and let the next tick retry, or claim each row with a
+  lease or attempt increment inside the same statement; a regression makes the status write fail and asserts a
+  bounded number of sends and that the round returns.
+
+- [ ] **M19-70 Shutdown abandons a running optimisation and leaves its row unfinished** — *should-fix.*
+  `runServe` builds the signal context at `cmd/engram/main.go:187` and hands it to every worker — retention,
+  outbox, reminder, digest (`:211-248`) — but the job runner is started earlier, inside `newWebServer`, with
+  `context.Background()` (`:383`). The runner has no `Stop`, nothing waits for it, and `srv.Run(ctx)` returns on
+  SIGTERM (`internal/web/server.go:473-485`); the process then exits with the job's context still live, so the
+  optimiser subprocess is never signalled, is reparented and keeps running until it finishes or dies writing to
+  the closed stdout pipe, and `jobs.status` stays `running` until the next start reclaims it as
+  `interrupted by restart`. That reclaim goes straight to the store (`internal/jobs/jobs.go:255-268`) and never
+  calls the `OnFailure` hook, so no administrator is told. The Runner's doc claims the opposite
+  (`jobs.go:233-238`, "when ctx is cancelled … the subprocess currently executing is killed"), and
+  `ARCHITECTURE.md` section 7 lists the runner among the workers that stop on shutdown. *Reproduced* for the
+  second half, with a runner whose context is cancelled mid-job (what correct wiring would do):
+  `/bin/sleep 30` is killed, then `finish job failed failed job_id=1 error="update job 1: context canceled"` and
+  `after cancelling the worker ctx: status="running" error=<nil> finished_at=false`, because `execute` writes
+  the failure with the already-cancelled context (`jobs.go:411-415`). *Unverified:* that the orphaned adapter
+  survives a real process exit; it depends on whether it writes to the dead pipe first. *Acceptance:* pass the
+  signal context to `Runner.Start`, add a `Stop` that waits for `execute` to reach a terminal state, and write
+  that state with a context that is not cancelled (`context.WithoutCancel`), so shutdown leaves `failed` rather
+  than `running`; a regression starts a long job, cancels the process context, and asserts the row is terminal,
+  the process group is gone, and the next `Start` has nothing to reclaim.
+
+- [ ] **M19-71 A job cancelled while it is still queued runs anyway and is reported succeeded** — *should-fix.*
+  The worker reads the row at `internal/jobs/jobs.go:371-373` and only then registers the cancel handle that
+  `Cancel` looks for at `:376-382`; `Cancel`'s queued branch loads the row itself and writes `failed` directly
+  (`:297-309`). `Store.MarkRunning` updates by id with no status predicate (`internal/jobs/store.go:125-130`,
+  through `:161-170`), so on the interleaving "worker read `queued` → Cancel wrote `failed` → worker marks
+  `running`" the terminal row is flipped back and the subprocess executes; for an optimisation the write-back
+  then applies the new weights to the preset and `FinishSucceeded` replaces the cancellation with `succeeded`.
+  *Reproduced* deterministically by stalling the worker inside the ByID query after the row was scanned, then
+  cancelling: `Cancel err=<nil>; status right after Cancel="failed"` and `final status="succeeded" error=<nil>
+  started_at=true subprocess_ran=true`. The existing cancel test covers only a job that is already running
+  (`internal/jobs/cancel_test.go:46`), so nothing pins the queued branch. *Acceptance:* make every transition a
+  conditional update (`WHERE status = 'queued'`) and treat zero affected rows as "already terminal, do not
+  start"; a regression cancels a queued job at the moment the worker has read it and asserts the subprocess
+  never runs and the row stays `failed`.
+
+- [ ] **M19-72 A child that leaves the process group keeps the timeout from ending the job** — *should-fix.*
+  `runProcess` hands the child a `tailBuffer` for stdout and stderr (`internal/jobs/jobs.go:560-562`), so
+  `exec` copies through an `os.Pipe` and `cmd.Wait` does not return until every writer of that pipe is gone
+  (`:567-568`, waited on at `:577,581`). `killProcessGroup` (`internal/jobs/process_unix.go:22-30`) only reaches
+  the group the child was put in (`:17-19`); a grandchild that calls `setsid` or `setpgid` escapes it, keeps
+  the pipe open, and `<-done` blocks for as long as that process lives, so neither the timer nor the context
+  bounds the job any more and the single job slot stays occupied. *Reproduced*: with a 200 ms timeout and
+  `/bin/sh -c "setsid sleep 6 & wait"` the job reached `failed` after `6.005s` with
+  `error "job timed out after 200ms"`. The process-group test (`internal/jobs/jobs_test.go:178-231`) covers only
+  a grandchild that stays in the group. *Acceptance:* bound the wait independently of the pipe (`cmd.WaitDelay`,
+  or close the parent's read end when the timer or context fires) so that `runProcess` returns within a fixed
+  grace period; a regression uses a `setsid` grandchild and asserts the job is terminal well before that
+  process would have exited on its own.
+
+- [ ] **M19-73 The preset write-back and the job's terminal write are two writes, so a failing finish either
+  leaves the job running or reports failure after the weights were applied** — *should-fix.* `FinishOptimize`
+  writes the preset first and the job row second (`internal/jobs/optimize.go:65-74`), and `execute` maps any
+  error from it to `fail` (`jobs.go:427-431`); on the generic path a failing `FinishSucceeded` is only logged
+  and returns (`:435-439`), although that function's comment says "any failing step must end in failed, so a job
+  never stays in running forever". Both outcomes reproduced by failing only the `status=succeeded` update:
+  (a) `status="running" finished_at=false failure_hook_calls=0 active=true next_enqueue=a job is already
+  running` — `Store.Active` counts the row as in-flight, so every later enqueue is 409 until a restart;
+  (b) `FinishOptimize err=...; after execute's fail(): job status="failed" error="finish optimize: update job 1:
+  injected final write failure"; preset weights written=true` — the user is told the optimisation failed
+  although the new weights are in the preset, and the administrator's failure mail goes out for a job that took
+  effect. *Acceptance:* write the preset and the job row in one transaction, or make the write-back idempotent
+  and resumable from `result_json`, and retry or fail the terminal write instead of returning; regressions cover
+  a failing finish and a failing write-back and assert that nothing is half-applied and no job is non-terminal.
+
+- [ ] **M19-74 A stalled SMTP relay blocks the send forever; the configured timeout only covers the dial** —
+  *should-fix.* `DefaultTimeout` is documented as "the timeout of a single SMTP interaction (connect +
+  handshake + delivery)" (`internal/mail/smtp.go:25-26`) and `SMTPSender.timeout` is passed only to
+  `net.Dialer.Timeout` and `tls.DialWithDialer` (`:115-146`). After `smtp.NewClient` nothing sets a deadline on
+  the connection, and `net/smtp` takes no context, so `MAIL`, `RCPT`, `DATA` and the wait for the server's reply
+  (`:69-85`) are unbounded. One relay that accepts and then stops talking blocks `deliver` →
+  `drain` → the worker's only goroutine: no mail is delivered, no round error is logged, and `Lifecycle.Stop`
+  waits on that goroutine, so shutdown hangs too. *Reproduced*: a listener that accepts and never sends the 220
+  greeting, `SMTPSender{Timeout: 200ms}` and a 1.5 s context deadline — `Send still blocked after 2s with
+  Timeout=200ms and a 1.5s context deadline (the context is ignored)`. *Acceptance:* put a deadline on every
+  connection, set or refresh it per stage, and close the connection when the context is cancelled, so that one
+  `Send` is bounded by the configured timeout; a regression points the sender at a silent listener and asserts
+  it returns an error within the timeout and that a subsequent round can still deliver.
+
+- [ ] **M19-75 The multipart boundary is a constant, so a value containing that line splits the message** —
+  *nit.* `buildMessage` hard-codes `const boundary = "engram-mail-boundary"` (`internal/mail/smtp.go:177-193`),
+  while variable values are only HTML-escaped (`template.go:231-240`), which leaves CR and LF intact; a value
+  therefore appears verbatim in both the HTML body and the derived text part. *Reproduced*: `Render` with the
+  deck name `"My deck\r\n--engram-mail-boundary\r\nContent-Type: text/plain\r\n\r\nINJECTED PART\r\n
+  --engram-mail-boundary--"` produced `boundary occurrences in the message: 7`,
+  `injected part present verbatim: true`, `plain-text part carries the payload: true`. Reachability today is
+  narrow, and is stated so that this is not over-read: deck names, deck descriptions and usernames reject C0
+  controls (`internal/store/package_import.go:189-197`), but preset names have no text rule
+  (`internal/store/preset.go:83-97`, `internal/web/presets_api.go:539-560`) and reach `{{preset}}` in the
+  `optimize_done` mail (`internal/mail/vars.go:111`), which is sent to that preset's own owner — so the only
+  message a user can corrupt this way is their own. *Acceptance:* choose a random boundary per message and
+  assert it does not occur in either body, and give preset names the control-character rule deck names have; a
+  regression sends a value containing a literal `--engram-mail-boundary` line and parses the result back into
+  its two parts.
+
+- [ ] **M19-76 The outbox's `LookupEnv` seam is accepted and silently ignored** — *nit.* `Deps.LookupEnv` is
+  documented as the environment stand-in for tests (`internal/mail/outbox.go:77-78`), but `NewOutbox` builds
+  `NewResolver(deps.DB, deps.Secrets)` without it (`:151`), so the field never reaches the resolver and
+  `os.LookupEnv` is always used. *Reproduced*: with a stand-in that answers `SMTP_HOST` and `SMTP_FROM`,
+  `Configured with the Deps.LookupEnv stand-in = false (want true)` and `resolver lookup is nil: true`. A caller
+  that trusts the seam silently tests the real environment instead. *Acceptance:* pass `deps.LookupEnv` into
+  `NewResolver`, or delete the field and the two comments that promise it; a test sets it and asserts
+  `Configured()` is true.
+
+- [ ] **M19-77 The exported review log survives every failed optimisation job** — *nit.* `CommandBuilder`
+  creates the job directory and writes the user's whole review history to `review-log.jsonl`
+  (`internal/jobs/optimizer.go:149-167`) under a per-process root that carries the pid (`:91-92`), and only
+  `Complete` removes that directory, in a deferred call (`:185-191`). Every other terminal path — the adapter
+  exiting non-zero, a timeout, an administrator cancel, a `Complete` error — returns before that call, so the
+  log stays on disk for the life of the process, and after a crash or restart no later run has the same pid and
+  nothing ever removes it. The data is protected by a 0700 directory, so this is retention rather than
+  disclosure. Verified by reading the three exit paths; no command was needed. *Acceptance:* remove the job
+  directory on every terminal path (a defer in `execute`, or a cleanup call in `fail`) and sweep the per-pid
+  roots at startup; a regression runs a failing job and asserts no `review-log.jsonl` remains.
+
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
