@@ -2026,6 +2026,11 @@ def build_learning_due_fixture(workdir: Path) -> None:
                 note["Back"] = label
                 col.add_note(note, 1)
                 cards[label] = note.cards()[0].id
+        for index, (label, cid) in enumerate(cards.items()):
+            fixed_cid = 1500000000000 + index
+            col.db.execute("update cards set id=? where id=?", fixed_cid, cid)
+            cards[label] = fixed_cid
+        col.db.execute("update col set crt=1700000000")
         for label, cid in cards.items():
             conf = col.decks.config_dict_for_deck_id(1)
             conf["new"]["delays"] = [1 if label.startswith("intraday") else 4320]
@@ -2037,6 +2042,10 @@ def build_learning_due_fixture(workdir: Path) -> None:
                 card = col.get_card(cid)
                 card.start_timer()
                 col.sched.answerCard(card, 1)
+                if label.startswith("intraday"):
+                    due = col.get_card(cid).due
+                    answered = col.db.scalar("select max(id) from revlog where cid=?", cid)
+                    print(f"learning-due offset {label}: {due * 1000 - answered} ms")
             if label.endswith("suspended"):
                 col.sched.suspend_cards([cid])
             if label.endswith("buried"):
@@ -2146,7 +2155,8 @@ def main(argv: list[str]) -> int:
                 golden["import_note_types"] = imported[package.fixture]
             write_json(OUT_DIR / ("%s.golden.json" % package.fixture), golden)
         build_memory_fixture(workdir)
-        build_learning_due_fixture(workdir)
+        if "--rebuild-learning-due" in argv:
+            build_learning_due_fixture(workdir)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

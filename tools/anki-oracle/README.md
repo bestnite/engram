@@ -59,14 +59,19 @@ sha256sum -c /tmp/anki-oracle.sha
 git status --short internal/notetype/testdata
 ```
 
-The last two commands must report every file as `OK` and print nothing.
+The checksum command must report every file as `OK`. The status command must print nothing.
 
-`learning-due.anki21.apkg` is the one exception to that check: Anki writes an intraday due date
-from the time `answerCard` runs, and the interval between a card's review time and its due time
-differs between runs (measured 64950 ms and, seconds later, 72560 ms for the same card), so no
-offsetting after the fact reproduces the file. It is regenerated only when its rule changes, its
-golden stays the recorded oracle for the committed fixture, and `sha256sum -c` covers every other
-file.
+The generator leaves `learning-due.anki21.apkg` and `learning-due.golden.json` untouched by default.
+Pass `--rebuild-learning-due` to regenerate the pair together when its rule changes. The golden
+records the committed package, and the checksum check includes both files.
+
+Anki fuzzes the one-minute learning step. With the card IDs and collection creation time fixed
+before answering, two runs measured the following due-minus-review offsets in milliseconds, in
+home, suspended, buried, filtered-on and filtered-off order: 59988, 60987, 72986, 59985, 71984;
+and 59484, 60483, 72482, 59481, 71480. Within each run the five review IDs are 1 ms apart, but
+their due timestamps span 13 seconds. The per-card fuzz pattern repeats with fixed IDs, while the
+fractional answer-time second shifts the offsets. The package and golden cannot be reproduced byte
+for byte by this generator; the default check preserves the recorded pair rather than rebuilding it.
 
 `generate.py --table` prints the rule table below, so the table and the fixture catalogue cannot
 drift apart.
@@ -297,8 +302,8 @@ golden can be compared byte for byte and a renderer can be given the same ids.
 ## Determinism
 
 Anki assigns note, card, note type and deck ids from the wall clock and stamps modification times
-on every write, so a package built twice is not byte-identical by itself. The generator removes
-every source of variation:
+on every write, so a package built twice is not byte-identical by itself. For the regenerated
+fixtures other than `learning-due`, the generator removes sources of variation as follows:
 
 1. Note ids, card ids, note type ids and deck ids are rewritten to fixed sequential values, and
    `col.crt`, `col.mod`, `col.scm`, `notes.mod`, `cards.mod`, `cards.due`, `usn` are replaced with
@@ -319,7 +324,7 @@ every source of variation:
    (1980-01-01 00:00:00).
 8. The golden JSON is written with sorted keys, a fixed indent and a trailing newline.
 
-Two runs on one machine are byte-identical, which is the check in "Regeneration". Regenerating on
+Two default runs on one machine are byte-identical, which is the check in "Regeneration". Regenerating on
 a different machine, or after `uv` resolves new versions of the pinned dependency's own
 dependencies, can change the bytes; the check is about the same environment.
 
