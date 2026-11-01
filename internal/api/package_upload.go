@@ -1,8 +1,6 @@
 package api
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -153,7 +151,7 @@ func (a *API) validateImportPreset(ctx context.Context, userID uint64, opts *sto
 //
 // The ticket is consumed first, bytes are read after: a request with an invalid ticket reads not a single byte; once presented the ticket is spent, and a failed import
 // cannot be replayed - the caller just issues a new one (issuance is cheap, and the uploaded bytes never went through the model anyway).
-// The body may be an .edeck or .apkg zip, or the JSON document produced by export_deck, told apart by the first non-whitespace byte.
+// The request body is passed directly to the archive importer.
 func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io.Reader) (*store.PackageImportReport, error) {
 	invalid := newServiceError(http.StatusNotFound, CodeImportUploadInvalid, "")
 	now := a.now()
@@ -200,15 +198,9 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 	}
 	defer release()
 	limited := &overflowReader{r: body, remaining: store.ResolvePackageLimits(ctx, a.db).MaxPackageBytes}
-	r, err := uploadPackageReader(limited)
-	if err != nil {
-		err = mapPackageError(err)
-	} else {
-		var report *store.PackageImportReport
-		report, err = a.ImportDeckPackage(ctx, u, ticket.APIKeyID, r, opts)
-		if err == nil {
-			return report, nil
-		}
+	report, err := a.ImportDeckPackage(ctx, u, ticket.APIKeyID, limited, opts)
+	if err == nil {
+		return report, nil
 	}
 	// Over-limit takes precedence over other errors: truncated bytes make parsing report a format error, which is not the real cause.
 	// The code reuses file import's package_too_large, keeping the size cap consistent in both places.
@@ -216,25 +208,6 @@ func (a *API) ImportDeckPackageUpload(ctx context.Context, token string, body io
 		return nil, newServiceError(http.StatusRequestEntityTooLarge, store.CodePackageTooLarge, "")
 	}
 	return nil, err
-}
-
-// uploadPackageReader decides the body shape from the first non-whitespace byte: '{' means a JSON document, handed to the same
-// store.PackageReader as MCP uses, restoring it to a zip; anything else is taken as archive bytes (.edeck or .apkg). Agents therefore need not build a zip themselves.
-func uploadPackageReader(body io.Reader) (io.Reader, error) {
-	br := bufio.NewReader(body)
-	head, err := br.Peek(64)
-	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, bufio.ErrBufferFull) {
-		return nil, err
-	}
-	trimmed := bytes.TrimLeft(head, " \t\r\n")
-	if len(trimmed) == 0 || trimmed[0] != '{' {
-		return br, nil
-	}
-	var doc map[string]any
-	if err := json.NewDecoder(br).Decode(&doc); err != nil {
-		return nil, &store.PackageError{Code: store.CodePackageBadFormat, Message: "package JSON document is malformed"}
-	}
-	return store.PackageReader(doc)
 }
 
 // overflowReader lets at most remaining bytes through; on overflow it records exceeded and returns an error.

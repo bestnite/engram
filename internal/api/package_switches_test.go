@@ -65,11 +65,11 @@ func TestExportAnkiRESTSwitches(t *testing.T) {
 		}
 		return r
 	}
-	if r := get(""); r.Header().Get("Content-Type") != "application/vnd.engram.edeck" {
+	if r := get(""); r.Header().Get("Content-Type") != "application/zip" {
 		t.Fatalf("default content type: %s", r.Header().Get("Content-Type"))
 	}
-	if r := get("format=edeck"); r.Header().Get("Content-Type") != "application/vnd.engram.edeck" {
-		t.Fatalf("edeck content type: %s", r.Header().Get("Content-Type"))
+	if r := get("format=apkg"); r.Header().Get("Content-Type") != "application/zip" {
+		t.Fatalf("apkg content type: %s", r.Header().Get("Content-Type"))
 	}
 	for _, off := range []string{"", "include_progress", "include_reviews", "include_deck_configs", "include_media", "include_weights"} {
 		name := off

@@ -14,8 +14,8 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Browser paths for deck packages (.edeck):
-//   GET  /decks/:id/package  export one deck as a .edeck download (reusing the store-layer export, not rewritten)
+// Browser paths for deck packages:
+//   GET  /decks/:id/package  export one deck as a .apkg download (reusing the store-layer export, not rewritten)
 //   GET  /import             import page (returns the SPA app shell, rendered by the client router)
 // The import itself goes through REST `POST /api/v1/decks/import`, the same service entry the SPA's built-in page uses.
 
@@ -30,12 +30,7 @@ func (s *Server) registerPackageWebRoutes(router *gin.Engine) {
 	router.GET("/import", s.shell.ServeIndex)
 }
 
-// packageExportMediaType is the MIME for .edeck (consistent with the REST export).
-const packageExportMediaType = "application/vnd.engram.edeck"
-
-// deckPackageExport exports a deck the current user may read as a .edeck download.
-// Permissions follow the same rules as the REST entry (reader is enough to export). The export must go through api.ExportDeckPackage: the media byte root
-// is filled in uniformly by it, and calling the store layer directly without the root makes media resolve against the process working directory, so any deck referencing media would 500.
+// deckPackageExport exports an Anki package for a deck the current user may read.
 func (s *Server) deckPackageExport(c *gin.Context) {
 	user, ok := s.requireUser(c)
 	if !ok {
@@ -49,39 +44,18 @@ func (s *Server) deckPackageExport(c *gin.Context) {
 	if !ok {
 		return
 	}
-	format := c.DefaultQuery("format", "edeck")
-	if format != "edeck" && format != "apkg" {
+	if format := c.DefaultQuery("format", "apkg"); format != "apkg" {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	opts := api.PackageQueryOptions(c)
-	if format == "apkg" {
-		data, err := s.api.ExportAnkiPackage(c.Request.Context(), user.ID, deckID, opts)
-		if err != nil {
-			s.logger.Error("deck package export failed", "error", err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		name := strings.TrimSuffix(api.DeckPackageFilename(deck.Name, deck.PublicID), ".edeck") + ".apkg"
-		c.Header("Content-Disposition", api.AttachmentDisposition(name))
-		c.Data(http.StatusOK, "application/zip", data)
-		return
-	}
-	pkg, err := s.api.ExportDeckPackage(c.Request.Context(), user.ID, deckID, opts)
+	data, err := s.api.ExportAnkiPackage(c.Request.Context(), user.ID, deckID, api.PackageQueryOptions(c))
 	if err != nil {
-		s.logger.Error("deck package export failed", "deck_id", deckID, "user_id", user.ID, "error", err)
+		s.logger.Error("deck package export failed", "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
-	var buf bytes.Buffer
-	if err := pkg.WriteZip(&buf); err != nil {
-		s.logger.Error("write deck package failed", "deck_id", deckID, "error", err)
-		c.AbortWithStatus(http.StatusInternalServerError)
-		return
-	}
-	c.Header("Content-Type", packageExportMediaType)
 	c.Header("Content-Disposition", api.AttachmentDisposition(api.DeckPackageFilename(deck.Name, deck.PublicID)))
-	c.Data(http.StatusOK, packageExportMediaType, buf.Bytes())
+	c.Data(http.StatusOK, "application/zip", data)
 }
 
 type batchExportDeckRequest struct {
@@ -123,7 +97,7 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 			return
 		}
 		// As with the single export, this goes through the api service, which fills in the media root and clock uniformly.
-		pkg, err := s.api.ExportDeckPackage(ctx, user.ID, deck.ID, store.PackageOptions{
+		pkg, err := s.api.ExportAnkiPackage(ctx, user.ID, deck.ID, store.PackageOptions{
 			IncludeMedia:    includeMedia,
 			IncludeProgress: req.IncludeProgress,
 			IncludeReviews:  req.IncludeReviews,
@@ -131,13 +105,6 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 		})
 		if err != nil {
 			s.logger.Error("export deck package in batch failed", "deck_id", deck.ID, "error", err)
-			zw.Close()
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		var pkgBuf bytes.Buffer
-		if err := pkg.WriteZip(&pkgBuf); err != nil {
-			s.logger.Error("write deck package zip in batch failed", "deck_id", deck.ID, "error", err)
 			zw.Close()
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
@@ -151,7 +118,7 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-		if _, err := f.Write(pkgBuf.Bytes()); err != nil {
+		if _, err := f.Write(pkg); err != nil {
 			s.logger.Error("write zip entry failed", "filename", filename, "error", err)
 			zw.Close()
 			c.AbortWithStatus(http.StatusInternalServerError)

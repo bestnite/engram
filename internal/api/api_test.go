@@ -36,6 +36,11 @@ func newTestEnv(t *testing.T, readLimit, writeLimit int) *testEnv {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	return newTestEnvWithDB(t, db, readLimit, writeLimit)
+}
+
+func newTestEnvWithDB(t *testing.T, db *gorm.DB, readLimit, writeLimit int) *testEnv {
+	t.Helper()
 	if err := store.AutoMigrate(context.Background(), db); err != nil {
 		t.Fatalf("AutoMigrate() error = %v", err)
 	}

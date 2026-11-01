@@ -11,7 +11,7 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// Acceptance for .apkg on the same REST entry as .edeck: POST /api/v1/decks/import sniffs the
+// Acceptance for Anki archives: POST /api/v1/decks/import sniffs the
 // archive instead of the file name, imports the package, and a corrupt archive is a 400 with the
 // package_bad_format code rather than a 500.
 

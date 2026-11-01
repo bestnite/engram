@@ -126,7 +126,7 @@ func TestImportURLRejectsReuseWithWeightsBeforeFetch(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, isErr, text := callTool(t, cs, "import_deck", map[string]any{
-		"url": "https://example.com/deck.edeck", "preset_mode": "reuse",
+		"url": "https://example.com/deck.apkg", "preset_mode": "reuse",
 		"preset_id": preset.PublicID, "apply_weights": true,
 	})
 	if !isErr || !strings.Contains(text, store.CodePresetSelectionInvalid) {

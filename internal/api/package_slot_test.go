@@ -51,7 +51,7 @@ func TestImportPackageRefusesWhenEverySlotIsTaken(t *testing.T) {
 		t.Fatalf("ImportSlot: %v", err)
 	}
 
-	body, ct := multipartBody(t, "deck.edeck", minimalPackageZip(t))
+	body, ct := multipartBody(t, "deck.apkg", minimalPackageZip(t))
 	rec := postImport(t, env, k.Plaintext, body, ct)
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("import while the only slot is taken = %d, want 429 (body %s)", rec.Code, rec.Body.String())
@@ -73,11 +73,11 @@ func TestImportPackageRefusesWhenEverySlotIsTaken(t *testing.T) {
 	release()
 	// A rejected import still returns its slot: an invalid package answers 400, not 429, and the
 	// next valid import succeeds.
-	badBody, badCT := multipartBody(t, "bad.edeck", []byte("this is not a zip"))
+	badBody, badCT := multipartBody(t, "bad.apkg", []byte("this is not a zip"))
 	if rec := postImport(t, env, k.Plaintext, badBody, badCT); rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid package after release = %d, want 400 (body %s)", rec.Code, rec.Body.String())
 	}
-	goodBody, goodCT := multipartBody(t, "deck.edeck", minimalPackageZip(t))
+	goodBody, goodCT := multipartBody(t, "deck.apkg", minimalPackageZip(t))
 	if rec := postImport(t, env, k.Plaintext, goodBody, goodCT); rec.Code != http.StatusOK {
 		t.Fatalf("import after the first ended = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}

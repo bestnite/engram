@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -9,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"git.nite07.com/nite/engram/internal/store"
@@ -37,9 +35,9 @@ type exportDownloadTicket struct {
 
 func (a *API) CreateExportDownload(ctx context.Context, userID, deckID uint64, format string, opts store.PackageOptions) (*ExportDownload, error) {
 	if format == "" {
-		format = "edeck"
+		format = "apkg"
 	}
-	if format != "edeck" && format != "apkg" {
+	if format != "apkg" {
 		return nil, InvalidRequest("invalid package format")
 	}
 	if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
@@ -88,31 +86,17 @@ func (a *API) handleExportDownload(c *gin.Context) {
 		abortNotFound(c)
 		return
 	}
-	var data []byte
-	contentType := "application/vnd.engram.edeck"
-	name := DeckPackageFilename(d.Name, d.PublicID)
-	opts := store.PackageOptions{IncludeProgress: ticket.IncludeProgress, IncludeReviews: ticket.IncludeReviews, IncludeDeckConfigs: ticket.IncludeDeckConfigs, IncludeMedia: ticket.IncludeMedia, IncludeWeights: ticket.IncludeWeights}
-	switch ticket.Format {
-	case "apkg":
-		data, err = a.ExportAnkiPackage(ctx, ticket.UserID, d.ID, opts)
-		contentType = "application/zip"
-		name = strings.TrimSuffix(name, ".edeck") + ".apkg"
-	case "edeck":
-		var pkg *store.DeckPackage
-		pkg, err = a.ExportDeckPackage(ctx, ticket.UserID, d.ID, opts)
-		if err == nil {
-			var buf bytes.Buffer
-			err = pkg.WriteZip(&buf)
-			data = buf.Bytes()
-		}
-	default:
+	if ticket.Format != "apkg" {
 		abortNotFound(c)
 		return
 	}
+	name := DeckPackageFilename(d.Name, d.PublicID)
+	opts := store.PackageOptions{IncludeProgress: ticket.IncludeProgress, IncludeReviews: ticket.IncludeReviews, IncludeDeckConfigs: ticket.IncludeDeckConfigs, IncludeMedia: ticket.IncludeMedia, IncludeWeights: ticket.IncludeWeights}
+	data, err := a.ExportAnkiPackage(ctx, ticket.UserID, d.ID, opts)
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
 	c.Header("Content-Disposition", AttachmentDisposition(name))
-	c.Data(http.StatusOK, contentType, data)
+	c.Data(http.StatusOK, "application/zip", data)
 }

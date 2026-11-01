@@ -29,7 +29,7 @@ func (f *stubPackageFetcher) Fetch(_ context.Context, rawURL string, _ int64) (i
 	return io.NopCloser(bytes.NewReader(f.body)), nil
 }
 
-// mcpMinimalPackageZip builds a minimal valid .edeck (one basic note).
+// mcpMinimalPackageZip builds a minimal valid legacy archive (one basic note).
 func mcpMinimalPackageZip(t *testing.T) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -64,7 +64,7 @@ func TestImportDeckURLMutualExclusion(t *testing.T) {
 
 	_, isErr, text := callTool(t, cs, "import_deck", map[string]any{
 		"package": map[string]any{"manifest.json": map[string]any{}},
-		"url":     "https://example.com/d.edeck",
+		"url":     "https://example.com/d.apkg",
 	})
 	if !isErr || !strings.Contains(text, "mutually exclusive") {
 		t.Fatalf("import_deck(package+url) = (isErr=%v, %q), want a mutual-exclusion error", isErr, text)
@@ -84,7 +84,7 @@ func TestImportDeckURLDownloadsAndImports(t *testing.T) {
 	cs := connect(t, ts.URL, key)
 
 	out, isErr, text := callTool(t, cs, "import_deck", map[string]any{
-		"url":     "https://example.com/deck.edeck",
+		"url":     "https://example.com/deck.apkg",
 		"target":  "new_deck",
 		"dry_run": true,
 	})
@@ -94,7 +94,7 @@ func TestImportDeckURLDownloadsAndImports(t *testing.T) {
 	if out["dry_run"] != true || out["notes_created"] != float64(1) {
 		t.Errorf("import_deck(url) report = %v, want dry_run=true notes_created=1", out)
 	}
-	if f.calls != 1 || len(f.urls) != 1 || f.urls[0] != "https://example.com/deck.edeck" {
+	if f.calls != 1 || len(f.urls) != 1 || f.urls[0] != "https://example.com/deck.apkg" {
 		t.Errorf("fetcher calls/urls = %d/%v, want one call to the given url", f.calls, f.urls)
 	}
 }
@@ -110,7 +110,7 @@ func TestImportURLRateLimitSharedAcrossRESTAndMCP(t *testing.T) {
 	cs := connect(t, ts.URL, key)
 
 	const restCalls, mcpCalls = 6, 4
-	restBody := `{"url":"https://example.com/deck.edeck","target":"new_deck","dry_run":true}`
+	restBody := `{"url":"https://example.com/deck.apkg","target":"new_deck","dry_run":true}`
 
 	for i := 0; i < restCalls; i++ {
 		if code, _ := rest(t, ts.URL, http.MethodPost, "/api/v1/decks/import-url", key, restBody); code != http.StatusOK {
@@ -119,7 +119,7 @@ func TestImportURLRateLimitSharedAcrossRESTAndMCP(t *testing.T) {
 	}
 	for i := 0; i < mcpCalls; i++ {
 		if _, isErr, text := callTool(t, cs, "import_deck", map[string]any{
-			"url": "https://example.com/deck.edeck", "target": "new_deck", "dry_run": true,
+			"url": "https://example.com/deck.apkg", "target": "new_deck", "dry_run": true,
 		}); isErr {
 			t.Fatalf("MCP call %d failed: %s", i+1, text)
 		}
@@ -130,7 +130,7 @@ func TestImportURLRateLimitSharedAcrossRESTAndMCP(t *testing.T) {
 
 	// The 11th call: both MCP and REST must be blocked by the same pool, and neither triggers a download.
 	if _, isErr, text := callTool(t, cs, "import_deck", map[string]any{
-		"url": "https://example.com/deck.edeck", "target": "new_deck", "dry_run": true,
+		"url": "https://example.com/deck.apkg", "target": "new_deck", "dry_run": true,
 	}); !isErr || !strings.Contains(text, api.CodeRateLimited) {
 		t.Fatalf("11th call over MCP = (isErr=%v, %q), want a rate_limited error", isErr, text)
 	}

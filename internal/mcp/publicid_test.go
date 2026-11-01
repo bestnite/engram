@@ -73,7 +73,6 @@ func TestToolSchemasDeclareStringIDs(t *testing.T) {
 	stringFields := map[string]string{
 		"create_deck":         "preset_id",
 		"search_notes":        "deck_id",
-		"export_deck":         "deck_id",
 		"create_notes":        "deck_id",
 		"update_note":         "note_id",
 		"delete_note":         "note_id",
@@ -119,7 +118,6 @@ func TestToolsRejectNumericIDs(t *testing.T) {
 
 	numeric := map[string]map[string]any{
 		"search_notes":        {"deck_id": deck.ID},
-		"export_deck":         {"deck_id": deck.ID},
 		"get_due_cards":       {"deck_id": deck.ID},
 		"list_deck_tags":      {"deck_id": deck.ID},
 		"add_extra_new_cards": {"deck_id": deck.ID},
@@ -149,7 +147,6 @@ func TestToolsUnknownPublicIDIsNotFound(t *testing.T) {
 		args map[string]any
 	}{
 		{"search_notes", map[string]any{"deck_id": missing}},
-		{"export_deck", map[string]any{"deck_id": missing}},
 		{"create_notes", map[string]any{"deck_id": missing, "notes": []any{}}},
 		{"get_due_cards", map[string]any{"deck_id": missing}},
 		{"get_due_cards", map[string]any{"deck_ids": []any{missing}}},

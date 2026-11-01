@@ -52,7 +52,7 @@ func postImport(t *testing.T, env *testEnv, key string, body *bytes.Buffer, cont
 // packageTestNoteTypesJSON is the note_types.json of the hand-built test packages: one normal type.
 const packageTestNoteTypesJSON = `[{"ref":"nt-1","name":"Basic","config":{"kind":"normal","fields":[{"id":"front","name":"front"},{"id":"back","name":"back"}],"templates":[{"id":"t-forward","name":"Forward","qfmt":"{{front}}","afmt":"{{front}}<hr>{{back}}"}]}}]`
 
-// minimalPackageZip builds a minimal valid .edeck (one basic note, no media, no progress).
+// minimalPackageZip builds a minimal valid legacy archive (one basic note, no media, no progress).
 func minimalPackageZip(t *testing.T) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -97,7 +97,7 @@ func TestImportPackageRejectsOversizedBody(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 
-	body, ct := multipartBody(t, "big.edeck", bytes.Repeat([]byte("A"), 4096))
+	body, ct := multipartBody(t, "big.apkg", bytes.Repeat([]byte("A"), 4096))
 	rec := postImport(t, env, k.Plaintext, body, ct)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
@@ -128,7 +128,7 @@ func TestImportPackageAcceptsBodyWithinLimit(t *testing.T) {
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	t.Setenv(store.EnvPackageMaxBytes, "")
 
-	body, ct := multipartBody(t, "deck.edeck", minimalPackageZip(t))
+	body, ct := multipartBody(t, "deck.apkg", minimalPackageZip(t))
 	rec := postImport(t, env, k.Plaintext, body, ct)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("valid import = %d, want 200 (body %s)", rec.Code, rec.Body.String())

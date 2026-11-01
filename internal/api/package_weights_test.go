@@ -7,7 +7,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -46,58 +45,6 @@ func readPackageEntry(t *testing.T, raw []byte, name string) []byte {
 	return nil
 }
 
-// TestExportPackageIncludeWeightsQuery asserts GET /decks/:id/package carries no weights by default,
-// and with include_weights=1 preset.json carries the weights while the manifest declares it truthfully.
-func TestExportPackageIncludeWeightsQuery(t *testing.T) {
-	cases := []struct {
-		name        string
-		query       string
-		wantWeights bool
-	}{
-		{"default omits weights", "", false},
-		{"include_weights=0 omits weights", "?include_weights=0", false},
-		{"include_weights=1 exports weights", "?include_weights=1", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			env := newTestEnv(t, 60, 60)
-			user := seedUser(t, env.db, "pkg_w_"+safeName(tc.name), store.RoleUser)
-			k := seedKey(t, env.keys, user.ID, []string{store.ScopeRead}, nil)
-			d := seedDeck(t, env.db, user.ID)
-			if err := env.db.Model(&store.Preset{}).Where("id = ?", d.PresetID).
-				Updates(map[string]any{"weights_json": weightsJSON, "weights_review_count": 42}).Error; err != nil {
-				t.Fatalf("seed weights: %v", err)
-			}
-
-			req := httptest.NewRequest(http.MethodGet, "/api/v1/decks/"+d.PublicID+"/package"+tc.query, nil)
-			req.Header.Set("Authorization", "Bearer "+k.Plaintext)
-			rec := httptest.NewRecorder()
-			env.router().ServeHTTP(rec, req)
-			if rec.Code != http.StatusOK {
-				t.Fatalf("export status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
-			}
-
-			var preset store.PackagePreset
-			if err := json.Unmarshal(readPackageEntry(t, rec.Body.Bytes(), "preset.json"), &preset); err != nil {
-				t.Fatalf("decode preset.json: %v", err)
-			}
-			var manifest store.PackageManifest
-			if err := json.Unmarshal(readPackageEntry(t, rec.Body.Bytes(), "manifest.json"), &manifest); err != nil {
-				t.Fatalf("decode manifest.json: %v", err)
-			}
-			if got := len(preset.Weights) == 21; got != tc.wantWeights {
-				t.Fatalf("preset.json weights = %v, want present=%v", preset.Weights, tc.wantWeights)
-			}
-			if tc.wantWeights != (preset.WeightsReviewCount != nil) {
-				t.Fatalf("weights_review_count = %v, want present=%v", preset.WeightsReviewCount, tc.wantWeights)
-			}
-			if manifest.IncludeWeights != tc.wantWeights {
-				t.Fatalf("manifest.include_weights = %v, want %v", manifest.IncludeWeights, tc.wantWeights)
-			}
-		})
-	}
-}
-
 // TestImportPackageApplyWeightsForm asserts POST /decks/import does not adopt the package's weights by default,
 // and only apply_weights=1 writes them into the new preset, with weights_applied / weights_discarded in the response matching that.
 func TestImportPackageApplyWeightsForm(t *testing.T) {
@@ -126,7 +73,7 @@ func TestImportPackageApplyWeightsForm(t *testing.T) {
 
 			var body bytes.Buffer
 			w := multipart.NewWriter(&body)
-			fw, err := w.CreateFormFile("file", "weights.edeck")
+			fw, err := w.CreateFormFile("file", "weights.apkg")
 			if err != nil {
 				t.Fatalf("create form file: %v", err)
 			}

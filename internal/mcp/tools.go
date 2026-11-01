@@ -76,10 +76,10 @@ type getNoteTypeIn struct {
 	NoteTypeID string `json:"note_type_id" jsonschema:"the public id of the note type to read"`
 }
 
-// exportDeckIn is the input of export_deck; it exports a **deck package**.
+// exportDeckIn contains the export download options.
 type exportDeckIn struct {
 	DeckID             string `json:"deck_id" jsonschema:"the public id of the deck to export as a package"`
-	Format             string `json:"format,omitempty" jsonschema:"package format: edeck (default) or apkg"`
+	Format             string `json:"format,omitempty" jsonschema:"package format: apkg"`
 	IncludeDeckConfigs *bool  `json:"include_deck_configs,omitempty" jsonschema:"include deck configuration; default true"`
 	IncludeProgress    bool   `json:"include_progress,omitempty" jsonschema:"include the caller's own review progress"`
 	// IncludeMedia defaults to true (media is inlined by default).
@@ -124,10 +124,10 @@ type importDeckIn struct {
 	// PresetID identifies the owned preset required by reuse or copy for new_deck; empty mode means new and new refuses it.
 	// For into_deck and replace_deck, PresetID is always refused; only empty or new mode is accepted.
 	PresetID string `json:"preset_id,omitempty" jsonschema:"for new_deck: empty preset_mode means new; reuse and copy require the owned preset's public id; new refuses preset_id; for into_deck and replace_deck: preset_id is always refused and only empty or new mode is accepted"`
-	// Package is the package body itself: the JSON document export_deck outputs, a base64-encoded .edeck zip, or a base64-encoded .apkg archive. Mutually exclusive with URL.
-	Package any `json:"package,omitempty" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck/.apkg archive; mutually exclusive with url"`
-	// URL is a public HTTPS direct link (.edeck/.zip/.apkg); it is downloaded and validated by the server, and is mutually exclusive with Package.
-	URL string `json:"url,omitempty" jsonschema:"public HTTPS direct link to a .edeck/.zip/.apkg package; mutually exclusive with package"`
+	// Package is a base64-encoded archive, mutually exclusive with URL.
+	Package any `json:"package,omitempty" jsonschema:"the base64-encoded archive; mutually exclusive with url"`
+	// URL is a public HTTPS direct link (.apkg); it is downloaded and validated by the server, and is mutually exclusive with Package.
+	URL string `json:"url,omitempty" jsonschema:"public HTTPS direct link to a .apkg package; mutually exclusive with package"`
 	// Target takes new_deck (default), into_deck:<public id>, or replace_deck:<public id>.
 	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<public id> or replace_deck:<public id>"`
 	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`
@@ -365,37 +365,6 @@ func (s *Server) getNoteType(ctx context.Context, id Identity, in getNoteTypeIn)
 
 func (s *Server) getStats(ctx context.Context, id Identity, _ getStatsIn) (any, error) {
 	return s.api.Stats(ctx, id.User)
-}
-
-// exportDeck exports a deck package: it goes through the same service method as REST `GET /decks/:id/package`.
-// It returns the logical content of the package in JSON document form, which can be validated directly against schema/deck-package.schema.json.
-func (s *Server) exportDeck(ctx context.Context, id Identity, in exportDeckIn) (any, error) {
-	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
-	if err != nil {
-		return nil, err
-	}
-	includeMedia := true
-	if in.IncludeMedia != nil {
-		includeMedia = *in.IncludeMedia
-	}
-	opts := store.PackageOptions{
-		IncludeProgress:    in.IncludeProgress,
-		IncludeMedia:       includeMedia,
-		IncludeReviews:     in.IncludeReviews,
-		IncludeWeights:     in.IncludeWeights,
-		IncludeDeckConfigs: in.IncludeDeckConfigs,
-	}
-	if in.Format == "apkg" {
-		return s.api.ExportAnkiPackage(ctx, id.User.ID, d.ID, opts)
-	}
-	if in.Format != "" && in.Format != "edeck" {
-		return nil, api.InvalidRequest("invalid package format")
-	}
-	pkg, err := s.api.ExportDeckPackage(ctx, id.User.ID, d.ID, opts)
-	if err != nil {
-		return nil, err
-	}
-	return pkg.Document(), nil
 }
 
 func (s *Server) createExportDownload(ctx context.Context, id Identity, in exportDeckIn) (*api.ExportDownload, error) {

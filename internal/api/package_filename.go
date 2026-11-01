@@ -10,7 +10,7 @@ import (
 // would exceed the 255-byte limit of some filesystems (one Chinese character takes 3 bytes).
 const packageFilenameMaxRunes = 80
 
-// DeckPackageFilename returns the download filename when exporting a deck package: deck title + .edeck.
+// DeckPackageFilename returns the download filename when exporting a deck package: deck title + .apkg.
 //
 // Characters in the title that are illegal or carry special meaning on common filesystems (path separators, Windows reserved characters, control characters)
 // become underscores, runs of whitespace collapse to one space, and leading/trailing spaces and dots are stripped (Windows forbids trailing dots or spaces).
@@ -39,7 +39,7 @@ func DeckPackageFilename(deckName, publicID string) string {
 	if name == "" {
 		name = "deck-" + publicID
 	}
-	return name + ".edeck"
+	return name + ".apkg"
 }
 
 // AttachmentDisposition builds the Content-Disposition for downloads. When the filename contains non-ASCII characters (e.g. a Chinese deck name)

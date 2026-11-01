@@ -73,7 +73,7 @@ func TestImportURLRequiresWriteScopeAndDoesNotFetch(t *testing.T) {
 	f := &stubFetcher{body: minimalPackageZip(t)}
 	env.api.fetcher = f
 
-	rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/d.edeck","target":"new_deck"}`)
+	rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/d.apkg","target":"new_deck"}`)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("read-scope import-url = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
@@ -116,7 +116,7 @@ func TestImportURLSessionRequiresCSRF(t *testing.T) {
 
 	send := func(csrf string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/decks/import-url",
-			strings.NewReader(`{"url":"https://example.com/d.edeck","target":"new_deck"}`))
+			strings.NewReader(`{"url":"https://example.com/d.apkg","target":"new_deck"}`))
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(cookies[0])
 		if csrf != "" {
@@ -156,7 +156,7 @@ func TestImportURLDeniedRoleDoesNotFetch(t *testing.T) {
 	f := &stubFetcher{body: minimalPackageZip(t)}
 	env.api.fetcher = f
 
-	body := fmt.Sprintf(`{"url":"https://example.com/d.edeck","target":"into_deck:%s"}`, deck.PublicID)
+	body := fmt.Sprintf(`{"url":"https://example.com/d.apkg","target":"into_deck:%s"}`, deck.PublicID)
 	rec := postImportURL(t, env, k.Plaintext, body)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("import-url into a deck without access = %d, want 403 (body %s)", rec.Code, rec.Body.String())
@@ -173,7 +173,7 @@ func TestImportURLSuccess(t *testing.T) {
 	f := &stubFetcher{body: minimalPackageZip(t)}
 	env.api.fetcher = f
 
-	rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/deck.edeck","target":"new_deck"}`)
+	rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/deck.apkg","target":"new_deck"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("import-url = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
@@ -185,7 +185,7 @@ func TestImportURLSuccess(t *testing.T) {
 	if report.DryRun || report.NotesCreated != 1 || report.DeckPublicID == "" {
 		t.Errorf("report = %+v, want a real import with one note and a deck id", report)
 	}
-	if f.calls != 1 || len(f.urls) != 1 || f.urls[0] != "https://example.com/deck.edeck" {
+	if f.calls != 1 || len(f.urls) != 1 || f.urls[0] != "https://example.com/deck.apkg" {
 		t.Errorf("fetcher calls/urls = %d/%v, want one call to the given url", f.calls, f.urls)
 	}
 	var decks int64
@@ -210,7 +210,7 @@ func TestImportURLPresetSelection(t *testing.T) {
 	env.api.fetcher = f
 	for _, mode := range []string{"reuse", "copy"} {
 		t.Run(mode, func(t *testing.T) {
-			body := fmt.Sprintf(`{"url":"https://example.com/deck.edeck","target":"new_deck","preset_mode":%q,"preset_id":%q}`, mode, preset.PublicID)
+			body := fmt.Sprintf(`{"url":"https://example.com/deck.apkg","target":"new_deck","preset_mode":%q,"preset_id":%q}`, mode, preset.PublicID)
 			rec := postImportURL(t, env, k.Plaintext, body)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
@@ -241,7 +241,7 @@ func TestImportURLPresetSelection(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := f.calls
-			body := fmt.Sprintf(`{"url":"https://example.com/deck.edeck",%s}`, tc.options)
+			body := fmt.Sprintf(`{"url":"https://example.com/deck.apkg",%s}`, tc.options)
 			for i := 0; i < importURLRateLimit+1; i++ {
 				rec := postImportURL(t, env, k.Plaintext, body)
 				if rec.Code != http.StatusBadRequest || decodeErrorCode(t, rec.Body.Bytes()) != store.CodePresetSelectionInvalid {
@@ -255,7 +255,7 @@ func TestImportURLPresetSelection(t *testing.T) {
 	}
 	// Invalid requests must not consume the remaining direct-link quota.
 	for i := f.calls; i < importURLRateLimit; i++ {
-		rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/deck.edeck","target":"new_deck","dry_run":true}`)
+		rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/deck.apkg","target":"new_deck","dry_run":true}`)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("remaining quota: status = %d, body = %s", rec.Code, rec.Body.String())
 		}
@@ -270,7 +270,7 @@ func TestImportURLCorruptPackageIsRejected(t *testing.T) {
 	f := &stubFetcher{body: []byte("this is not a zip archive")}
 	env.api.fetcher = f
 
-	rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/bad.edeck","target":"new_deck"}`)
+	rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/bad.apkg","target":"new_deck"}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("corrupt package = %d, want 400 (body %s)", rec.Code, rec.Body.String())
 	}
@@ -296,7 +296,7 @@ func TestImportURLDryRunWritesNothing(t *testing.T) {
 	f := &stubFetcher{body: minimalPackageZip(t)}
 	env.api.fetcher = f
 
-	rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/deck.edeck","target":"new_deck","dry_run":true}`)
+	rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/deck.apkg","target":"new_deck","dry_run":true}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("dry-run import-url = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
@@ -337,7 +337,7 @@ func TestImportURLFetchErrorMapping(t *testing.T) {
 			k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 			env.api.fetcher = &stubFetcher{err: tc.fetchErr}
 
-			rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/deck.edeck","target":"new_deck"}`)
+			rec := postImportURL(t, env, k.Plaintext, `{"url":"https://example.com/deck.apkg","target":"new_deck"}`)
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tc.wantStatus, rec.Body.String())
 			}
@@ -355,7 +355,7 @@ func TestImportURLRejectsOversizedJSONBody(t *testing.T) {
 	f := &stubFetcher{body: minimalPackageZip(t)}
 	env.api.fetcher = f
 
-	huge := `{"url":"https://example.com/` + strings.Repeat("a", 80<<10) + `.edeck"}`
+	huge := `{"url":"https://example.com/` + strings.Repeat("a", 80<<10) + `.apkg"}`
 	rec := postImportURL(t, env, k.Plaintext, huge)
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized JSON body = %d, want 413 (body %s)", rec.Code, rec.Body.String())
@@ -372,7 +372,7 @@ func TestImportURLIsRateLimited(t *testing.T) {
 	f := &stubFetcher{body: minimalPackageZip(t)}
 	env.api.fetcher = f
 
-	body := `{"url":"https://example.com/deck.edeck","target":"new_deck","dry_run":true}`
+	body := `{"url":"https://example.com/deck.apkg","target":"new_deck","dry_run":true}`
 	for i := 0; i < importURLRateLimit; i++ {
 		if rec := postImportURL(t, env, k.Plaintext, body); rec.Code != http.StatusOK {
 			t.Fatalf("request %d = %d, want 200 (body %s)", i+1, rec.Code, rec.Body.String())
@@ -406,14 +406,14 @@ func TestImportURLRateLimitPoolIsSharedWithService(t *testing.T) {
 	f := &stubFetcher{body: minimalPackageZip(t)}
 	env.api.fetcher = f
 
-	body := `{"url":"https://example.com/deck.edeck","target":"new_deck","dry_run":true}`
+	body := `{"url":"https://example.com/deck.apkg","target":"new_deck","dry_run":true}`
 	for i := 0; i < importURLRateLimit; i++ {
 		if rec := postImportURL(t, env, k.Plaintext, body); rec.Code != http.StatusOK {
 			t.Fatalf("request %d = %d, want 200 (body %s)", i+1, rec.Code, rec.Body.String())
 		}
 	}
 	_, err := env.api.ImportDeckPackageURL(context.Background(), user, nil,
-		"https://example.com/deck.edeck", store.PackageImportOptions{Target: "new_deck", DryRun: true})
+		"https://example.com/deck.apkg", store.PackageImportOptions{Target: "new_deck", DryRun: true})
 	var se *ServiceError
 	if !errors.As(err, &se) || se.Code != CodeRateLimited {
 		t.Fatalf("service call after the quota is spent = %v, want CodeRateLimited", err)
@@ -430,7 +430,7 @@ func TestImportURLMapsRealFetcherErrorsThroughHTTP(t *testing.T) {
 	user := seedUser(t, env.db, "url_real_fetch", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 	// Keep the production fetcher built by New(); the rejection of private-network / non-HTTPS addresses happens before any network call.
-	rec := postImportURL(t, env, k.Plaintext, `{"url":"http://example.com/deck.edeck","target":"new_deck"}`)
+	rec := postImportURL(t, env, k.Plaintext, `{"url":"http://example.com/deck.apkg","target":"new_deck"}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("non-https url = %d, want 400 (body %s)", rec.Code, rec.Body.String())
 	}
@@ -438,7 +438,7 @@ func TestImportURLMapsRealFetcherErrorsThroughHTTP(t *testing.T) {
 		t.Errorf("code = %q, want %q", code, CodeImportURLInvalid)
 	}
 
-	rec = postImportURL(t, env, k.Plaintext, `{"url":"https://127.0.0.1/deck.edeck","target":"new_deck"}`)
+	rec = postImportURL(t, env, k.Plaintext, `{"url":"https://127.0.0.1/deck.apkg","target":"new_deck"}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("loopback url = %d, want 400 (body %s)", rec.Code, rec.Body.String())
 	}

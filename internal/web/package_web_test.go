@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -20,7 +21,7 @@ import (
 // `POST /api/v1/decks/import` (the SPA's client.ts uses it), so the web layer keeps only the export and the /import shell.
 
 // TestDeckPackageExportServesAttachment asserts the export endpoint's response shape and auth: a signed-in user's download gets
-// an .edeck attachment (same MIME as the REST export), and anonymous access is redirected to the login page.
+// an .apkg attachment (same MIME as the REST export), and anonymous access is redirected to the login page.
 func TestDeckPackageExportServesAttachment(t *testing.T) {
 	srv, db, ownerID, cookies, _ := newNotesServer(t)
 	deck := seedDeck(t, db, ownerID, "Pack Deck")
@@ -30,11 +31,11 @@ func TestDeckPackageExportServesAttachment(t *testing.T) {
 	if exp.Code != http.StatusOK {
 		t.Fatalf("GET export = %d, want 200 (body %s)", exp.Code, snippet(exp.Body.String()))
 	}
-	if ct := exp.Header().Get("Content-Type"); ct != packageExportMediaType {
-		t.Errorf("export content-type = %q, want %q", ct, packageExportMediaType)
+	if ct := exp.Header().Get("Content-Type"); ct != "application/zip" {
+		t.Errorf("export content-type = %q, want %q", ct, "application/zip")
 	}
-	if got := downloadName(t, exp); got != "Pack Deck.edeck" {
-		t.Errorf("export filename = %q, want the deck title %q", got, "Pack Deck.edeck")
+	if got := downloadName(t, exp); got != "Pack Deck.apkg" {
+		t.Errorf("export filename = %q, want the deck title %q", got, "Pack Deck.apkg")
 	}
 	if exp.Body.Len() == 0 {
 		t.Error("exported package is empty")
@@ -68,8 +69,8 @@ func TestDeckPackageDownloadsAreNamedAfterTheDeck(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET REST export = %d, want 200 (body %s)", rec.Code, snippet(rec.Body.String()))
 	}
-	if got := downloadName(t, rec); got != "日语 N2 词汇.edeck" {
-		t.Errorf("REST export filename = %q, want %q", got, "日语 N2 词汇.edeck")
+	if got := downloadName(t, rec); got != "日语 N2 词汇.apkg" {
+		t.Errorf("REST export filename = %q, want %q", got, "日语 N2 词汇.apkg")
 	}
 	if strings.Contains(rec.Header().Get("Content-Disposition"), deck.PublicID) {
 		t.Errorf("Content-Disposition %q still carries the deck id", rec.Header().Get("Content-Disposition"))
@@ -98,7 +99,7 @@ func TestBatchExportNamesEntriesAfterDecksWithoutCollisions(t *testing.T) {
 	for _, f := range zr.File {
 		names = append(names, f.Name)
 	}
-	want := []string{"Biology.edeck", "Biology (2).edeck", "a_b.edeck"}
+	want := []string{"Biology.apkg", "Biology (2).apkg", "a_b.apkg"}
 	if strings.Join(names, "|") != strings.Join(want, "|") {
 		t.Errorf("zip entries = %q, want %q", names, want)
 	}
@@ -129,15 +130,15 @@ func seedMediaDeck(t *testing.T, srv *Server, db *gorm.DB, ownerID uint64, name 
 	return deck, raw
 }
 
-// packageHasMedia reports whether a .edeck blob carries a media entry with the given content.
-func packageHasMedia(t *testing.T, edeck, want []byte) bool {
+// packageHasMedia reports whether a .apkg blob carries a media entry with the given content.
+func packageHasMedia(t *testing.T, apkg, want []byte) bool {
 	t.Helper()
-	zr, err := zip.NewReader(bytes.NewReader(edeck), int64(len(edeck)))
+	zr, err := zip.NewReader(bytes.NewReader(apkg), int64(len(apkg)))
 	if err != nil {
 		t.Fatalf("read package zip: %v", err)
 	}
 	for _, f := range zr.File {
-		if !strings.HasPrefix(f.Name, "media/") {
+		if _, err := strconv.Atoi(f.Name); err != nil {
 			continue
 		}
 		rc, err := f.Open()

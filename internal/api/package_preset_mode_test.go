@@ -127,7 +127,7 @@ func TestImportPresetReuseResponse(t *testing.T) {
 	})
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
-	f, err := w.CreateFormFile("file", "import.edeck")
+	f, err := w.CreateFormFile("file", "import.apkg")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestImportMultipartRejectsPresetOptions(t *testing.T) {
 			}
 			var body bytes.Buffer
 			w := multipart.NewWriter(&body)
-			f, err := w.CreateFormFile("file", "import.edeck")
+			f, err := w.CreateFormFile("file", "import.apkg")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -235,7 +235,7 @@ func TestImportSharedDeckOmitsOwnerPreset(t *testing.T) {
 	key := seedKey(t, env.keys, editor.ID, []string{store.ScopeWrite}, nil)
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
-	f, err := w.CreateFormFile("file", "import.edeck")
+	f, err := w.CreateFormFile("file", "import.apkg")
 	if err != nil {
 		t.Fatal(err)
 	}

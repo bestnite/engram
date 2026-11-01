@@ -26,7 +26,7 @@ func apiPNGBody(n int) []byte {
 	return b
 }
 
-// apiMediaPackageZip builds a minimal valid .edeck containing one note that references a media entry, plus the inline media bytes.
+// apiMediaPackageZip builds a minimal valid legacy archive containing one note that references a media entry, plus the inline media bytes.
 func apiMediaPackageZip(t *testing.T, body []byte) (raw []byte, sha string) {
 	t.Helper()
 	sum := sha256.Sum256(body)
@@ -72,7 +72,7 @@ func TestImportPackageCountsMediaAgainstImporterQuota(t *testing.T) {
 	}
 
 	raw, _ := apiMediaPackageZip(t, apiPNGBody(64))
-	body, ct := multipartBody(t, "deck.edeck", raw)
+	body, ct := multipartBody(t, "deck.apkg", raw)
 	rec := postImport(t, env, k.Plaintext, body, ct)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
@@ -126,7 +126,7 @@ func TestImportPackageUsesTheImportersOwnQuota(t *testing.T) {
 			}
 
 			raw, _ := apiMediaPackageZip(t, apiPNGBody(64))
-			body, ct := multipartBody(t, "deck.edeck", raw)
+			body, ct := multipartBody(t, "deck.apkg", raw)
 			rec := postImport(t, env, k.Plaintext, body, ct)
 			if rec.Code != tc.want {
 				t.Fatalf("import status = %d, want %d (body %s)", rec.Code, tc.want, rec.Body.String())

@@ -129,14 +129,14 @@ func resolveImportUser(ctx context.Context, users *store.UserStore, ref string) 
 // runExport handles `engram export`: export one deck package (--deck + --package).
 func runExport(args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
-	deckID := fs.Uint64("deck", 0, "deck id to export as a .edeck card package")
-	out := fs.String("package", "", "output .edeck path")
+	deckID := fs.Uint64("deck", 0, "deck id to export as a .apkg card package")
+	out := fs.String("package", "", "output .apkg path")
 	userID := fs.Uint64("user", 0, "acting user id (default: the deck owner)")
 	includeProgress := fs.Bool("include-progress", false, "include the caller's own review progress")
 	includeReviews := fs.Bool("include-reviews", false, "include review logs (requires --include-progress)")
 	noMedia := fs.Bool("no-media", false, "do not inline media bytes")
 	includeWeights := fs.Bool("include-weights", false, "include the caller's FSRS weights in preset.json")
-	format := fs.String("format", "edeck", "package format: edeck or apkg")
+	format := fs.String("format", "apkg", "package format: apkg")
 	includeDeckConfigs := fs.Bool("include-deck-configs", true, "include deck configuration")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -147,7 +147,7 @@ func runExport(args []string) error {
 	if *deckID == 0 {
 		return errors.New("export: --deck <id> is required")
 	}
-	if *format != "edeck" && *format != "apkg" {
+	if *format != "apkg" {
 		return errors.New("export: unknown package format")
 	}
 	ctx := context.Background()
@@ -166,40 +166,21 @@ func runExport(args []string) error {
 		IncludeWeights:     *includeWeights,
 		IncludeDeckConfigs: includeDeckConfigs,
 	}
-	if *format == "apkg" {
-		data, err := apiSrv.ExportAnkiPackage(ctx, actor.ID, *deckID, opts)
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(*out, data, 0666); err != nil {
-			return fmt.Errorf("write package: %w", err)
-		}
-		fmt.Fprintf(cliOut, "exported deck %d -> %s\n", *deckID, *out)
-		return nil
-	}
-	pkg, err := apiSrv.ExportDeckPackage(ctx, actor.ID, *deckID, opts)
+	data, err := apiSrv.ExportAnkiPackage(ctx, actor.ID, *deckID, opts)
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(*out)
-	if err != nil {
-		return fmt.Errorf("create %s: %w", *out, err)
-	}
-	if err := pkg.WriteZip(f); err != nil {
-		f.Close()
+	if err := os.WriteFile(*out, data, 0666); err != nil {
 		return fmt.Errorf("write package: %w", err)
 	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close %s: %w", *out, err)
-	}
-	fmt.Fprintf(cliOut, "exported deck %d: %d notes, %d cards -> %s\n", *deckID, len(pkg.Notes), len(pkg.Cards), *out)
+	fmt.Fprintf(cliOut, "exported deck %d -> %s\n", *deckID, *out)
 	return nil
 }
 
 // runImport handles `engram import`: import one deck package and print the same report JSON as REST.
 func runImport(args []string) error {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
-	in := fs.String("package", "", "input .edeck path")
+	in := fs.String("package", "", "input .apkg path")
 	userRef := fs.String("user", "", "acting user id or username (required: the import never guesses the owner)")
 	target := fs.String("target", "", "new_deck (default), into_deck:<id> or replace_deck:<id>")
 	dryRun := fs.Bool("dry-run", false, "validate and count without writing")

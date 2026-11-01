@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"git.nite07.com/nite/engram/internal/pgtest"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -53,7 +54,7 @@ func putUpload(t *testing.T, env *testEnv, uploadURL string, body []byte) *httpt
 	return rec
 }
 
-// minimalPackageDocument is the JSON document form of minimalPackageZip (the output form of export_deck).
+// minimalPackageDocument is a legacy JSON document used to test rejection.
 func minimalPackageDocument() []byte {
 	return []byte(`{
   "manifest.json": {"format_version":2,"exported_at":"2026-10-02T00:00:00Z","deck":{"name":"from-json"},"include_progress":false,"include_media":false,"include_reviews":false,"counts":{"notes":1,"cards":1}},
@@ -69,8 +70,7 @@ func TestImportUploadImportsWithoutBearer(t *testing.T) {
 		name string
 		body []byte
 	}{
-		{name: "edeck archive", body: minimalPackageZip(t)},
-		{name: "json document", body: minimalPackageDocument()},
+		{name: "anki archive", body: ankiFixtureBytes(t)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -94,8 +94,8 @@ func TestImportUploadImportsWithoutBearer(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil {
 				t.Fatalf("decode report: %v", err)
 			}
-			if report.NotesCreated != 1 || report.DeckPublicID == "" {
-				t.Fatalf("report = %+v, want one note in a new deck", report)
+			if report.NotesCreated != 8 || report.DeckPublicID == "" {
+				t.Fatalf("report = %+v, want eight notes in a new deck", report)
 			}
 			// The audit is recorded against the issuer and the key used for issuance: the upload request itself carries no key, so ownership must not be lost.
 			var logs []store.AuditLog
@@ -106,6 +106,17 @@ func TestImportUploadImportsWithoutBearer(t *testing.T) {
 				t.Fatalf("audit = %+v, want one deck.package_import by user %d with key %d", logs, user.ID, k.Key.ID)
 			}
 		})
+	}
+}
+
+func TestImportUploadRejectsDocument(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "upload_document", store.RoleUser)
+	key := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
+	up := issueUpload(t, env, key.Plaintext, `{}`)
+	rec := putUpload(t, env, up.UploadURL, minimalPackageDocument())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("document upload status = %d, want 400: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -292,5 +303,29 @@ func TestImportUploadMalformedPackage(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("malformed upload %q = %d, want 400 (body %s)", body, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+func TestAnkiUploadDatabaseDrivers(t *testing.T) {
+	for _, driver := range []string{"sqlite", "postgres"} {
+		t.Run(driver, func(t *testing.T) {
+			var env *testEnv
+			if driver == "postgres" {
+				db, ok := pgtest.Open(t)
+				if !ok {
+					t.Skip("TEST_PG_DSN not set")
+				}
+				env = newTestEnvWithDB(t, db, 60, 60)
+			} else {
+				env = newTestEnv(t, 60, 60)
+			}
+			user := seedUser(t, env.db, "anki_upload", store.RoleUser)
+			key := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
+			up := issueUpload(t, env, key.Plaintext, `{}`)
+			rec := putUpload(t, env, up.UploadURL, ankiFixtureBytes(t))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("upload status = %d: %s", rec.Code, rec.Body.String())
+			}
+		})
 	}
 }

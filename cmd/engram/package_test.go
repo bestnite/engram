@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// CLI acceptance: export writes a .edeck, import round-trips from that file and produces the same report as REST.
+// CLI acceptance: export writes a .apkg, import round-trips from that file and produces the same report as REST.
 
 // seedCLIDeck creates an owner + deck + two basic notes (one card each).
 func seedCLIDeck(t *testing.T, db *gorm.DB) (userID, deckID uint64) {
@@ -84,7 +84,7 @@ func TestCLIPackageRoundTrip(t *testing.T) {
 	userID, deckID := seedCLIDeck(t, db)
 	uid, did := strconv.FormatUint(userID, 10), strconv.FormatUint(deckID, 10)
 
-	pkgPath := filepath.Join(t.TempDir(), "deck.edeck")
+	pkgPath := filepath.Join(t.TempDir(), "deck.apkg")
 	if out := captureCLI(t, func() error {
 		return runExport([]string{"--deck", did, "--package", pkgPath, "--user", uid})
 	}); out == "" {
@@ -167,7 +167,7 @@ func TestCLIImportReusePreset(t *testing.T) {
 	if err := db.Where("owner_user_id = ?", userID).First(&p).Error; err != nil {
 		t.Fatal(err)
 	}
-	file := filepath.Join(t.TempDir(), "deck.edeck")
+	file := filepath.Join(t.TempDir(), "deck.apkg")
 	captureCLI(t, func() error { return runExport([]string{"--deck", did, "--package", file, "--user", uid}) })
 	report := captureImportReport(t, []string{"--package", file, "--user", uid, "--preset-mode", "reuse", "--preset-id", p.PublicID})
 	if report["preset_mode"] != "reuse" || report["preset_name"] != p.Name {
@@ -234,7 +234,7 @@ func cliRun(fn func() error) (error, string) {
 	return fn(), buf.String()
 }
 
-// importFixture creates the database, seeds a source deck and an import target account, then exports a round-trippable .edeck.
+// importFixture creates the database, seeds a source deck and an import target account, then exports a round-trippable .apkg.
 func importFixture(t *testing.T) (db *gorm.DB, target store.User, pkgPath string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "cli.db")
@@ -256,7 +256,7 @@ func importFixture(t *testing.T) (db *gorm.DB, target store.User, pkgPath string
 	if err := db.Create(&target).Error; err != nil {
 		t.Fatalf("create target user: %v", err)
 	}
-	pkgPath = filepath.Join(t.TempDir(), "deck.edeck")
+	pkgPath = filepath.Join(t.TempDir(), "deck.apkg")
 	captureCLI(t, func() error {
 		return runExport([]string{"--deck", strconv.FormatUint(deckID, 10), "--package", pkgPath, "--user", strconv.FormatUint(userID, 10)})
 	})

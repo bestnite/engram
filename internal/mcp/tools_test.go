@@ -54,23 +54,6 @@ func TestToolsMatchREST(t *testing.T) {
 		t.Errorf("get_stats MCP=%v REST=%v", mcpOut, restOut)
 	}
 
-	// export_deck: returns the deck package document, with manifest/notes/cards/preset.
-	mcpOut, isErr, text := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID})
-	if isErr {
-		t.Fatalf("export_deck error: %s", text)
-	}
-	manifest, _ := mcpOut["manifest.json"].(map[string]any)
-	if manifest == nil {
-		t.Fatalf("export_deck did not return a package document: %v", mcpOut)
-	}
-	counts, _ := manifest["counts"].(map[string]any)
-	if got := counts["notes"]; got != float64(2) {
-		t.Errorf("package manifest counts.notes = %v, want 2", got)
-	}
-	if _, ok := mcpOut["notes.json"]; !ok {
-		t.Errorf("package document is missing notes.json: %v", mcpOut)
-	}
-
 	// create_notes / import_deck (dry_run, produces the same counts under the same deck state).
 	// The dry run uses the permanent payload: note_type plus fields keyed by field name with HTML values.
 	dry := map[string]any{"deck_id": deck.PublicID, "dry_run": true, "notes": []any{
@@ -80,19 +63,6 @@ func TestToolsMatchREST(t *testing.T) {
 	dryBody := fmt.Sprintf(`{"dry_run":true,"notes":[{"note_type":%q,"fields":{"front":"<p>x</p>","back":"<p>y</p>"},"external_ref":"n:3"}]}`, basicTypeID)
 	if _, restOut := rest(t, base, http.MethodPost, deckPath, key, dryBody); !reflect.DeepEqual(mcpOut, restOut) {
 		t.Errorf("create_notes(dry_run) MCP=%v REST=%v", mcpOut, restOut)
-	}
-
-	// import_deck: accepts the document export_deck outputs; a dry_run preview writes nothing.
-	pkgDoc, _, _ := callTool(t, cs, "export_deck", map[string]any{"deck_id": deck.PublicID, "include_progress": true})
-	mcpOut, isErr, text = callTool(t, cs, "import_deck", map[string]any{"package": pkgDoc, "dry_run": true, "target": "new_deck"})
-	if isErr {
-		t.Fatalf("import_deck error: %s", text)
-	}
-	if mcpOut["dry_run"] != true || mcpOut["notes_created"] != float64(2) {
-		t.Errorf("import_deck(dry_run) report = %v, want dry_run=true notes_created=2", mcpOut)
-	}
-	if _, ok := mcpOut["errors"]; !ok {
-		t.Errorf("import_deck report is missing the errors field: %v", mcpOut)
 	}
 
 	// Get the note's public id for update/delete.

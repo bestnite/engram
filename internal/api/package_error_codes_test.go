@@ -63,7 +63,7 @@ func TestImportPackageSurfacesBadFormat(t *testing.T) {
 	user := seedUser(t, env.db, "pkg_bad_format", store.RoleUser)
 	k := seedKey(t, env.keys, user.ID, []string{store.ScopeWrite}, nil)
 
-	body, ct := multipartBody(t, "bad.edeck", []byte("this is not a zip"))
+	body, ct := multipartBody(t, "bad.apkg", []byte("this is not a zip"))
 	rec := postImport(t, env, k.Plaintext, body, ct)
 
 	if rec.Code != http.StatusBadRequest {
@@ -90,7 +90,7 @@ func TestImportPackageSurfacesTooLarge(t *testing.T) {
 		t.Fatalf("seed package_max_bytes: %v", err)
 	}
 
-	body, ct := multipartBody(t, "big.edeck", bytes.Repeat([]byte("A"), 4096))
+	body, ct := multipartBody(t, "big.apkg", bytes.Repeat([]byte("A"), 4096))
 	rec := postImport(t, env, k.Plaintext, body, ct)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
@@ -116,7 +116,7 @@ func TestImportPackageSurfacesUnknownKind(t *testing.T) {
 		"cards.json":      `[]`,
 		"preset.json":     presetJSON,
 	})
-	body, ct := multipartBody(t, "unknown.edeck", raw)
+	body, ct := multipartBody(t, "unknown.apkg", raw)
 	rec := postImport(t, env, k.Plaintext, body, ct)
 
 	if rec.Code != http.StatusBadRequest {
@@ -145,7 +145,7 @@ func TestImportPackageSurfacesObsoleteFormat(t *testing.T) {
 		"cards.json":    `[]`,
 		"preset.json":   presetJSON,
 	})
-	body, ct := multipartBody(t, "format1.edeck", raw)
+	body, ct := multipartBody(t, "format1.apkg", raw)
 	rec := postImport(t, env, k.Plaintext, body, ct)
 
 	if rec.Code != http.StatusBadRequest {

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,27 +15,12 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// REST entry points for deck packages (.edeck and .apkg):
+// REST entry points for deck packages:
 //   GET  /api/v1/decks/:id/package  export (read)
 //   POST /api/v1/decks/import       import (write)
 // All the logic is in the store layer; this only shapes parameters, decides permissions and maps errors.
 
-// ExportDeckPackage exports a deck package and returns the in-memory form; shared by REST, MCP and the CLI.
-// Callers only set the Include* switches; MediaRoot and the clock are decided by the server and any value passed in is overwritten.
-func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, opts store.PackageOptions) (*store.DeckPackage, error) {
-	if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
-		return nil, err
-	}
-	opts.MediaRoot = a.mediaRoot
-	opts.Now = a.now
-	pkg, err := a.decks.ExportPackage(ctx, userID, deckID, opts)
-	if err != nil {
-		return nil, mapPackageError(err)
-	}
-	return pkg, nil
-}
-
-// ExportAnkiPackage applies the same permission and server settings as the native export.
+// ExportAnkiPackage applies permission checks and server settings for Anki archives.
 func (a *API) ExportAnkiPackage(ctx context.Context, userID, deckID uint64, opts store.PackageOptions) ([]byte, error) {
 	if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
 		return nil, err
@@ -55,7 +39,7 @@ func PackageQueryOptions(c *gin.Context) store.PackageOptions {
 	return store.PackageOptions{IncludeProgress: c.Query("include_progress") == "1", IncludeReviews: c.Query("include_reviews") == "1", IncludeMedia: c.DefaultQuery("include_media", "1") != "0", IncludeWeights: c.Query("include_weights") == "1", IncludeDeckConfigs: &configs}
 }
 
-// ImportDeckPackage parses and imports one deck package (.edeck or .apkg); target picks one of three destinations.
+// ImportDeckPackage parses and imports one deck package; target picks one of three destinations.
 // allowOthersProgress only takes effect when the caller is an admin (the progress-import boundary).
 func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *uint64, r io.Reader, opts store.PackageImportOptions) (*store.PackageImportReport, error) {
 	target, err := a.authorizeImportTarget(ctx, u.ID, opts.Target)
@@ -202,38 +186,17 @@ func (a *API) handleExportPackage(c *gin.Context) {
 		abortNotFound(c)
 		return
 	}
-	format := c.DefaultQuery("format", "edeck")
-	if format != "edeck" && format != "apkg" {
+	if format := c.DefaultQuery("format", "apkg"); format != "apkg" {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
-	opts := PackageQueryOptions(c)
-	if format == "apkg" {
-		data, err := a.ExportAnkiPackage(ctx, u.ID, d.ID, opts)
-		if err != nil {
-			writeServiceError(c, err)
-			return
-		}
-		name := strings.TrimSuffix(DeckPackageFilename(d.Name, publicID), ".edeck") + ".apkg"
-		c.Header("Content-Disposition", AttachmentDisposition(name))
-		c.Data(http.StatusOK, "application/zip", data)
-		return
-	}
-	pkg, err := a.ExportDeckPackage(ctx, u.ID, d.ID, opts)
+	data, err := a.ExportAnkiPackage(ctx, u.ID, d.ID, PackageQueryOptions(c))
 	if err != nil {
 		writeServiceError(c, err)
 		return
 	}
-	var buf bytes.Buffer
-	if err := pkg.WriteZip(&buf); err != nil {
-		a.logger.Error("write deck package failed", "deck_id", d.ID, "error", err)
-		abortError(c, http.StatusInternalServerError, CodeInternal, "")
-		return
-	}
-	// The download name uses the deck title so users recognize the deck in their download folder; when the title sanitizes to nothing it falls back to the external id.
-	c.Header("Content-Type", "application/vnd.engram.edeck")
 	c.Header("Content-Disposition", AttachmentDisposition(DeckPackageFilename(d.Name, publicID)))
-	c.Data(http.StatusOK, "application/vnd.engram.edeck", buf.Bytes())
+	c.Data(http.StatusOK, "application/zip", data)
 }
 
 // isRequestBodyTooLarge reports whether a multipart parse failure was triggered by http.MaxBytesReader.
