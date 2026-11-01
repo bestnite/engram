@@ -9,17 +9,9 @@
 package store
 
 import (
-	"context"
-	"crypto/sha1"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"path"
-	"sort"
 	"strings"
 	"unicode/utf8"
-
-	"gorm.io/gorm"
 )
 
 // maxMediaFilenameLength is Anki's 120-byte cap on a media file name. It matches the limit the import path enforces
@@ -85,79 +77,6 @@ func addDataToFolderUniquely(existing map[string]string, desiredName, sha256hex,
 		return normalized
 	}
 	return addHashSuffixToFileStem(normalized, sha1hex)
-}
-
-// renamePackageMedia implements Anki's clash behaviour for a deck package import. It renames every package media name
-// whose content differs from the target deck's existing name, rewrites this package's references in note fields and
-// note-type templates/CSS/LaTeX, and updates the package entries so the renamed names are what the import registers.
-//
-// A name that is absent, or already points at the same bytes, is left alone. The old name keeps its old content; only the
-// new bytes move to the suffixed name.
-func renamePackageMedia(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *packageModel) error {
-	rows, err := NewMediaNameStore(tx).ListByDeck(ctx, deckID)
-	if err != nil {
-		return fmt.Errorf("import package: list existing media names: %w", err)
-	}
-	existing := make(map[string]string, len(rows))
-	for _, row := range rows {
-		existing[row.Name] = row.Sha256
-	}
-
-	renames := map[string]string{}
-	// Iterate the shas in a stable order: two entries can contend for the same name, and map order must not decide
-	// which one keeps it.
-	shas := make([]string, 0, len(pkg.Media))
-	for sha := range pkg.Media {
-		shas = append(shas, sha)
-	}
-	sort.Strings(shas)
-	for _, sha := range shas {
-		entry := pkg.Media[sha]
-		raw, ok := pkg.MediaRaw[sha]
-		if !ok {
-			continue
-		}
-		names := entry.Names
-		if len(names) == 0 {
-			names = []string{path.Base(entry.Path)}
-		}
-		sum := sha1.Sum(raw)
-		suffix := hex.EncodeToString(sum[:])
-		sum256 := sha256.Sum256(raw)
-		sha256hex := hex.EncodeToString(sum256[:])
-		renamed := make([]string, 0, len(names))
-		for _, name := range names {
-			oldName := normaliseMediaName(name)
-			newName := addDataToFolderUniquely(existing, oldName, sha256hex, suffix)
-			if newName != oldName {
-				renames[oldName] = newName
-			}
-			// Reserve the chosen name for later entries, mirroring Anki writing each file before examining the next.
-			existing[newName] = sha256hex
-			renamed = append(renamed, newName)
-		}
-		entry.Names = renamed
-		pkg.Media[sha] = entry
-	}
-	if len(renames) == 0 {
-		return nil
-	}
-	for i := range pkg.Notes {
-		for key, value := range pkg.Notes[i].Fields {
-			pkg.Notes[i].Fields[key] = rewriteMediaRefs(value, renames)
-		}
-	}
-	for i := range pkg.NoteTypes {
-		cfg := &pkg.NoteTypes[i].Config
-		for j := range cfg.Templates {
-			cfg.Templates[j].QFormat = rewriteMediaRefs(cfg.Templates[j].QFormat, renames)
-			cfg.Templates[j].AFormat = rewriteMediaRefs(cfg.Templates[j].AFormat, renames)
-		}
-		cfg.CSS = rewriteMediaRefs(cfg.CSS, renames)
-		cfg.LaTeXPre = rewriteMediaRefs(cfg.LaTeXPre, renames)
-		cfg.LaTeXPost = rewriteMediaRefs(cfg.LaTeXPost, renames)
-	}
-	return nil
 }
 
 // rewriteMediaRefs replaces media names only inside the three reference positions, so ordinary text that happens to

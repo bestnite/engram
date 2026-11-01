@@ -1,7 +1,6 @@
 package store
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/sha1"
@@ -48,29 +47,6 @@ func (l PackageImportLimits) ankiLimits() anki.Limits {
 		MaxFileBytes:  anki.DefaultLimits().MaxFileBytes,
 		MaxTotalBytes: l.MaxUnpackedBytes,
 	}
-}
-
-// isAnkiArchive reports whether raw is an Anki package. The decision reads the zip entry names:
-// every .apkg layout carries a collection entry and/or a "meta" entry, while an .edeck carries
-// manifest.json and note_types.json instead. The file name is never consulted.
-func isAnkiArchive(raw []byte) bool {
-	return isAnkiArchiveReader(bytes.NewReader(raw), int64(len(raw)))
-}
-
-// isAnkiArchiveReader is the file-backed form: the import sniffs the spooled package through
-// random access instead of holding the archive in memory.
-func isAnkiArchiveReader(r io.ReaderAt, size int64) bool {
-	zr, err := zip.NewReader(r, size)
-	if err != nil {
-		return false
-	}
-	for _, f := range zr.File {
-		switch f.Name {
-		case "meta", "collection.anki2", "collection.anki21", "collection.anki21b":
-			return true
-		}
-	}
-	return false
 }
 
 // mapAnkiPackageError maps a reader error onto the deck package's stable codes, so corrupt bytes
@@ -900,8 +876,7 @@ func (s *DeckStore) prepareAnkiImport(ctx context.Context, actorUserID uint64, r
 	}
 	plan := planAnkiDecks(pkg)
 
-	// Quota is checked before the transaction and before any disk write, exactly like the .edeck
-	// path, so an over-quota package leaves no deck, row or file behind.
+	// Check quota before the transaction and disk writes so rejection leaves no rows or files.
 	if err := checkMediaQuota(ctx, s.db, actorUserID, ankiRawMediaSizes(files), opts.MediaQuotaBytes); err != nil {
 		return nil, err
 	}
@@ -1970,8 +1945,7 @@ func registerAnkiMediaNames(ctx context.Context, tx *gorm.DB, deckID uint64, fil
 }
 
 // renameAnkiMedia implements Anki's clash rule for an .apkg import and rewrites this package's
-// references. It mirrors the .edeck rule but works on the reader's model, because that is what
-// the mapping later consumes. The digests come from the single hashing pass.
+// references in the reader model. The digests come from the single hashing pass.
 func renameAnkiMedia(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *anki.Package, files []ankiMediaFile) error {
 	rows, err := NewMediaNameStore(tx).ListByDeck(ctx, deckID)
 	if err != nil {

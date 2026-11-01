@@ -626,47 +626,6 @@ func testMediaEntry(name string, data []byte) anki.MediaEntry {
 	}
 }
 
-// TestIsAnkiArchiveSniffsEntries proves the .apkg/.edeck decision reads entry names, not the suffix.
-func TestIsAnkiArchiveSniffsEntries(t *testing.T) {
-	apkg, err := os.ReadFile(ankiFixturePath("stock.anki21b.apkg"))
-	if err != nil {
-		t.Fatalf("read fixture: %v", err)
-	}
-	if !isAnkiArchive(apkg) {
-		t.Fatal("an .apkg was not recognised")
-	}
-	if isAnkiArchive(minimalPackageZipForTest(t)) {
-		t.Fatal("an .edeck was recognised as an Anki package")
-	}
-	if isAnkiArchive([]byte("not a zip")) {
-		t.Fatal("garbage was recognised as an Anki package")
-	}
-}
-
-// minimalPackageZipForTest builds the smallest .edeck-shaped zip: manifest.json only.
-func minimalPackageZipForTest(t *testing.T) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-	w, err := zw.Create("manifest.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Write([]byte(`{}`)); err != nil {
-		t.Fatal(err)
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return buf.Bytes()
-}
-
-// TestLocalAnkiPackage is the maintainer's manual acceptance hook for a package that cannot be
-// committed (the Ultimate Geography deck lives in testdata/local/ and is gitignored). It imports
-// every local .apkg and prints the deck's note/card count plus the SHA-256 of every rendered face.
-//
-// Set ENGRAM_ANKI_ORACLE_CARDS and ENGRAM_ANKI_ORACLE_SHA256 from the Anki oracle run to turn the
-// printout into an assertion. Without a local package the test skips, so CI never depends on it.
 func TestLocalAnkiPackage(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join("..", "..", "testdata", "local", "*.apkg"))
 	if err != nil {

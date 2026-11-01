@@ -718,8 +718,7 @@ func (s *DeckStore) ankiMediaFiles(ctx context.Context, deckID uint64, types []N
 			row, err := nameStore.ByName(ctx, deckID, name)
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				// A reference the deck has no media row for is not a file this deck
-				// carries. This matches the .edeck export, which resolves only names
-				// media_names knows; a stale reference does not block the export.
+				// carries; a stale reference does not block the export.
 				continue
 			}
 			if err != nil {

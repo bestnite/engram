@@ -109,33 +109,3 @@ func TestDeckDescriptionLimitCreateAndRename(t *testing.T) {
 // TestDeckDescriptionLimitExportImportRoundTrip asserts the symmetry of the shared bounds: a deck with a 2000-character
 // description can be exported as a deck package as-is and then accepted by the import side (another new account) — before the fix the web UI could create
 // decks with 2000+ descriptions that the importer would reject, so the round trip was asymmetric.
-func TestDeckDescriptionLimitExportImportRoundTrip(t *testing.T) {
-	for driver, db := range packageDatabases(t) {
-		t.Run(driver, func(t *testing.T) {
-			users := seedUsers(t, db, "deck_desc_export", "deck_desc_import")
-			exporter, importer := users[0], users[1]
-			ctx := context.Background()
-			deckID := seedPresetDeck(t, db, exporter)
-
-			desc := strings.Repeat("x", 2000)
-			d, err := NewDeckStore(db).ByID(ctx, deckID)
-			if err != nil {
-				t.Fatalf("ByID() error = %v", err)
-			}
-			d.Description = desc
-			if err := NewDeckStore(db).Update(ctx, exporter, d.ID, nil, &d.Description); err != nil {
-				t.Fatalf("set 2000-char description: %v", err)
-			}
-
-			raw := exportZip(t, db, exporter, deckID, PackageOptions{})
-			report := importPackageOK(t, db, importer, raw, PackageImportOptions{})
-			got, err := NewDeckStore(db).ByID(ctx, report.DeckID)
-			if err != nil {
-				t.Fatalf("ByID(imported) error = %v", err)
-			}
-			if len([]rune(got.Description)) != len([]rune(desc)) {
-				t.Fatalf("round-tripped description = %d runes, want %d", len([]rune(got.Description)), len([]rune(desc)))
-			}
-		})
-	}
-}

@@ -110,29 +110,3 @@ func TestDeckNameLimitCreateAndRename(t *testing.T) {
 // TestDeckNameLimitExportImportRoundTrip asserts the symmetry of the shared bounds: a 200-character deck name
 // can be exported as a deck package as-is and then accepted by the import side (another new account) — what F27b fixed was 'the export side can produce it
 // but the import side refuses it'. Names are counted by character, so the round trip returns them character for character.
-func TestDeckNameLimitExportImportRoundTrip(t *testing.T) {
-	for driver, db := range packageDatabases(t) {
-		t.Run(driver, func(t *testing.T) {
-			users := seedUsers(t, db, "deck_name_export", "deck_name_import")
-			exporter, importer := users[0], users[1]
-			ctx := context.Background()
-			deckID := seedPresetDeck(t, db, exporter)
-
-			name := strings.Repeat("x", 200)
-			d, err := NewDeckStore(db).ByID(ctx, deckID)
-			if err != nil {
-				t.Fatalf("ByID() error = %v", err)
-			}
-			d.Name = name
-			if err := NewDeckStore(db).Update(ctx, exporter, d.ID, &d.Name, nil); err != nil {
-				t.Fatalf("rename to 200 chars: %v", err)
-			}
-
-			raw := exportZip(t, db, exporter, deckID, PackageOptions{})
-			report := importPackageOK(t, db, importer, raw, PackageImportOptions{})
-			if got := deckNameOf(t, db, report.DeckID); got != name {
-				t.Fatalf("round-tripped name = %d runes, want the 200-rune name unchanged", len([]rune(got)))
-			}
-		})
-	}
-}

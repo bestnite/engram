@@ -1,7 +1,6 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -458,62 +457,6 @@ func mustNoteIDs(t *testing.T, db *gorm.DB, deckID uint64) []uint64 {
 // TestImportPackageRejectsUnreadableMediaRef covers privilege injection at the package import entry point:
 // A's package references A's media without carrying the bytes, so when B (who cannot read that media) imports it the whole package is rejected (stable code),
 // and after the transaction rolls back B owns no deck / note / mapping rows.
-func TestImportPackageRejectsUnreadableMediaRef(t *testing.T) {
-	for driver, db := range testDatabases(t) {
-		t.Run(driver, func(t *testing.T) {
-			if err := db.AutoMigrate(AllModels()...); err != nil {
-				t.Fatalf("AutoMigrate() error = %v", err)
-			}
-			ctx := context.Background()
-			users := seedUsers(t, db, "pkgforbid_owner", "pkgforbid_importer")
-			owner, importer := users[0], users[1]
-			srcDeck := seedPresetDeck(t, db, owner)
-			sha := saveMedia(t, db, t.TempDir(), owner, mediaBytes("pkgforbid"))
-			// the source note references the media in in-package form; export with media disabled → the package carries no bytes.
-			srcNote := Note{DeckID: srcDeck, NoteTypeID: Ptr(stockNoteTypeID(t, db, srcDeck, "basic")), CreatedBy: Ptr(owner)}
-			if _, err := NewNoteStore(db).Save(ctx, &srcNote, map[string]any{
-				"front": "q?", "back": `<img src="` + sha + `.png">`,
-			}); err != nil {
-				t.Fatalf("create source note: %v", err)
-			}
-			raw := exportZip(t, db, owner, srcDeck, PackageOptions{IncludeMedia: false})
-
-			_, err := NewDeckStore(db).ImportPackage(ctx, importer, bytes.NewReader(raw), PackageImportOptions{
-				SkipMissingMedia: true,
-				MediaRoot:        t.TempDir(),
-			})
-			var pe *PackageError
-			if !errors.As(err, &pe) || pe.Code != CodePackageMediaForbidden {
-				t.Fatalf("import error = %v, want PackageError code %s", err, CodePackageMediaForbidden)
-			}
-			if !entryContains(pe.Entries, sha) {
-				t.Errorf("rejection entries = %v, want one naming media/%s", pe.Entries, sha)
-			}
-			// the rollback is complete: the importer owns no deck, no note, no mapping.
-			var deckCount, noteCount, mappingCount int64
-			if err := db.Model(&Deck{}).Where("owner_user_id = ?", importer).Count(&deckCount).Error; err != nil {
-				t.Fatalf("count importer decks: %v", err)
-			}
-			if err := db.Model(&Note{}).Where("created_by = ?", importer).Count(&noteCount).Error; err != nil {
-				t.Fatalf("count importer notes: %v", err)
-			}
-			if err := db.Model(&MediaNote{}).
-				Joins("JOIN notes ON notes.id = media_notes.note_id").
-				Where("media_notes.media_sha = ? AND notes.created_by = ?", sha, importer).
-				Count(&mappingCount).Error; err != nil {
-				t.Fatalf("count media_notes: %v", err)
-			}
-			if deckCount != 0 || noteCount != 0 || mappingCount != 0 {
-				t.Errorf("rejected import left decks=%d notes=%d mapping=%d, want 0/0/0",
-					deckCount, noteCount, mappingCount)
-			}
-		})
-	}
-}
-
-// TestMediaReadableByGrantNotByStranger pins the two remaining allow conditions at the read boundary:
-// a grantee of the deck reads media referenced by a note in it, while a user with neither an uploader
-// record nor a grant gets no access. The share-session branch that used to grant the second case is gone.
 func TestMediaReadableByGrantNotByStranger(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
