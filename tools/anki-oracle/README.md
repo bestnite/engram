@@ -54,20 +54,28 @@ With no arguments or with `--memory-replay`, the generator writes the memory-rep
 golden, and boundary-control packages and golden. Pass `--memory-rules` to regenerate only the
 six replay-rule packages and their golden. Pass `--all` to regenerate the full set including those
 rules (except learning-due). From the
-repository root, the determinism check for the other fixtures is:
+repository root, the determinism check for the other fixtures is below. It regenerates fixtures
+in place; preserve any fixture changes you need before running it.
 
 ```bash
-find internal/notetype/testdata/anki -maxdepth 1 -type f ! -name 'memory-replay*.anki2.apkg' ! -name 'memory-replay-controls.golden.json' ! -name 'memory-replay-environments.golden.json' ! -name 'memory-replay-rules.golden.json' -print0 | sort -z | xargs -0 sha256sum > /tmp/opencode/anki-oracle.sha
-(cd tools/anki-oracle && .venv/bin/python generate.py --all)
-sha256sum -c /tmp/opencode/anki-oracle.sha
-git status --short internal/notetype/testdata
+(
+  set -e
+  set -o pipefail
+  checks=$(mktemp -d tools/anki-oracle/.checks.XXXXXXXX)
+  trap 'rm -rf "$checks"' EXIT
+  find internal/notetype/testdata/anki -maxdepth 1 -type f ! -name 'memory-replay*.anki2.apkg' ! -name 'memory-replay-controls.golden.json' ! -name 'memory-replay-environments.golden.json' ! -name 'memory-replay-rules.golden.json' -print0 | sort -z | xargs -0 sha256sum > "$checks/fixtures.sha"
+  (cd tools/anki-oracle && .venv/bin/python generate.py --all)
+  sha256sum -c "$checks/fixtures.sha"
+  git status --short internal/notetype/testdata
+)
 ```
 
-The checksum command must report every listed file as `OK`. Memory-replay goldens record the
-actual measurement time and timing configuration, so they must be compared semantically rather
-than byte-for-byte. All memory-replay packages contain runtime-generated IDs and are excluded from the
-byte-determinism check; validate their contents and imported behaviour semantically instead.
-The status command may report these packages even when their semantics are unchanged.
+The checksum command must report every listed file as `OK`, including the original
+`memory-replay.golden.json`. The check excludes all memory-replay packages and the controls,
+environments and rules goldens. These timing goldens record the actual measurement time and timing
+configuration, and the packages contain runtime-generated IDs. Compare the excluded files' contents
+and imported behaviour semantically instead of byte-for-byte.
+The status command may report these files even when their semantics are unchanged.
 
 The generator leaves `learning-due.anki21.apkg` and `learning-due.golden.json` untouched by default.
 Pass `--rebuild-learning-due` to regenerate the pair together when its rule changes. The golden
@@ -274,12 +282,16 @@ invalid factors outside 100..1100.
 
 The review-start controls isolate SM-2 initialization, while learning-start controls exercise
 replay from an empty state. Fixed absolute timestamps are measured under multiple importing
-timezones and rollovers to distinguish configuration effects from elapsed-time effects. Each
+timezones and rollovers to investigate configuration effects separately from elapsed-time effects. Each
 timezone runs in a separate process; the generator sets and reads scheduling preferences and
 prints the rollover and scheduler timing for the importing collection. In this investigation,
 612 independent measurements covered three timezones and rollover hours 0, 4 and 6; the
 re-runnable committed goldens contain 43 timing controls and six rule controls. Timing metadata records the actual
-run, so compare that metadata separately from the computed values across runs.
+run, so compare that metadata separately from the computed values across runs. Environments 0–5
+all have stability 30 and difficulty 6.08253288269043; their S/D values do not distinguish the
+timezones or rollovers. The Go controls assert the recorded offset and `next_day_at` for each
+configuration as well as S/D. The New York winter and summer controls additionally constrain
+replay under the measured current offset despite different historical offsets.
 
 At 03:59:59→04:00:00.999, review-start S/D is `30.0 / 6.08253288269043` and learning-start
 S/D is `2.30649995803833 / 2.1112141609191895`. At 03:59:59→04:00:01.000, review-start
@@ -408,9 +420,16 @@ golden can be compared byte for byte and a renderer can be given the same ids.
 
 ## Determinism
 
+The default invocation generates memory-replay fixtures with runtime IDs and timing metadata;
+two default runs are not required to produce identical bytes. Non-memory-replay fixtures use
+the byte-level checksum check in "Regeneration". Memory-replay fixtures are compared semantically:
+compare golden memory values and the rules their histories exercise, not package bytes or runtime
+metadata. The original `memory-replay.golden.json` is a stable numeric-only exception and remains
+in the checksum check; the controls, environments and rules goldens contain runtime metadata.
+
 Anki assigns note, card, note type and deck ids from the wall clock and stamps modification times
-on every write, so a package built twice is not byte-identical by itself. For the regenerated
-fixtures other than `learning-due`, the generator removes sources of variation as follows:
+on every write, so a package built twice is not byte-identical by itself. For the byte-checked
+regenerated fixtures other than `learning-due`, the generator removes sources of variation as follows:
 
 1. Note ids, card ids, note type ids and deck ids are rewritten to fixed sequential values, and
    `col.crt`, `col.mod`, `col.scm`, `notes.mod`, `cards.mod`, `cards.due`, `usn` are replaced with
@@ -431,7 +450,7 @@ fixtures other than `learning-due`, the generator removes sources of variation a
    (1980-01-01 00:00:00).
 8. The golden JSON is written with sorted keys, a fixed indent and a trailing newline.
 
-Two default runs on one machine are byte-identical, which is the check in "Regeneration". Regenerating on
+The included fixtures are checked for byte identity in "Regeneration". Regenerating on
 a different machine, or after `uv` resolves new versions of the pinned dependency's own
 dependencies, can change the bytes; the check is about the same environment.
 

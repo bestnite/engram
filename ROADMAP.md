@@ -10,19 +10,6 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 
 ## 1. Task backlog
 
-### M18 — Anki replay review follow-ups
-
-- [ ] **M18-112 Make oracle reproduction instructions portable and precise** — Update
-  `tools/anki-oracle/README.md` to use a repository-local checksum path. Explain that
-  environment-0 through environment-5 all have stability 30 and do not distinguish timezone
-  through S/D; measured `next_day_at` assertions and New York winter/summer controls constrain
-  configuration behaviour.
-  *Acceptance:* the documented checksum command runs from the repository root without a
-  pre-existing external temporary directory; existing fixtures stay unchanged; the README
-  describes the actual assertions without claiming S/D distinguishes environments 0–5.
-  *Evidence:* checksum verification output, fixture/assertion inspection and the reviewed diff,
-  recorded when closing this entry.
-
 ### M10 — Future work (not part of the current release)
 
 These tasks are recorded so the design keeps room for them. They are not part of the current
@@ -134,6 +121,7 @@ bluemonday-sanitised `internal/render` are gone.
 
 | Goal | What shipped | Breaking change |
 |---|---|---|
+| Reproducible oracle checks and precise evidence scope (M18-112) | Source: oracle follow-up review found that the default memory-replay generation cannot promise byte identity. The README distinguishes byte checks for non-memory-replay fixtures from semantic memory-replay comparisons, retaining the stable numeric-only original memory golden in the checksum set. Checks use repository-local temporary files. Environment 0–5 S/D do not distinguish configuration; offset and next_day_at assertions plus New York winter/summer controls supply that evidence. | No — documentation only |
 | Precise Anki import approximation warning (M18-110) | Incomplete selected history follows the measured Anki initialization and no longer triggers the not-aligned warning. Only cards without usable carried memory and without selected history count toward the warning, whose text identifies that fallback. | No — log counting and text change only |
 | Undo after imported cram grades (M18-108) | Written unselected grades inherit the preceding selected memory; carried final memory stays on the last selected grade and propagates through consecutive cram tails. SQLite and PostgreSQL regression cases import, grade and undo with carried and replay-derived memory. Missing-memory undo still refuses before writes. | No — imported row memory changes; no schema or payload changes |
 | Anki-compatible content model (M17 phases 1–3) | Note types as data with eight registered answer controls; the `{note_type, fields}` REST/MCP note payload, the note type endpoints, the sandboxed card and edit frames, `/fm/` media tokens; migrations 0012–0014; `.edeck` format 2 and the regenerated bundled decks, both removed with the format by `M18-5`. Details above. | Yes — HTTP API, MCP, database schema, file format |
