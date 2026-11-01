@@ -834,59 +834,228 @@ func convertNoteRubyShortcodes(tx *gorm.DB) error {
 }
 
 // expandRubyShortcodes turns every {{ruby:base|reading}} marker that the old
-// renderer would have accepted into its ruby element.
+// renderer would have accepted into its ruby element. It rewrites text nodes
+// only: a marker inside an attribute and a marker inside a code block or code
+// span are literal content, so the tag scanner leaves them alone.
 //
-// The field already holds HTML from migration 0012, so the base is written as
-// it stands: Markdown inside it was rendered, and a cloze span in the base is
-// markup, not text. Only the reading is escaped, as the old renderer escaped
-// it. A marker that fails the old rule is written back unchanged, and scanning
-// resumes after its first closing braces, which is exactly where the old parser
-// stopped; the source therefore stays byte-for-byte as it was.
+// The field already holds HTML from migration 0012, so the base and the reading
+// are written as they stand: Markdown inside them was rendered, the reading was
+// escaped once by that renderer, and a cloze marker in the base is text the
+// renderer expands later. Escaping the reading again would turn every "&" from
+// the source into "&amp;amp;". A marker that fails the old rule is written back
+// unchanged.
 func expandRubyShortcodes(html string) string {
 	const open = "{{ruby:"
 	var b strings.Builder
 	b.Grow(len(html))
+	literalDepth := 0
+	codeElements := map[string]bool{"code": true, "pre": true}
 	for i := 0; i < len(html); {
-		start := strings.Index(html[i:], open)
-		if start < 0 {
-			b.WriteString(html[i:])
-			break
+		if html[i] == '<' {
+			if strings.HasPrefix(html[i:], "<!--") {
+				end := strings.Index(html[i+4:], "-->")
+				if end < 0 {
+					b.WriteString(html[i:])
+					break
+				}
+				end += i + 4 + len("-->")
+				b.WriteString(html[i:end])
+				i = end
+				continue
+			}
+			end := migrationTagEnd(html, i)
+			if end < 0 {
+				b.WriteString(html[i:])
+				break
+			}
+			tag := html[i : end+1]
+			b.WriteString(tag)
+			if name, closing, ok := migrationElementName(tag); ok && codeElements[name] {
+				if closing {
+					if literalDepth > 0 {
+						literalDepth--
+					}
+				} else {
+					literalDepth++
+				}
+			}
+			i = end + 1
+			continue
 		}
-		start += i
-		b.WriteString(html[i:start])
-		end := strings.Index(html[start:], "}}")
-		if end < 0 {
-			b.WriteString(html[start:])
-			break
-		}
-		end += start
-		if element, ok := rubyElement(html[start+len(open) : end]); ok {
-			b.WriteString(element)
+		next := strings.IndexByte(html[i:], '<')
+		if next < 0 {
+			next = len(html)
 		} else {
-			b.WriteString(html[start : end+2])
+			next += i
 		}
-		i = end + 2
+		text := html[i:next]
+		if literalDepth == 0 {
+			text = expandRubyInText(text)
+		}
+		b.WriteString(text)
+		i = next
 	}
 	return b.String()
 }
 
-// rubyElement renders the body of one ruby marker, the text between its colon
-// and its closing braces. It accepts exactly what the old renderer accepted: a
-// base and a reading that are both non-empty, neither containing "=" or "|",
-// and no nested shortcode. Anything else is not a ruby annotation and stays
-// source text.
-func rubyElement(rest string) (string, bool) {
-	if strings.Contains(rest, "{{") {
-		return "", false
+// migrationTagEnd returns the index of the '>' that ends the tag starting at
+// start, ignoring a '>' inside a quoted attribute value, or -1 when the tag
+// never ends.
+func migrationTagEnd(s string, start int) int {
+	quote := byte(0)
+	for i := start + 1; i < len(s); i++ {
+		switch c := s[i]; {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '>':
+			return i
+		}
 	}
-	base, reading, found := strings.Cut(rest, "|")
+	return -1
+}
+
+// migrationElementName reports the element name of one tag and whether it is a
+// closing tag. Declarations and processing instructions have no element name.
+func migrationElementName(tag string) (name string, closing bool, ok bool) {
+	if len(tag) < 3 {
+		return "", false, false
+	}
+	i := 1
+	if tag[i] == '/' {
+		closing = true
+		i++
+	}
+	start := i
+	for i < len(tag) && (tag[i] >= 'a' && tag[i] <= 'z' || tag[i] >= 'A' && tag[i] <= 'Z' || tag[i] >= '0' && tag[i] <= '9' || tag[i] == '-') {
+		i++
+	}
+	if i == start {
+		return "", false, false
+	}
+	return strings.ToLower(tag[start:i]), closing, true
+}
+
+// expandRubyInText rewrites the ruby markers of one text node.
+func expandRubyInText(text string) string {
+	const open = "{{ruby:"
+	var b strings.Builder
+	b.Grow(len(text))
+	for i := 0; i < len(text); {
+		start := strings.Index(text[i:], open)
+		if start < 0 {
+			b.WriteString(text[i:])
+			break
+		}
+		start += i
+		b.WriteString(text[i:start])
+		body, end, found := rubyMarkerBody(text, start+len(open))
+		if !found {
+			b.WriteString(text[start:])
+			break
+		}
+		if element, ok := rubyElement(body); ok {
+			b.WriteString(element)
+		} else {
+			b.WriteString(text[start:end])
+		}
+		i = end
+	}
+	return b.String()
+}
+
+// rubyMarkerBody returns the body of one ruby marker and the offset just past
+// its closing braces. Nested {{...}} markers are counted, so a cloze marker in
+// the base does not end the ruby marker at its own closing braces.
+func rubyMarkerBody(s string, from int) (body string, end int, ok bool) {
+	depth := 0
+	for i := from; i+1 < len(s); i++ {
+		switch {
+		case s[i] == '{' && s[i+1] == '{':
+			depth++
+			i++
+		case s[i] == '}' && s[i+1] == '}':
+			if depth == 0 {
+				return s[from:i], i + 2, true
+			}
+			depth--
+			i++
+		}
+	}
+	return "", 0, false
+}
+
+// rubyElement renders the body of one ruby marker, the text between its colon
+// and its closing braces. It accepts what the old renderer accepted, with one
+// addition: a cloze marker may sit in the base, because the renderer expands it
+// into an inline span inside the ruby base. A nested marker of any other kind,
+// which the old renderer rejected, still leaves the marker as source text.
+func rubyElement(body string) (string, bool) {
+	base, reading, found := splitRubyBody(body)
 	if !found || base == "" || reading == "" {
 		return "", false
 	}
-	if strings.ContainsAny(base, "=|") || strings.ContainsAny(reading, "=|") {
+	if !validRubyBase(base) || strings.Contains(reading, "{{") || strings.ContainsAny(reading, "=|") {
 		return "", false
 	}
-	return "<ruby>" + base + "<rt>" + stdhtml.EscapeString(reading) + "</rt></ruby>", true
+	return "<ruby>" + base + "<rt>" + reading + "</rt></ruby>", true
+}
+
+// splitRubyBody cuts the body at its first top-level "|", ignoring a pipe inside
+// a nested marker.
+func splitRubyBody(body string) (base, reading string, found bool) {
+	depth := 0
+	for i := 0; i+1 < len(body); i++ {
+		switch {
+		case body[i] == '{' && body[i+1] == '{':
+			depth++
+			i++
+		case body[i] == '}' && body[i+1] == '}':
+			if depth > 0 {
+				depth--
+			}
+			i++
+		case body[i] == '|' && depth == 0:
+			return body[:i], body[i+1:], true
+		}
+	}
+	return "", "", false
+}
+
+// validRubyBase reports whether the base may be written into the ruby element:
+// it must not carry a top-level "=" or "|", and every nested marker must be a
+// balanced cloze marker.
+func validRubyBase(base string) bool {
+	for i := 0; i < len(base); {
+		if base[i] == '{' && i+1 < len(base) && base[i+1] == '{' {
+			j := i + 2
+			if j >= len(base) || (base[j] != 'c' && base[j] != 'C') {
+				return false
+			}
+			j++
+			digits := j
+			for j < len(base) && base[j] >= '0' && base[j] <= '9' {
+				j++
+			}
+			if j == digits || !strings.HasPrefix(base[j:], "::") {
+				return false
+			}
+			_, end, ok := rubyMarkerBody(base, j+2)
+			if !ok {
+				return false
+			}
+			i = end
+			continue
+		}
+		if base[i] == '=' || base[i] == '|' {
+			return false
+		}
+		i++
+	}
+	return true
 }
 
 // rubyAnnotationRE matches one ruby element produced by rubyElement.

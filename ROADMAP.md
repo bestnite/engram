@@ -330,7 +330,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   passes in `93.098s`, `go test ./internal/web/ -count=1` in `12.728s`, and
   `go test ./internal/auth/ ./internal/reminder/ ./internal/digest/ -count=1` passes.
 
-- [ ] **M19-8 The 0017 ruby migration rewrites already-converted content** — *should-fix.* The step
+- [x] **M19-8 The 0017 ruby migration rewrites already-converted content** — *should-fix.* The step
   applies a context-free string substitution to HTML that 0012 already produced
   (`internal/store/migrate_notes.go:803-805,848-880`): readings double-escape, a literal shortcode
   inside a code span is executed, and a cloze nested in a ruby annotation is cut at the first `}}` and
@@ -340,6 +340,38 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   own remedy, not just a corrected step. *Acceptance:* convert by HTML context, skip `code`/`pre`, escape
   the reading once, keep legal nesting; add a regression that runs real old Markdown through 0012 and
   then 0017.
+  *Closed by this commit (`fix(store): rewrite ruby shortcodes in their HTML context`).*
+  `expandRubyShortcodes` (`internal/store/migrate_notes.go:847`) now walks the field's HTML and rewrites
+  text nodes only. It skips a marker inside an element's tag, inside a `code` or `pre` element, and
+  inside an HTML comment, using `migrationTagEnd` (`:904`) so a quoted `>` does not end a tag early.
+  `rubyMarkerBody` (`:973`) and `splitRubyBody` (`:1009`) count `{{`/`}}` nesting, so the marker ends at
+  its own closing braces and its base/reading separator is the first top-level `|`, which lets a cloze
+  marker in the base survive. The reading is written as 0012 escaped it, with no second escape, and
+  `validRubyBase` (`:1031`) accepts nested cloze markers only, so every other nested shortcode still
+  leaves the marker literal as before.
+  `TestMigrationConvertsRubyInHtmlContext` (`internal/store/migrate_notes_test.go:1220`) seeds old
+  Markdown notes, runs the full `Sync` so 0012 renders them and 0017 rewrites the result, and asserts the
+  three reported cases: the reading is escaped once, a code span stays literal, and the cloze keeps its
+  nesting. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestMigrationConvertsRubyInHtmlContext -count=1 -v`:
+  ```
+  === RUN   TestMigrationConvertsRubyInHtmlContext
+  === RUN   TestMigrationConvertsRubyInHtmlContext/sqlite
+  === RUN   TestMigrationConvertsRubyInHtmlContext/postgres
+  --- PASS: TestMigrationConvertsRubyInHtmlContext (0.77s)
+      --- PASS: TestMigrationConvertsRubyInHtmlContext/sqlite (0.04s)
+      --- PASS: TestMigrationConvertsRubyInHtmlContext/postgres (0.66s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.779s
+  ```
+  With only `internal/store/migrate_notes.go` reverted, the same run failed with
+  `reading is escaped once: field = "<p><ruby>B<rt>a&amp;amp;b</rt></ruby></p>\n", want "<p><ruby>B<rt>a&amp;b</rt></ruby></p>\n"`,
+  `code span is skipped: field = "<p><code><ruby>B<rt>R</rt></ruby></code></p>\n", want "<p><code>{{ruby:B|R}}</code></p>\n"`
+  and `cloze in the base keeps its nesting: field = "<p>{{ruby:{{c1::漢字}}|かんじ}}</p>\n", want "<p><ruby>{{c1::漢字}}<rt>かんじ</rt></ruby></p>\n"`.
+  `go vet ./internal/store/` and `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run
+  'TestMigration|TestConvertNoteRuby|TestCheckNotesMigration|TestSync|TestApply' -count=1` pass.
+  A database already at schema version 17 keeps what the old step wrote; repairing that content is a
+  data migration over user notes, so it is not part of this fix and needs the maintainer's decision.
 
 - [x] **M19-9 A batch note update silently clears `source_url` and `extra_json`** — *should-fix.* The
   bulk import path builds a fresh note without the stored `SourceURL`/`ExtraJSON` and the store writes

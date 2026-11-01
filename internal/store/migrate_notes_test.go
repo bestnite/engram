@@ -1031,9 +1031,24 @@ func TestConvertNoteRubyShortcodes(t *testing.T) {
 			wantFront: `<ruby>漢字<rt>かんじ</rt></ruby>`,
 		},
 		{
-			name:      "reading html escaped",
-			front:     `{{ruby:B|a<b&c}}`,
+			name:      "reading escaped once",
+			front:     `{{ruby:B|a&lt;b&amp;c}}`,
 			wantFront: `<ruby>B<rt>a&lt;b&amp;c</rt></ruby>`,
+		},
+		{
+			name:      "cloze in the base keeps its nesting",
+			front:     `{{ruby:{{c1::漢字}}|かんじ}}`,
+			wantFront: `<ruby>{{c1::漢字}}<rt>かんじ</rt></ruby>`,
+		},
+		{
+			name:      "marker in a code span stays literal",
+			front:     `<p><code>{{ruby:B|R}}</code> and {{ruby:漢|かん}}</p>`,
+			wantFront: `<p><code>{{ruby:B|R}}</code> and <ruby>漢<rt>かん</rt></ruby></p>`,
+		},
+		{
+			name:      "marker in a code block stays literal",
+			front:     "<pre>{{ruby:B|R}}</pre><p>{{ruby:漢|かん}}</p>",
+			wantFront: "<pre>{{ruby:B|R}}</pre><p><ruby>漢<rt>かん</rt></ruby></p>",
 		},
 		{
 			name:      "ruby inside tts",
@@ -1191,6 +1206,79 @@ func TestConvertNoteRubyShortcodes(t *testing.T) {
 			for id, want := range after {
 				if got := readNote(id); got != want {
 					t.Errorf("second run changed note %d: %+v, want %+v", id, got, want)
+				}
+			}
+		})
+	}
+}
+
+// TestMigrationConvertsRubyInHtmlContext is migration 0017's acceptance on the
+// data it really sees: old Markdown runs through 0012 into HTML, and then 0017
+// rewrites the surviving ruby markers. The reading is escaped once, a marker in
+// a code span stays literal, and a cloze marker in the base survives with its
+// nesting so the later renderer can expand it inside the ruby element.
+func TestMigrationConvertsRubyInHtmlContext(t *testing.T) {
+	cases := []struct {
+		name      string
+		kind      string
+		field     string
+		value     string
+		wantField string
+	}{
+		{
+			name:      "reading is escaped once",
+			kind:      "basic",
+			field:     "front",
+			value:     `{{ruby:B|a&b}}`,
+			wantField: "<p><ruby>B<rt>a&amp;b</rt></ruby></p>\n",
+		},
+		{
+			name:      "code span is skipped",
+			kind:      "basic",
+			field:     "front",
+			value:     "`{{ruby:B|R}}`",
+			wantField: "<p><code>{{ruby:B|R}}</code></p>\n",
+		},
+		{
+			name:      "cloze in the base keeps its nesting",
+			kind:      "cloze",
+			field:     "text",
+			value:     `{{ruby:{{c1::漢字}}|かんじ}}`,
+			wantField: "<p><ruby>{{c1::漢字}}<rt>かんじ</rt></ruby></p>\n",
+		},
+	}
+
+	for driver, db := range migrationDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			autoMigratePreNoteTypeNotNull(t, db)
+			ctx := context.Background()
+			owner := seedUsers(t, db, "ruby_html_owner")[0]
+			deckID := seedDeck(t, db, owner)
+
+			ids := make(map[string]uint64, len(cases))
+			for _, tc := range cases {
+				note := seedOldNote(t, db, deckID, tc.kind, map[string]any{tc.field: tc.value})
+				ids[tc.name] = note.ID
+			}
+
+			if _, err := Sync(ctx, db, BuiltinMigrations); err != nil {
+				t.Fatalf("Sync() error = %v", err)
+			}
+
+			for _, tc := range cases {
+				var row struct {
+					FieldsJSON string `gorm:"column:fields_json"`
+				}
+				if err := db.Unscoped().Table("notes").Select("fields_json").
+					Where("id = ?", ids[tc.name]).Scan(&row).Error; err != nil {
+					t.Fatalf("%s: read note: %v", tc.name, err)
+				}
+				fields, err := ParseFields(row.FieldsJSON)
+				if err != nil {
+					t.Fatalf("%s: parse fields: %v", tc.name, err)
+				}
+				if got := fields[tc.field]; got != tc.wantField {
+					t.Errorf("%s: field = %q, want %q", tc.name, got, tc.wantField)
 				}
 			}
 		})
