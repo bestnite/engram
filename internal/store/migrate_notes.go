@@ -69,6 +69,12 @@ func notesMigrationReport(db *gorm.DB) (MigrationReport, error) {
 	if err != nil {
 		return report, err
 	}
+	// An early database may lack notes.public_id as well; selecting it there would fail the whole
+	// pre-flight. Probe it the way decks is probed and fall back to the numeric id below.
+	noteColumns := "id, deck_id, kind, fields_json"
+	if m.HasColumn("notes", "public_id") {
+		noteColumns = "id, public_id, deck_id, kind, fields_json"
+	}
 	var rows []struct {
 		ID         uint64
 		PublicID   string
@@ -77,18 +83,11 @@ func notesMigrationReport(db *gorm.DB) (MigrationReport, error) {
 		FieldsJSON string `gorm:"column:fields_json"`
 	}
 	if err := db.Unscoped().Table("notes").
-		Select("id, public_id, deck_id, kind, fields_json").
+		Select(noteColumns).
 		Order("id ASC").Scan(&rows).Error; err != nil {
 		return report, fmt.Errorf("check notes migration: scan notes: %w", err)
 	}
 	for _, row := range rows {
-		fields, err := ParseFields(row.FieldsJSON)
-		if err != nil {
-			// A note with unreadable fields blocks the conversion when 0012
-			// runs anyway; naming it here would repeat the decode error
-			// without the field name, so it is left to the migration.
-			continue
-		}
 		noteID := row.PublicID
 		if noteID == "" {
 			noteID = strconv.FormatUint(row.ID, 10)
@@ -96,6 +95,16 @@ func notesMigrationReport(db *gorm.DB) (MigrationReport, error) {
 		deckID := decks[row.DeckID]
 		if deckID == "" {
 			deckID = strconv.FormatUint(row.DeckID, 10)
+		}
+		fields, err := ParseFields(row.FieldsJSON)
+		if err != nil {
+			// Migration 0012 fails on this row, so calling the database clean would be a lie:
+			// report it as blocking, with the row an operator can find and the decode error.
+			report.Blocking = append(report.Blocking, MigrationIssue{
+				DeckID: deckID, NoteID: noteID, Field: "fields_json",
+				Reason: fmt.Sprintf("fields_json is unreadable: %v", err),
+			})
+			continue
 		}
 		keys := make([]string, 0, len(fields))
 		for key := range fields {

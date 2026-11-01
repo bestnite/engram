@@ -783,7 +783,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   cut-off. The neighbouring `reviewday.Start` behaviour inside the DST cut-off hour needs fixing
   together with this.
 
-- [ ] **M19-24 The upgrade preflight cannot inspect an early database and calls unconvertible data
+- [x] **M19-24 The upgrade preflight cannot inspect an early database and calls unconvertible data
   clean** — *should-fix.* The preflight probes `decks.public_id` for compatibility but still selects
   `notes.public_id` unconditionally (`internal/store/migrate_notes.go:79-90`), so a genuinely early
   database fails with a SQL error; separately, a `fields_json` decode failure is skipped with `continue`,
@@ -794,6 +794,40 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   migration can run. *Acceptance:* probe `notes` the way `decks` is probed and fall back to numeric IDs;
   a decode failure is `Blocking` or a non-zero error; regressions start from a schema without
   `public_id` in either table and from a corrupt field row.
+  *Closed by this commit (`fix(store): make the upgrade preflight read an early notes table`).*
+  `notesMigrationReport` (`internal/store/migrate_notes.go:60`) now probes `notes.public_id` with
+  `HasColumn` and selects it only when present, exactly like `deckPublicIDs`, so an early database scans
+  and reports by numeric note and deck ids. The note and deck ids are resolved before the decode, and an
+  unreadable `fields_json` now appends a `Blocking` issue with `Field: "fields_json"` and
+  `Reason: "fields_json is unreadable: <decode error>"` instead of being skipped; the same check is what
+  `0012` enforces, so the CLI no longer calls such a database clean.
+  `TestCheckNotesMigrationWithoutNotePublicID` and `TestCheckNotesMigrationReportsUnreadableFields`
+  (`internal/store/migrate_notes_test.go`) build the schema without `notes.public_id` (deck public id
+  present) and with a corrupt `fields_json` row, and assert a report that names the numeric note id and
+  blocks respectively. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestCheckNotesMigrationWithoutNotePublicID|TestCheckNotesMigrationReportsUnreadableFields' -count=1 -v`:
+  ```
+  === RUN   TestCheckNotesMigrationWithoutNotePublicID
+  === RUN   TestCheckNotesMigrationWithoutNotePublicID/sqlite
+  === RUN   TestCheckNotesMigrationWithoutNotePublicID/postgres
+  --- PASS: TestCheckNotesMigrationWithoutNotePublicID (0.06s)
+      --- PASS: TestCheckNotesMigrationWithoutNotePublicID/sqlite (0.00s)
+      --- PASS: TestCheckNotesMigrationWithoutNotePublicID/postgres (0.04s)
+  === RUN   TestCheckNotesMigrationReportsUnreadableFields
+  === RUN   TestCheckNotesMigrationReportsUnreadableFields/sqlite
+  === RUN   TestCheckNotesMigrationReportsUnreadableFields/postgres
+  --- PASS: TestCheckNotesMigrationReportsUnreadableFields (0.34s)
+      --- PASS: TestCheckNotesMigrationReportsUnreadableFields/sqlite (0.02s)
+      --- PASS: TestCheckNotesMigrationReportsUnreadableFields/postgres (0.27s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.415s
+  ```
+  With only `internal/store/migrate_notes.go` reverted, the same run failed on both drivers with
+  `CheckNotesMigration() error = check notes migration: scan notes: SQL logic error: no such column: public_id (1), want a report`
+  and `CheckNotesMigration() error = check notes migration: scan notes: ERROR: column "public_id" does not exist (SQLSTATE 42703), want a report`,
+  plus `report.Blocked() = false, want the corrupt row to block`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestCheckNotesMigration|TestMigration' -count=1`
+  passes on both drivers.
 
 - [ ] **M19-25 The unique-constraint test still passes with the business constraints dropped** —
   *should-fix.* The duplicate object is built as `dup := first; dup.ID = 0`, which keeps `PublicID`

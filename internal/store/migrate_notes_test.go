@@ -1196,3 +1196,103 @@ func TestConvertNoteRubyShortcodes(t *testing.T) {
 		})
 	}
 }
+
+// legacyNoteWithoutPublicID is the notes table shape from before notes carried a
+// public id: the pre-flight check used to select that column unconditionally and
+// fail the whole report on this schema.
+type legacyNoteWithoutPublicID struct {
+	ID         uint64 `gorm:"primaryKey"`
+	DeckID     uint64 `gorm:"column:deck_id"`
+	Kind       string `gorm:"column:kind"`
+	FieldsJSON string `gorm:"column:fields_json"`
+}
+
+func (legacyNoteWithoutPublicID) TableName() string { return "notes" }
+
+// TestCheckNotesMigrationWithoutNotePublicID covers a database older than the
+// note public id while the deck already has one: the check must report by the
+// numeric note id instead of failing on the missing column.
+func TestCheckNotesMigrationWithoutNotePublicID(t *testing.T) {
+	for driver, db := range migrationDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			if err := db.AutoMigrate(&legacyDeckWithPublicID{}, &legacyNoteWithoutPublicID{}); err != nil {
+				t.Fatalf("auto migrate pre-note-public-id schema: %v", err)
+			}
+			if db.Migrator().HasColumn("notes", "public_id") {
+				t.Fatal("notes.public_id exists, want the schema before it was added")
+			}
+			deck := legacyDeckWithPublicID{OwnerUserID: 1, Name: "Legacy deck", PublicID: NewPublicID()}
+			if err := db.Create(&deck).Error; err != nil {
+				t.Fatalf("create legacy deck: %v", err)
+			}
+			note := legacyNoteWithoutPublicID{
+				DeckID: deck.ID, Kind: "list",
+				FieldsJSON: `{"prompt":"Name them","items":["one\ntwo"]}`,
+			}
+			if err := db.Create(&note).Error; err != nil {
+				t.Fatalf("create legacy note: %v", err)
+			}
+
+			report, err := CheckNotesMigration(context.Background(), db)
+			if err != nil {
+				t.Fatalf("CheckNotesMigration() error = %v, want a report", err)
+			}
+			if len(report.Blocking) != 1 {
+				t.Fatalf("blocking issues = %d, want 1: %+v", len(report.Blocking), report.Blocking)
+			}
+			issue := report.Blocking[0]
+			if want := strconv.FormatUint(note.ID, 10); issue.NoteID != want {
+				t.Errorf("issue note id = %q, want the numeric id %q", issue.NoteID, want)
+			}
+			if want := deck.PublicID; issue.DeckID != want {
+				t.Errorf("issue deck id = %q, want the deck public id %q", issue.DeckID, want)
+			}
+		})
+	}
+}
+
+// legacyDeckWithPublicID is the decks table once it carries a public id; the note
+// probe is isolated from the deck probe so the missing column under test is the note one.
+type legacyDeckWithPublicID struct {
+	ID          uint64 `gorm:"primaryKey"`
+	OwnerUserID uint64 `gorm:"column:owner_user_id"`
+	Name        string `gorm:"column:name"`
+	PublicID    string `gorm:"column:public_id"`
+}
+
+func (legacyDeckWithPublicID) TableName() string { return "decks" }
+
+// TestCheckNotesMigrationReportsUnreadableFields covers a row whose fields_json
+// 0012 cannot decode: the pre-flight must block on it, because the migration
+// would fail on the same row.
+func TestCheckNotesMigrationReportsUnreadableFields(t *testing.T) {
+	for driver, db := range migrationDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			autoMigratePreNoteTypeNotNull(t, db)
+			ctx := context.Background()
+			owner := seedUsers(t, db, "migration_corrupt_owner")[0]
+			deckID := seedDeck(t, db, owner)
+			note := seedOldNote(t, db, deckID, "basic", map[string]any{"front": "front", "back": "back"})
+			if err := db.Exec(`UPDATE notes SET fields_json = ? WHERE id = ?`, `{"front":`, note.ID).Error; err != nil {
+				t.Fatalf("corrupt fields_json: %v", err)
+			}
+
+			report, err := CheckNotesMigration(ctx, db)
+			if err != nil {
+				t.Fatalf("CheckNotesMigration() error = %v", err)
+			}
+			if !report.Blocked() {
+				t.Fatal("report.Blocked() = false, want the corrupt row to block")
+			}
+			found := false
+			for _, issue := range report.Blocking {
+				if issue.Field == "fields_json" && issue.NoteID != "" && strings.Contains(issue.Reason, "unreadable") {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("blocking issues = %+v, want the corrupt note's fields_json", report.Blocking)
+			}
+		})
+	}
+}
