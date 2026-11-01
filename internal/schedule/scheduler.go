@@ -132,7 +132,8 @@ type Scheduler struct {
 }
 
 // NewScheduler builds a scheduler from a preset: weights come from preset.WeightsJSON (with automatic 17/19/21-dimension migration),
-// falling back to fsrs.DefaultWeights() when NULL; learning/relearning steps, target retention, maximum interval and fuzz all come from the preset.
+// falling back to fsrs.DefaultWeights() for NULL, an empty string, a whitespace-only string, or null;
+// learning/relearning steps, target retention, maximum interval and fuzz all come from the preset.
 func NewScheduler(preset *store.Preset) (*Scheduler, error) {
 	p, err := Parameters(preset)
 	if err != nil {
@@ -144,7 +145,8 @@ func NewScheduler(preset *store.Preset) (*Scheduler, error) {
 }
 
 // Parameters assembles go-fsrs parameters from a preset and is the single source of "where the scheduling parameters come from":
-// weights (automatic 17/19/21-dimension migration, default when NULL), target retention, learning/relearning steps, maximum interval and fuzz.
+// weights (automatic 17/19/21-dimension migration; defaults for NULL, an empty string, a whitespace-only string, or null),
+// target retention, learning/relearning steps, maximum interval and fuzz.
 // NewScheduler and the fit replay both go through here, so the assembly is not written twice and cannot slowly drift apart.
 func Parameters(preset *store.Preset) (fsrs.Parameters, error) {
 	if preset == nil {
@@ -152,7 +154,7 @@ func Parameters(preset *store.Preset) (fsrs.Parameters, error) {
 	}
 	weights, err := store.PresetWeights(preset.WeightsJSON)
 	if err != nil {
-		return fsrs.Parameters{}, err
+		return fsrs.Parameters{}, fmt.Errorf("schedule: preset weights: %w", err)
 	}
 	return parametersWithWeights(preset, weights)
 }

@@ -1,11 +1,22 @@
 package schedule
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"git.nite07.com/nite/engram/internal/store"
 )
+
+func TestNewSchedulerInvalidWeights(t *testing.T) {
+	preset := testPreset(t)
+	raw := "not json"
+	preset.WeightsJSON = &raw
+	_, err := NewScheduler(preset)
+	if err == nil || !strings.HasPrefix(err.Error(), "schedule:") {
+		t.Fatalf("NewScheduler error = %v, want schedule prefix", err)
+	}
+}
 
 // boolPtr lets tests assign an explicit value to the *bool fields of store.Preset.
 func boolPtr(b bool) *bool { return &b }

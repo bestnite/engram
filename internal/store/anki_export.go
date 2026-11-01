@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -14,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
 
 	"git.nite07.com/nite/engram/internal/anki"
@@ -607,27 +605,17 @@ func ankiDeckConfig(preset *Preset, includeWeights bool) (anki.WriteDeckConfig, 
 	return out, nil
 }
 
-// ankiWeights parses a preset's weights JSON and migrates older 17/19-value sets to the
-// 21 FSRS-6 parameters. A NULL value (the caller returns before this function), an empty
-// string, "null" and an empty array write no weights, so the exported deck falls back to
-// Anki's defaults. A value that does not decode, or a set fsrs.MigrateWeights refuses,
-// fails the export: the scheduler refuses the same value, so the deck could not be
-// studied either, and writing no weights would hide that fault from the user.
+// ankiWeights accepts exactly the values accepted by the scheduler. An empty string or
+// null, after trimming, writes no weights; the caller also omits weights for NULL.
+// Invalid weights fail export rather than hiding a preset the scheduler cannot use.
 func ankiWeights(raw string) ([]float64, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "null" {
 		return nil, nil
 	}
-	var values []float64
-	if err := json.Unmarshal([]byte(raw), &values); err != nil {
-		return nil, fmt.Errorf("decode weights: %w", err)
-	}
-	if len(values) == 0 {
-		return nil, nil
-	}
-	migrated, err := fsrs.MigrateWeights(values)
+	migrated, err := PresetWeights(&raw)
 	if err != nil {
-		return nil, fmt.Errorf("migrate weights: %w", err)
+		return nil, fmt.Errorf("export weights: %w", err)
 	}
 	out := make([]float64, len(migrated))
 	copy(out, migrated[:])

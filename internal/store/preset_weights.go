@@ -24,7 +24,10 @@ func importPresetWeights(owner uint64, weights []float64, apply bool, report *Pa
 	return &text
 }
 
-// PresetWeights decodes and migrates preset weights, using defaults for NULL, empty, or null values.
+// PresetWeights decodes and migrates preset weights, using defaults for NULL, an empty
+// string, a whitespace-only string, or null. It lives in store so progress import and
+// the scheduler share one rule: imported memory states must use the weights the scheduler
+// continues with, and schedule already depends on store.
 func PresetWeights(raw *string) (fsrs.Weights, error) {
 	if raw == nil || strings.TrimSpace(*raw) == "" {
 		return fsrs.DefaultWeights(), nil
