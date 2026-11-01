@@ -475,39 +475,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   package review rows. Evidence is the raw scoped `go test` and `go vet` output, the PostgreSQL run with
   `TEST_PG_DSN` set.
 
-- [ ] **M18-57 A learning card's package time is not its due date** — `M18-15` keeps the importer's
-  `card_states` row unless the package time is later than the row's `last_review_at`. The package time
-  is `state.LastReviewAt`, which the `M18-11` chain sets from `lrt`, then from the last kept revlog row,
-  then from the due date minus `ivl` for a review or relearning card. A learning card that has none of
-  these keeps NULL, by the `M18-11` rule. When `state.LastReviewAt` is NULL and the card has a due date,
-  the comparison computes the due date minus `ivl` a second time, in its own copy of that code. Only a
-  learning card reaches that copy. For a learning card, `ivl` is 0, so the package time becomes the
-  card's next due date. That date lies after the package's last review.
-  Reproduced on `main` on both drivers: a learning card (type 1, queue 1, `due` 1600000600, `ivl` 0,
-  `cards.data` `{"s":3,"d":5}`, no `lrt`, no revlog row). First, the importer's row with reps 42 and
-  `last_review_at` 1600000300 is replaced by the package state, with reps 9, `last_review_at` NULL and
-  `progress_applied` 1. Second, each later import of the same package again reports `progress_applied`
-  1 and raises `version`, from 1 to 2 and then to 3. A repeated import therefore invalidates the
-  `expected_version` of an open review session, which `M18-8` had removed. Two leftovers sit in the same
-  block. `equalAnkiState`, which `M18-8` added, has had no caller since `M18-15`. The `reviews` rows
-  loaded into `reviewKeys` can never match: `M18-15` skips every package row that is not later than the
-  importer's latest review, and every loaded row is at or before it. The state comparison also has no
-  comment, so the rule the maintainer chose for `M18-15` is written only in a commit message. The fix: the
-  comparison uses `state.LastReviewAt` as the chain leaves it, and the second due-minus-`ivl` block is
-  deleted. A NULL package time counts as the zero time, the way a new card already counts. It therefore
-  never replaces an existing row, and a zero time on both sides writes nothing. `equalAnkiState` is
-  deleted. The batched `reviews` query feeds only `latestReview`, and `reviewKeys` holds only the rows
-  this import appends. A comment on the comparison states the rule and its reasons. A later local review
-  wins, because it is newer progress. A later package review writes the package state. Equal times
-  write nothing, so a repeated import changes no `version`. A NULL package time counts as oldest,
-  because the package has no evidence of a later review. *Acceptance:* a table test in
-  `internal/store/anki_progress_import_test.go` imports the learning card above. With the importer's row
-  in place, the row is unchanged and `states_skipped` is 1. With no row, three imports in a row leave
-  `version` at its value after the first import, and the second and third report `progress_applied` 0
-  and `states_skipped` 1. `TestAnkiProgressLocalWins` and `TestUndoImportedReviewMemory` still pass.
-  `git grep -n equalAnkiState` is empty. Evidence is the raw scoped `go test` and `go vet` output, the
-  PostgreSQL run with `TEST_PG_DSN` set, and the grep output.
-
 - [ ] **M18-59 Stored presets the scheduler cannot use are repaired** — v0.2.0 and v0.2.1 accepted every
   positive `maximum_interval_days` on `POST` and `PATCH /api/v1/presets`, because
   `validatePresetForWrite` checked only `<= 0`. `.apkg` imports before `238ede0` copied the package's
