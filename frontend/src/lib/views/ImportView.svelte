@@ -262,7 +262,7 @@
         <!-- Validation is left entirely to the local criterion in submit: the native required would make the browser show its
              own prompt on a real submit, conflicting with the "show the language pack copy when missing" convention, so
              required is not set. -->
-        <Dropzone bind:file testId="import-file" accept=".edeck,.zip,.apkg" hint={$t('dropzone.import_hint')} />
+        <Dropzone bind:file testId="import-file" accept=".zip,.apkg" hint={$t('dropzone.import_hint')} />
       </div>
     {:else}
       <label class="block text-sm font-medium">{$t('package.import.url')}

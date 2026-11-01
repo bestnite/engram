@@ -147,7 +147,7 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(report), { status: 200 }));
 
     await expect(
-      client.importDeckPackageURL('https://example.com/deck.edeck', {
+      client.importDeckPackageURL('https://example.com/deck.apkg', {
         target: 'into_deck:7',
         dryRun: false,
         onConflict: 'fail',
@@ -166,7 +166,7 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
     expect(headers.get('Content-Type')).toBe('application/json');
     // All seven fields appear explicitly; nothing relies on server defaults.
     expect(JSON.parse(String(init?.body))).toEqual({
-      url: 'https://example.com/deck.edeck',
+      url: 'https://example.com/deck.apkg',
       target: 'into_deck:7',
       dry_run: false,
       on_conflict: 'fail',
@@ -184,7 +184,7 @@ describe('ApiClient.importDeckPackageURL — real client with intercepted fetch'
     );
     mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(reportFixture()), { status: 200 }));
 
-    await client.importDeckPackageURL('https://example.com/a.edeck', { target: 'new_deck' });
+    await client.importDeckPackageURL('https://example.com/a.apkg', { target: 'new_deck' });
 
     expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
     const [, init] = mockFetch.mock.calls[1]!;
@@ -277,7 +277,7 @@ describe('ImportView — package weights', () => {
 
     weightsBox()!.click();
     await flush();
-    setFile('import-file', new File(['x'], 'deck.edeck'));
+    setFile('import-file', new File(['x'], 'deck.apkg'));
     await flush();
     submitForm();
     await flush();
@@ -629,7 +629,7 @@ describe('ImportView — URL source', () => {
     expect(target.querySelector('[data-testid="import-file"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="import-url"]')).toBeNull();
 
-    setFile('import-file', new File(['x'], 'deck.edeck'));
+    setFile('import-file', new File(['x'], 'deck.apkg'));
     await flush();
     submitForm();
     await flush();
@@ -652,12 +652,12 @@ describe('ImportView — URL source', () => {
     expect(target.querySelector('[data-testid="import-url"]')).toBeTruthy();
     expect(target.querySelector('[data-testid="import-file"]')).toBeNull();
 
-    setInput('import-url', 'https://example.com/deck.edeck');
+    setInput('import-url', 'https://example.com/deck.apkg');
     await flush();
     submitForm();
     await flush();
 
-    expect(importUrl).toHaveBeenCalledWith('https://example.com/deck.edeck', {
+    expect(importUrl).toHaveBeenCalledWith('https://example.com/deck.apkg', {
       target: 'new_deck',
       dryRun: true,
       onConflict: 'update',
@@ -682,7 +682,7 @@ describe('ImportView — URL source', () => {
     mountView();
     await flush();
     await chooseSegment('import-source', urlLabel());
-    setInput('import-url', 'https://example.com/deck.edeck');
+    setInput('import-url', 'https://example.com/deck.apkg');
     await flush();
     submitForm();
     await flush();
@@ -712,7 +712,7 @@ describe('ImportView — URL source', () => {
     mountView();
     await flush();
     await chooseSegment('import-source', urlLabel());
-    setInput('import-url', 'http://example.com/deck.edeck');
+    setInput('import-url', 'http://example.com/deck.apkg');
     await flush();
     submitForm();
     await flush();
@@ -736,7 +736,7 @@ describe('ImportView — URL source', () => {
     mountView();
     await flush();
     await chooseSegment('import-source', urlLabel());
-    setInput('import-url', 'https://example.com/deck.edeck');
+    setInput('import-url', 'https://example.com/deck.apkg');
     await flush();
     submitForm();
     await flush();
@@ -753,7 +753,7 @@ describe('ImportView — URL source', () => {
     mountView();
     await flush();
     await chooseSegment('import-source', urlLabel());
-    setInput('import-url', 'https://example.com/deck.edeck');
+    setInput('import-url', 'https://example.com/deck.apkg');
     await flush();
 
     submitForm();
@@ -774,7 +774,7 @@ describe('ImportView — URL source', () => {
     mountView();
     await flush();
     await chooseSegment('import-source', urlLabel());
-    setInput('import-url', 'https://example.com/deck.edeck');
+    setInput('import-url', 'https://example.com/deck.apkg');
     await flush();
     submitForm();
     await flush();
@@ -792,7 +792,7 @@ describe('ImportView — URL source', () => {
     mountView();
     await flush();
     await chooseSegment('import-source', urlLabel());
-    setInput('import-url', 'https://example.com/deck.edeck');
+    setInput('import-url', 'https://example.com/deck.apkg');
     await flush();
     submitForm();
     await flush();
@@ -812,7 +812,7 @@ describe('ImportView — URL source', () => {
     mountView();
     await flush();
     await chooseSegment('import-source', urlLabel());
-    setInput('import-url', 'https://example.com/deck.edeck');
+    setInput('import-url', 'https://example.com/deck.apkg');
     await flush();
 
     submitForm();
@@ -840,7 +840,7 @@ describe('ImportView — URL source', () => {
     mountView();
     await flush();
     await chooseSegment('import-source', urlLabel());
-    setInput('import-url', 'https://example.com/deck.edeck');
+    setInput('import-url', 'https://example.com/deck.apkg');
     await flush();
     submitForm();
     await flush();
@@ -859,7 +859,7 @@ describe('ImportView — result toast', () => {
     mountView();
     await flush();
     await chooseSegment('import-source', urlLabel());
-    setInput('import-url', 'https://example.com/deck.edeck');
+    setInput('import-url', 'https://example.com/deck.apkg');
     await flush();
     submitForm();
     await flush();

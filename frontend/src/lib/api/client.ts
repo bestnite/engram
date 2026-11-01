@@ -306,6 +306,7 @@ export class ApiClient {
       throw new ApiClientError('Review history requires progress export', { status: 400, code: 'invalid_request' });
     }
     const params = new URLSearchParams();
+    params.set('format', 'apkg');
     if (options.includeProgress) params.set('include_progress', '1');
     if (options.includeMedia === false) params.set('include_media', '0');
     if (options.includeReviews) params.set('include_reviews', '1');
@@ -313,7 +314,7 @@ export class ApiClient {
     if (!params.has('include_media')) params.set('include_media', '1');
     const query = params.toString();
     const path = `/api/v1/decks/${encodeURIComponent(String(deckId))}/package${query ? `?${query}` : ''}`;
-    const headers = new Headers({ Accept: 'application/vnd.engram.edeck' });
+    const headers = new Headers({ Accept: 'application/octet-stream, application/zip' });
     let response: Response;
     try {
       response = await this.fetchFn(this.baseUrl ? `${this.baseUrl}${path}` : path, {
@@ -330,7 +331,7 @@ export class ApiClient {
     }
     const disposition = response.headers.get('Content-Disposition') || '';
     const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
-    const filename = match?.[1] ? decodeURIComponent(match[1]) : (match?.[2] || `deck-${deckId}.edeck`);
+    const filename = match?.[1] ? decodeURIComponent(match[1]) : (match?.[2] || `deck-${deckId}.apkg`);
     return { blob: await response.blob(), filename };
   }
 

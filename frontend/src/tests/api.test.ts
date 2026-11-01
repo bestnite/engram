@@ -39,25 +39,25 @@ describe('Centralized typed same-origin REST API client', () => {
 
   describe('deck package endpoints', () => {
     it('uses the existing SSR package download with filename and option switches', async () => {
-      const bytes = new Blob(['package-bytes'], { type: 'application/vnd.engram.edeck' });
-      mockFetch.mockResolvedValueOnce(new Response(bytes, { status: 200, headers: { 'Content-Disposition': 'attachment; filename="deck-8.edeck"' } }));
+      const bytes = new Blob(['package-bytes'], { type: 'application/zip' });
+      mockFetch.mockResolvedValueOnce(new Response(bytes, { status: 200, headers: { 'Content-Disposition': 'attachment; filename="deck-8.apkg"' } }));
       const result = await client.downloadDeckPackage('8 /', { includeProgress: true, includeMedia: false, includeReviews: true, includeWeights: true });
-      expect(result.filename).toBe('deck-8.edeck');
+      expect(result.filename).toBe('deck-8.apkg');
       expect(await result.blob.text()).toBe('package-bytes');
       const [url, init] = mockFetch.mock.calls[0]!;
-      expect(url).toBe('/api/v1/decks/8%20%2F/package?include_progress=1&include_media=0&include_reviews=1&include_weights=1');
+      expect(url).toBe('/api/v1/decks/8%20%2F/package?format=apkg&include_progress=1&include_media=0&include_reviews=1&include_weights=1');
       expect(init?.credentials).toBe('same-origin');
-      expect(new Headers(init?.headers).get('Accept')).toBe('application/vnd.engram.edeck');
+      expect(new Headers(init?.headers).get('Accept')).toBe('application/octet-stream, application/zip');
     });
 
     it('decodes a non-ASCII deck title from filename* (the exact header the server sends)', async () => {
-      const bytes = new Blob(['package-bytes'], { type: 'application/vnd.engram.edeck' });
+      const bytes = new Blob(['package-bytes'], { type: 'application/zip' });
       mockFetch.mockResolvedValueOnce(new Response(bytes, {
         status: 200,
-        headers: { 'Content-Disposition': "attachment; filename*=utf-8''%E6%97%A5%E8%AF%AD%20N2%20%E8%AF%8D%E6%B1%87.edeck" },
+        headers: { 'Content-Disposition': "attachment; filename*=utf-8''%E6%97%A5%E8%AF%AD%20N2%20%E8%AF%8D%E6%B1%87.apkg" },
       }));
       const result = await client.downloadDeckPackage('8');
-      expect(result.filename).toBe('日语 N2 词汇.edeck');
+      expect(result.filename).toBe('日语 N2 词汇.apkg');
     });
 
     it('rejects review history without progress before making a request', async () => {
@@ -69,7 +69,7 @@ describe('Centralized typed same-origin REST API client', () => {
       client.setCsrfToken('package-csrf');
       const report = { target: 'new_deck', dry_run: true, notes_created: 1, notes_updated: 0, notes_skipped: 0, cards_created: 1, media_new: 0, media_missing: 0, progress_applied: 0, progress_skipped: 0, progress_discarded: false, weights_applied: false, weights_discarded: false, errors: [] };
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(report), { status: 200 }));
-      const file = new File(['archive'], 'backup.edeck');
+      const file = new File(['archive'], 'backup.apkg');
       await expect(client.importDeckPackage(file, { target: 'new_deck', dryRun: true, onConflict: 'skip', skipMissingMedia: true, applyWeights: true }))
         .resolves.toEqual(report);
       const [url, init] = mockFetch.mock.calls[0]!;
@@ -81,7 +81,7 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(headers.has('Content-Type')).toBe(false);
       const form = init?.body as FormData;
       expect(form.get('file')).toBeInstanceOf(File);
-      expect((form.get('file') as File).name).toBe('backup.edeck');
+      expect((form.get('file') as File).name).toBe('backup.apkg');
       expect(Object.fromEntries(form.entries())).toMatchObject({ target: 'new_deck', dry_run: '1', on_conflict: 'skip', skip_missing_media: '1', apply_weights: '1' });
     });
 
@@ -94,7 +94,7 @@ describe('Centralized typed same-origin REST API client', () => {
       mockFetch.mockResolvedValueOnce(csrfRejected());
       mockFetch.mockResolvedValueOnce(sessionOnce());
       mockFetch.mockResolvedValueOnce(csrfRejected());
-      await expect(client.importDeckPackage(new File(['x'], 'a.edeck'), { target: 'new_deck' })).rejects.toMatchObject({ status: 403, code: 'csrf_failed' });
+      await expect(client.importDeckPackage(new File(['x'], 'a.apkg'), { target: 'new_deck' })).rejects.toMatchObject({ status: 403, code: 'csrf_failed' });
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/auth/session');
       expect(new Headers(mockFetch.mock.calls[1]?.[1]?.headers).get('X-CSRF-Token')).toBe('fresh-package-csrf');
     });
