@@ -175,7 +175,8 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `uniqueOwnerName`, the archive spool and the `ImportPackage` entry. `README.md` and
   `ARCHITECTURE.md` record the single format and name what it does not carry (the note's
   `external_ref`, `extra` and `source_url`, because Anki drops `notes.data` on import), and the
-  release ledger records the breaking removals. *Acceptance:* `git grep -n edeck -- '*.go' '*.ts' '*.svelte'` is
+  release ledger records the breaking removals. This entry is split into `M18-83` to `M18-86`
+  and closes when all four have landed. *Acceptance:* `git grep -n edeck -- '*.go' '*.ts' '*.svelte'` is
   empty; export and import both go through `.apkg` only; an archive named `.zip` whose entries hold
   an Anki collection is accepted, because the file name never decides the reader; the full-module gate
   passes. Evidence is the grep output, the test output, and a captured export-then-import round trip.
@@ -258,6 +259,37 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
 
+
+
+- [ ] **M18-83 Remove `.edeck` from the store import core** — first part of the split of `M18-5`. Delete
+  `internal/store/package_document.go`; remove the `.edeck` parts of `internal/store/package.go` and the
+  `.edeck` branches of `internal/store/package_import.go` and its tests. Keep everything the `.apkg` path
+  still uses: `PackageError` and its codes, `PackageImportOptions`, `PackageImportReport`,
+  `PackageImportError`, the package limits, `MediaQuotaBytes`, `uniqueOwnerName`, the archive spool,
+  `ImportPackage` and `createPresetFromPackage`. *Acceptance:* `git grep -n edeck -- internal/store` prints
+  nothing; `go test ./internal/store/...` passes on SQLite and with `TEST_PG_DSN` set, with the `postgres`
+  subtests PASS. Evidence is the grep output and the raw scoped test output.
+
+- [ ] **M18-84 Remove `.edeck` from the transport entry points** — second part of the split of `M18-5`.
+  Remove the `export_deck` MCP tool, the JSON-document branch of the upload ticket, and the CLI's `.edeck`
+  export; `.apkg` stays the only format on every entry. *Acceptance:* `git grep -n edeck -- internal/mcp
+  internal/api cmd` prints nothing; the transport tests pass on SQLite and with `TEST_PG_DSN` set, with the
+  `postgres` subtests PASS. Evidence is the grep output and the raw scoped test output.
+
+- [ ] **M18-85 The export dialog offers only `.apkg`** — third part of the split of `M18-5`. The export
+  dialog in `frontend/src/lib/views/DeckDetailView.svelte` offers the `.apkg` package with its four
+  switches and no `.edeck` choice; user-facing text comes from the catalog and both catalogs keep identical
+  key sets. *Acceptance:* `git grep -n edeck -- '*.ts' '*.svelte'` prints nothing; component tests pass and
+  `npm --prefix frontend run build` succeeds. Evidence is the grep output, the component test output and the
+  build output.
+
+- [ ] **M18-86 Single-format documentation and the removal in the release ledger** — fourth part of the
+  split of `M18-5`. Delete `schema/deck-package.schema.json` and `schema/examples/deck-package.example.json`,
+  remove the `.edeck` section of `schema/README.md`, state the single format in `README.md` and
+  `ARCHITECTURE.md` and name what it does not carry (`external_ref`, `extra`, `source_url`, because Anki
+  drops `notes.data` on import), and record the breaking removal in the release ledger. *Acceptance:*
+  `git grep -n -i edeck -- README.md ARCHITECTURE.md schema` prints nothing apart from the ledger row that
+  records the removal, and the ledger holds that row. Evidence is the grep output and the diff.
 
 
 ---
