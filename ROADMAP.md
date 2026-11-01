@@ -257,17 +257,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   names. Evidence is the oracle's printed values and the golden.
 
 
-- [ ] **M18-82 A refused preset selection carries no code the client can match** — since `M18-42`,
-  `ValidateImportPreset` answers every preset refusal with the same `PackageError`: 400 with code
-  `invalid_request` and the English message "invalid preset selection". The import page therefore
-  cannot tell a preset refusal from any other malformed request without matching that English string,
-  and it does match it (`frontend/src/lib/views/ImportView.svelte`). Found while working on `M18-6`.
-  The fix: the refusal carries a stable code of its own (for example `preset_selection_invalid`), the
-  transports keep answering 400, the page matches that code instead of the message, and the catalog
-  gains the localised text for it. *Acceptance:* a handler test shows the code on create, update and
-  the import routes, and the page's error binding no longer depends on an English message. Evidence is
-  the raw scoped `go test` output and the component test output.
-
 
 ---
 
