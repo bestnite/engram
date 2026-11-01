@@ -114,6 +114,18 @@ any entry. `M18-45` edits this file, so only the parent does it, with the mainta
 same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`, and never runs beside
 `M18-21`, which edits the same file.
 
+`M18-47` to `M18-55` fix defects that a review of the landed `M18-43`, `M18-36`, `M18-37`, `M18-10`,
+`M18-11` and `M18-12` (commits `fcda88f` to `29b2979`) found; the review found nothing to fix in
+`M18-43`. They also land before `M18-5`. `M18-47`, `M18-48`, `M18-49`, `M18-50`, `M18-51` and `M18-54`
+change `internal/store/anki_import.go`, so each runs alone like the entries above. `M18-47` and `M18-49`
+both change `tools/anki-oracle/generate.py` and the goldens under `internal/notetype/testdata/anki/`, so
+they never run at the same time. `M18-48` lands after `M18-47`, whose fixture it uses. `M18-51` waits
+for a maintainer decision and lands after `M18-49`. `M18-52` runs tests and changes no file, so it may
+run beside any entry. `M18-53` changes only `internal/store/anki_export_test.go` and may run beside any
+entry that does not touch that file. `M18-54` lands after `M18-47` to `M18-51`, which change the code it
+comments. `M18-55` edits this file, so only the parent does it, with the maintainer present, in the same
+change as `M18-22`.
+
 - [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
   half of `internal/store/package_import.go`, `internal/store/package_document.go`,
   `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
@@ -254,6 +266,200 @@ same change as `M18-35`. `M18-46` changes only `README.md`, lands after `M18-42`
   in `internal/store/package_import.go`, the flags in `cmd/engram/package.go`, the two tool inputs in
   `internal/mcp/tools.go` and the two request functions in `frontend/src/lib/api/client.ts`. Evidence
   is the `README.md` diff.
+
+- [ ] **M18-47 Learning due dates follow Anki's rule in every queue, against a committed fixture** —
+  `importAnkiProgress` in `internal/store/anki_import.go` reads the due value of a learning (type 1) or
+  relearning (type 3) card as days from collection creation only when its queue is 3, and as Unix
+  seconds in every other queue. Suspending a card (queue −1) or burying it (queue −2 or −3) changes
+  only its queue, so a suspended or buried interday learning card keeps a day number in `due`. When
+  Anki restores a learning or relearning card's queue it decides by the value, not by the old queue:
+  above 1 000 000 000 the value is a timestamp, otherwise a day number (Anki's
+  `restore_queue_from_type`; the fixture below confirms it). Reproduced on `main` with the stock
+  fixture, `crt` 1500000000 and `cards.data` `{"s":4.5,"d":6.2}`: type 1 queue −1 due 3, type 1
+  queue −2 due 3, type 3 queue −3 due 3, and type 1 queue 2 with `odid` 1 and `odue` 3 were each
+  stored with `due_at` `1970-01-01T00:00:03Z`; type 1 queue −1 due 1700000000 was stored correctly.
+  The evidence `M18-12` closed with is also not reproducible. `TestAnkiFilteredOraclePackage` skips
+  unless `TEST_ANKI_FILTERED_PACKAGE` names a package that is not committed. Its expected value,
+  `crt` plus 3 days, is the importer's own formula. `tools/anki-oracle/interday_probe.py` prints the
+  same formula as "expected due" instead of a date Anki reports. The probe builds no intraday (queue 1)
+  learning card in a filtered deck, although the `filtered_*_queue1` cases of `TestAnkiImportDueDates`
+  assume that `odue` holds its timestamp. The fix has three parts. First, for type 1 and type 3 the
+  importer takes `odue` when `odid` ≠ 0 and `due` otherwise, and reads that value as Unix seconds when
+  it is above 1 000 000 000 and as days from collection creation otherwise, in every queue; the code
+  comment states this rule and that Anki restores a queue by it. Second, `tools/anki-oracle/generate.py`
+  builds a fixture package with `anki==26.9.3`. It holds an intraday learning card, an interday learning
+  card and an interday relearning card, each in five copies: in its home deck, suspended, buried, in a
+  filtered deck with rescheduling on, and in a filtered deck with rescheduling off. It also holds one
+  review card in each of the two filtered decks. Anki's own scheduler and filtered-deck operations put
+  the cards in these states; the script does not write the columns by hand. The golden records, per
+  card, the package's `type`, `queue`, `due`, `odue` and `odid`, and the due date Anki reports for the
+  card through its own API after importing the package with scheduling. Third, a test that imports the
+  committed fixture on both drivers and compares every card's `due_at` with the golden replaces
+  `TestAnkiFilteredOraclePackage`. `interday_probe.py` is deleted, and its section in
+  `tools/anki-oracle/README.md` is replaced by a description of the new fixture. *Acceptance:* each of
+  the four cards reproduced above is stored with `due_at` 3 days after `crt`; the fixture test passes
+  on both drivers and runs without any `TEST_ANKI_*` variable; `TestAnkiImportDueDates` still passes,
+  and each of its `filtered_*_queue1` cases matches a layout the golden records. Evidence is the raw
+  scoped `go test` and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set, and the oracle
+  script's output.
+
+- [ ] **M18-48 A card in a filtered deck is placed in its home deck** — `planAnkiDecks` and the card
+  loop (`plan.Paths[card.DeckID]`) in `internal/store/anki_import.go` place a card by `did`. For a card
+  in a filtered deck, `did` names the filtered deck. Since `M18-12` the importer reads such a card's due
+  date from `odue`, because a filtered deck is temporary, but the card's deck still comes from `did`.
+  Reproduced on `main`: the stock fixture's card, moved to a deck named `Filtered Deck 1` (id 999) with
+  `odid` naming its home deck `Default`, is imported as a new deck named `Filtered Deck 1`. The filtered
+  deck also supplies the deck description, and `ankiTopConfig` looks up the filtered deck's
+  configuration instead of the home deck's. engram has no filtered decks. The fix: wherever the importer
+  uses a card's deck, a card with `odid` ≠ 0 uses `odid`. That covers the card counts and the shared
+  prefix in `planAnkiDecks`, the card's `deck_path`, and the deck whose configuration `ankiTopConfig`
+  reads. A deck that then holds no card takes no part, as today. The golden that `M18-47` adds also
+  records the deck Anki assigns each filtered card after import. If Anki keeps a card in the filtered
+  deck instead of its home deck, the task stops and reports that, because engram cannot represent a
+  filtered deck. *Acceptance:* a table test in `internal/store/anki_progress_import_test.go` covers four
+  packages. A package whose only card sits in a filtered deck with `odid` naming `Home` imports as a
+  deck named `Home`, and the card has no `deck_path`. A card whose home deck is `Home::Sub` and which
+  sits in a filtered deck gets `deck_path` `Sub`, in a package where another card sits in `Home`. A
+  package whose cards are all in their home decks imports as before. The preset of a new deck comes from
+  the home deck's configuration. Evidence is the raw scoped `go test` and `go vet` output.
+
+- [ ] **M18-49 The replay selects the rows Anki selects** — `deriveAnkiMemory` in
+  `internal/store/anki_import.go` replays the kept rows from an empty state, except when the first kept
+  row is a review row (revlog type 1): then it builds SM-2 from the card's `factor` and `ivl` and
+  ignores every row. A row is dropped when it lies at or before the card's last revlog type 4 row,
+  whatever its factor. The `memory-replay` golden that settled `M18-37` holds one review-start card with
+  a single review row and one reset row with factor 0, so it cannot tell these rules from Anki's on
+  longer histories. Measured on `main` with the default weights, on a review card with `ivl` 30, factor
+  2500 and no `s`/`d`, with four histories. First, the review-start histories Good, Again (+10 days),
+  Again (+11 days) and Good, Easy (+10 days), Easy (+40 days) both store stability 30 and difficulty
+  6.093. That is the same as a single Good row and as `MemoryStateFromSM2(2.5, 30, 0.9)`, so the later
+  ratings have no effect. Second, a history that begins with a relearning row (type 2), Again then Good
+  (+1 day), is replayed from an empty state as a first-ever Again and gives stability 1.887 and
+  difficulty 6.402. Third, learning Good, review Good (+3 days) and review Good (+20 days) give stability
+  63.20. Inserting a type 4 row with ease 0 and factor 2500 at +4 days drops the first two rows and
+  gives the SM-2 state 30; Anki writes a type 4 row for manual rescheduling, and the fixture shows which
+  factor it writes for Set due date and which for Forget. Fourth, inserting a type 3 row with ease 1 and
+  factor 0 at +4 days into the same history replays it as a real Again and gives stability 10.77; the
+  fixture shows which type and factor a review in a filtered deck with rescheduling off writes. The fix
+  has two parts. First, `build_memory_fixture` in `tools/anki-oracle/generate.py` adds one card per
+  history above. It also adds a card with a learning run, reviews and a second learning run with no
+  reset row between them. Anki's own operations produce the Set due date, Forget and filtered-deck rows
+  (`set_due_date`, forgetting the card, a filtered deck with rescheduling off); the script does not
+  write those rows by hand. `memory-replay.golden.json` records Anki's `compute_memory_state()` for
+  each card. Second, the Go code changes how it selects the starting state and the replayed rows until
+  every card's stored state equals its golden within 1e-4, the tolerance `TestAnkiProgressReplayStart`
+  already uses. The earlier rows' memory written since `M18-10` follows the same selection. The comment
+  on `deriveAnkiMemory` states the selection rule and why. *Acceptance:* `TestAnkiProgressReplayStart`
+  has one case per new golden card and passes on both drivers; its three existing cases still pass.
+  Evidence is the raw scoped `go test` and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set,
+  and the oracle script's output.
+
+- [ ] **M18-50 The first learning row after a reset was given to a new card** — `importAnkiProgress`
+  in `internal/store/anki_import.go` stores `state_before` 1 for a learning row (revlog type 0) when the
+  card has any earlier revlog row. Rows up to and including a reset (type 4) count as earlier rows.
+  After a reset the card is new, and since `M18-37` the replay already drops the rows up to the reset.
+  Reproduced on `main`: a learning card with the rows learning Good, review Good (+1 day), a type 4 row
+  with ease 0 and factor 0 (+200 days) and learning Again (+201 days) stores the last row with
+  `state_before` 1. The wrong value breaks undo. A review card with the rows learning Good, review Good
+  (+1 day, `ivl` 3), a type 4 reset row, learning Good and review Good (+3 days, `ivl` 7) is imported
+  with progress, and `Rollback` runs twice. The card ends in state `learning` with stability 0,
+  difficulty 0 and the due date of the pre-reset review plus 3 days. `Preview` then fails with `fsrs:
+  invalid stability: 0 (minimum 0.001 for non-New cards)`. The fix: as the importer walks the revlog in
+  order, a reset row clears its card's earlier-row mark, so the first learning row after it gets
+  `state_before` 0. The reset test is the expression the replay uses to drop rows, shared rather than
+  copied, so that `M18-49` changes both at once. *Acceptance:* a table test in
+  `internal/store/anki_progress_import_test.go` stores `state_before` 0, 2 and 0 for the three graded
+  rows of the first history above. A test in `internal/schedule` imports the second history, runs
+  `Rollback` twice and gets state `new`, after which `Preview` returns no error. Evidence is the raw
+  scoped `go test` and `go vet` output.
+
+- [ ] **M18-51 Undoing an imported review never restores an unusable memory state** — since `M18-10`,
+  an imported review row carries stability and difficulty in two cases only: the card's last kept row
+  carries the card's state, and an earlier kept row carries `HistoricalMemoryStates` when the importer
+  replayed the history. When the package carries a usable `s`/`d`, which every engram export does, or
+  when the card takes the SM-2 path, the earlier rows stay NULL. `Rollback` in
+  `internal/schedule/actions.go` takes the restored memory from the previous row, so undoing the last
+  imported row writes stability 0 and difficulty 0 on a review card, and every later preview and
+  submission fails. Reproduced on `main` with `anki.WriteArchive`. A review card with
+  `{"s":5,"d":5}` and the rows learning Good and review Good (+3 days) is imported with progress, and
+  `Rollback` runs once. The card ends in state `review` with stability 0 and difficulty 0, and
+  `Preview` fails with `fsrs: invalid stability: 0 (minimum 0.001 for non-New cards)`. The same happens
+  with no `s`/`d` and two review rows, which takes the SM-2 path. With no `s`/`d` and a history that
+  begins with a learning row, the restored stability is 2.3065 and `Preview` succeeds. Two fixes are
+  possible. (B) `Rollback` refuses with `ErrNothingToUndo`, writing nothing, when the restored state is
+  not new and the previous row carries no stability or no difficulty. (A) In addition to (B), every kept
+  row carries the memory state after that row under the `M18-49` selection: a replayed row carries the
+  replayed state, the row the replay starts from carries the starting state, and the last kept row
+  carries the card's state. This holds also when the card's own state comes from `s`/`d`. With (A), (B)
+  is left only for rows before a reset and rows of a card whose replay failed. The maintainer has decided
+  (A) with (B): the common engram round trip then restores the real state instead of refusing, and (B)
+  stays as the guard for the rows (A) cannot fill. *Acceptance:* both reproduced cases end in a state
+  that `Preview` accepts, or in a refusal that leaves `card_states`, `reviews` and `audit_log`
+  unchanged, as the chosen fix requires; a negative test shows that the refusal deletes no review and
+  writes no `review.undo` audit row. Evidence is the raw scoped `go test` and `go vet` output.
+  *Do not start until the maintainer chooses between (B) and (A) with (B).*
+
+- [ ] **M18-52 The `M18-36` tests pass on PostgreSQL, with the output recorded** — the commit that
+  closed `M18-36` (`56b787e`) contains no PostgreSQL output. It says the postgres subtests passed "in
+  the subagent run recorded at" a file under `/tmp`. That file is not in the repository: item 7 of the
+  definition of done in section 4 of `AGENTS.md` forbids citing it, and section 7 requires the evidence
+  to be output. `TestAnkiProgressCarriedMemoryValidation` in `internal/store` and
+  `TestImportedAnkiMemoryPreview` in `internal/schedule` both have a postgres branch. This task runs
+  tests and changes no file. A PostgreSQL case that fails is recorded as a new entry that names the
+  failure; it is not fixed under this ID. *Acceptance:*
+  `go test -count=1 -v -run 'TestAnkiProgressCarriedMemoryValidation|TestImportedAnkiMemoryPreview' ./internal/store/ ./internal/schedule/`
+  with `TEST_PG_DSN` set passes, and its output shows the `postgres` subtests of both tests as `PASS`,
+  none as `SKIP`. Evidence is that raw output, quoted in the closing commit.
+
+- [ ] **M18-53 The round trip compares a `duration_days` that is not NULL** — `M18-10` required
+  `TestExportAnkiPackageRoundTrip` to compare `interval_days` and `duration_days`. The landed change
+  removed `DurationDays: Ptr(24.0)` from the only review `seedAnkiExportDeck` seeds in
+  `internal/store/anki_export_test.go`. The source value and the imported value are therefore both
+  NULL, and the comparison passes whatever duration the importer computes. The fix: the seed gives the
+  card two reviews by the owner. The second review's `duration_days` equals the fractional number of
+  days between the two `reviewed_at` values. The round trip compares `interval_days` and
+  `duration_days` of both rows, the second row's `duration_days` not NULL. Every other assertion of the
+  test keeps its meaning. *Acceptance:* the test passes on both drivers; with the `duration =
+  &value` assignment in `importAnkiProgress` removed for one run, the test fails. Evidence is the raw
+  scoped `go test` and `go vet` output of both runs, the PostgreSQL one with `TEST_PG_DSN` set.
+
+- [ ] **M18-54 Comments state the imported progress rules** — the code `M18-10`, `M18-11` and `M18-36`
+  added states its rules without saying why, and `M18-11` left one comment and one error text stale. The
+  gaps are four. First, `usableAnkiMemory` in `internal/store/anki_import.go` has no doc comment. The
+  comment states each bound and its reason: go-fsrs v4 refuses a non-new card with stability below
+  0.001 or difficulty below 1, and 10 is the highest difficulty FSRS produces. Second, the last-review
+  chain in `importAnkiProgress` has no comment. The chain takes `lrt`, then the last kept revlog row,
+  then the due date minus `ivl` for a review or relearning card, and leaves a learning card NULL. The
+  comment states why each step comes in that order and why a learning card stays NULL. Third, the
+  columns of an imported review row have no comment. `interval_days` is `ivl`, a negative `ivl` being
+  seconds; `duration_days` counts days from the previous kept row; stability and difficulty come from
+  the replay. The comment states what engram's own review rows mean by each column, so the reader sees
+  why the importer fills them this way. Fourth, in `internal/anki/write.go`, the comment above the card
+  loop says that `cards.data` retains memory state, but the column now also carries `lrt`. The error
+  text `encode card %d memory state` becomes `encode card %d data`. *Acceptance:* the diff adds or
+  corrects each of the four comments and the error text; the scoped `go vet` and `go test` of
+  `internal/store` and `internal/anki` pass. Evidence is the diff and the raw scoped output.
+
+- [ ] **M18-55 The `M18-1` and `M18-2` ledger rows record what `M18-10` to `M18-12`, `M18-36` and
+  `M18-37` changed** — `M18-22` writes each ledger row from the commits whose messages name that row's
+  ID. The commits of `M18-10`, `M18-11`, `M18-12`, `M18-36` and `M18-37` name only their own IDs, so
+  the `M18-1` and `M18-2` rows would leave out changes visible through every import and export entry.
+  For `M18-1`: an `.apkg` export writes `lrt`, in seconds, into `cards.data` for every card with a last
+  review time (`M18-11`). For `M18-2`, there are five points. First, an imported review row's
+  `interval_days` is the revlog `ivl` (a negative `ivl` converted from seconds to days), where `M18-2`
+  had written `ivl` into `duration_days`. Its `duration_days` is the fractional number of days since
+  the card's previous kept row, and its stability and difficulty come from the replay (`M18-10`).
+  Second, a card's last review time comes from `lrt`, then from the last kept revlog row, then from the
+  due date minus `ivl` (`M18-11`). Third, an interday learning card's due date counts days from
+  collection creation, and a filtered-deck card's due date comes from `odue` (`M18-12`). Fourth, an
+  unusable `s`/`d` is treated as missing (`M18-36`). Fifth, the replay drops the rows up to the last
+  reset, and a history that begins with a review row takes the SM-2 state (`M18-37`). None of these is
+  breaking, because `M18-1` and `M18-2` are in no release. The rows also name each of `M18-47` to
+  `M18-51` that has landed by then. Only the parent edits this file, with the maintainer present, in
+  the same change as `M18-22`. *Acceptance:* the ledger row that names `M18-1` also names `M18-11`, and
+  the ledger row that names `M18-2` also names `M18-10`, `M18-11`, `M18-12`, `M18-36` and `M18-37`.
+  Evidence is the output of `grep -n -E 'M18-(10|11|12|36|37)\b' ROADMAP.md` limited to the ledger
+  section.
 
 ---
 
