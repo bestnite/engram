@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // The storage side of media reclamation: mark orphaned media, delete media rows orphaned past the grace period. File deletion lives in internal/media.
@@ -72,12 +73,20 @@ func clearOrphanedMedia(ctx context.Context, db *gorm.DB, shas []string) (int64,
 	return cleared, nil
 }
 
+// DeletedMedia is one media row removed by DeleteOrphanedMedia together with the uploader records removed with it.
+// They travel together so a caller whose file removal failed can put both back for the next sweep.
+type DeletedMedia struct {
+	Media
+	Uploaders []MediaUploader
+}
+
 // DeleteOrphanedMedia deletes media rows orphaned no later than before and still orphaned right now (at most limit rows),
 // together with their media_uploaders rows, returning the deleted rows (callers delete files based on RelPath).
 //
 // The delete statement checks orphanhood again: if a note referenced it between selection and deletion, that row is not deleted.
-func DeleteOrphanedMedia(ctx context.Context, db *gorm.DB, before time.Time, limit int) ([]Media, error) {
+func DeleteOrphanedMedia(ctx context.Context, db *gorm.DB, before time.Time, limit int) ([]DeletedMedia, error) {
 	var rows []Media
+	var result []DeletedMedia
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("orphaned_at IS NOT NULL AND orphaned_at <= ?", before.UTC()).
 			Where(orphanCondition).Order("sha256 ASC").Limit(limit).Find(&rows).Error; err != nil {
@@ -102,25 +111,65 @@ func DeleteOrphanedMedia(ctx context.Context, db *gorm.DB, before time.Time, lim
 		for _, sha := range kept {
 			keptSet[sha] = true
 		}
-		deleted := rows[:0]
+		deleted := make([]DeletedMedia, 0, len(rows))
 		gone := make([]string, 0, len(rows))
 		for _, m := range rows {
 			if !keptSet[m.Sha256] {
-				deleted = append(deleted, m)
+				deleted = append(deleted, DeletedMedia{Media: m})
 				gone = append(gone, m.Sha256)
 			}
 		}
-		rows = deleted
 		if len(gone) == 0 {
 			return nil
+		}
+		// the uploader rows are read before they are deleted, so a caller that has to restore a row whose file could
+		// not be removed restores its attribution too instead of silently dropping 'this user supplied these bytes'.
+		var uploaders []MediaUploader
+		if err := tx.Where("media_sha IN ?", gone).Find(&uploaders).Error; err != nil {
+			return fmt.Errorf("store: load uploaders of orphaned media: %w", err)
 		}
 		if err := tx.Where("media_sha IN ?", gone).Delete(&MediaUploader{}).Error; err != nil {
 			return fmt.Errorf("store: delete uploaders of orphaned media: %w", err)
 		}
+		bySha := make(map[string][]MediaUploader, len(uploaders))
+		for _, u := range uploaders {
+			bySha[u.MediaSha] = append(bySha[u.MediaSha], u)
+		}
+		for i := range deleted {
+			deleted[i].Uploaders = bySha[deleted[i].Sha256]
+		}
+		result = deleted
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return rows, nil
+	return result, nil
+}
+
+// RestoreDeletedMedia puts back media rows and their uploader records that DeleteOrphanedMedia removed but whose
+// files could not be removed. The orphan mark is restored with the row, so the next sweep selects it again and retries
+// the removal, instead of leaving a file that no row points at.
+func RestoreDeletedMedia(ctx context.Context, db *gorm.DB, rows []DeletedMedia) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, row := range rows {
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row.Media).Error; err != nil {
+				return fmt.Errorf("store: restore media %s: %w", row.Sha256, err)
+			}
+			if len(row.Uploaders) == 0 {
+				continue
+			}
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row.Uploaders).Error; err != nil {
+				return fmt.Errorf("store: restore uploaders of media %s: %w", row.Sha256, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }

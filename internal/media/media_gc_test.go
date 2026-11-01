@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -161,5 +164,103 @@ func TestCollectGarbageKeepsNoteTypeMedia(t *testing.T) {
 	}
 	if removed != 1 {
 		t.Fatalf("CollectGarbage removed %d after the note type was deleted, want 1", removed)
+	}
+}
+
+// TestCollectGarbageKeepsBatchAfterFailedRemoval covers a filesystem error during one removal. The sweep must attempt
+// every file of the batch, reclaim the ones it can, and keep the row and uploader record of the file it could not
+// remove, so the next sweep retries that file instead of leaking it with nothing pointing at it.
+func TestCollectGarbageKeepsBatchAfterFailedRemoval(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	uploader := uint64(7)
+	type saved struct {
+		row *store.Media
+	}
+	files := make([]saved, 0, 3)
+	for _, tag := range []string{"first", "second", "third"} {
+		body := append(pngBytes(), []byte(tag)...)
+		row, err := s.Save(ctx, bytes.NewReader(body), SaveOptions{Name: "a.png", CreatedBy: &uploader})
+		if err != nil {
+			t.Fatalf("Save(%s) error = %v", tag, err)
+		}
+		files = append(files, saved{row: row})
+	}
+	// Break the file of the row whose sha sorts first: a collector that stops at the first failure cannot have
+	// reclaimed the other two before reaching it.
+	sort.Slice(files, func(i, j int) bool { return files[i].row.Sha256 < files[j].row.Sha256 })
+	failing := files[0]
+	failPath, err := s.absPath(failing.row.RelPath)
+	if err != nil {
+		t.Fatalf("absPath: %v", err)
+	}
+	if err := os.Remove(failPath); err != nil {
+		t.Fatalf("remove file to make room for a failing path: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(failPath, "keep"), 0o755); err != nil {
+		t.Fatalf("create non-empty directory at the file path: %v", err)
+	}
+
+	const grace = time.Hour
+	t0 := time.Now().UTC()
+	if n, err := s.CollectGarbage(ctx, t0, grace); err != nil || n != 0 {
+		t.Fatalf("marking sweep = %d, %v; want 0 removed", n, err)
+	}
+
+	removed, err := s.CollectGarbage(ctx, t0.Add(grace+time.Minute), grace)
+	if err == nil || !strings.Contains(err.Error(), failing.row.Sha256) {
+		t.Fatalf("sweep error = %v, want the failed removal of %s reported", err, failing.row.Sha256)
+	}
+	if want := int64(len(files) - 1); removed != want {
+		t.Fatalf("sweep removed %d, want %d: the rest of the batch must still be reclaimed", removed, want)
+	}
+
+	for i, f := range files {
+		var rows, uploaders int64
+		if err := s.db.Model(&store.Media{}).Where("sha256 = ?", f.row.Sha256).Count(&rows).Error; err != nil {
+			t.Fatalf("count media %s: %v", f.row.Sha256, err)
+		}
+		if err := s.db.Model(&store.MediaUploader{}).Where("media_sha = ?", f.row.Sha256).Count(&uploaders).Error; err != nil {
+			t.Fatalf("count uploaders %s: %v", f.row.Sha256, err)
+		}
+		abs, _ := s.absPath(f.row.RelPath)
+		var fileGone bool
+		if _, err := os.Stat(abs); errors.Is(err, os.ErrNotExist) {
+			fileGone = true
+		}
+		if i == 0 {
+			if rows != 1 || uploaders != 1 || fileGone {
+				t.Errorf("failed removal: row=%d uploaders=%d fileGone=%v, want the row, its uploader and the file kept", rows, uploaders, fileGone)
+			}
+			var kept store.Media
+			if err := s.db.First(&kept, "sha256 = ?", f.row.Sha256).Error; err != nil {
+				t.Fatalf("reload kept media: %v", err)
+			}
+			if kept.OrphanedAt == nil || !kept.OrphanedAt.Equal(t0) {
+				t.Errorf("kept media orphaned_at = %v, want the mark %v so the next sweep selects it", kept.OrphanedAt, t0)
+			}
+			continue
+		}
+		if rows != 0 || uploaders != 0 || !fileGone {
+			t.Errorf("reclaimed media: row=%d uploaders=%d fileGone=%v, want all gone", rows, uploaders, fileGone)
+		}
+	}
+
+	// Once the path can be removed, the next sweep retries the kept row and reclaims it.
+	if err := os.RemoveAll(failPath); err != nil {
+		t.Fatalf("clear the failing path: %v", err)
+	}
+	removed, err = s.CollectGarbage(ctx, t0.Add(2*(grace+time.Minute)), grace)
+	if err != nil {
+		t.Fatalf("retry sweep error = %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("retry sweep removed %d, want 1", removed)
+	}
+	var rows, uploaders int64
+	s.db.Model(&store.Media{}).Where("sha256 = ?", failing.row.Sha256).Count(&rows)
+	s.db.Model(&store.MediaUploader{}).Where("media_sha = ?", failing.row.Sha256).Count(&uploaders)
+	if rows != 0 || uploaders != 0 {
+		t.Errorf("after the retry: row=%d uploaders=%d, want both gone", rows, uploaders)
 	}
 }

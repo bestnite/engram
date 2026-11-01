@@ -1634,7 +1634,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   (77.9 % of statements) and by reading the tests. *Acceptance:* add one archive per branch, each asserting
   `ErrUnsafeEntry` or `ErrBadArchive`.
 
-- [ ] **M19-54 Garbage collection aborts a batch after deleting the rows, leaking the rest of its files** —
+- [x] **M19-54 Garbage collection aborts a batch after deleting the rows, leaking the rest of its files** —
   *nit.* `CollectGarbage` asks `store.DeleteOrphanedMedia` for a batch of 200 and removes the files only
   afterwards (`internal/media/media.go:304-327`); one `os.Remove` that fails with anything but "not exist"
   (permissions, a read-only mount) returns immediately, and because the whole batch's rows are already
@@ -1646,6 +1646,30 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   window. *Acceptance:* attempt every file of the batch, keep the row of a file that could not be removed so
   the next sweep retries it, and add a test that makes one removal fail and expects the batch's other files
   to be gone and the failed row to survive.
+  *Closed by this commit (`fix(media): reclaim the rest of a batch after a failed file removal`).*
+  `CollectGarbage` (`internal/media/media.go:301`) now records every failed removal, restores that row and its
+  uploader records through `store.RestoreDeletedMedia` (`internal/store/media_gc.go:153`), and returns
+  `errors.Join` of the failures only after the whole batch has been attempted; the restored row keeps its
+  orphan mark, so the next sweep selects it again. `store.DeleteOrphanedMedia` (`:87`) returns
+  `[]DeletedMedia` (`:78`), which carries the uploader rows read before they are deleted, so the restore keeps
+  the attribution instead of dropping it. A batch with a failure ends the loop after that batch, because the
+  restored rows would otherwise be selected and fail again in the same run.
+  `TestCollectGarbageKeepsBatchAfterFailedRemoval` (`internal/media/media_gc_test.go:173`) makes the file of
+  the lowest sha a non-empty directory so the first removal of the batch fails, and asserts that the sweep
+  reports that sha, reclaims the other two rows and files, keeps the failed row, its uploader row and its
+  orphan mark, then reclaims it on the retry once the path is removable. Raw output of
+  `go test ./internal/media/ -run TestCollectGarbageKeepsBatchAfterFailedRemoval -count=1 -v`:
+  ```
+  === RUN   TestCollectGarbageKeepsBatchAfterFailedRemoval
+  --- PASS: TestCollectGarbageKeepsBatchAfterFailedRemoval (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/media	0.023s
+  ```
+  With the old loop restored, the same run failed with
+  `sweep removed 0, want 2: the rest of the batch must still be reclaimed`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/media/ -count=1` and
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestMediaGC|TestMediaNote|TestMediaName|TestClearOrphaned|TestMediaUploaders|TestUserMediaUsage|TestDeckDeleteReleasesNoteTypeMedia|TestPackage' -count=1`
+  pass. The re-upload check between `bySha256` and `os.Remove` is unchanged, so that window remains.
 
 - [ ] **M19-55 The review page's global key handler swallows Space and Enter on its own controls** — *should-fix.*
   `onKeydown` maps Space/Enter to reveal or submit and calls `preventDefault()` for every decision but `ignore`

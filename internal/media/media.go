@@ -289,11 +289,15 @@ func (s *Store) bySha256(ctx context.Context, sum string) (*store.Media, error) 
 const gcBatch = 200
 
 // CollectGarbage reclaims orphaned media: refresh the orphan flags first, then delete the media rows and files whose
-// orphaned time is earlier than now-grace. Returns the number of deleted media.
+// orphaned time is earlier than now-grace. Returns the number of media whose file was reclaimed.
 //
 // Files are removed after the database row deletion commits; before removing, confirm the bytes were not re-uploaded
 // (a re-upload creates a new media row at the same path), otherwise a freshly written file would be deleted.
 // A file that no longer exists is not an error.
+//
+// Every file of the batch is attempted: a removal that fails does not stop the rest of the batch. The row of a file
+// that could not be removed is put back with its orphan mark, so the next sweep retries it instead of leaving a file
+// that no row points at.
 func (s *Store) CollectGarbage(ctx context.Context, now time.Time, grace time.Duration) (int64, error) {
 	if s.db == nil {
 		return 0, nil
@@ -307,21 +311,37 @@ func (s *Store) CollectGarbage(ctx context.Context, now time.Time, grace time.Du
 		if err != nil {
 			return removed, err
 		}
+		var failed []store.DeletedMedia
+		var failures []error
 		for _, m := range rows {
 			if again, err := s.bySha256(ctx, m.Sha256); err != nil {
-				return removed, err
+				failed = append(failed, m)
+				failures = append(failures, err)
+				continue
 			} else if again != nil {
 				continue
 			}
 			abs, err := s.absPath(m.RelPath)
 			if err != nil {
-				return removed, err
+				failed = append(failed, m)
+				failures = append(failures, err)
+				continue
 			}
 			if err := os.Remove(abs); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return removed, fmt.Errorf("media: remove orphaned file %s: %w", m.Sha256, err)
+				failed = append(failed, m)
+				failures = append(failures, fmt.Errorf("media: remove orphaned file %s: %w", m.Sha256, err))
+				continue
 			}
+			removed++
 		}
-		removed += int64(len(rows))
+		// rows put back keep their old orphan mark, so continuing this loop would select and fail on them forever.
+		// Restore, report, and let the next sweep retry.
+		if err := store.RestoreDeletedMedia(ctx, s.db, failed); err != nil {
+			return removed, errors.Join(append(failures, err)...)
+		}
+		if len(failures) > 0 {
+			return removed, errors.Join(failures...)
+		}
 		if len(rows) < gcBatch {
 			return removed, nil
 		}
