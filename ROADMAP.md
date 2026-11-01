@@ -125,7 +125,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   the rules name) while the first succeeds; the export of an unreadable media name must not appear in
   the archive. Evidence is the raw test output.
 
-- [ ] **M19-3 An evicted MCP session answers with the identity of the account that created it** —
+- [x] **M19-3 An evicted MCP session answers with the identity of the account that created it** —
   *Blocker.* The first pass reported a stale identity; the rewritten review **confirmed and reproduced it,
   and it is worse than stale identity: it is a cross-account read.** After the owner record is dropped by
   the cap-eviction path, `sessionOwnerMismatch` returns false for the now-unregistered session id
@@ -133,6 +133,25 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   account and received that account's deck list with 200. *Acceptance:* a test evicts the session and shows the next tool call is refused with the
   documented code, and that a call carrying a revoked API key is refused even when the session object
   still exists. Evidence is the raw test output.
+  *Closed by `5c8a65d`.* `sessionOwner` (`internal/mcp/mcp.go:153-161`) now tells an unregistered session
+  from another owner's, and `ServeHTTP` (`internal/mcp/mcp.go:110-127`) refuses an id with no owner record
+  with 404 `session not found` before the request reaches the SDK; 404 is the code the SDK already returns
+  for a session it does not have, so the client initializes again and the response reveals nothing. A
+  registered session owned by another account is still 403 `session user mismatch`. The revoked-key case
+  was already enforced by the auth middleware on every request and is now pinned in the same test.
+  `TestMcpEvictedSessionIsRefused` (`internal/mcp/mcp_evicted_session_test.go`) ages the session to the
+  oldest slot, fills the owner table past `mcpSessionCap` to drive the real eviction, then shows the other
+  account's tool call is refused with no deck in the body and the owner is refused too; it then revokes a
+  key whose session is still registered and expects 401. Raw output of
+  `go test ./internal/mcp/ -run TestMcpEvictedSessionIsRefused -count=1 -v`:
+  ```
+  === RUN   TestMcpEvictedSessionIsRefused
+  --- PASS: TestMcpEvictedSessionIsRefused (0.05s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/mcp	0.059s
+  ```
+  The same test before the fix reproduced the report: `evicted session served another account
+  (status=200); raw={"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"decks\":[{\"id\":\"01a1985c-4164-7e30-ad97-82feb7a6984a\",\"name\":\"deck\",...`. `go test ./internal/mcp/ -count=1` passes.
 
 - [ ] **M19-4 Concurrent migration applies one step twice and drops note metadata** — *Blocker.* `Apply`
   reads the schema version once outside the migration transaction and takes no database-level lock
