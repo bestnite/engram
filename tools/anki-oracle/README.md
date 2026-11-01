@@ -55,14 +55,15 @@ golden, and boundary-control packages and golden. Pass `--all` to regenerate the
 repository root, the determinism check for the other fixtures is:
 
 ```bash
-find internal/notetype/testdata/anki -maxdepth 1 -type f ! -name 'memory-replay*.anki2.apkg' -print0 | sort -z | xargs -0 sha256sum > /tmp/opencode/anki-oracle.sha
+find internal/notetype/testdata/anki -maxdepth 1 -type f ! -name 'memory-replay*.anki2.apkg' ! -name 'memory-replay-controls.golden.json' ! -name 'memory-replay-environments.golden.json' -print0 | sort -z | xargs -0 sha256sum > /tmp/opencode/anki-oracle.sha
 (cd tools/anki-oracle && .venv/bin/python generate.py --all)
 sha256sum -c /tmp/opencode/anki-oracle.sha
 git status --short internal/notetype/testdata
 ```
 
-The checksum command must report every listed file as `OK`, including both memory-replay
-goldens. All memory-replay packages contain runtime-generated IDs and are excluded from the
+The checksum command must report every listed file as `OK`. Memory-replay goldens record the
+actual measurement time and timing configuration, so they must be compared semantically rather
+than byte-for-byte. All memory-replay packages contain runtime-generated IDs and are excluded from the
 byte-determinism check; validate their contents and imported behaviour semantically instead.
 The status command may report these packages even when their semantics are unchanged.
 
@@ -208,11 +209,11 @@ oracle result, while changing its interval or factor did. `review-lapses` produc
 The `subday` rows have Unix millisecond timestamps `1699920000000` and `1700002800000`
 (2023-11-14 00:00 and 23:00 UTC). Anki returns `7.315299987792969` and
 `2.1112141609191895`; the attempted Go replay with importing user timezone UTC and cutoff 00:00
-returned `2.3065` and `2.11121423578539`. That implementation was reverted: its UTC-midnight
-boundary does not reproduce Anki's value for these rows. The controls below measure a 04:00
+returned `2.3065` and `2.11121423578539`. That implementation was reverted: calendar-date
+truncation placed both reviews in the same bucket, unlike Anki's measured result. The controls below measure a 04:00
 local learning-day boundary in the configured Shanghai collection. The observed current collection
-`next_day_at` was `1793563200`; that value alone does not prove the historical cutoff. How the
-Go replay should handle the measured exact-04:00 ownership remains an implementation decision.
+`next_day_at` was `1793563200`; that value alone does not prove the historical cutoff. The
+Go replay uses the importing user's current UTC offset and cutoff to match the target collection.
 The comparison tolerance remains `1e-4` and has not been relaxed.
 
 The memory replay generator fixes the process timezone to `Asia/Shanghai` and sets rollover to
@@ -220,9 +221,10 @@ The memory replay generator fixes the process timezone to `Asia/Shanghai` and se
 `memory-replay-control-*.anki2.apkg` holds one control, so different cards can use the same exact
 revlog timestamp despite the revlog primary key. `memory-replay-controls.golden.json` maps each
 package to its local timestamps, Unix milliseconds, and imported `compute_memory_state()` result.
-Each control has two Good review rows, type 1, factor 2500, interval 30; the first row's last
-interval is 10 and the second's is 30. The card has type 2, queue 2, interval 30, factor 2500,
-and no stored memory state.
+The review-start controls have two Good type 1 rows, factor 2500, interval 30; their last
+intervals are 10 and 30. The learning-start millisecond controls have a Good type 0 row with
+interval 1 followed by a Good type 1 row with interval 3. Each control card has type 2, queue 2,
+interval 30, factor 2500, and no stored memory state.
 
 On the pinned oracle, the one-hour controls beginning at 02:00, 02:30, 03:00, 04:30, 05:00,
 and 23:30 have stability 30; those beginning at 03:30 and 04:00 have stability
@@ -232,10 +234,48 @@ stability 34.21629333496094; and 10 days have stability 48.76170349121094. The s
 controls measure 30 at 03:00:00→03:59:59 and
 03:59:59→04:00:00, 32.14255905151367 at 03:00:00→04:00:01,
 03:59:59→04:00:01 and 04:00:00→04:00:01, and 30 at 04:00:01→05:00:00.
-All controls measure difficulty 6.08253288269043. These results place exactly 04:00:00 on the
+The review-start controls measure difficulty 6.08253288269043. These results place exactly 04:00:00 on the
 earlier side for these histories. The proposed `floor((local_seconds - 4h) / 86400)` assigns that
 instant to the later side, and disagrees at 03:00→04:00 and 04:00→05:00. The controls do not
-establish a general rule for other timezones, daylight-saving transitions, or cutoff settings.
+establish a general rule for all timezones, daylight-saving transitions, or cutoff settings.
+
+The millisecond controls test review and learning starts at 03:59:59→04:00:00.999 and
+03:59:59→04:00:01.000: the first is same-day, the second is one day. Anki truncates each
+revlog millisecond timestamp to seconds and computes `age = max(0, (next_day_at - seconds) / 86400)`
+with integer division; delta is the previous age minus the current age. Consequently a simple
+floor of local time minus the cutoff assigns the exact boundary incorrectly. `next_day_at` comes
+from the importing collection's rollover and current UTC offset, not the source collection. The
+environment goldens record the actual timing, offset and measurement time. Separate processes
+measure Shanghai, UTC and New York configurations; New York winter and summer histories test the
+current fixed offset against historical daylight-saving offsets. The importer's user timezone and
+cutoff supply the equivalent settings in engram; an unset user cutoff defaults to 04:00.
+Replay scans backward to the last learning run or, for incomplete history, the earliest interday
+grade after a reset. Cramming rows are ignored, and manual scheduling with a nonzero factor is not
+a reset. Complete history starts empty; incomplete history uses the first selected grade's interval
+and factor for its SM-2 starting state and does not replay that grade. Anki's ignore-revlogs-before-date setting has no
+importer equivalent and is not modelled.
+
+### Memory replay measurement method
+
+The review-start controls isolate SM-2 initialization, while learning-start controls exercise
+replay from an empty state. Fixed absolute timestamps are measured under multiple importing
+timezones and rollovers to distinguish configuration effects from elapsed-time effects. Each
+timezone runs in a separate process; the generator sets and reads scheduling preferences and
+prints the rollover and scheduler timing for the importing collection. In this investigation,
+612 independent measurements covered three timezones and rollover hours 0, 4 and 6; the
+re-runnable committed goldens contain 43 control measurements. Timing metadata records the actual
+run, so compare that metadata separately from the computed values across runs.
+
+At 03:59:59→04:00:00.999, review-start S/D is `30.0 / 6.08253288269043` and learning-start
+S/D is `2.30649995803833 / 2.1112141609191895`. At 03:59:59→04:00:01.000, review-start
+S/D is `32.14255905151367 / 6.08253288269043` and learning-start S/D is
+`7.315299987792969 / 2.1112141609191895`. With New York rollover 0 and current offset −05:00,
+the 2024 winter and summer controls at 04:30→05:30 UTC both measured
+`32.14255905151367 / 6.08253288269043`, despite their differing historical local offsets.
+
+The reference implementation inspected is Anki tag `26.09.3`: `rslib/src/scheduler/fsrs/params.rs`,
+`rslib/src/scheduler/fsrs/memory_state.rs`, `rslib/src/revlog/mod.rs`,
+`rslib/src/scheduler/timing.rs`, and `rslib/src/scheduler/mod.rs`.
 
 One file per fixture group, UTF-8, keys sorted, two-space indent, one trailing newline.
 

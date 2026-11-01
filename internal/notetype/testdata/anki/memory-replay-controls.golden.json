@@ -6,12 +6,17 @@
         "2023-11-15T06:13:00+08:00",
         "2023-11-25T06:13:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527648,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-elapsed-10d.anki2.apkg",
+      "rollover": 4,
       "stability": 48.76170349121094,
       "timestamps_ms": [
         1699999980000,
         1700863980000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "elapsed-12h": {
       "difficulty": 6.08253288269043,
@@ -19,12 +24,17 @@
         "2023-11-15T06:13:00+08:00",
         "2023-11-15T18:13:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527647,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-elapsed-12h.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699999980000,
         1700043180000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "elapsed-1h": {
       "difficulty": 6.08253288269043,
@@ -32,12 +42,17 @@
         "2023-11-15T06:13:00+08:00",
         "2023-11-15T07:13:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527647,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-elapsed-1h.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699999980000,
         1700003580000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "elapsed-23h": {
       "difficulty": 6.08253288269043,
@@ -45,12 +60,17 @@
         "2023-11-15T06:13:00+08:00",
         "2023-11-16T05:13:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527647,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-elapsed-23h.anki2.apkg",
+      "rollover": 4,
       "stability": 32.14255905151367,
       "timestamps_ms": [
         1699999980000,
         1700082780000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "elapsed-24h": {
       "difficulty": 6.08253288269043,
@@ -58,12 +78,17 @@
         "2023-11-15T06:13:00+08:00",
         "2023-11-16T06:13:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527647,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-elapsed-24h.anki2.apkg",
+      "rollover": 4,
       "stability": 32.14255905151367,
       "timestamps_ms": [
         1699999980000,
         1700086380000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "elapsed-25h": {
       "difficulty": 6.08253288269043,
@@ -71,12 +96,17 @@
         "2023-11-15T06:13:00+08:00",
         "2023-11-16T07:13:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527648,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-elapsed-25h.anki2.apkg",
+      "rollover": 4,
       "stability": 32.14255905151367,
       "timestamps_ms": [
         1699999980000,
         1700089980000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "elapsed-2d": {
       "difficulty": 6.08253288269043,
@@ -84,12 +114,17 @@
         "2023-11-15T06:13:00+08:00",
         "2023-11-17T06:13:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527648,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-elapsed-2d.anki2.apkg",
+      "rollover": 4,
       "stability": 34.21629333496094,
       "timestamps_ms": [
         1699999980000,
         1700172780000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "elapsed-36h": {
       "difficulty": 6.08253288269043,
@@ -97,12 +132,17 @@
         "2023-11-15T06:13:00+08:00",
         "2023-11-16T18:13:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527648,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-elapsed-36h.anki2.apkg",
+      "rollover": 4,
       "stability": 32.14255905151367,
       "timestamps_ms": [
         1699999980000,
         1700129580000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "elapsed-6h": {
       "difficulty": 6.08253288269043,
@@ -110,12 +150,17 @@
         "2023-11-15T06:13:00+08:00",
         "2023-11-15T12:13:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527647,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-elapsed-6h.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699999980000,
         1700021580000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "hour-0200": {
       "difficulty": 6.08253288269043,
@@ -123,12 +168,17 @@
         "2023-11-15T02:00:00+08:00",
         "2023-11-15T03:00:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527646,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-hour-0200.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699984800000,
         1699988400000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "hour-0230": {
       "difficulty": 6.08253288269043,
@@ -136,12 +186,17 @@
         "2023-11-15T02:30:00+08:00",
         "2023-11-15T03:30:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527646,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-hour-0230.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699986600000,
         1699990200000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "hour-0300": {
       "difficulty": 6.08253288269043,
@@ -149,12 +204,17 @@
         "2023-11-15T03:00:00+08:00",
         "2023-11-15T04:00:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527646,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-hour-0300.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699988400000,
         1699992000000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "hour-0330": {
       "difficulty": 6.08253288269043,
@@ -162,12 +222,17 @@
         "2023-11-15T03:30:00+08:00",
         "2023-11-15T04:30:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527646,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-hour-0330.anki2.apkg",
+      "rollover": 4,
       "stability": 32.14255905151367,
       "timestamps_ms": [
         1699990200000,
         1699993800000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "hour-0400": {
       "difficulty": 6.08253288269043,
@@ -175,12 +240,17 @@
         "2023-11-15T04:00:00+08:00",
         "2023-11-15T05:00:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527646,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-hour-0400.anki2.apkg",
+      "rollover": 4,
       "stability": 32.14255905151367,
       "timestamps_ms": [
         1699992000000,
         1699995600000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "hour-0430": {
       "difficulty": 6.08253288269043,
@@ -188,12 +258,17 @@
         "2023-11-15T04:30:00+08:00",
         "2023-11-15T05:30:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527646,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-hour-0430.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699993800000,
         1699997400000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "hour-0500": {
       "difficulty": 6.08253288269043,
@@ -201,12 +276,17 @@
         "2023-11-15T05:00:00+08:00",
         "2023-11-15T06:00:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527647,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-hour-0500.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699995600000,
         1699999200000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "hour-2330": {
       "difficulty": 6.08253288269043,
@@ -214,12 +294,233 @@
         "2023-11-15T23:30:00+08:00",
         "2023-11-16T00:30:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527647,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-hour-2330.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1700062200000,
         1700065800000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-learning-0": {
+      "difficulty": 2.1112141609191895,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T03:59:59.999000+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527650,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-learning-0.anki2.apkg",
+      "rollover": 4,
+      "stability": 2.30649995803833,
+      "timestamps_ms": [
+        1699991999000,
+        1699991999999
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-learning-1": {
+      "difficulty": 2.1112141609191895,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:00+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527650,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-learning-1.anki2.apkg",
+      "rollover": 4,
+      "stability": 2.30649995803833,
+      "timestamps_ms": [
+        1699991999000,
+        1699992000000
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-learning-1000": {
+      "difficulty": 2.1112141609191895,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:00.999000+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527650,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-learning-1000.anki2.apkg",
+      "rollover": 4,
+      "stability": 2.30649995803833,
+      "timestamps_ms": [
+        1699991999000,
+        1699992000999
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-learning-1001": {
+      "difficulty": 2.1112141609191895,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:01+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527650,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-learning-1001.anki2.apkg",
+      "rollover": 4,
+      "stability": 7.315299987792969,
+      "timestamps_ms": [
+        1699991999000,
+        1699992001000
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-learning-2": {
+      "difficulty": 2.1112141609191895,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:00.001000+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527650,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-learning-2.anki2.apkg",
+      "rollover": 4,
+      "stability": 2.30649995803833,
+      "timestamps_ms": [
+        1699991999000,
+        1699992000001
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-review-0": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T03:59:59.999000+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527649,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-review-0.anki2.apkg",
+      "rollover": 4,
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699991999000,
+        1699991999999
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-review-1": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:00+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527649,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-review-1.anki2.apkg",
+      "rollover": 4,
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699991999000,
+        1699992000000
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-review-1000": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:00.999000+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527649,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-review-1000.anki2.apkg",
+      "rollover": 4,
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699991999000,
+        1699992000999
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-review-1001": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:01+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527650,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-review-1001.anki2.apkg",
+      "rollover": 4,
+      "stability": 32.14255905151367,
+      "timestamps_ms": [
+        1699991999000,
+        1699992001000
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "millis-review-2": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2023-11-15T03:59:59+08:00",
+        "2023-11-15T04:00:00.001000+08:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527649,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-millis-review-2.anki2.apkg",
+      "rollover": 4,
+      "stability": 30.0,
+      "timestamps_ms": [
+        1699991999000,
+        1699992000001
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "new-york-summer": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2024-07-15T04:30:00+00:00",
+        "2024-07-15T05:30:00+00:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527651,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-new-york-summer.anki2.apkg",
+      "rollover": 4,
+      "stability": 30.0,
+      "timestamps_ms": [
+        1721017800000,
+        1721021400000
+      ],
+      "timezone": "Asia/Shanghai"
+    },
+    "new-york-winter": {
+      "difficulty": 6.08253288269043,
+      "local": [
+        "2024-01-15T04:30:00+00:00",
+        "2024-01-15T05:30:00+00:00"
+      ],
+      "next_day_at": 1793563200,
+      "now": 1793527650,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-new-york-winter.anki2.apkg",
+      "rollover": 4,
+      "stability": 30.0,
+      "timestamps_ms": [
+        1705293000000,
+        1705296600000
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "second-030000-035959": {
       "difficulty": 6.08253288269043,
@@ -227,12 +528,17 @@
         "2023-11-15T03:00:00+08:00",
         "2023-11-15T03:59:59+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527648,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-second-030000-035959.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699988400000,
         1699991999000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "second-030000-040001": {
       "difficulty": 6.08253288269043,
@@ -240,12 +546,17 @@
         "2023-11-15T03:00:00+08:00",
         "2023-11-15T04:00:01+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527648,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-second-030000-040001.anki2.apkg",
+      "rollover": 4,
       "stability": 32.14255905151367,
       "timestamps_ms": [
         1699988400000,
         1699992001000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "second-035959-040000": {
       "difficulty": 6.08253288269043,
@@ -253,12 +564,17 @@
         "2023-11-15T03:59:59+08:00",
         "2023-11-15T04:00:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527649,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-second-035959-040000.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699991999000,
         1699992000000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "second-035959-040001": {
       "difficulty": 6.08253288269043,
@@ -266,12 +582,17 @@
         "2023-11-15T03:59:59+08:00",
         "2023-11-15T04:00:01+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527649,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-second-035959-040001.anki2.apkg",
+      "rollover": 4,
       "stability": 32.14255905151367,
       "timestamps_ms": [
         1699991999000,
         1699992001000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "second-040000-040001": {
       "difficulty": 6.08253288269043,
@@ -279,12 +600,17 @@
         "2023-11-15T04:00:00+08:00",
         "2023-11-15T04:00:01+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527648,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-second-040000-040001.anki2.apkg",
+      "rollover": 4,
       "stability": 32.14255905151367,
       "timestamps_ms": [
         1699992000000,
         1699992001000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     },
     "second-040001-050000": {
       "difficulty": 6.08253288269043,
@@ -292,12 +618,17 @@
         "2023-11-15T04:00:01+08:00",
         "2023-11-15T05:00:00+08:00"
       ],
+      "next_day_at": 1793563200,
+      "now": 1793527649,
+      "offset_seconds": 28800,
       "package": "memory-replay-control-second-040001-050000.anki2.apkg",
+      "rollover": 4,
       "stability": 30.0,
       "timestamps_ms": [
         1699992001000,
         1699995600000
-      ]
+      ],
+      "timezone": "Asia/Shanghai"
     }
   },
   "rollover": 4,

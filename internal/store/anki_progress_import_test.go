@@ -832,21 +832,38 @@ func TestAnkiProgressReplayStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	for driver, db := range packageDatabases(t) {
-		for _, tc := range []struct {
+		type replayCase struct {
 			name, key string
-			index     int
 			learning  bool
-		}{
-			{"first_learning", "reset", 1, true},
-			{"partial_review", "partial", 0, false},
-			{"reset", "reset", 1, false},
-		} {
+		}
+		cases := []replayCase{{"first_learning", "reset", true}, {"partial_review", "partial", false}}
+		for name := range golden.Cards {
+			cases = append(cases, replayCase{name, name, false})
+		}
+		for _, tc := range cases {
 			t.Run(driver+"/"+tc.name, func(t *testing.T) {
 				pkg, err := anki.ReadFile(ankiFixturePath("memory-replay.anki2.apkg"))
 				if err != nil {
 					t.Fatal(err)
 				}
-				card := pkg.Cards[tc.index]
+				guid := map[string]string{"partial": "stock-basic-one", "reset": "stock-basic-two"}[tc.key]
+				var noteID int64
+				for _, note := range pkg.Notes {
+					if (guid != "" && note.GUID == guid) || (guid == "" && len(note.Fields) > 0 && note.Fields[0] == "memory-"+tc.key) {
+						noteID = note.ID
+						break
+					}
+				}
+				var card anki.Card
+				for _, candidate := range pkg.Cards {
+					if candidate.NoteID == noteID {
+						card = candidate
+						break
+					}
+				}
+				if card.ID == 0 {
+					t.Fatalf("missing card %s", tc.key)
+				}
 				pkg.Cards = []anki.Card{card}
 				var reviews []anki.Review
 				for _, r := range pkg.Reviews {
@@ -856,6 +873,9 @@ func TestAnkiProgressReplayStart(t *testing.T) {
 				}
 				pkg.Reviews = reviews
 				user := seedUsers(t, db, "replay_start_"+driver+"_"+tc.name)[0]
+				if err := db.Model(&User{}).Where("id = ?", user).Updates(map[string]any{"timezone": "Asia/Shanghai", "day_cutoff_hour": 4}).Error; err != nil {
+					t.Fatal(err)
+				}
 				plan, report := planAnkiDecks(pkg), &PackageImportReport{}
 				if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{PresetMode: PackagePresetNew, IncludeProgress: true, Now: time.Now}, report); err != nil {
 					t.Fatal(err)
@@ -991,6 +1011,7 @@ func TestAnkiProgressLastReview(t *testing.T) {
 		}{
 			{"lrt wins", 2, 7, `{"s":4.5,"d":6.2,"lrt":1600000000}`, []anki.Review{{ID: 1600086400123, Ease: 3, Type: 1}}, Ptr(int64(1600000000000))},
 			{"kept revlog", 2, 7, `{"s":4.5,"d":6.2}`, []anki.Review{{ID: 1600000000000, Ease: 3, Type: 1}, {ID: 1600000001000, Type: 4}, {ID: 1600000002123, Ease: 3, Type: 1}, {ID: 1600000003000, Ease: 0, Type: 1}}, Ptr(int64(1600000002123))},
+			{"stored memory noninterday grade", 2, 7, `{"s":4.5,"d":6.2}`, []anki.Review{{ID: 1600000012345, Ease: 3, Type: 1, Interval: -600}}, Ptr(int64(1600000012345))},
 			{"review due minus days", 2, 7, `{"s":4.5,"d":6.2}`, nil, nil},
 			{"relearning due minus seconds", 3, -600, `{"s":4.5,"d":6.2}`, nil, Ptr(int64(1699999400000))},
 			{"learning without history", 1, -600, `{"s":4.5,"d":6.2}`, nil, nil},
@@ -1220,7 +1241,7 @@ func TestAnkiProgressReplayUsesStudyWeightsAndReviewDays(t *testing.T) {
 			}
 			params := fsrs.DefaultParam()
 			params.W = weights
-			want, err := fsrs.NewFSRS(params).MemoryState(fsrs.ReviewEntries{{Rating: fsrs.Good}, {Rating: fsrs.Easy, DeltaT: 1}}, nil)
+			want, err := fsrs.NewFSRS(params).MemoryState(fsrs.ReviewEntries{{Rating: fsrs.Good}, {Rating: fsrs.Easy, DeltaT: 0}}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1230,6 +1251,13 @@ func TestAnkiProgressReplayUsesStudyWeightsAndReviewDays(t *testing.T) {
 			}
 			if got.Stability == nil || got.Difficulty == nil || *got.Stability != want.Stability || *got.Difficulty != want.Difficulty {
 				t.Fatalf("got %+v want %+v", got, want)
+			}
+			var reviews []Review
+			if err := db.Where("user_id = ?", user).Order("reviewed_at").Find(&reviews).Error; err != nil {
+				t.Fatal(err)
+			}
+			if len(reviews) != 2 || reviews[0].ReviewDay != "2024-02-29" || reviews[1].ReviewDay != "2024-03-01" {
+				t.Fatalf("review days = %+v", reviews)
 			}
 		})
 	}

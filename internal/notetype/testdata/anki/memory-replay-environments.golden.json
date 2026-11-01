@@ -1,0 +1,93 @@
+{
+  "controls": {
+    "environment-0": {
+      "difficulty": 6.08253288269043,
+      "next_day_at": 1793548800,
+      "now": 1793527651,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-hour-0300.anki2.apkg",
+      "rollover": 0,
+      "source_rollover": 4,
+      "stability": 30.0,
+      "timezone": "Asia/Shanghai"
+    },
+    "environment-1": {
+      "difficulty": 6.08253288269043,
+      "next_day_at": 1793570400,
+      "now": 1793527651,
+      "offset_seconds": 28800,
+      "package": "memory-replay-control-hour-0300.anki2.apkg",
+      "rollover": 6,
+      "source_rollover": 4,
+      "stability": 30.0,
+      "timezone": "Asia/Shanghai"
+    },
+    "environment-2": {
+      "difficulty": 6.08253288269043,
+      "next_day_at": 1793577600,
+      "now": 1793527651,
+      "offset_seconds": 0,
+      "package": "memory-replay-control-hour-0300.anki2.apkg",
+      "rollover": 0,
+      "source_rollover": 4,
+      "stability": 30.0,
+      "timezone": "UTC"
+    },
+    "environment-3": {
+      "difficulty": 6.08253288269043,
+      "next_day_at": 1793592000,
+      "now": 1793527651,
+      "offset_seconds": 0,
+      "package": "memory-replay-control-hour-0300.anki2.apkg",
+      "rollover": 4,
+      "source_rollover": 4,
+      "stability": 30.0,
+      "timezone": "UTC"
+    },
+    "environment-4": {
+      "difficulty": 6.08253288269043,
+      "next_day_at": 1793595600,
+      "now": 1793527651,
+      "offset_seconds": -18000,
+      "package": "memory-replay-control-hour-0300.anki2.apkg",
+      "rollover": 0,
+      "source_rollover": 4,
+      "stability": 30.0,
+      "timezone": "America/New_York"
+    },
+    "environment-5": {
+      "difficulty": 6.08253288269043,
+      "next_day_at": 1793530800,
+      "now": 1793527652,
+      "offset_seconds": -18000,
+      "package": "memory-replay-control-hour-0300.anki2.apkg",
+      "rollover": 6,
+      "source_rollover": 4,
+      "stability": 30.0,
+      "timezone": "America/New_York"
+    },
+    "environment-6": {
+      "difficulty": 6.08253288269043,
+      "next_day_at": 1793595600,
+      "now": 1793527652,
+      "offset_seconds": -18000,
+      "package": "memory-replay-control-new-york-winter.anki2.apkg",
+      "rollover": 0,
+      "source_rollover": 4,
+      "stability": 32.14255905151367,
+      "timezone": "America/New_York"
+    },
+    "environment-7": {
+      "difficulty": 6.08253288269043,
+      "next_day_at": 1793595600,
+      "now": 1793527652,
+      "offset_seconds": -18000,
+      "package": "memory-replay-control-new-york-summer.anki2.apkg",
+      "rollover": 0,
+      "source_rollover": 4,
+      "stability": 32.14255905151367,
+      "timezone": "America/New_York"
+    }
+  },
+  "source": "anki==26.9.3"
+}

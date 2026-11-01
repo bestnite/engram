@@ -1,3 +1,7 @@
+// Copyright: Ankitects Pty Ltd and contributors
+// License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
+// The incomplete-history SM-2 initialization is adapted from
+// rslib/src/scheduler/fsrs/memory_state.rs at Anki 26.09.3.
 package store
 
 import (
@@ -1467,8 +1471,11 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 }
 
 // deriveAnkiMemory writes stability and difficulty into state, using the package
-// values, eligible history, or an SM-2 estimate in that order. Successful history
-// replay writes memory for each kept row; all paths write the final state for the
+// values, eligible history, or an SM-2 estimate in that order. Selection scans
+// backward to the latest learning run or the earliest interday grade after a
+// reset, ignoring cramming. Incomplete history starts from that grade's SM-2
+// interval and factor; the grade itself is not replayed. Successful history
+// replay writes memory for each selected row; all paths write the final state for the
 // last kept row when both memory values are present.
 // If HistoricalMemoryStates fails, its error is discarded: the final state remains
 // usable, but earlier rows retain NULL memory because their states are unavailable.
@@ -1476,21 +1483,45 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 // so that an invalid non-new state cannot break previews and submissions.
 // A negative cards.ivl counts seconds and is converted to days for SM-2. The SM-2
 // retention of 0.9 assumes the retention the card's SM-2 intervals aimed at.
-func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *CardState, engine *fsrs.FSRS, history fsrs.ReviewEntries, firstType int, keptIDs []int64, rowMemory map[int64]fsrs.MemoryState, approximated *int) bool {
+func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *CardState, engine *fsrs.FSRS, selected []anki.Review, history fsrs.ReviewEntries, complete bool, keptIDs []int64, rowMemory map[int64]fsrs.MemoryState, approximated *int) bool {
 	state.Stability, state.Difficulty = stability, difficulty
 	if card.Type != 0 && !usableAnkiMemory(state.Stability, state.Difficulty) {
 		var memory *fsrs.MemoryState
 		var computeErr error
-		if len(history) == 0 || firstType != 0 {
+		if len(history) == 0 || !complete {
 			*approximated++
 		}
-		if len(history) > 0 && firstType != 1 {
-			memory, computeErr = engine.MemoryState(history, nil)
+		if len(history) > 0 {
+			var start *fsrs.MemoryState
+			if !complete {
+				first := selected[0]
+				factor := float64(first.Factor) / 1000
+				if first.Factor == 0 {
+					factor = 2.5
+				}
+				// go-fsrs requires ease > 1; stability is independent of ease.
+				sm2Factor := factor
+				if sm2Factor <= 1 {
+					sm2Factor = 1.000001
+				}
+				start, computeErr = engine.MemoryStateFromSM2(sm2Factor, float64(max(first.Interval, 1)), 0.9)
+				if computeErr == nil && factor <= 1.1 {
+					start.Difficulty = (factor-0.1)*9 + 1
+				}
+				history = history[1:]
+			}
 			if computeErr == nil {
-				if historical, err := engine.HistoricalMemoryStates(history, nil); err == nil {
-					for i, id := range keptIDs {
-						rowMemory[id] = historical[i]
+				if len(history) == 0 {
+					memory = start
+					rowMemory[selected[0].ID] = *start
+				} else if historical, err := engine.HistoricalMemoryStates(history, start); err == nil {
+					memory = &historical[len(historical)-1]
+					// A non-nil starting state is included as the first historical value.
+					for i, r := range selected {
+						rowMemory[r.ID] = historical[i]
 					}
+				} else {
+					memory, computeErr = engine.MemoryState(history, start)
 				}
 			}
 		} else {
@@ -1513,7 +1544,7 @@ func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *Car
 }
 
 func isAnkiReset(r anki.Review) bool {
-	return r.Type == 4
+	return r.Type == 4 && r.Factor == 0
 }
 
 // importAnkiProgress keeps per-user state separate from shared card content and
@@ -1600,44 +1631,35 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	}
 	last := make(map[int64]int64)
 	previous := make(map[int64]int64)
+	allHistory := make(map[int64][]anki.Review)
 	histories := make(map[int64]fsrs.ReviewEntries)
+	selectedHistory := make(map[int64][]anki.Review)
+	completeHistory := make(map[int64]bool)
 	keptIDs := make(map[int64][]int64)
 	rowMemory := make(map[int64]fsrs.MemoryState)
 	rowDuration := make(map[int64]float64)
-	firstType := make(map[int64]int)
-	lastDay := make(map[int64]time.Time)
-	reset := make(map[int64]int64)
+	lastUsable := make(map[int64]int64)
 	for _, r := range pkg.Reviews {
-		if isAnkiReset(r) && r.ID > reset[r.CardID] {
-			reset[r.CardID] = r.ID
+		allHistory[r.CardID] = append(allHistory[r.CardID], r)
+		if isAnkiReset(r) {
+			delete(lastUsable, r.CardID)
+		} else if r.Type >= 0 && r.Type <= 3 && r.Ease >= 1 && r.Ease <= 4 {
+			lastUsable[r.CardID] = r.ID
 		}
-	}
-	for _, r := range pkg.Reviews {
 		if r.Type >= 0 && r.Type <= 3 && r.Ease >= 1 && r.Ease <= 4 {
 			previous[r.CardID], last[r.CardID] = last[r.CardID], r.ID
-			if r.ID <= reset[r.CardID] {
-				continue
-			}
-			if len(histories[r.CardID]) == 0 {
-				firstType[r.CardID] = r.Type
-			}
-			ids := keptIDs[r.CardID]
+		}
+	}
+	nextDay := ankiReplayNextDay(now, loc, cutoff)
+	for cid, rows := range allHistory {
+		selected, history, complete := selectAnkiReplay(rows, nextDay)
+		selectedHistory[cid], histories[cid], completeHistory[cid] = selected, history, complete
+		for _, r := range selected {
+			ids := keptIDs[cid]
 			if len(ids) > 0 {
 				rowDuration[r.ID] = float64(r.ID-ids[len(ids)-1]) / 86400000
 			}
-			keptIDs[r.CardID] = append(ids, r.ID)
-			// Replay DeltaT counts whole review days between consecutive kept rows,
-			// using the importing user's timezone and cutoff.
-			day, err := time.Parse("2006-01-02", reviewday.Day(time.UnixMilli(r.ID), loc, cutoff))
-			if err != nil {
-				return fmt.Errorf("import Anki progress: parse review day: %w", err)
-			}
-			var delta float64
-			if prev, ok := lastDay[r.CardID]; ok {
-				delta = day.Sub(prev).Hours() / 24
-			}
-			histories[r.CardID] = append(histories[r.CardID], fsrs.ReviewEntry{Rating: fsrs.Rating(r.Ease), DeltaT: delta})
-			lastDay[r.CardID] = day
+			keptIDs[cid] = append(ids, r.ID)
 		}
 	}
 	for _, card := range pkg.Cards {
@@ -1675,7 +1697,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 				return fmt.Errorf("import Anki card %d data: %w", card.ID, err)
 			}
 		}
-		if !deriveAnkiMemory(card, data.Stability, data.Difficulty, &state, engine, histories[card.ID], firstType[card.ID], keptIDs[card.ID], rowMemory, &approximated) {
+		if !deriveAnkiMemory(card, data.Stability, data.Difficulty, &state, engine, selectedHistory[card.ID], histories[card.ID], completeHistory[card.ID], keptIDs[card.ID], rowMemory, &approximated) {
 			report.StatesSkipped++
 			continue
 		}
@@ -1695,8 +1717,8 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 				at = time.UnixMilli(stamp).UTC()
 			}
 			state.LastReviewAt = &at
-		} else if ids := keptIDs[card.ID]; len(ids) > 0 {
-			at := time.UnixMilli(ids[len(ids)-1]).UTC()
+		} else if stamp := lastUsable[card.ID]; stamp != 0 {
+			at := time.UnixMilli(stamp).UTC()
 			state.LastReviewAt = &at
 		} else if (card.Type == 2 || card.Type == 3) && state.DueAt != nil {
 			interval := time.Duration(card.Interval) * 24 * time.Hour

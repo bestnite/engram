@@ -28,13 +28,14 @@ import os
 import shutil
 import sqlite3
 import struct
+import subprocess
 import sys
 import tempfile
 import time
 import zipfile
 import zlib
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -1980,13 +1981,13 @@ def build_weights_fixture(workdir: Path) -> None:
     rewrite_package(raw, OUT_DIR / "weights.anki21b.apkg", fmt="anki21b", workdir=workdir)
 
 
-def configure_memory_collection(col: Collection, label: str) -> None:
+def configure_memory_collection(col: Collection, label: str, rollover: int = 4) -> None:
     preferences = col.get_preferences()
-    preferences.scheduling.rollover = 4
+    preferences.scheduling.rollover = rollover
     preferences.scheduling.new_timezone = True
     col.set_preferences(preferences)
     actual = col.get_preferences().scheduling
-    assert actual.rollover == 4 and actual.new_timezone
+    assert actual.rollover == rollover and actual.new_timezone
     print(f"memory-replay {label} configuration: TZ={os.environ['TZ']} "
           f"rollover={actual.rollover} new_timezone={actual.new_timezone} "
           f"timing={col.sched._timing_today()}")
@@ -2147,6 +2148,14 @@ def build_memory_controls(workdir: Path) -> None:
                         ("035959-040001", (3, 59, 59), (4, 0, 1))):
         cases.append(("second-" + label, start.replace(hour=a[0], minute=a[1], second=a[2]),
                       start.replace(hour=b[0], minute=b[1], second=b[2])))
+    boundary = start.replace(hour=4)
+    for kind in ("review", "learning"):
+        for offset in (-1, 0, 1, 999, 1000):
+            cases.append((f"millis-{kind}-{offset+1}", boundary - timedelta(seconds=1),
+                          boundary + timedelta(milliseconds=offset)))
+    for season, month in (("winter", 1), ("summer", 7)):
+        first = datetime(2024, month, 15, 4, 30, tzinfo=timezone.utc)
+        cases.append((f"new-york-{season}", first, first + timedelta(hours=1)))
 
     with zipfile.ZipFile(OUT_DIR / "memory-replay.anki2.apkg") as archive:
         original = {name: archive.read(name) for name in archive.namelist()}
@@ -2163,22 +2172,30 @@ def build_memory_controls(workdir: Path) -> None:
         conn.execute("update notes set flds=? where id=?", (f"memory-control-{label}\x1f{label}", nid))
         conn.execute("update cards set type=2, queue=2, ivl=30, factor=2500, data='{}' where id=?", (cid,))
         stamps = [int(value.timestamp() * 1000) for value in (first, second)]
-        for stamp, ivl, last in ((stamps[0], 30, 10), (stamps[1], 30, 30)):
-            conn.execute("insert into revlog values (?, ?, -1, 3, ?, ?, 2500, 1000, 1)",
-                         (stamp, cid, ivl, last))
+        learning = label.startswith("millis-learning-")
+        rows = ((stamps[0], 1, 0, 0), (stamps[1], 3, 1, 1)) if learning else ((stamps[0], 30, 10, 1), (stamps[1], 30, 30, 1))
+        for stamp, ivl, last, kind in rows:
+            conn.execute("insert into revlog values (?, ?, -1, 3, ?, ?, 2500, 1000, ?)",
+                         (stamp, cid, ivl, last, kind))
         conn.commit()
         conn.execute("vacuum")
         conn.close()
         source = Collection(str(db_path))
+        exported = workdir / f"control-{label}-export.apkg"
         try:
             configure_memory_collection(source, f"control-{label} source")
+            source.export_anki_package(out_path=str(exported), options=ExportAnkiPackageOptions(
+                with_scheduling=True, with_deck_configs=True, with_media=False, legacy=True),
+                limit=ExportLimit())
         finally:
             source.close()
+        with zipfile.ZipFile(exported) as archive:
+            legacy_db = archive.read("collection.anki21")
         package = OUT_DIR / f"memory-replay-control-{label}.anki2.apkg"
         with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_STORED) as archive:
             for name, contents in original.items():
                 info = zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0))
-                archive.writestr(info, db_path.read_bytes() if name == "collection.anki2" else contents)
+                archive.writestr(info, legacy_db if name == "collection.anki2" else contents)
         col = Collection(str(workdir / f"control-import-{label}.anki2"))
         try:
             configure_memory_collection(col, f"control-{label} import")
@@ -2191,7 +2208,12 @@ def build_memory_controls(workdir: Path) -> None:
             assert "s" not in data and "d" not in data, data
             rows = col.db.all("select id, ease, ivl, lastIvl, factor, type from revlog where cid=? order by id", card.id)
             state = col.compute_memory_state(card.id)
+            timing = col.sched._timing_today()
+            now = int(time.time())
+            offset = int(datetime.fromtimestamp(now, ZoneInfo("Asia/Shanghai")).utcoffset().total_seconds())
             results["controls"][label] = {"package": package.name, "local": [first.isoformat(), second.isoformat()],
+                                           "timezone": "Asia/Shanghai", "rollover": 4,
+                                           "next_day_at": timing.next_day_at, "now": now, "offset_seconds": offset,
                                            "timestamps_ms": stamps, "stability": state.stability,
                                            "difficulty": state.difficulty}
             print(f"memory-replay control {label}: local={first.isoformat()},{second.isoformat()} "
@@ -2199,6 +2221,47 @@ def build_memory_controls(workdir: Path) -> None:
         finally:
             col.close()
     write_json(OUT_DIR / "memory-replay-controls.golden.json", results)
+    build_memory_environment_controls(workdir)
+
+
+def build_memory_environment_controls(workdir: Path) -> None:
+    results = {"source": SOURCE, "controls": {}}
+    cases = [("Asia/Shanghai", 0, "hour-0300"), ("Asia/Shanghai", 6, "hour-0300"),
+             ("UTC", 0, "hour-0300"), ("UTC", 4, "hour-0300"),
+             ("America/New_York", 0, "hour-0300"), ("America/New_York", 6, "hour-0300"),
+             ("America/New_York", 0, "new-york-winter"), ("America/New_York", 0, "new-york-summer")]
+    for i, (zone, rollover, package_label) in enumerate(cases):
+        output = workdir / f"environment-{i}.json"
+        env = dict(os.environ, TZ=zone)
+        subprocess.run([sys.executable, "-u", __file__, "--memory-environment-worker", str(output),
+                        str(rollover), package_label], env=env, check=True)
+        results["controls"][f"environment-{i}"] = json.loads(output.read_text())
+    write_json(OUT_DIR / "memory-replay-environments.golden.json", results)
+
+
+def memory_environment_worker(output: Path, rollover: int, label: str) -> None:
+    time.tzset()
+    package = OUT_DIR / f"memory-replay-control-{label}.anki2.apkg"
+    with tempfile.TemporaryDirectory(prefix="anki-environment-") as directory:
+        col = Collection(str(Path(directory) / "import.anki2"))
+        try:
+            configure_memory_collection(col, "environment import", rollover)
+            col.import_anki_package(ImportAnkiPackageRequest(package_path=str(package),
+                options=ImportAnkiPackageOptions(with_scheduling=True, with_deck_configs=True)))
+            assert col.get_preferences().scheduling.rollover == rollover
+            card = col.get_note(col.find_notes(f'"memory-control-{label}"')[0]).cards()[0]
+            state = col.compute_memory_state(card.id)
+            now = int(time.time())
+            zone = os.environ["TZ"]
+            result = {"package": package.name, "timezone": zone, "rollover": rollover,
+                      "source_rollover": 4, "now": now,
+                      "offset_seconds": int(datetime.fromtimestamp(now, ZoneInfo(zone)).utcoffset().total_seconds()),
+                      "next_day_at": col.sched._timing_today().next_day_at,
+                      "stability": state.stability, "difficulty": state.difficulty}
+            print("memory-replay environment", result)
+            output.write_text(json.dumps(result))
+        finally:
+            col.close()
 
 
 def build_learning_due_fixture(workdir: Path) -> None:
@@ -2283,6 +2346,9 @@ def build_learning_due_fixture(workdir: Path) -> None:
 
 
 def main(argv: list[str]) -> int:
+    if len(argv) == 4 and argv[0] == "--memory-environment-worker":
+        memory_environment_worker(Path(argv[1]), int(argv[2]), argv[3])
+        return 0
     if "--table" in argv:
         print_table()
         return 0
