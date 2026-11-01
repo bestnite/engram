@@ -289,7 +289,7 @@ func (s *Server) reviewUndo(c *gin.Context) {
 //
 // front and back carry the card-view contract (html, css, body_class, side, media_base), and the frame renders them
 // directly. An answer carries the typed value of a type-in card so the back can compare it. edit_href is the review
-// page's edit entry; intervals are the next interval for each of the four grades (api.PreviewIntervals).
+// page's edit entry.
 func (s *Server) reviewRender(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -311,13 +311,6 @@ func (s *Server) reviewRender(c *gin.Context) {
 		writeRenderError(c, http.StatusInternalServerError, api.CodeInternal)
 		return
 	}
-	// The next interval of each of the four grades, shown under the grade buttons. A failed preview only loses this hint line and does not block answering,
-	// so we log it and still return the card face as usual (intervals as an empty array).
-	intervals, err := s.api.PreviewIntervals(c.Request.Context(), user, card.ID)
-	if err != nil {
-		s.logger.Warn("preview review intervals failed", "card_id", card.ID, "error", err)
-		intervals = []api.RatingInterval{}
-	}
 	c.JSON(http.StatusOK, gin.H{
 		"card_id": card.PublicID,
 		"ordinal": view.Ordinal,
@@ -327,7 +320,6 @@ func (s *Server) reviewRender(c *gin.Context) {
 		// Whether the answer face already shows the question: the page then shows it alone on reveal.
 		"answer_includes_question": view.AnswerIncludesQuestion,
 		"edit_href":                view.EditHref,
-		"intervals":                intervals,
 	})
 }
 

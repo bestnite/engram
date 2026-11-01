@@ -30,14 +30,10 @@ type queueBody struct {
 
 // reviewRenderBody is the external shape of the card render response.
 type reviewRenderBody struct {
-	CardID    string   `json:"card_id"`
-	Front     CardFace `json:"front"`
-	Back      CardFace `json:"back"`
-	EditHref  string   `json:"edit_href"`
-	Intervals []struct {
-		Rating  int   `json:"rating"`
-		Seconds int64 `json:"seconds"`
-	} `json:"intervals"`
+	CardID   string   `json:"card_id"`
+	Front    CardFace `json:"front"`
+	Back     CardFace `json:"back"`
+	EditHref string   `json:"edit_href"`
 }
 
 // TestReviewRouteServesShell asserts a logged-in user hitting GET /review gets the SPA app shell, with the client router rendering the review page.
@@ -202,6 +198,14 @@ func TestReviewRenderReturnsFaceHTML(t *testing.T) {
 	if body.Front.HTML == "" || body.Back.HTML == "" {
 		t.Fatalf("render returned empty HTML: %+v", body)
 	}
+	// No interval preview: no page reads it, so computing four scheduler previews on every render would be wasted work.
+	var shape map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &shape); err != nil {
+		t.Fatalf("decode render shape: %v", err)
+	}
+	if _, ok := shape["intervals"]; ok {
+		t.Errorf("render response carries %q, want no field for a preview no page displays", "intervals")
+	}
 	// The stored markup is returned as it is stored. Sanitising here would be a second, divergent rule: the frame is
 	// sandboxed and is the only place the HTML is ever executed.
 	if !strings.Contains(body.Front.HTML, "<script>alert(1)</script> front-text") {
@@ -212,21 +216,6 @@ func TestReviewRenderReturnsFaceHTML(t *testing.T) {
 	}
 	if body.EditHref != "/decks/"+deck.PublicID+"/notes/"+note.PublicID {
 		t.Errorf("render edit_href = %q, want the note edit path", body.EditHref)
-	}
-	// Next interval of the four grades: a new card follows the default learning steps 1m,10m, Again is 1 minute, and the rest do not step down grade by grade.
-	if len(body.Intervals) != 4 {
-		t.Fatalf("render intervals = %+v, want 4 entries", body.Intervals)
-	}
-	for i, iv := range body.Intervals {
-		if iv.Rating != i+1 {
-			t.Errorf("render intervals[%d].rating = %d, want %d", i, iv.Rating, i+1)
-		}
-		if i > 0 && iv.Seconds < body.Intervals[i-1].Seconds {
-			t.Errorf("render intervals not ordered: %+v", body.Intervals)
-		}
-	}
-	if body.Intervals[0].Seconds != 60 {
-		t.Errorf("render Again interval = %ds, want 60s", body.Intervals[0].Seconds)
 	}
 }
 

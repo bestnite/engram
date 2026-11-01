@@ -55,7 +55,6 @@ describe('ReviewView audio and speech controls', () => {
         card_id: 'c1',
         ...faces(TTS_HTML, AUDIO_HTML),
         edit_href: '',
-        intervals: [],
       }),
     } as unknown as ApiClient;
     const target = document.createElement('div');

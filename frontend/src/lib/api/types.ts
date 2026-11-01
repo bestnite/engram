@@ -940,14 +940,6 @@ export interface ReviewRenderResponse {
    */
   answer_includes_question?: boolean;
   edit_href: string;
-  /** Next interval (seconds) for each of the four grades, ordered Again/Hard/Good/Easy; empty array when the preview fails. */
-  intervals?: RatingInterval[];
-}
-
-/** Interval from this card to its next review after one grade is submitted (aligned with the Go backend's internal/api/review_preview.go:RatingInterval). */
-export interface RatingInterval {
-  rating: number;
-  seconds: number;
 }
 
 /**

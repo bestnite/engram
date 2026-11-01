@@ -2136,7 +2136,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `npx vitest run` passes 588 tests in 58 files, and `npm run check` still reports exactly the 11 pre-existing
   `M19-62` errors in 2 files.
 
-- [ ] **M19-61 Every review render computes four interval previews that no page displays** — *should-fix.*
+- [x] **M19-61 Every review render computes four interval previews that no page displays** — *should-fix.*
   The SPA render handler calls `api.PreviewIntervals` for each card render and returns `intervals`
   (`internal/web/review_api.go:313-331`), and that function's doc comment says the review page shows the values
   under the four rating buttons (`internal/api/review_preview.go:25-26`). The frontend declares the field
@@ -2146,6 +2146,29 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   API function and the search result; *Unverified:* the per-request cost was not measured. *Acceptance:* render
   the four intervals under the rating buttons from that response, or remove the response field and the
   per-render call so neither the API comment nor the type describes a UI that does not exist.
+  *Closed by this commit (`fix(web): stop computing interval previews no page displays`).*
+  Took the removal branch: `reviewRender` (`internal/web/review_api.go:288`) no longer calls `PreviewIntervals`
+  and its response has no `intervals` key, the comment naming the field is gone, and `PreviewIntervals`,
+  `RatingInterval` (`internal/api/review_preview.go`) and their test were deleted together with the frontend
+  `intervals`/`RatingInterval` declaration (`frontend/src/lib/api/types.ts`), so no remaining comment, type or
+  helper describes the removed hint line. A render now does not add the preview's card read, note read, role
+  check, scheduler build, card-state read or four previews.
+  `TestReviewRenderReturnsFaceHTML` (`internal/web/review_endpoints_test.go`) decodes the response as a raw map
+  and fails when the `intervals` key is present. Raw output of
+  `go test ./internal/web/ -run TestReviewRenderReturnsFaceHTML -count=1 -v`:
+  ```
+  === RUN   TestReviewRenderReturnsFaceHTML
+  --- PASS: TestReviewRenderReturnsFaceHTML (0.03s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.041s
+  ```
+  With the field written back into the response, the same test failed with
+  `render response carries "intervals", want no field for a preview no page displays`.
+  `go test ./internal/web/ -run 'TestReviewRender|TestReviewRoute|TestReview' -count=1` passes,
+  `go vet ./internal/web/ ./internal/api/` is clean, `npm --prefix frontend run check` reports
+  `svelte-check found 0 errors and 0 warnings`, and
+  `npx vitest run --config vitest.config.client.ts src/tests/shortcodes-review.client.ts` reports
+  `Test Files  1 passed (1)` / `Tests  2 passed (2)`.
 
 - [x] **M19-62 `npm run check` fails on main, so the CI frontend gate is red** — *should-fix.* Eleven type
   errors in two test files: `frontend/src/tests/import-url.client.ts:345,365,394,417,438,466,519,552,588` build
