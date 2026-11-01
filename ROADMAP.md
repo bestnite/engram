@@ -484,21 +484,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `progress_discarded` text, and shows yes or no in each of the three weight rows for `true` and `false`.
   The scoped `go vet` of `internal/store` passes. Evidence is the component test output and the diff.
 
-- [ ] **M18-62 The batching test measures many cards and skipped notes** — `TestAnkiProgressBatchStatements`
-  in `internal/store/anki_progress_import_test.go` imports one card with 5 000 revlog rows. It catches a
-  query per revlog row. It cannot catch a query per card: with one card, the per-card `card_states`
-  lookup that `M18-16` removed runs one statement, as the batched load does. It never runs the batched
-  lookup of skipped notes' cards, because it calls `importAnkiProgress` directly and that lookup lives in
-  `importAnkiInTx`. The fix adds a case. A package with 1 000 cards, each with one review row, is
-  imported once, and then imported again through `importAnkiInTx` with `into_deck`, `on_conflict`
-  `skip` and `include_progress` on, so every note is skipped. A GORM query callback counts the
-  `SELECT` statements on `card_states`, `reviews` and `cards` during the second import. *Acceptance:* in
-  the second import, the `SELECT` statements on `card_states` and `reviews` number at most 4. The second
-  import of 1 000 cards runs at most 2 more `SELECT` statements on `cards` than the same import of 10
-  cards. With the batched
-  `card_states` load replaced by a per-card query for one run, the test fails. Evidence is the raw
-  scoped `go test` and `go vet` output of both runs, the PostgreSQL one with `TEST_PG_DSN` set.
-
 - [ ] **M18-63 The release ledger and `AGENTS.md` record `M18-14` to `M18-18`** — `M18-22` writes each
   ledger row from the commits whose messages name that row's ID. The commits of `M18-14`, `M18-15`,
   `M18-17` and `M18-18` name only their own IDs. Their changes are visible through the HTTP API, the
