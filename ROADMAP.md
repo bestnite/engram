@@ -2807,12 +2807,30 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go test ./internal/mcp/ -run 'TestImport|TestPackage|TestCreateImportUpload|TestExport|TestAnki' -count=1`
   and `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestPackage|TestAnkiImport|TestImportPackage' -count=1` pass.
 
-- [ ] **M19-108 The key-revocation handler has no test of its own scoping** — *nit.* `internal/api/keys.go:80-109`
+- [x] **M19-108 The key-revocation handler has no test of its own scoping** — *nit.* `internal/api/keys.go:80-109`
   resolves any key by public id and then revokes it scoped to the caller; the ownership refusal exists only at the
   store layer (`internal/store/apikey_test.go:193`), and no test in `internal/api` or `internal/web` calls
   `DELETE /api/v1/keys/{id}`. *Reproduced:* `grep -rn '"/api/v1/keys' internal/*/*_test.go` lists GET and POST calls
   only. *Acceptance:* an `httptest` case revokes the caller's own key (200, row carries `revoked_at`) and another
   user's key id (404, that key still active), so the handler's scoping is pinned where it is enforced.
+  *Closed by this commit (`test(api): pin the key-revocation scope at the handler`).*
+  `TestDeleteKeyIsScopedToCaller` (`internal/api/keys_revoke_scope_test.go`) calls `DELETE /api/v1/keys/{id}` through
+  the real router. It revokes a second key owned by the caller and asserts 200, `revoked: true`, the echoed public id
+  and a non-nil `revoked_at` on the row; it then sends another account's key id with the same credentials, asserts 404
+  `not_found`, a nil `revoked_at` on that row, and that the key still authenticates (`GET /api/v1/decks` = 200). Raw
+  output of `go test ./internal/api/ -run TestDeleteKeyIsScopedToCaller -count=1 -v`:
+  ```
+  === RUN   TestDeleteKeyIsScopedToCaller
+  === RUN   TestDeleteKeyIsScopedToCaller/own_key_is_revoked
+  === RUN   TestDeleteKeyIsScopedToCaller/another_account's_key_is_not_revoked
+  --- PASS: TestDeleteKeyIsScopedToCaller (0.02s)
+      --- PASS: TestDeleteKeyIsScopedToCaller/own_key_is_revoked (0.00s)
+      --- PASS: TestDeleteKeyIsScopedToCaller/another_account's_key_is_not_revoked (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.040s
+  ```
+  With the handler changed to the unscoped `RevokeByID`, the same run failed with
+  `DELETE another account's key = 200, want 404 (body {"id":"…","revoked":true})`; the scoped handler is restored.
 
 - [ ] **M19-109 The two `/mcp` refusals carry no stable code** — *nit.* `internal/mcp/mcp.go:103-116` answers a request
   without a key with `http.Error(..., 401, "api key required")` and a session/user mismatch with
