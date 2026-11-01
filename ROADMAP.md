@@ -263,15 +263,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
 
 
 
-- [ ] **M18-83 Remove `.edeck` from the store import core** — third part of the split of `M18-5`, run after `M18-85` and `M18-84`. Delete
-  `internal/store/package_document.go`; remove the `.edeck` parts of `internal/store/package.go` and the
-  `.edeck` branches of `internal/store/package_import.go` and its tests. Keep everything the `.apkg` path
-  still uses: `PackageError` and its codes, `PackageImportOptions`, `PackageImportReport`,
-  `PackageImportError`, the package limits, `MediaQuotaBytes`, `uniqueOwnerName`, the archive spool,
-  `ImportPackage` and `createPresetFromPackage`. *Acceptance:* `git grep -n edeck -- internal/store` prints
-  nothing; `go test ./internal/store/...` passes on SQLite and with `TEST_PG_DSN` set, with the `postgres`
-  subtests PASS. Evidence is the grep output and the raw scoped test output.
-
 - [ ] **M18-86 Single-format documentation and the removal in the release ledger** — fourth part of the
   split of `M18-5`. Delete `schema/deck-package.schema.json` and `schema/examples/deck-package.example.json`,
   remove the `.edeck` section of `schema/README.md`, state the single format in `README.md` and
