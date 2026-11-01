@@ -91,14 +91,19 @@ func mustSubmit(t *testing.T, db *gorm.DB, in SubmitInput) SubmitResult {
 }
 
 // TestUndoRestoresPreviousDueAndInterval asserts Undo restores exactly the due date and interval after the previous grade
-// Approach: grade twice, snapshot the state after the first grade, then compare field by field after Undo.
+// Approach: grade twice with a step of at least one day, snapshot the state after the first grade, then compare field by field after Undo.
 func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
 	now1 := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
 	deckID := seedDeck(t, db, now1)
 	cardID := seedCard(t, db, deckID, "forward", now1)
-	s := mustScheduler(t, testPreset(t))
+	preset := testPreset(t)
+	// A step of at least one day makes the scheduled_days assertion below observable: with the default 1m/10m steps both
+	// values are 0, and the assertion would hold even if undo restored nothing.
+	preset.LearningSteps = "7d,1.5d"
+	preset.RelearningSteps = "7d,1.5d"
+	s := mustScheduler(t, preset)
 
 	mustSubmit(t, db, SubmitInput{
 		CardID: cardID, UserID: 1, Rating: Good, ExpectedVersion: 0,

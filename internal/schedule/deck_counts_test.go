@@ -21,12 +21,13 @@ import (
 //	(c) deck columns new_per_day=0 / reviews_per_day=0 (unlimited);
 //	(d) negative case: another user's deck (with new cards) does not appear, whatever it is called.
 //
-// DeckCounts has no Now parameter and uses the clock at call time internally; the "used today" review rows in the fixture are written by the review day of now,
-// which is the same day as the Now passed to Build (the two differ by milliseconds, identical except when crossing the 04:00 cutoff).
+// DeckCounts takes the clock through QueueOptions; a zero Now falls back to the clock at call time, so the fixture
+// passes one fixed instant to both DeckCounts and Build. The "used today" review rows are written by that instant's
+// review day, which makes the two calls agree regardless of when the test runs, including across the 04:00 cutoff.
 func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
 	day := reviewday.Day(now, time.UTC, reviewday.DefaultCutoffHour)
 	future := now.Add(48 * time.Hour)
 	last := now.Add(-48 * time.Hour)
@@ -132,7 +133,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 		}
 	}
 
-	counts, err := builder.DeckCounts(ctx, 1, visible, QueueOptions{})
+	counts, err := builder.DeckCounts(ctx, 1, visible, QueueOptions{Now: now, Location: time.UTC})
 	if err != nil {
 		t.Fatalf("DeckCounts() error = %v", err)
 	}
@@ -189,7 +190,7 @@ func TestDeckCountsMatchBuildPerDeck(t *testing.T) {
 			t.Errorf("all-decks queue leaked another user's deck %d", it.DeckID)
 		}
 	}
-	allCounts, err := builder.DeckCounts(ctx, 1, nil, QueueOptions{})
+	allCounts, err := builder.DeckCounts(ctx, 1, nil, QueueOptions{Now: now, Location: time.UTC})
 	if err != nil {
 		t.Fatalf("DeckCounts(nil) error = %v", err)
 	}

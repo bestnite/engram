@@ -1541,7 +1541,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go vet ./internal/answer/`, `go test ./internal/answer/ -count=1`, `go test ./internal/store/ -run 'TestPreset'
   -count=1` and `go test ./internal/api/ -run 'TestGrade|TestPreset|TestReview' -count=1` pass.
 
-- [ ] **M19-36 Three test defects that will not fail when the behaviour breaks** — *nit.*
+- [x] **M19-36 Three test defects that will not fail when the behaviour breaks** — *nit.*
   (a) `internal/schedule/actions_test.go:137-139` compares `restored.ScheduledDays` with `afterFirst`'s in a
   fixture whose steps are the default 1m/10m, so both are 0 and the assertion holds even if undo restores
   nothing — the real divergence is M19-29. (b) `internal/schedule/deck_counts_test.go:24` claims `DeckCounts`
@@ -1553,6 +1553,40 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   M19-27. Verified by reading; (b)'s flake window is milliseconds wide, so it was not reproduced.
   *Acceptance:* a ≥ 1-day step in the undo fixture plus a mutation check, explicit `Now` in the deck-count
   and budget tests with the comment corrected, and a `NewScheduler` error case for an unacceptable step.
+  *Closed by this commit (`test(schedule): pin the undo and deck-count test fixtures`).*
+  (a) `TestUndoRestoresPreviousDueAndInterval` now builds its scheduler with `7d,1.5d`
+  (`internal/schedule/actions_test.go:104`), so the first grade stores `scheduled_days = 1` and the comparison is
+  observable; the dedicated `TestUndoRestoresScheduledDaysExactly` from M19-29 carries the mutation control.
+  Replacing the restore with the pre-fix `math.Round` failed the fixture with
+  `undo scheduled_days = 2, want 1` (`actions_test.go:143`).
+  (b) Both tests use the fixed instant `2026-10-07T12:00Z` and pass `Now` and `Location` to every
+  `DeckCounts`/`DeckBudgets` call (`internal/schedule/deck_counts_test.go:30,136,193`;
+  `internal/schedule/deck_budget_test.go:27,90,144,153,160`), and the comment now states that the clock arrives
+  through `QueueOptions` and that a zero `Now` falls back to it. Returning the first call to `QueueOptions{}`
+  while keeping the fixture failed:
+  ```
+  --- FAIL: TestDeckCountsMatchBuildPerDeck (0.06s)
+      deck_counts_test.go:154: deck 1: DeckCounts = {New:1 Review:3}, Build(DeckID) New=0 Review(learning+due)=2
+      deck_counts_test.go:154: deck 3: DeckCounts = {New:20 Review:20}, Build(DeckID) New=15 Review(learning+due)=12
+      deck_counts_test.go:160: quota deck counts = {New:1 Review:3}, want New=0 Review:2 (1 learning + 1 due review)
+      deck_counts_test.go:175: partial deck counts = {New:20 Review:20}, want New=15 Review=12 (20 minus today's usage)
+  ```
+  (c) Already covered once M19-27 and M19-28 landed: `TestNewSchedulerRefusesParametersTheLibraryWouldReplace`
+  refuses a negative learning/relearning step, a zero or over-ceiling retention and a zero or over-ceiling
+  maximum interval, and `TestStepsOutsideSchedulerRangeAreRefused` refuses a step one day over the cap, the
+  200000-day overflow, a non-finite scaled step and `NaNm`. Raw output of
+  `go test ./internal/schedule/ -run 'TestStepsOutsideSchedulerRangeAreRefused|TestNewSchedulerRefusesParametersTheLibraryWouldReplace' -count=1 -v`:
+  ```
+  --- PASS: TestNewSchedulerRefusesParametersTheLibraryWouldReplace (0.00s)
+  --- PASS: TestStepsOutsideSchedulerRangeAreRefused (0.00s)
+      --- PASS: TestStepsOutsideSchedulerRangeAreRefused/one_day_over_the_cap (0.00s)
+      --- PASS: TestStepsOutsideSchedulerRangeAreRefused/the_overflow_from_the_report (0.00s)
+      --- PASS: TestStepsOutsideSchedulerRangeAreRefused/non-finite_after_scaling (0.00s)
+      --- PASS: TestStepsOutsideSchedulerRangeAreRefused/not_a_number (0.00s)
+  ok  	git.nite07.com/nite/engram/internal/schedule	0.009s
+  ```
+  The full package passes: `go test ./internal/schedule/ -count=1` prints
+  `ok  	git.nite07.com/nite/engram/internal/schedule	1.189s`, and `go vet ./internal/schedule/` is clean.
 
 - [x] **M19-37 The request log writes live frame-media bearer tokens to disk** — *Blocker.*
   `requestLogger` logs `c.Request.URL.Path` for every request (`internal/web/server.go:539-545`) and is

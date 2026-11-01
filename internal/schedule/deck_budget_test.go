@@ -13,6 +13,9 @@ import (
 // DeckBudgets must share the queue's source (reusing deckBudget's formula), and express "unlimited" with a boolean rather than
 // -1/0.
 //
+// The instant is fixed and passed through QueueOptions, so the fixture's review days and the call's "today" cannot
+// drift apart when the test runs across the 04:00 cutoff.
+//
 // The fixture covers three boundaries:
 //
 //	(a) deck column written as 0 (unlimited): PerDay is 0, Unlimited is true, and nothing is capped even with usage today;
@@ -21,7 +24,7 @@ import (
 func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	now := time.Now().UTC()
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
 	day := reviewday.Day(now, time.UTC, reviewday.DefaultCutoffHour)
 	at := now.Add(-time.Hour)
 	future := now.Add(48 * time.Hour)
@@ -84,7 +87,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	sched := mustScheduler(t, testPreset(t))
 	builder := NewQueueBuilder(db, decks, sched)
 
-	budgets, err := builder.DeckBudgets(ctx, 1, []uint64{unlimited, atCap, overCap, untouched}, QueueOptions{})
+	budgets, err := builder.DeckBudgets(ctx, 1, []uint64{unlimited, atCap, overCap, untouched}, QueueOptions{Now: now, Location: time.UTC})
 	if err != nil {
 		t.Fatalf("DeckBudgets() error = %v", err)
 	}
@@ -138,7 +141,7 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	}
 
 	// A non-existent deck id uses the resolveScope fallback: the new-card cap takes the default, reviews are unlimited.
-	missing, err := builder.DeckBudgets(ctx, 1, []uint64{99999}, QueueOptions{})
+	missing, err := builder.DeckBudgets(ctx, 1, []uint64{99999}, QueueOptions{Now: now, Location: time.UTC})
 	if err != nil {
 		t.Fatalf("DeckBudgets(missing) error = %v", err)
 	}
@@ -147,14 +150,14 @@ func TestDeckBudgetsReportsUsedAndLeft(t *testing.T) {
 	}
 
 	// Empty-set and non-zero userID validation.
-	empty, err := builder.DeckBudgets(ctx, 1, nil, QueueOptions{})
+	empty, err := builder.DeckBudgets(ctx, 1, nil, QueueOptions{Now: now, Location: time.UTC})
 	if err != nil {
 		t.Fatalf("DeckBudgets(nil) error = %v", err)
 	}
 	if len(empty) != 0 {
 		t.Errorf("DeckBudgets(nil) returned %d entries, want 0", len(empty))
 	}
-	if _, err := builder.DeckBudgets(ctx, 0, []uint64{unlimited}, QueueOptions{}); err == nil {
+	if _, err := builder.DeckBudgets(ctx, 0, []uint64{unlimited}, QueueOptions{Now: now, Location: time.UTC}); err == nil {
 		t.Error("DeckBudgets(userID=0) error = nil, want an error")
 	}
 }
