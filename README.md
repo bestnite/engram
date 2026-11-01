@@ -54,11 +54,8 @@ The package brings these across:
 - **Note types**: fields, templates (all four sides, including browser variants), CSS, the LaTeX preamble and suffix, and Anki's note type options arrive unchanged.
 - **Notes, tags and cards**: every note is created as the package holds it, with its tags, and the package's cards are created as they exist.
 - **Media**: images, audio and video are registered under their Anki file names and resolved by the package's fields, templates and CSS.
-
-These parts of the package are not imported:
-
-- **Scheduling state and review history.** Anki's due dates, intervals and review log stay behind: imported cards start as new cards, and FSRS schedules them from your own reviews.
-- **Anki's deck options and FSRS parameters.** A new deck starts from the default preset, and Engram optimises its parameters from the reviews you record.
+- **Scheduling state and review history**: `include_progress`, off by default, applies the package's card states and review log to your own account. Otherwise, imported cards start as new cards.
+- **Deck configuration and FSRS weights**: With `preset_mode` `new`, a new deck's preset takes supported settings from the package's deck configuration. `apply_weights`, off by default and allowed only with `new_deck` and `preset_mode` `new`, adopts the package's FSRS weights if they can be migrated. The import report's `weights_applied` and `weights_discarded` fields record the outcome.
 
 An imported note type carries no answer control, so its cards are self-rated until you add one in the note type editor.
 
