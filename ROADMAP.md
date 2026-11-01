@@ -193,23 +193,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-21 README describes what an `.apkg` import carries** — the "Anki `.apkg` packages"
-  section of `README.md` lists "Scheduling state and review history" and "Anki's deck options and
-  FSRS parameters" under the parts that are not imported, and says that a new deck starts from the
-  default preset. The code does otherwise: `createAnkiPreset` builds the new deck's preset from the
-  package's deck configuration; `importAnkiProgress` applies the card states and the review log when
-  `include_progress` is on; and since `M18-9` the package's FSRS weights are adopted when
-  `apply_weights` is on, the target is `new_deck` and `fsrs.MigrateWeights` accepts them. The
-  paragraph just above that section already describes the deck configuration and `include_progress`,
-  so the README contradicts itself. The fix rewrites the two list items to state the current
-  behaviour, names `apply_weights` (off by default, `new_deck` only) and the report's
-  `weights_applied` and `weights_discarded`, and leaves no statement that disagrees with the paragraph
-  above. `M18-5` rewrites the format paragraphs later; this entry removes the contradiction now.
-  *Acceptance:* the section no longer lists scheduling state, review history, deck options or FSRS
-  parameters as parts that are not imported, and each of its statements matches `createAnkiPreset`,
-  `importAnkiProgress` and `PackageImportOptions` in `internal/store`. Evidence is the `README.md`
-  diff.
-
 - [ ] **M18-22 Release ledger records the landed `M18` work** — the release ledger in section 2 of
   this file holds no row for `M18-1`, `M18-2`, `M18-3` or `M18-9`, although all four landed after
   v0.2.0 and change what an import or export does through the HTTP API, the MCP tools and the CLI.
