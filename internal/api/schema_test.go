@@ -41,6 +41,8 @@ func TestNoteImportSchemaMatchesTheContract(t *testing.T) {
 	invalid := []string{
 		// No note_type: the note names no type.
 		`{"notes":[{"fields":{"front":"q"}}]}`,
+		// A whitespace-only note_type is trimmed to nothing and treated as missing by the server.
+		`{"notes":[{"note_type":"   ","fields":{"front":"q"}}]}`,
 		// The transitional card kind is gone from the contract.
 		`{"notes":[{"kind":"basic","fields":{"front":"q","back":"a"}}]}`,
 		// A field value is an HTML string; the old typed shapes are no longer part of the contract.

@@ -27,9 +27,10 @@
       "maxItems": 20,
       "items": {
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "pattern": "\\S"
       },
-      "description": "Tags for the tag actions, 1 to 20 entries. Required by 'add_tags', 'remove_tags' and 'set_tags'; not allowed by 'delete'."
+      "description": "Tags for the tag actions, 1 to 20 entries. Required by 'add_tags', 'remove_tags' and 'set_tags'; not allowed by 'delete'. A tag must contain at least one non-whitespace character: the server trims surrounding whitespace and drops entries that become empty, so a whitespace-only tag leaves no tag to apply and the request is rejected."
     },
     "dry_run": {
       "type": "boolean",

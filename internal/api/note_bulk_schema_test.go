@@ -99,6 +99,8 @@ func TestNoteBulkSchemaRejectsInvalidShapes(t *testing.T) {
 		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":["a"]}`,
 		`{"action":"remove_tags","note_ids":["0198c0de-0000-7000-8000-000000000001","0198c0de-0000-7000-8000-000000000002"],"tags":["a","b"]}`,
 		`{"action":"set_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":["a"],"dry_run":true}`,
+		// \S requires a non-whitespace character, so an inner space in a tag stays valid.
+		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":["two words"]}`,
 	}
 	for _, body := range valid {
 		if err := validate(body); err != nil {
@@ -114,6 +116,8 @@ func TestNoteBulkSchemaRejectsInvalidShapes(t *testing.T) {
 		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":[]}`,
 		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":[` + strings.Join(tags21, ",") + `]}`,
 		`{"action":"delete","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":["x"]}`,
+		// A whitespace-only tag is trimmed away and leaves no tag, which the server rejects (bulk_notes_test.go covers that refusal).
+		`{"action":"add_tags","note_ids":["0198c0de-0000-7000-8000-000000000001"],"tags":[" "]}`,
 		`{"note_ids":["0198c0de-0000-7000-8000-000000000001"]}`,
 		// Numbers (the old auto-increment primary key form) are no longer valid note_ids elements.
 		`{"action":"delete","note_ids":[1]}`,

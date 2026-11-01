@@ -2742,7 +2742,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Acceptance:* CONTRIBUTING restates the exception with the rule, in the words `AGENTS.md` uses, so a reviewer of
   a review deletion does not have to guess which document wins.
 
-- [ ] **M19-86 The bulk schema promises it never accepts a body the server rejects, and a whitespace tag breaks
+- [x] **M19-86 The bulk schema promises it never accepts a body the server rejects, and a whitespace tag breaks
   that** — *nit.* `schema/note-bulk.schema.json:5` says the schema "is therefore the stricter of the two for a
   request carrying repeated or blank entries, and it never accepts a body the server would reject", and
   `schema/README.md:38-40` repeats the claim. `tags.items.minLength: 1` does not reject a whitespace-only tag, but
@@ -2755,6 +2755,35 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   read, not run. *Acceptance:* the schema expresses the trim (a `pattern` such as `\S`) or the sentence is
   replaced by "the server applies an additional trim the schema cannot express", so neither document claims an
   invariant the pair does not hold.
+  *Closed by this commit (`fix(schema): reject whitespace-only tags and note types`).*
+  `tags.items` in `schema/note-bulk.schema.json` and `note_type` in `schema/note-import.schema.json` now carry
+  `"pattern": "\\S"`, so a value that the server trims to nothing is refused by the schema as well; the tag
+  description states the trim and its consequence. Both additions accept an inner space (`"two words"` keeps
+  validating), so the pattern rejects blank values rather than all whitespace.
+  `TestNoteBulkSchemaRejectsInvalidShapes` (`internal/api/note_bulk_schema_test.go`) now treats
+  `{"action":"add_tags","note_ids":["…"],"tags":[" "]}` as invalid and `"tags":["two words"]` as valid, and
+  `TestNoteImportSchemaMatchesTheContract` (`internal/api/schema_test.go`) treats a whitespace-only `note_type`
+  as invalid; `TestBulkNotesRejectsInvalidRequestShapes` (`internal/api/bulk_notes_test.go`) adds the same
+  whitespace tag as a subtest and pins the server's `400 invalid_request`, so the two sides are checked on the
+  same body. Raw output of
+  `go test ./internal/api/ -run 'TestNoteBulkSchema|TestNoteImportSchema|TestBulkNotesRejectsInvalidRequestShapes' -count=1 -v`:
+  ```
+  === RUN   TestBulkNotesRejectsInvalidRequestShapes
+      --- PASS: TestBulkNotesRejectsInvalidRequestShapes/whitespace-only_tag (0.00s)
+  === RUN   TestNoteBulkSchemaMatchesTheGoActions
+  --- PASS: TestNoteBulkSchemaMatchesTheGoActions (0.00s)
+  === RUN   TestNoteBulkSchemaRejectsInvalidShapes
+  --- PASS: TestNoteBulkSchemaRejectsInvalidShapes (0.00s)
+  === RUN   TestNoteImportSchemaMatchesTheContract
+  --- PASS: TestNoteImportSchemaMatchesTheContract (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.028s
+  ```
+  With only the two schema files reverted, the same run failed with
+  `invalid body was accepted, want a schema violation: {"action":"add_tags",…,"tags":[" "]}` and
+  `invalid payload was accepted, want a schema violation: {"notes":[{"note_type":"   ","fields":{"front":"q"}}]}`.
+  `go test ./internal/api/ -run 'TestBulkNotes|TestNoteBulk|TestNoteImport' -count=1` passes, and
+  `go vet ./internal/api/` is clean.
 
 - [ ] **M19-87 ARCHITECTURE gives `schema/` a deck-package schema that no longer exists** — *nit.*
   `ARCHITECTURE.md:39` describes the directory as "JSON Schemas for note import, bulk notes, and deck packages".

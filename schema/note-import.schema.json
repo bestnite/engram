@@ -38,7 +38,8 @@
         "note_type": {
           "type": "string",
           "minLength": 1,
-          "description": "Opaque public id of a note type of the deck in the path, as returned by GET /api/v1/decks/:id/note-types. The server maps every field name to the matching field id of this note type."
+          "pattern": "\\S",
+          "description": "Opaque public id of a note type of the deck in the path, as returned by GET /api/v1/decks/:id/note-types. The server trims surrounding whitespace, so a whitespace-only value is treated as missing and rejected. The server maps every field name to the matching field id of this note type."
         },
         "fields": {
           "type": "object",

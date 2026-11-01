@@ -90,6 +90,8 @@ func TestBulkNotesRejectsInvalidRequestShapes(t *testing.T) {
 		{"oversized note_ids", `{"action":"delete","note_ids":` + b.String() + `}`},
 		{"tag action without tags", fmt.Sprintf(`{"action":"add_tags","note_ids":["%s"]}`, note.PublicID)},
 		{"delete with tags", fmt.Sprintf(`{"action":"delete","note_ids":["%s"],"tags":["x"]}`, note.PublicID)},
+		// The tag list is normalized before the count is applied, so a whitespace-only tag leaves nothing to apply.
+		{"whitespace-only tag", fmt.Sprintf(`{"action":"add_tags","note_ids":["%s"],"tags":[" "]}`, note.PublicID)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
