@@ -276,26 +276,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   present. *Acceptance:* section 2.7 of `AGENTS.md` names `reuse`, `copy` and `last_review_at`. Evidence
   is the `AGENTS.md` diff.
 
-- [ ] **M18-94 The `deck_config_skipped` row reads yes or no, and the `M18-68` fields carry comments** —
-  `reportRows` in `frontend/src/lib/views/ImportView.svelte` pushes `['package.report.deck_config_skipped', 1]`,
-  and the template converts only `dry_run`, `progress_discarded` and the `package.report.weights_` keys to
-  the catalog's yes and no. The page therefore shows "Package deck configuration could not be read;
-  defaults were used | 1", the defect `M18-61` removed from the weight rows. The `M18-68` component test in
-  `frontend/src/tests/import-url.client.ts` checks only that the label appears, so it cannot catch this.
-  `anki.Package.ReviewsUnreadable` in `internal/anki/model.go` and `PackageImportReport.DeckConfigSkipped`
-  in `internal/store/package_import.go` have no comment, while their neighbours have one, the defect
-  `M18-61` and `M18-70` fixed for the other fields. The `describe` title in
-  `frontend/src/tests/import-url.client.ts` ends in `(M18-6)`, a retired ID. The fix: the row shows the
-  catalog's yes, the way the weight rows do; the row still appears only when the field is true.
-  `ReviewsUnreadable` gains a comment stating that it counts the revlog rows the reader skipped, and that
-  the import counts them in `reviews_discarded` when `include_progress` is off. `DeckConfigSkipped` gains
-  a comment stating its four conditions, as `resolveAnkiTargetDeck` sets them. The test title names the
-  behaviour it tests instead of the ID. *Acceptance:* the component test shows the row with the catalog's
-  yes text for `deck_config_skipped` true, and no row for false; the scoped `go vet` of `internal/anki`
-  and `internal/store` passes; `git grep -n 'M18-' -- frontend/src` prints nothing. Evidence is the
-  component test output, the output of `npm --prefix frontend run build`, the grep output and the raw
-  scoped `go vet` output.
-
 - [ ] **M18-102 The closing evidence the reviewed tasks lack is recorded** — section 7 of `AGENTS.md`
   lets an entry leave the backlog only with evidence, and these closing commits lack the evidence their
   acceptance named. `M18-20` (`16b130f`) says the work landed in `63c508c`, a commit that no branch
