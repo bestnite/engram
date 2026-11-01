@@ -509,33 +509,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   for `cards_skipped` 2 and hides it for 0. Evidence is the component test output and the output of
   `npm --prefix frontend run build`.
 
-- [ ] **M18-68 The report says what the reader dropped** — the reader drops data in two more places, and
-  the report shows neither. First, `readReviews` in `internal/anki/scheduling.go` keeps no count of the
-  revlog rows it skips. With `include_progress` off, `importAnkiProgress` in
-  `internal/store/anki_import.go` sets `reviews_discarded` to `len(pkg.Reviews)`, which leaves the
-  unreadable rows out, and `progress_discarded` follows that count. Reproduced on `main` on both drivers:
-  the schema-11 stock package whose only revlog row has `ease` = 2.5, imported with `include_progress`
-  off, reports `reviews_discarded` 0 and `progress_discarded` false. Second, when the top deck's
-  configuration was skipped, `ankiTopConfig` returns nil (since `M18-24`) and the new preset holds the
-  `NewPreset` values. `resolveAnkiTargetDeck` then reports `weights_applied`, `weights_discarded` and
-  `weights_invalid` all false, which is the report of a package without weights, also when
-  `apply_weights` was on. No field says that the package's deck options were not read. The maintainer has
-  decided the second point too: the report gains the field — it is additive, the values are lies without
-  it, and the alternative (reusing the weights flags) would overload three flags with a meaning they do
-  not have. The fix has three parts. First, `anki.Package` in `internal/anki/model.go` gains
-  `ReviewsUnreadable int`, which `readReviews` increments for each row it skips, and with
-  `include_progress` off `reviews_discarded` is `len(pkg.Reviews) + pkg.ReviewsUnreadable`. Second, the
-  report gains `DeckConfigSkipped` (JSON `deck_config_skipped`), which is true only when the target is
-  `new_deck`, `preset_mode` is `new`, `DeckConfigsSkipped` is true and `ankiTopConfig` returned nil.
-  Third, `frontend/src/lib/api/types.ts` gains the field, and `ImportView.svelte` shows one catalog line
-  when it is true; the key `package.report.deck_config_skipped` is appended at the end of both catalogs,
-  and the two key sets stay identical. *Acceptance:* a table test in `internal/store` imports through
-  `ImportPackage`. The package above, with `include_progress` off, reports `reviews_discarded` 1 and
-  `progress_discarded` true. The `top invalid` package of `TestAnkiImportSkippedDeckConfigs` reports
-  `deck_config_skipped` true; its `other invalid` and `both valid` packages report it false. A component
-  test shows the line for true and hides it for false. Evidence is the raw scoped `go test` and `go vet`
-  output, the PostgreSQL run with `TEST_PG_DSN` set, and the component test output.
-
 - [ ] **M18-70 Comments state the reader's skip rules without a task ID** — the code of `M18-24` to
   `M18-27` carries four comment defects. First, the comment on `roundedIntegers` in
   `internal/anki/sqlite.go` gives as its reason "before M18-13 one such value rejected the whole package";
