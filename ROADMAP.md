@@ -66,13 +66,13 @@ release; a task moves into a release milestone when it is scheduled.
 
 ### M19 — Repository review findings
 
-A domain-by-domain review of the whole repository was run with a second model. The `internal/store`
-domain completed — 155 files, 23 findings (3 blocker, 19 should-fix, 1 nit), each with a reproduction or
-an explicit "unverified" — and its report is kept outside the repository at
-`~/.hermes/reports/engram-repo-review-store-20261102.md`. The API and MCP domain was stopped by the
-provider's content filter before it could write its report, so M19-1..M19-3 are static analysis that was
-read out of the code but never reproduced. Every entry says which it is: "unverified" does not mean
-"probably fine", and it does not mean "confirmed broken".
+A domain-by-domain review of the whole repository is being run with a second model. Two domains are
+finished: `internal/store` (155 files, 23 findings — 3 blocker, 19 should-fix, 1 nit, M19-4..M19-26) and
+`internal/schedule` + `internal/answer` + `internal/retention` + `internal/reviewday` (53 files, 10
+findings — 2 blocker, 4 should-fix, 4 nit, M19-27..M19-36). The API and MCP domain was stopped by the
+provider's content filter before it wrote a report, so M19-1..M19-3 are static analysis that was read out
+of the code but never reproduced. Every entry says which it is: "unverified" does not mean "probably
+fine", and it does not mean "confirmed broken".
 
 - [ ] **M19-1 A preset identifier may be resolvable across accounts** — the review reported that a
   request can name a preset belonging to another account and have it resolved rather than refused,
@@ -352,6 +352,125 @@ read out of the code but never reproduced. Every entry says which it is: "unveri
   serve them, or move the still-valid boundary cases onto `createAnkiPreset`/the import path; do not keep
   a second set of business rules to keep a test alive. Confirm no compatibility promise exists before
   removing an exported symbol.
+
+
+- [ ] **M19-27 A step the preset form accepts silently replaces every scheduling parameter with the
+  library defaults** — *Blocker.* `Parameters`/`parametersWithWeights` build `fsrs.Parameters` and return
+  them without validating (`internal/schedule/scheduler.go:151-160,172-192`); the only validation is inside
+  `fsrs.NewFSRS`, whose failure mode is to swap in `DefaultParam()` — retention 0.9, maximum 36 500,
+  steps 1m/10m — with no error and no log (`go-fsrs/v4@v4.0.0/fsrs.go:18-30`). The form accepts the step
+  because `validStepSpec` checks the numeric prefix and the unit but never scales by the unit
+  (`internal/web/presets.go:49-79`), so `1e308d` passes. *Reproduced* end to end through `Submit` on both
+  drivers: preset asking 0.8 / 100 with `learning_steps "1e308d"` yields `effective retention=0.9000
+  max=36500 steps=[1 10]`, and the review row is written from those. `CompareFit` (`fit.go:44-63`) builds
+  its instances the same way, so an optimiser verdict for such a preset compares two fits that both ignore
+  the user's settings. *Acceptance:* validate the assembled parameters and return an error instead of
+  letting the library substitute defaults; one step validator for the repository that checks finiteness
+  and a bound **after** scaling by the unit, refusing `1e308d` with `preset_steps_invalid`; a table case
+  asserting `NewScheduler` errors and a `internal/web` case asserting the PATCH is refused.
+
+- [ ] **M19-28 An accepted step overflows `time.Duration` and writes a due date in 1734 with an interval
+  of 0 into the review log** — *Blocker.* `stepMinutes` bounds nothing (`internal/schedule/scheduler.go:
+  221-247`) and `validStepSpec` accepts `200000d`; 200 000 × 1440 minutes overflows the nanosecond
+  duration (`go-fsrs steps.go:24-26`) and `applyStep` adds it, producing `due_at` in the past with
+  `state=review` and `scheduled_days=200000` (`scheduler_basic.go:23-32`). `outcomeFrom`
+  (`scheduler.go:321-339`) then clamps the negative difference, so `reviews.interval_days` records 0 for a
+  grade the scheduler believes scheduled 200 000 days — in the one table AGENTS §2.3.2 says cannot be
+  reconstructed. *Reproduced* on both drivers: `step="200000d" ... state=review
+  due=1734-06-23T12:12:43Z scheduled_days=200000 review.interval_days=0`, with `validStepSpec("200000d")
+  = true`. *Acceptance:* reject any step whose minute value is not finite or exceeds 36 500 days in every
+  validator; treat `due.Before(now)` on a non-New outcome as an error rather than clamping the interval;
+  regressions for one step just under and one just over the cap, neither writing a review row.
+
+- [ ] **M19-29 Undo restores `scheduled_days` by rounding a float, so the restored state is not what the
+  scheduler wrote** — *should-fix.* `rebuildReviewLog` recomputes the field as
+  `int(math.Round(prev.IntervalDays))` (`internal/schedule/actions.go:166-197`, esp. `:189-194`), while the
+  scheduler truncates: `Floor(delayMinutes/1440)` for a step and `uint64(interval)` for a graduation
+  (`scheduler_basic.go:25-27,34-40`). *Reproduced* on both drivers: `step=1.5d before_scheduled=1
+  restored_scheduled=2` and `step=200000d before_scheduled=200000 restored_scheduled=0`, with the due date
+  restored exactly so nothing looks wrong. The value is exported to Anki as the interval and is the
+  `ScheduledDays` handed to the next `Next`. The existing undo test cannot see it: its fixture uses 1m/10m
+  steps, so both values are 0 (`actions_test.go:137-139`). *Acceptance:* stop deriving an integer from a
+  float — snapshot the post-grade `scheduled_days` in the append-only log (nullable column, backfill
+  `floor(interval_days)`) and restore it verbatim; add a regression with a ≥ 1-day step plus a mutation
+  control that fails when the field is left unrestored.
+
+- [ ] **M19-30 The retrievability order has no caller, and when reached it applies the daily cap before
+  ranking** — *should-fix.* `OrderByRetrievability` is the documented default (`internal/schedule/queue.go:
+  33-38`) but the only production call site always passes `OrderByDueAt` (`internal/api/service.go:1177-1185`),
+  so that order is unreachable. If it were reached, `Build` sorts the rows the deck query already limited by
+  `LIMIT` (`queue.go:229-251,739-747`), so the ordering only permutes the N earliest-due cards and can
+  drop the one most likely to be forgotten. *Reproduced* with `reviews_per_day=1` and two due cards
+  (R=0.994 due 2 h ago, R=0.846 due 1 h ago): `queue=[{CardID:1 ...}]
+  wanted_lowest_R_card=2`. *Acceptance:* either delete the path and the enum value, or rank before capping
+  (fetch up to `BatchSize`, compute retrievability, apply each deck's allowance to the ranked list); a
+  regression keeps a low-R card that is not the earliest due.
+
+- [ ] **M19-31 A `choice_single`/`choice_multi` back face panics on a large numeric field value** —
+  *should-fix.* `optionIndex` rejects negatives and fractions but has no upper bound
+  (`internal/answer/context.go:261-268`); `1e100` parses, truncates to itself, and `int(1e100)` yields
+  `math.MinInt64` on amd64, which passes the `index >= len(options)` guard and indexes the slice
+  (`choice_single.go:33-39`, `choice_multi.go:36-59`). *Reproduced*: `PANIC=runtime error: index out of
+  range [-9223372036854775808]` for both controls. The value comes from note content and the render runs in
+  the request that serves the card face, so the recovery middleware turns it into a 500 per flip rather
+  than a crash; the grade path is unaffected because it unmarshals into `int`, which is why a grade-path
+  test would miss it. *Acceptance:* bound the index in `optionIndex` (`> math.MaxInt32` is an error) and
+  have both `RenderBack` implementations treat an out-of-range stored index as an error; a regression
+  asserts an error and no panic.
+
+- [ ] **M19-32 `choice_multi` halves the score when the correct-index list repeats an index** —
+  *should-fix.* `correct` is built as a set but the denominator is `len(answers)`
+  (`internal/answer/choice_multi.go:69-99`, denominator at `:92`), and `choiceMultiParts` validates range
+  but not duplicates (`:112-137`). `answers = "0<br>0"` therefore scores `(1-0)/2 = 0.5`, i.e. `Hard` for a
+  fully correct selection. *Reproduced*: `score=0.5 rating=2 detail=map[answers:[0 0] hits:1 misses:0
+  selected:[0]]`. *Acceptance:* deduplicate `answers` or refuse the duplicate at parse time, so the
+  denominator is the number of distinct correct options; a regression selects the duplicated index once and
+  expects score 1.
+
+- [ ] **M19-33 `IsMachineGraded` special-cases a control name in core code** — *nit.*
+  `internal/answer/answer.go:136-147` returns false when `spec.Control == "short_answer"`, while the package
+  doc and AGENTS §2.3.7 say adding a control means adding one file and registering it with no core change.
+  A second self-assessed control (the essay or draw-and-explain kind M10-3 will need) must edit this
+  function; if the author forgets, the API demands a 1–4 self-rating for a card that records a written
+  answer. Verified by reading it and its callers (`internal/api/service.go:1465-1500`); no test asserts the
+  rule for any control but `short_answer`. *Acceptance:* an optional interface implemented by the control
+  (`SelfAssessed() bool`, or `MachineGraded() bool`) consulted by `IsMachineGraded`, with no control name
+  appearing as a string literal outside its own file.
+
+- [ ] **M19-34 The retention interval constant is dead and the sweep runs every 10 minutes while the
+  package documents one hour** — *nit.* `retention.DefaultInterval = time.Hour` is documented as the
+  fallback (`internal/retention/retention.go:36-41,72-75`) and passed through as the zero value
+  (`:96-102`), after which the worker substitutes its own 10-minute default
+  (`internal/worker/worker.go:68-71`), and production never sets `Interval` (`cmd/engram/main.go:199-207`).
+  The behaviour is harmless — everything reclaimed is already expired and the queries are indexed — but a
+  reader reasoning about load is wrong by 6×, and AGENTS §1 makes a comment that disagrees with the code a
+  finding. Verified by tracing the three call sites; no command needed. *Acceptance:* resolve the default
+  in `New` so the constant and the comment become true, or delete the constant and document ten minutes.
+
+- [ ] **M19-35 The grade-mapping thresholds are not range-checked, so a perfect score can map to `Again`** —
+  *nit.* `validate` checks version and rating range but not the threshold domain
+  (`internal/answer/grade.go:86-104`), `withDefaults` treats every `<= 0` threshold as unset (`:106-127`),
+  and `RatingFor` clamps the score into `[0,1]` (`:131-145`). Observed: `{"full_threshold":2}` makes
+  `rating(1)=2`, `{"full_threshold":2,"none_threshold":1.5}` makes `rating(1)=1`, and negative thresholds
+  silently become 1/0. Since `reviews.rating` is written from the mapping and cannot be reconstructed, the
+  second case is the damaging one; `full_threshold: 0` ("every answer is full credit") is unrepresentable
+  because it reads as unset. Reachability, stated so this is not over-read: no transport writes
+  `grade_mapping_json` today — the preset request struct has no such field and the `.apkg` import carries
+  none — so this is a latent validation gap, not a currently reachable defect. *Acceptance:* validate
+  `0 <= none_threshold < full_threshold <= 1` and make "unset" explicit so an intentional 0 survives.
+
+- [ ] **M19-36 Three test defects that will not fail when the behaviour breaks** — *nit.*
+  (a) `internal/schedule/actions_test.go:137-139` compares `restored.ScheduledDays` with `afterFirst`'s in a
+  fixture whose steps are the default 1m/10m, so both are 0 and the assertion holds even if undo restores
+  nothing — the real divergence is M19-29. (b) `internal/schedule/deck_counts_test.go:24` claims `DeckCounts`
+  has no `Now` parameter and reads the clock itself, which is false (`queue.go:322,330` and the callers pass
+  `Now`); the test then depends on wall-clock proximity, so it fails if the process crosses the 04:00 cut-off
+  between fixture setup and the call (`deck_budget_test.go:24,87` has the same shape). (c) No test asserts
+  that `NewScheduler` fails for parameters the library will reject; `migrate_preset_limits_test.go` compares
+  parameters after migration 0020 has already repaired the row, so it never reaches the silent-reset path of
+  M19-27. Verified by reading; (b)'s flake window is milliseconds wide, so it was not reproduced.
+  *Acceptance:* a ≥ 1-day step in the undo fixture plus a mutation check, explicit `Now` in the deck-count
+  and budget tests with the comment corrected, and a `NewScheduler` error case for an unacceptable step.
 
 
 ## 2. Release ledger
