@@ -362,12 +362,6 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 		adminError(c, http.StatusBadRequest, "last_admin")
 		return
 	}
-	// Send the "account deleted" notification before deleting; a mail failure does not affect the deletion (the notify function returns no error).
-	s.notifyAccountStatus(ctx, target, "deleted")
-	// Invalidate sessions before deleting, so that even if the deletion fails midway no usable session is left behind.
-	if err := s.accounts.ForceLogout(ctx, target.ID); err != nil {
-		s.logger.Error("spa admin: revoke sessions before delete failed", "user_id", target.ID, "error", err)
-	}
 	// The authoritative decision and the deletion are in the same gate transaction.
 	err := store.WithAdminGate(ctx, s.db, func(tx *gorm.DB, admins int64) error {
 		var fresh store.User
@@ -382,6 +376,13 @@ func (s *Server) adminUserDelete(c *gin.Context) {
 	if s.writeAdminGateError(c, err, "delete user", target.ID) {
 		return
 	}
+	// Only a committed deletion may notify and revoke: the pre-check above is lock-free, and a gate refusal
+	// (a concurrent demotion that made target the last admin) must leave the account's mail and sessions intact.
+	if err := s.accounts.ForceLogout(ctx, target.ID); err != nil {
+		s.logger.Error("spa admin: revoke sessions after delete failed", "user_id", target.ID, "error", err)
+	}
+	// A mail failure does not affect the deletion; the notify function returns no error.
+	s.notifyAccountStatus(ctx, target, "deleted")
 	s.auditor.Record(ctx, store.AuditEntry{
 		UserID: store.Ptr(actor.ID), Action: store.ActionUserDelete,
 		TargetType: "user", TargetID: store.Ptr(target.ID),

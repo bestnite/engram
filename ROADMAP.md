@@ -1745,7 +1745,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go vet ./internal/web/` and
   `go test ./internal/web/ -run 'TestAdminUser' -count=1` pass.
 
-- [ ] **M19-47 A refused user deletion has already mailed the user and signed them out** — *nit.*
+- [x] **M19-47 A refused user deletion has already mailed the user and signed them out** — *nit.*
   `adminUserDelete` sends the "account deleted" notice and calls `ForceLogout` before the authoritative
   last-admin check inside `WithAdminGate` (`internal/web/admin_users_api.go:355-379`); the pre-check at
   `:356` is lock-free, so a concurrent demotion can make the gate refuse after both side effects ran. The
@@ -1753,6 +1753,25 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   reading the order; *Unverified:* the interleaving was not reproduced. *Acceptance:* move the notification
   and the revocation after the gate commit and add a test that a deletion refused with `last_admin` sends no
   mail and revokes no session.
+  *Closed by this commit (`fix(web): side effects of a user deletion only after it commits`).*
+  `adminUserDelete` (`internal/web/admin_users_api.go:364`) now runs `ForceLogout` and the "account deleted"
+  notice only after `WithAdminGate` returns nil, so a refusal leaves the account's mail and sessions
+  untouched; the early lock-free pre-check stays as a cheap refusal that has no side effects.
+  `TestAdminUserDeleteRefusedSendsNothing` (`internal/web/admin_users_delete_refusal_test.go`) gives the
+  server a second admin and has both admins delete each other concurrently, so both pass the pre-check and
+  the gate refuses one with `last_admin`; it asserts exactly one 204 and one 400, exactly one
+  `account_status` outbox row, a working session for the survivor and 401 for the deleted account. Raw
+  output of `go test ./internal/web/ -run TestAdminUserDeleteRefusedSendsNothing -count=1 -v`:
+  ```
+  === RUN   TestAdminUserDeleteRefusedSendsNothing
+  --- PASS: TestAdminUserDeleteRefusedSendsNothing (0.04s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.053s
+  ```
+  With only `internal/web/admin_users_api.go` reverted, the same test failed with
+  `account-status mails = 2, want 1: a refused deletion must not mail the surviving account`.
+  `go test ./internal/web/ -run 'TestAdminUser|TestAdminWrite|TestAdminGate' -count=1` passes, and
+  `go vet ./internal/web/` is clean.
 
 - [ ] **M19-48 Anki drops the `engram` note-type key, so machine grading does not survive a round trip
   through Anki** — *should-fix.* `internal/anki/write.go:414-418` states that "Anki carries an unknown
