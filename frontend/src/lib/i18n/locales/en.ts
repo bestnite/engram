@@ -567,7 +567,7 @@ export const en: LocaleCatalog = {
   'presets.form.edit_note': 'Changes apply to future scheduling only; existing due dates stay as they are.',
   'presets.form.error.name_required': 'Preset name is required.',
   'presets.form.error.retention': 'Desired retention must be a number between 0 and 1 (exclusive).',
-  'presets.form.error.max_interval': 'Maximum interval must be a positive whole number of days.',
+  'presets.form.error.max_interval': 'Maximum interval must be a whole number from 1 to 36,500 days.',
   'presets.form.error.steps': 'Invalid learning steps; use comma-separated durations such as 1m,10m.',
   'presets.form.error.invalid_request': 'The preset request is invalid.',
   'presets.form.error.default_protected': 'The default preset cannot be renamed or deleted.',

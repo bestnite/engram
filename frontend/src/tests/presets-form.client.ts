@@ -101,8 +101,21 @@ describe('PresetsView max interval saving', () => {
     expect(update).not.toHaveBeenCalled();
     // The message must be a language-pack string, not the key itself: the dialog used to render formError raw.
     const error = document.body.querySelector('[data-testid="presets-form-error"]');
-    expect(error?.textContent).toContain('最大间隔必须是正整数天数。');
+    expect(error?.textContent).toContain('最大间隔必须是 1 到 36,500 之间的整数天数。');
     expect(error?.textContent).not.toContain('presets.form.error');
+  });
+
+  it('rejects an interval above the limit and sends the limit', async () => {
+    const update = await setup();
+    await type('presets-form-max-interval', '36501');
+    await submit();
+    expect(update).not.toHaveBeenCalled();
+    expect(document.body.querySelector('[data-testid="presets-form-error"]')?.textContent)
+      .toContain('最大间隔必须是 1 到 36,500 之间的整数天数。');
+
+    await type('presets-form-max-interval', '36500');
+    await submit();
+    expect(update).toHaveBeenCalledWith('8', expect.objectContaining({ maximum_interval_days: 36500 }));
   });
 
   it('keeps the field labels short and explains each one in a help button outside its label', async () => {

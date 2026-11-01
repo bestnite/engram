@@ -201,6 +201,17 @@ func TestPresetWriteRejectsExcessiveMaximumInterval(t *testing.T) {
 			if rec.Code != http.StatusBadRequest || code != "preset_max_interval_invalid" {
 				t.Fatalf("status=%d code=%q body=%s", rec.Code, code, rec.Body.String())
 			}
+			var envelope struct {
+				Error struct {
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if want := "The maximum interval must be between 1 and 36,500 days."; envelope.Error.Message != want {
+				t.Errorf("message = %q, want %q", envelope.Error.Message, want)
+			}
 		})
 	}
 }

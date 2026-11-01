@@ -113,7 +113,7 @@ var presetErrorMessages = map[string]string{
 	"invalid_request":             "The preset request is invalid.",
 	"preset_name_required":        "The preset name is required.",
 	"preset_retention_invalid":    "The desired retention must be between 0 and 1 (exclusive).",
-	"preset_max_interval_invalid": "The maximum interval must be a positive number of days.",
+	"preset_max_interval_invalid": "The maximum interval must be between 1 and 36,500 days.",
 	"preset_steps_invalid":        "The learning steps are invalid.",
 	"preset_save_failed":          "The preset could not be saved.",
 	"not_found":                   "The requested preset was not found.",
@@ -529,7 +529,7 @@ func optimizeVerdict(r *store.OptimizeResult) string {
 }
 
 // parsePresetRequest parses the JSON and validates the format; a non-empty code means refused.
-// Validation semantics: retention in the open interval (0,1), maximum interval a positive integer,
+// Validation semantics: retention in the open interval (0,1), maximum interval an integer from 1 to 36,500 days,
 // steps checked against the grammar with non-positive values refused — the store's validation remains the last line of defence.
 func parsePresetRequest(c *gin.Context) (presetRequest, string) {
 	var req presetRequest
@@ -544,7 +544,7 @@ func parsePresetRequest(c *gin.Context) (presetRequest, string) {
 		return req, "preset_name_required"
 	case req.DesiredRetention <= 0 || req.DesiredRetention >= 1:
 		return req, "preset_retention_invalid"
-	case req.MaximumIntervalDays <= 0:
+	case req.MaximumIntervalDays <= 0 || req.MaximumIntervalDays > 36500:
 		return req, "preset_max_interval_invalid"
 	case !validStepSpec(req.LearningSteps) || !validStepSpec(req.RelearningSteps):
 		return req, "preset_steps_invalid"

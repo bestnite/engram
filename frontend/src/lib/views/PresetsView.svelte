@@ -153,7 +153,7 @@
       return 'presets.form.error.retention';
     }
     const maxInterval = Number(formMaxInterval.trim());
-    if (!Number.isInteger(maxInterval) || maxInterval <= 0) {
+    if (!Number.isInteger(maxInterval) || maxInterval <= 0 || maxInterval > 36500) {
       return 'presets.form.error.max_interval';
     }
     const learning = formLearning.trim();

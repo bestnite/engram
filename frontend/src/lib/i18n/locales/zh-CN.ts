@@ -566,7 +566,7 @@ export const zhCN: LocaleCatalog = {
   'presets.form.edit_note': '修改只影响之后的排程，已安排的到期日不变。',
   'presets.form.error.name_required': '预设名称不能为空。',
   'presets.form.error.retention': '目标保留率必须是 0 到 1 之间的数（不含 0 和 1）。',
-  'presets.form.error.max_interval': '最大间隔必须是正整数天数。',
+  'presets.form.error.max_interval': '最大间隔必须是 1 到 36,500 之间的整数天数。',
   'presets.form.error.steps': '学习步骤格式无效，请用逗号分隔的时长，如 1m,10m。',
   'presets.form.error.invalid_request': '预设请求无效。',
   'presets.form.error.default_protected': '默认预设不可改名，也不可删除。',
