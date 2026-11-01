@@ -70,11 +70,56 @@ func TestLoginLimiterDelayGrowsAndResetsOnSuccess(t *testing.T) {
 		t.Errorf("4th delay = %v, want %v", prev, 8*base)
 	}
 
-	// Reset after a successful login: the delay is back to zero (acceptance point).
+	// Reset after a successful login: the account's count is back to zero, so the same account on
+	// another IP waits nothing. The IP's accumulated failures stay until the window ends, so an
+	// attempt from that IP still waits.
 	lim.Reset("alice", "127.0.0.1")
-	if d, err := lim.Wait(ctx, "alice", "127.0.0.1"); err != nil || d != 0 {
-		t.Fatalf("Wait() after Reset = (%v, %v), want (0, nil)", d, err)
+	if d, err := lim.Wait(ctx, "alice", "198.51.100.7"); err != nil || d != 0 {
+		t.Fatalf("Wait() for the reset account on another IP = (%v, %v), want (0, nil)", d, err)
 	}
+	lim.Release("alice", "198.51.100.7")
+	if d, err := lim.Wait(ctx, "bob", "127.0.0.1"); err != nil || d <= 0 {
+		t.Fatalf("Wait() for another account on the same IP after a success = (%v, %v), want > 0", d, err)
+	}
+	lim.Release("bob", "127.0.0.1")
+}
+
+// TestLoginLimiterSuccessKeepsOtherAccountsIPFailures covers password spraying: an attacker with one
+// valid account must not be able to clear the per-IP budget by logging into it, so failures another
+// account accumulated on the same IP stay in place after that successful login.
+func TestLoginLimiterSuccessKeepsOtherAccountsIPFailures(t *testing.T) {
+	lim := NewLoginLimiter(LimiterConfig{
+		BaseDelay:     10 * time.Millisecond,
+		Window:        time.Hour,
+		MaxIPFailures: 4,
+		Sleep:         func(context.Context, time.Duration) error { return nil },
+	})
+	ctx := context.Background()
+	const ip = "203.0.113.9"
+
+	for i := 0; i < 3; i++ {
+		lim.RecordFailure("mallory", ip)
+	}
+	// alice's valid login from the same IP resets only alice's account bucket.
+	lim.Reset("alice", ip)
+
+	d, err := lim.Wait(ctx, "victim-1", ip)
+	if err != nil || d <= 0 {
+		t.Fatalf("Wait() after another account's success = (%v, %v), want > 0: the IP failures must survive", d, err)
+	}
+	lim.Release("victim-1", ip)
+
+	// One more failure reaches the per-IP limit even though a successful login happened in between.
+	lim.RecordFailure("mallory", ip)
+	if _, err := lim.Wait(ctx, "victim-2", ip); !errors.Is(err, ErrLoginLocked) {
+		t.Fatalf("Wait() after the fourth IP failure = %v, want ErrLoginLocked: a success must not refill the IP budget", err)
+	}
+
+	// The logged-in account itself starts from zero on a fresh IP.
+	if d, err := lim.Wait(ctx, "alice", "198.51.100.7"); err != nil || d != 0 {
+		t.Fatalf("Wait() for the reset account on another IP = (%v, %v), want (0, nil)", d, err)
+	}
+	lim.Release("alice", "198.51.100.7")
 }
 
 // TestLoginLimiterCapsDelay asserts the delay is capped, so the failure count cannot push the wait to an unacceptable length.

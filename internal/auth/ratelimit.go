@@ -67,7 +67,7 @@ type failureBucket struct {
 //
 // With delay alone and no locking, an attacker could amplify throughput arbitrarily with concurrency (every request just sleeps a few extra seconds).
 // The price of locking is that someone can deliberately mistype to lock an account for one window (15 minutes); for a self-hosted instance that is
-// an acceptable trade-off, and a successful login clears it immediately.
+// an acceptable trade-off, and a successful login clears the account's count immediately. The IP count is not cleared by a successful login; it expires with its window.
 //
 // State lives in memory: this service is deployed as a single instance and pulls in no Redis; failure counts are short-lived anti-brute-force data,
 // so clearing them on process restart is an acceptable trade-off.
@@ -304,12 +304,23 @@ func (l *LoginLimiter) Release(username, ip string) {
 	}
 }
 
-// Reset clears the failure counts and placeholders of the account and the IP after a successful login (acceptance: reset on success).
+// Reset clears the account's failure count after a successful login and returns this attempt's
+// in-flight slot in the IP dimension. The IP count is kept until its window ends: it is the only
+// control against one password tried across many accounts, and clearing it on any successful login
+// would let an attacker with one valid account reset the per-IP budget at will.
 func (l *LoginLimiter) Reset(username, ip string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.buckets, accountKey(username))
-	delete(l.buckets, ipKey(ip))
+	key := ipKey(ip)
+	if b := l.buckets[key]; b != nil {
+		if b.inflight > 0 {
+			b.inflight--
+		}
+		if b.count == 0 && b.inflight == 0 {
+			delete(l.buckets, key)
+		}
+	}
 }
 
 // Default parameters for anonymous-entry rate limiting: pre-login entry points such as /forgot-password and /register

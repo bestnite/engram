@@ -1009,7 +1009,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   before binding (and keep the existing package limit on uploads), give request bodies a deadline that does
   not cut off the documented large uploads, and add a test that an oversized login body answers 413.
 
-- [ ] **M19-41 One successful login clears the per-IP failure budget, so password spraying is not limited
+- [x] **M19-41 One successful login clears the per-IP failure budget, so password spraying is not limited
   by IP** — *should-fix.* `Reset` deletes both the account bucket and the `ip:` bucket
   (`internal/auth/ratelimit.go:307-313`), and `apiLogin` calls it on every success
   (`internal/web/auth_api.go:138-140`); the TOTP step does the same (`internal/web/totp_login.go:119-121`).
@@ -1019,6 +1019,33 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Unverified:* no spraying test exists and none was run. *Acceptance:* on success clear only the account
   bucket, or keep the IP count until its window ends; add a test that a successful login by one account
   leaves another account's accumulated IP failures in place.
+  *Closed by this commit (`fix(auth): keep the per-IP failure budget across a successful login`).*
+  `LoginLimiter.Reset` (`internal/auth/ratelimit.go:311`) now deletes only the account bucket and returns
+  this attempt's in-flight slot in the IP dimension, leaving the IP's recorded failure count and its
+  `lastAt` in place until the window ends. `apiLogin` and the TOTP second step call the same `Reset`, so
+  both entry points keep the per-IP budget; the successful attempt itself still releases its placeholder,
+  so it cannot hold the IP at its limit. The limiter's doc comment was corrected to say the account count
+  is cleared on success while the IP count expires with its window.
+  `TestLoginLimiterSuccessKeepsOtherAccountsIPFailures` (`internal/auth/ratelimit_test.go`) records three
+  failures for one account on an IP, resets after a different account's successful login from that IP,
+  and asserts the next attempt still waits; a fourth failure then reaches `MaxIPFailures` and the next
+  attempt is refused with `ErrLoginLocked`, while the reset account itself waits nothing on a fresh IP.
+  `TestLoginLimiterDelayGrowsAndResetsOnSuccess` now checks the account reset on another IP and the kept
+  IP delay on the original one. Raw output of
+  `go test ./internal/auth/ -run 'TestLoginLimiterSuccessKeepsOtherAccountsIPFailures|TestLoginLimiterDelayGrowsAndResetsOnSuccess' -count=1 -v`:
+  ```
+  === RUN   TestLoginLimiterDelayGrowsAndResetsOnSuccess
+  --- PASS: TestLoginLimiterDelayGrowsAndResetsOnSuccess (0.00s)
+  === RUN   TestLoginLimiterSuccessKeepsOtherAccountsIPFailures
+  --- PASS: TestLoginLimiterSuccessKeepsOtherAccountsIPFailures (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/auth	0.010s
+  ```
+  With `Reset` restored to deleting both buckets, the new test failed with
+  `Wait() after another account's success = (0s, <nil>), want > 0: the IP failures must survive`.
+  `go test ./internal/auth/ -count=1` passes in `0.596s` and
+  `go test ./internal/web/ -run 'TestLogin|TestTOTP|TestAuth|TestRate|TestRegister|TestForgot' -count=1`
+  passes.
 
 - [ ] **M19-42 The admin settings saves are not atomic, so a rejected later key leaves earlier keys
   written** — *should-fix.* `adminSettingsSave` validates and writes inside one loop
