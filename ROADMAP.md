@@ -1927,7 +1927,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `cancelled job error = <nil>, want "cancelled by admin"`. `go vet ./internal/jobs/` and
   `/home/nite/.hermes/cache/scratch/pgtest ./internal/jobs/ -count=1` pass.
 
-- [ ] **M19-72 A child that leaves the process group keeps the timeout from ending the job** — *should-fix.*
+- [x] **M19-72 A child that leaves the process group keeps the timeout from ending the job** — *should-fix.*
   `runProcess` hands the child a `tailBuffer` for stdout and stderr (`internal/jobs/jobs.go:560-562`), so
   `exec` copies through an `os.Pipe` and `cmd.Wait` does not return until every writer of that pipe is gone
   (`:567-568`, waited on at `:577,581`). `killProcessGroup` (`internal/jobs/process_unix.go:22-30`) only reaches
@@ -1940,6 +1940,28 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   or close the parent's read end when the timer or context fires) so that `runProcess` returns within a fixed
   grace period; a regression uses a `setsid` grandchild and asserts the job is terminal well before that
   process would have exited on its own.
+  *Closed by this commit (`fix(jobs): bound the wait for output pipes a killed job left open`).*
+  `runProcess` (`internal/jobs/jobs.go:591`) sets `cmd.WaitDelay = processWaitDelay` (`:596`); the constant is
+  two seconds (`:583`). After the timer or the context has killed the process group, `cmd.Wait` therefore
+  closes a pipe an escaped grandchild still holds and returns within that grace period, and the timeout and
+  cancellation paths already ignore `Wait`'s result and report `ErrTimedOut` or the cancellation. A
+  well-behaved child's buffered output is read before the bound applies, so the captured log tail is unchanged
+  for ordinary jobs. `TestOptimiseTimeoutEndsWhenGrandchildEscapesTheGroup`
+  (`internal/jobs/jobs_test.go:236`) runs `/bin/sh -c "setsid sleep 30 & echo child=$!; wait"` under a 200 ms
+  timeout, asserts the job ends terminal inside six seconds, still reports `job timed out after 200ms`, and
+  checks that the escaped grandchild is alive at that moment (so the case really reproduced) before killing
+  it in cleanup. Raw output of
+  `go test ./internal/jobs/ -run TestOptimiseTimeoutEndsWhenGrandchildEscapesTheGroup -count=1 -v`:
+  ```
+  === RUN   TestOptimiseTimeoutEndsWhenGrandchildEscapesTheGroup
+      jobs_test.go:272: job 1 status=failed elapsed=2.208s error="job timed out after 200ms" escaped_grandchild_pid=3978933 still_alive=true
+  --- PASS: TestOptimiseTimeoutEndsWhenGrandchildEscapesTheGroup (2.32s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/jobs	2.331s
+  ```
+  With only the `cmd.WaitDelay` assignment removed, the same run failed with
+  `job 1 did not reach "failed" within 6s (last status "running")`. `go test ./internal/jobs/ -count=1` passes
+  in `4.002s` and `/home/nite/.hermes/cache/scratch/pgtest ./internal/jobs/ -count=1` in `4.092s`.
 
 - [x] **M19-73 The preset write-back and the job's terminal write are two writes, so a failing finish either
   leaves the job running or reports failure after the weights were applied** — *should-fix.* `FinishOptimize`

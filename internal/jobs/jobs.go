@@ -575,6 +575,13 @@ func HTTPStatus(err error) int {
 	return http.StatusInternalServerError
 }
 
+// processWaitDelay bounds the wait for the output pipes after the child exits or is killed.
+//
+// A grandchild that escaped the process group (setsid or setpgid) can keep the pipe open after every process the
+// group kill can reach is gone. Without a bound cmd.Wait would wait for that pipe forever, so the timeout and the
+// cancellation would not end the job and its single slot would stay occupied.
+const processWaitDelay = 2 * time.Second
+
 // runProcess starts the subprocess and waits for it to finish.
 //
 // The subprocess is put into its own process group (setProcessGroup), and on timeout or ctx cancellation the whole tree is killed
@@ -586,6 +593,7 @@ func runProcess(ctx context.Context, c Command, timeout time.Duration, maxBytes 
 	cmd.Dir = c.Dir
 	cmd.Env = c.Env
 	cmd.Stdin = c.Stdin
+	cmd.WaitDelay = processWaitDelay
 	setProcessGroup(cmd)
 
 	tail := newTailBuffer(maxBytes)

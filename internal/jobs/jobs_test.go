@@ -230,6 +230,49 @@ func TestOptimiseTimeoutKillsProcessGroup(t *testing.T) {
 		failed.ID, failed.Status, elapsed.Round(time.Millisecond), *failed.Error, *failed.LogTail, childPID, true)
 }
 
+// TestOptimiseTimeoutEndsWhenGrandchildEscapesTheGroup covers a grandchild that left the process group with setsid, so
+// the group kill cannot reach it and it keeps the child's output pipe open. The job must still become terminal within a
+// bounded time instead of waiting for that process to exit on its own.
+func TestOptimiseTimeoutEndsWhenGrandchildEscapesTheGroup(t *testing.T) {
+	const timeout = 200 * time.Millisecond
+	runner, st, _ := newTestRunner(t, timeout, func(context.Context, *store.Job, Reporter) (Command, error) {
+		return Command{
+			Name: "/bin/sh",
+			Args: []string{"-c", "setsid sleep 30 & echo child=$!; wait"},
+		}, nil
+	})
+
+	start := time.Now()
+	job, err := runner.Enqueue(context.Background(), KindOptimize, nil)
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	failed := waitForStatus(t, st, job.ID, StatusFailed, 6*time.Second)
+	elapsed := time.Since(start)
+
+	if elapsed >= 6*time.Second {
+		t.Fatalf("job took %s; the wait for the escaped grandchild's pipe was not bounded", elapsed)
+	}
+	if failed.Error == nil || !strings.Contains(*failed.Error, ErrTimedOut.Error()) {
+		t.Fatalf("failed job error = %v, want it to mention %q", failed.Error, ErrTimedOut.Error())
+	}
+
+	m := regexp.MustCompile(`child=(\d+)`).FindStringSubmatch(deref(failed.LogTail))
+	if m == nil {
+		t.Fatalf("log tail %q does not contain child=<pid>", deref(failed.LogTail))
+	}
+	childPID, err := strconv.Atoi(m[1])
+	if err != nil {
+		t.Fatalf("parse child pid %q: %v", m[1], err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(childPID, syscall.SIGKILL) })
+	if processGone(childPID, 100*time.Millisecond) {
+		t.Fatalf("grandchild %d exited on its own before the job ended; the case did not reproduce", childPID)
+	}
+	t.Logf("job %d status=%s elapsed=%s error=%q escaped_grandchild_pid=%d still_alive=%v",
+		failed.ID, failed.Status, elapsed.Round(time.Millisecond), *failed.Error, childPID, true)
+}
+
 // deref dereferences nullable text, returning "<nil>" when nil, so test logs print a readable value.
 func deref(s *string) string {
 	if s == nil {
