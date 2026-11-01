@@ -42,6 +42,7 @@ from anki.collection import (
 )
 from anki.consts import HELP_SITE
 from anki.import_export_pb2 import (
+    ExportLimit,
     ImportAnkiPackageOptions,
     ImportAnkiPackageRequest,
     MediaEntries,
@@ -2008,6 +2009,78 @@ def build_memory_fixture(workdir: Path) -> None:
         col.close()
 
 
+def build_learning_due_fixture(workdir: Path) -> None:
+    package = OUT_DIR / "learning-due.anki21.apkg"
+    col = Collection(str(workdir / "learning-due-source.anki2"))
+    try:
+        model = col.models.by_name("Basic")
+        cards = {}
+        for kind in ("intraday", "interday", "relearning", "review", "relearning-intraday"):
+            placements = (("filtered-on",) if kind == "relearning-intraday" else
+                          ("filtered-on", "filtered-off") if kind == "review" else
+                          ("home", "suspended", "buried", "filtered-on", "filtered-off"))
+            for placement in placements:
+                label = f"{kind}-{placement}"
+                note = col.new_note(model)
+                note["Front"] = label
+                note["Back"] = label
+                col.add_note(note, 1)
+                cards[label] = note.cards()[0].id
+        for label, cid in cards.items():
+            conf = col.decks.config_dict_for_deck_id(1)
+            conf["new"]["delays"] = [1 if label.startswith("intraday") else 4320]
+            conf["lapse"]["delays"] = [1 if label.startswith("relearning-intraday") else 4320]
+            col.decks.update_config(conf)
+            if label.startswith(("relearning", "review")):
+                col.sched.set_due_date([cid], "0!")
+            if not label.startswith("review"):
+                card = col.get_card(cid)
+                card.start_timer()
+                col.sched.answerCard(card, 1)
+            if label.endswith("suspended"):
+                col.sched.suspend_cards([cid])
+            if label.endswith("buried"):
+                col.sched.bury_cards([cid], manual=True)
+        for suffix, reschedule in (("on", True), ("off", False)):
+            did = col.decks.new_filtered(f"Filtered {suffix}")
+            deck = col.decks.get(did)
+            deck["terms"] = [[f"filtered-{suffix}", 100, 0]]
+            deck["resched"] = reschedule
+            col.decks.save(deck)
+            assert col.sched.rebuild_filtered_deck(did).count == (5 if reschedule else 4)
+        col.export_anki_package(out_path=str(package), options=ExportAnkiPackageOptions(
+            with_scheduling=True, with_deck_configs=True, with_media=False, legacy=True), limit=ExportLimit())
+    finally:
+        col.close()
+    with zipfile.ZipFile(package) as archive:
+        db_path = workdir / "learning-due-export.anki2"
+        db_path.write_bytes(archive.read("collection.anki21"))
+    conn = connect(db_path)
+    crt = conn.execute("select crt from col").fetchone()[0]
+    rows = conn.execute("select n.flds, c.type, c.queue, c.due, c.odue, c.odid from cards c join notes n on n.id=c.nid").fetchall()
+    conn.close()
+    result = {"source": SOURCE, "cards": {}}
+    col = Collection(str(workdir / "learning-due-import.anki2"))
+    try:
+        col.import_anki_package(ImportAnkiPackageRequest(package_path=str(package), options=ImportAnkiPackageOptions(with_scheduling=True, with_deck_configs=True)))
+        imported = {col.get_note(nid)["Front"]: col.get_note(nid).cards()[0] for nid in col.find_notes("")}
+        for fields, kind, queue, due, odue, odid in rows:
+            label = fields.split("\x1f")[0]
+            card = imported[label]
+            stats = col.card_stats_data(card.id)
+            entry = {"type": kind, "queue": queue, "due": due, "odue": odue, "odid": odid, "crt": crt, "imported_deck": col.decks.name(card.did)}
+            effective_due = odue if odid else due
+            if kind != 2 and effective_due > 1_000_000_000:
+                assert stats.HasField("due_date"), label
+                entry["due_at"] = stats.due_date
+            result["cards"][label] = entry
+            print(f"learning-due {label}: {result['cards'][label]}")
+        assert len(result["cards"]) == 18
+        write_json(OUT_DIR / "learning-due.golden.json", result)
+    finally:
+        col.close()
+
+
 def main(argv: list[str]) -> int:
     if "--table" in argv:
         print_table()
@@ -2073,6 +2146,7 @@ def main(argv: list[str]) -> int:
                 golden["import_note_types"] = imported[package.fixture]
             write_json(OUT_DIR / ("%s.golden.json" % package.fixture), golden)
         build_memory_fixture(workdir)
+        build_learning_due_fixture(workdir)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

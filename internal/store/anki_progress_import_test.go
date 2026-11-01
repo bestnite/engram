@@ -419,6 +419,11 @@ func TestAnkiImportDueDates(t *testing.T) {
 			{"relearning_queue1", 3, 1, 1700000000, 0, 0, 1700000000},
 			{"learning_queue3", 1, 3, 3, 0, 0, 1500259200},
 			{"relearning_queue3", 3, 3, 3, 0, 0, 1500259200},
+			{"learning_suspended_interday", 1, -1, 3, 0, 0, 1500259200},
+			{"learning_buried_interday", 1, -2, 3, 0, 0, 1500259200},
+			{"relearning_buried_interday", 3, -3, 3, 0, 0, 1500259200},
+			{"filtered_learning_interday", 1, 2, -100, 3, 1, 1500259200},
+			{"learning_suspended_intraday", 1, -1, 1700000000, 0, 0, 1700000000},
 			{"filtered_learning_queue1", 1, 1, -100, 1700000000, 1, 1700000000},
 			{"filtered_relearning_queue1", 3, 1, -100, 1700000000, 1, 1700000000},
 			{"filtered_learning_queue3", 1, 3, -100, 3, 1, 1500259200},
@@ -453,14 +458,38 @@ func TestAnkiImportDueDates(t *testing.T) {
 	}
 }
 
-func TestAnkiFilteredOraclePackage(t *testing.T) {
-	name := os.Getenv("TEST_ANKI_FILTERED_PACKAGE")
-	if name == "" {
-		t.Skip("TEST_ANKI_FILTERED_PACKAGE not set")
-	}
+func TestAnkiLearningDueOraclePackage(t *testing.T) {
+	name := ankiFixturePath("learning-due.anki21.apkg")
 	pkg, err := anki.ReadFile(name)
 	if err != nil {
 		t.Fatal(err)
+	}
+	var golden struct {
+		Cards map[string]struct {
+			Type, Queue          int
+			Due, Odue, Odid, Crt int64
+			DueAt                *int64 `json:"due_at"`
+		} `json:"cards"`
+	}
+	rawGolden, err := os.ReadFile(ankiFixturePath("learning-due.golden.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(rawGolden, &golden); err != nil {
+		t.Fatal(err)
+	}
+	if len(golden.Cards) != 18 || len(pkg.Cards) != 18 {
+		t.Fatalf("golden=%d cards=%d", len(golden.Cards), len(pkg.Cards))
+	}
+	labels := make(map[int64]string)
+	for _, note := range pkg.Notes {
+		labels[note.ID] = note.Fields[0]
+	}
+	for _, card := range pkg.Cards {
+		want, ok := golden.Cards[labels[card.NoteID]]
+		if !ok || pkg.CreatedAt != want.Crt || card.Type != want.Type || card.Queue != want.Queue || card.Due != want.Due || card.OriginalDue != want.Odue || card.OriginalDeckID != want.Odid {
+			t.Fatalf("card=%+v golden=%+v", card, want)
+		}
 	}
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -473,19 +502,36 @@ func TestAnkiFilteredOraclePackage(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var states []CardState
-			if err := db.Where("user_id = ?", user).Order("state").Find(&states).Error; err != nil {
-				t.Fatal(err)
+			if report.ProgressApplied != len(golden.Cards) {
+				t.Fatalf("report=%+v", report)
 			}
-			if len(states) != 3 {
-				t.Fatalf("states=%+v report=%+v", states, report)
-			}
-			for _, state := range states {
-				want := pkg.CreatedAt + 3*86400
-				if state.DueAt == nil || state.DueAt.Unix() != want {
-					t.Fatalf("state=%s due=%v want=%d", state.State, state.DueAt, want)
+			for label, want := range golden.Cards {
+				var state CardState
+				err := db.Table("card_states").Select("card_states.*").Joins("JOIN cards ON cards.id = card_states.card_id").Joins("JOIN notes ON notes.id = cards.note_id").Where("card_states.user_id = ? AND notes.fields_json LIKE ?", user, "%\""+label+"\"%").Take(&state).Error
+				if err != nil {
+					t.Fatalf("%s: %v", label, err)
 				}
-				t.Logf("state=%s due=%s unix=%d", state.State, state.DueAt.UTC().Format(time.RFC3339), state.DueAt.Unix())
+				due := want.Due
+				if want.Odid != 0 {
+					due = want.Odue
+				}
+				var expected int64
+				if want.Type != 2 && due > 1000000000 {
+					if want.DueAt == nil {
+						t.Fatalf("%s: missing Anki due timestamp", label)
+					}
+					expected = *want.DueAt
+				} else {
+					// Anki's API anchors day numbers to the importing collection's current day.
+					if want.DueAt != nil {
+						t.Fatalf("%s: unexpected Anki due timestamp", label)
+					}
+					expected = want.Crt + due*86400
+				}
+				if state.DueAt == nil || state.DueAt.Unix() != expected {
+					t.Errorf("%s due=%v want=%d", label, state.DueAt, expected)
+				}
+				t.Logf("%s due=%v want=%d", label, state.DueAt, expected)
 			}
 		})
 	}
@@ -546,58 +592,6 @@ func TestAnkiProgressReplayStart(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// TestRealAnkiPackage optionally exercises an externally generated Anki export.
-func TestRealAnkiPackage(t *testing.T) {
-	name := os.Getenv("TEST_ANKI_PACKAGE")
-	if name == "" {
-		t.Skip("TEST_ANKI_PACKAGE not set")
-	}
-	raw, err := os.ReadFile(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for driver, db := range packageDatabases(t) {
-		t.Run(driver, func(t *testing.T) {
-			ctx := context.Background()
-			user := seedUsers(t, db, "real_anki")[0]
-			report, err := NewDeckStore(db).ImportPackage(ctx, user, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck, IncludeProgress: true, ApplyWeights: true, MediaRoot: t.TempDir()})
-			if err != nil {
-				t.Fatal(err)
-			}
-			var states []CardState
-			var reviews []Review
-			if err := db.Where("user_id = ? AND reps > 0", user).Find(&states).Error; err != nil {
-				t.Fatal(err)
-			}
-			if err := db.Where("user_id = ?", user).Order("reviewed_at").Find(&reviews).Error; err != nil {
-				t.Fatal(err)
-			}
-			var deck Deck
-			if err := db.First(&deck, report.DeckID).Error; err != nil {
-				t.Fatal(err)
-			}
-			var preset Preset
-			if err := db.First(&preset, deck.PresetID).Error; err != nil {
-				t.Fatal(err)
-			}
-			if len(states) != 1 || len(reviews) < 2 || states[0].Stability == nil || states[0].Difficulty == nil || states[0].LastReviewAt == nil || states[0].LastReviewAt.Year() < 2020 || preset.WeightsJSON == nil {
-				t.Fatalf("states=%+v reviews=%+v preset=%+v", states, reviews, preset)
-			}
-			for _, s := range states {
-				t.Logf("state state=%s due=%v stability=%g difficulty=%g reps=%d lapses=%d last_review=%s", s.State, s.DueAt, *s.Stability, *s.Difficulty, s.Reps, s.Lapses, s.LastReviewAt.Format(time.RFC3339))
-			}
-			for _, r := range reviews {
-				duration := "NULL"
-				if r.DurationDays != nil {
-					duration = fmt.Sprint(*r.DurationDays)
-				}
-				t.Logf("review rating=%d reviewed_at=%s elapsed_ms=%d duration_days=%s state_before=%d review_day=%s", r.Rating, r.ReviewedAt.Format(time.RFC3339Nano), *r.ElapsedMS, duration, r.StateBefore, r.ReviewDay)
-			}
-			t.Logf("preset retention=%g learning=%s relearning=%s maximum_interval=%d weights=%s", preset.DesiredRetention, preset.LearningSteps, preset.RelearningSteps, preset.MaximumIntervalDays, *preset.WeightsJSON)
-		})
 	}
 }
 

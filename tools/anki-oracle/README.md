@@ -29,16 +29,15 @@ API does not expose, so the script counts them from the package's own schema-11 
 .venv/bin/python verify_package.py path/to/package.apkg
 ```
 
-## Probing a scheduling layout
+## Learning due fixture
 
-`interday_probe.py` builds a collection with a learning, a review and a relearning card, exports
-it as a package and prints the `due`, `odue`, `odid` and `type`/`queue` values Anki writes for
-each. It answers what a scheduling column means in a package, and its output is the evidence
-`M18-12` recorded for interday learning and filtered decks.
-
-```bash
-.venv/bin/python interday_probe.py /tmp/anki-probe-output
-```
+`learning-due.anki21.apkg` contains intraday learning, interday learning and interday relearning
+cards in their home deck, suspended, buried, and in filtered decks with rescheduling on and off.
+It also contains review cards in both filtered decks and an intraday relearning card in the
+rescheduling filtered deck. Anki's scheduler creates the states and rebuilds the filtered decks.
+The golden records package scheduling columns, collection creation time and Anki's imported deck.
+For timestamp due values it records Anki's reported due timestamp. It omits that API value for
+day numbers because Anki anchors it to the importing collection's current day and wall clock.
 
 ## Regeneration
 
@@ -368,5 +367,5 @@ packages store note field values, not rendered output, so they carry no host nam
 - Template error codes. Anki renders its own English error text for an unknown field, an unclosed
   conditional or a missing cloze number, while the Go ports return stable error codes the caller
   localises. The error text is not a contract, so no fixture records it.
-- Scheduling beyond the `memory-replay` history cases, deck configuration and browser-only
+- Scheduling beyond `memory-replay` and `learning-due`, deck configuration and browser-only
   rendering. The other packages are exported without scheduling or deck configurations.

@@ -1676,7 +1676,9 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		}
 		if card.Type != 0 {
 			due := time.Unix(dueValue, 0).UTC()
-			if card.Type == 2 || card.Queue == 3 {
+			// Anki restores learning queues by the due value: values above one billion
+			// are Unix seconds; smaller values are days since collection creation.
+			if card.Type == 2 || dueValue <= 1000000000 {
 				due = time.Unix(pkg.CreatedAt, 0).UTC().Add(time.Duration(dueValue) * 24 * time.Hour)
 			}
 			state.DueAt = &due
