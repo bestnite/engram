@@ -130,7 +130,7 @@
     }
   }
 
-  /** Only non-negative integers are accepted for the maximum interval; the regex rejects decimals and non-digits first. */
+  /** Match backend step validation: allow empty entries; otherwise require a positive number with an optional m, min, s, sec, h, hr, or d suffix. */
   function validSteps(spec: string): boolean {
     const trimmed = spec.trim();
     if (trimmed === '') return true;
