@@ -36,3 +36,24 @@ func TestImportDeckAcceptsAnki(t *testing.T) {
 		t.Fatalf("match_rule = %v, want anki_guid", out["match_rule"])
 	}
 }
+
+func TestImportDeckRejectsInvalidPackage(t *testing.T) {
+	_, db, keys, ts := newEnv(t)
+	u := seedUser(t, db, "mcp_invalid_package")
+	key := newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite})
+	cs := connect(t, ts.URL, key)
+	for _, tc := range []struct {
+		name  string
+		value any
+	}{
+		{"document", map[string]any{"manifest.json": map[string]any{}}},
+		{"invalid base64", "%%%"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, isErr, text := callTool(t, cs, "import_deck", map[string]any{"package": tc.value})
+			if !isErr {
+				t.Fatalf("import_deck accepted invalid package: %s", text)
+			}
+		})
+	}
+}

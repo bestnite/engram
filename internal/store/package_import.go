@@ -363,8 +363,6 @@ func spoolPackage(r io.Reader, maxBytes int64) (source *os.File, size int64, cle
 	return file, written, cleanup, nil
 }
 
-// readArchiveBytes reads the whole archive into memory under the total-size cap. It remains for
-// ReadPackageArchive, the in-memory path used when a caller already holds the package bytes.
 // ParsePackageTargetRef parses the kind and the raw deck reference out of a target string (clients supply the public id);
 // an empty string equals new_deck. The reference's validity is the caller's call -- only it knows whether the reference is a public id or an internal primary key.
 func ParsePackageTargetRef(target string) (kind string, ref string, err error) {

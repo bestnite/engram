@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 
@@ -428,17 +429,19 @@ func (s *Server) importDeck(ctx context.Context, id Identity, in importDeckIn) (
 		return nil, api.InvalidRequest("package or url is required")
 	}
 	// The URL path takes its slot inside ImportDeckPackageURL, before the download. A package
-	// document already sits in memory, but its import still counts against the same process-wide
+	// argument already sits in memory, but its import still counts against the same process-wide
 	// cap, so a tool caller gets the same deck_import_busy refusal as a REST caller.
 	release, err := s.api.ImportSlot(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	r, err := store.PackageReader(in.Package)
-	if err != nil {
-		return nil, err
+	encoded, ok := in.Package.(string)
+	if !ok {
+		return nil, api.InvalidRequest("package must be a base64-encoded archive")
 	}
+	// The store spools the decoded stream under the configured archive size limit.
+	r := base64.NewDecoder(base64.StdEncoding, strings.NewReader(strings.TrimSpace(encoded)))
 	return s.api.ImportDeckPackage(ctx, id.User, id.apiKeyID(), r, opts)
 }
 
