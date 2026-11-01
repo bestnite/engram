@@ -2712,7 +2712,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `presets = 1 after rejected writes, want 0`. The SPA case `name with CRLF` in
   `TestPresetWriteRejectsInvalidInput` passes: `ok  	git.nite07.com/nite/engram/internal/web	0.343s`.
 
-- [ ] **M19-76 The outbox's `LookupEnv` seam is accepted and silently ignored** — *nit.* `Deps.LookupEnv` is
+- [x] **M19-76 The outbox's `LookupEnv` seam is accepted and silently ignored** — *nit.* `Deps.LookupEnv` is
   documented as the environment stand-in for tests (`internal/mail/outbox.go:77-78`), but `NewOutbox` builds
   `NewResolver(deps.DB, deps.Secrets)` without it (`:151`), so the field never reaches the resolver and
   `os.LookupEnv` is always used. *Reproduced*: with a stand-in that answers `SMTP_HOST` and `SMTP_FROM`,
@@ -2720,6 +2720,26 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   that trusts the seam silently tests the real environment instead. *Acceptance:* pass `deps.LookupEnv` into
   `NewResolver`, or delete the field and the two comments that promise it; a test sets it and asserts
   `Configured()` is true.
+  *Closed by the `fix(mail): give the outbox's resolver the environment stand-in` commit.*
+  `NewOutbox` (`internal/mail/outbox.go:152`) builds the resolver from the same `Deps` and then assigns
+  `resolver.LookupEnv = deps.LookupEnv` (`:153`), so the documented seam reaches the code that reads the
+  environment and the field can no longer be accepted and dropped. `NewResolver` keeps its two-argument
+  signature, which is what makes this a two-line change, and every existing caller of `NewOutbox` with no
+  stand-in still gets `os.LookupEnv` through `Resolver.lookup` (`internal/mail/mail.go:129`).
+  `TestOutboxUsesTheLookupEnvStandIn` (`internal/mail/mail_test.go:68`) empties `SMTP_HOST` and
+  `SMTP_FROM` in the process environment, gives `Deps.LookupEnv` a stand-in that answers both, asserts
+  `Configured()` is true and that the resolved host is the stand-in's value, so neither a real
+  environment variable nor a settings row can produce the result. Raw output of
+  `go test ./internal/mail/ -run TestOutboxUsesTheLookupEnvStandIn -count=1 -v`:
+  ```
+  === RUN   TestOutboxUsesTheLookupEnvStandIn
+  --- PASS: TestOutboxUsesTheLookupEnvStandIn (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/mail	0.018s
+  ```
+  With only `internal/mail/outbox.go` reverted, the same run failed with
+  `Configured() = false, want true from the Deps.LookupEnv stand-in`. `go test ./internal/mail/ -count=1`
+  passes in `0.768s` and `go vet ./internal/mail/` is clean.
 
 - [x] **M19-77 The exported review log survives every failed optimisation job** — *nit.* `CommandBuilder`
   creates the job directory and writes the user's whole review history to `review-log.jsonl`

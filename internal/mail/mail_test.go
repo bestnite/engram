@@ -61,6 +61,31 @@ func TestConfiguredRequiresHostAndFrom(t *testing.T) {
 	}
 }
 
+// TestOutboxUsesTheLookupEnvStandIn shows that Deps.LookupEnv reaches the resolver: a stand-in that
+// supplies the host and the from address makes the outbox configured without any settings row. The
+// real environment variables are emptied so a value already present on the machine cannot make the
+// assertion pass.
+func TestOutboxUsesTheLookupEnvStandIn(t *testing.T) {
+	db := testDB(t)
+	t.Setenv(EnvSMTPHost, "")
+	t.Setenv(EnvSMTPFrom, "")
+	ob := NewOutbox(Deps{DB: db, LookupEnv: func(k string) (string, bool) {
+		switch k {
+		case EnvSMTPHost:
+			return "smtp.example.com", true
+		case EnvSMTPFrom:
+			return "no-reply@example.com", true
+		}
+		return "", false
+	}})
+	if !ob.Configured() {
+		t.Fatal("Configured() = false, want true from the Deps.LookupEnv stand-in")
+	}
+	if got, _, err := ob.resolver.Field(context.Background(), SettingKeySMTPHost); err != nil || got != "smtp.example.com" {
+		t.Fatalf("resolved SMTP host = %q, %v, want the stand-in's value", got, err)
+	}
+}
+
 // TestResolutionOrderEnvBeatsDBBeatsDefault covers the value precedence and the source annotation.
 func TestResolutionOrderEnvBeatsDBBeatsDefault(t *testing.T) {
 	db := testDB(t)

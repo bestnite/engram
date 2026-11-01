@@ -146,9 +146,14 @@ func NewOutbox(deps Deps) *Outbox {
 	if batch <= 0 {
 		batch = DefaultBatchSize
 	}
+	// The environment stand-in is a Deps field on its own, so it is set on the resolver built from the
+	// same Deps; without this the field is silently ignored and resolution always reads the real
+	// environment.
+	resolver := NewResolver(deps.DB, deps.Secrets)
+	resolver.LookupEnv = deps.LookupEnv
 	o := &Outbox{
 		db:       deps.DB,
-		resolver: NewResolver(deps.DB, deps.Secrets),
+		resolver: resolver,
 		sender:   sender,
 		logger:   logger,
 		now:      now,
