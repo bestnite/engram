@@ -350,19 +350,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `last_review_at`. Evidence is the output of `grep -n -E 'M18-(14|15|17|18)\b|preset_max_interval_invalid' ROADMAP.md`
   limited to the ledger section, and the `AGENTS.md` diff.
 
-- [ ] **M18-64 README states the re-import progress rule and `weights_invalid`** — `README.md` line 65
-  says that a re-import keeps "their cards and progress". It does not say what happens when the
-  re-import carries progress: since `M18-15`, the importer's own newer progress wins, and older package
-  review rows are not written. The paragraph on line 47 names `apply_weights` but not the report field
-  `weights_invalid`, which `M18-18` added to tell a refused weight set from an unused one. The fix: the
-  line 65 paragraph gains the `M18-15` rule, in the form `M18-57` leaves it. A card whose last review in
-  engram is not earlier than the package's keeps its engram state. A package review is written only
-  when it is later than the importer's latest review of that card. The line 47 paragraph states that
-  `weights_invalid` is true when `apply_weights` was on and the package's weights were refused. This
-  entry lands after `M18-21`, `M18-46` and `M18-57`, and never runs beside `M18-21` or `M18-46`.
-  *Acceptance:* each new statement matches `importAnkiProgress` and `createAnkiPreset` in
-  `internal/store/anki_import.go`. Evidence is the `README.md` diff.
-
 - [ ] **M18-72 The release ledger records `M18-19` and what `M18-23` to `M18-26` changed** — `M18-28` asks
   the `M18-2` ledger row to name each of `M18-23` to `M18-26` that has landed, but not to state what they
   changed, and no entry asks for a row for `M18-19`. All five have landed, and each changes what an import
