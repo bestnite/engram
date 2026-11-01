@@ -303,46 +303,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `internal/mcp/tools.go` and the two request functions in `frontend/src/lib/api/client.ts`. Evidence
   is the `README.md` diff.
 
-- [ ] **M18-47 Learning due dates follow Anki's rule in every queue, against a committed fixture** —
-  `importAnkiProgress` in `internal/store/anki_import.go` reads the due value of a learning (type 1) or
-  relearning (type 3) card as days from collection creation only when its queue is 3, and as Unix
-  seconds in every other queue. Suspending a card (queue −1) or burying it (queue −2 or −3) changes
-  only its queue, so a suspended or buried interday learning card keeps a day number in `due`. When
-  Anki restores a learning or relearning card's queue it decides by the value, not by the old queue:
-  above 1 000 000 000 the value is a timestamp, otherwise a day number (Anki's
-  `restore_queue_from_type`; the fixture below confirms it). Reproduced on `main` with the stock
-  fixture, `crt` 1500000000 and `cards.data` `{"s":4.5,"d":6.2}`: type 1 queue −1 due 3, type 1
-  queue −2 due 3, type 3 queue −3 due 3, and type 1 queue 2 with `odid` 1 and `odue` 3 were each
-  stored with `due_at` `1970-01-01T00:00:03Z`; type 1 queue −1 due 1700000000 was stored correctly.
-  The evidence `M18-12` closed with is also not reproducible. `TestAnkiFilteredOraclePackage` skips
-  unless `TEST_ANKI_FILTERED_PACKAGE` names a package that is not committed. Its expected value,
-  `crt` plus 3 days, is the importer's own formula. `tools/anki-oracle/interday_probe.py` prints the
-  same formula as "expected due" instead of a date Anki reports. The probe builds no intraday (queue 1)
-  learning card in a filtered deck, although the `filtered_*_queue1` cases of `TestAnkiImportDueDates`
-  assume that `odue` holds its timestamp. The fix has three parts. First, for type 1 and type 3 the
-  importer takes `odue` when `odid` ≠ 0 and `due` otherwise, and reads that value as Unix seconds when
-  it is above 1 000 000 000 and as days from collection creation otherwise, in every queue; the code
-  comment states this rule and that Anki restores a queue by it. Second, `tools/anki-oracle/generate.py`
-  builds a fixture package with `anki==26.9.3`. It holds an intraday learning card, an interday learning
-  card and an interday relearning card, each in five copies: in its home deck, suspended, buried, in a
-  filtered deck with rescheduling on, and in a filtered deck with rescheduling off. It also holds one
-  review card in each of the two filtered decks. Anki's own scheduler and filtered-deck operations put
-  the cards in these states; the script does not write the columns by hand. The golden records, per
-  card, the package's `type`, `queue`, `due`, `odue` and `odid`, the package's `crt`, and the deck
-  Anki assigns the card after import. For a card whose due value is a timestamp it also records the
-  due date Anki reports through its own API, and the test compares that timestamp exactly. A
-  day-number due is asserted as `crt` plus that many days instead, because Anki's API anchors a day
-  number at the importing collection's current day boundary, so its value moves with the wall clock
-  and cannot be a committed golden. Third, a test that imports the
-  committed fixture on both drivers and compares every card's `due_at` with the golden replaces
-  `TestAnkiFilteredOraclePackage`. `interday_probe.py` is deleted, and its section in
-  `tools/anki-oracle/README.md` is replaced by a description of the new fixture. *Acceptance:* each of
-  the four cards reproduced above is stored with `due_at` 3 days after `crt`; the fixture test passes
-  on both drivers and runs without any `TEST_ANKI_*` variable; `TestAnkiImportDueDates` still passes,
-  and each of its `filtered_*_queue1` cases matches a layout the golden records. Evidence is the raw
-  scoped `go test` and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set, and the oracle
-  script's output.
-
 - [ ] **M18-48 A card in a filtered deck is placed in its home deck** — `planAnkiDecks` and the card
   loop (`plan.Paths[card.DeckID]`) in `internal/store/anki_import.go` place a card by `did`. For a card
   in a filtered deck, `did` names the filtered deck. Since `M18-12` the importer reads such a card's due
