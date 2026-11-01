@@ -1033,6 +1033,14 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 	}
 	report.DeckPublicID = pid
 
+	// Two imports into the same deck must not decide a media name against the same pre-commit
+	// snapshot: each would keep the name and the later registration would repoint it at its own
+	// bytes, leaving the first import's notes rendering the second one's file. The row lock makes
+	// the second transaction wait and then read the names the first one committed.
+	if err := lockAnkiTargetDeck(ctx, tx, deckID); err != nil {
+		return err
+	}
+
 	if targetKind == "replace_deck" {
 		if err := tx.WithContext(ctx).Where("deck_id = ?", deckID).Delete(&Note{}).Error; err != nil {
 			return fmt.Errorf("replace deck: clear notes: %w", err)
@@ -1993,6 +2001,19 @@ func registerAnkiMediaNames(ctx context.Context, tx *gorm.DB, deckID uint64, fil
 		if err := names.Upsert(ctx, deckID, name, files[i].sha256hex); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// lockAnkiTargetDeck serialises imports that target the same deck before the media naming decision.
+//
+// The no-op update takes a row lock on PostgreSQL, so a concurrent import waits and then reads the
+// names the first one committed instead of deciding against a snapshot that is about to change.
+// SQLite rejects SELECT ... FOR UPDATE and its production connection is a single one, whose write
+// transaction already serialises the import, so a plain update is all this driver needs.
+func lockAnkiTargetDeck(ctx context.Context, tx *gorm.DB, deckID uint64) error {
+	if err := tx.WithContext(ctx).Exec("UPDATE decks SET name = name WHERE id = ?", deckID).Error; err != nil {
+		return fmt.Errorf("import Anki package: lock target deck: %w", err)
 	}
 	return nil
 }

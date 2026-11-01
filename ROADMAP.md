@@ -468,7 +468,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   soft-deleted notes reference it, or restoration is explicitly not guaranteed once collected — plus a
   regression that runs several upload/soft-delete/collect rounds against a budget.
 
-- [ ] **M19-18 Two concurrent `into_deck` imports can point a note at another package's media** —
+- [x] **M19-18 Two concurrent `into_deck` imports can point a note at another package's media** —
   *should-fix.* `renameAnkiMedia` reads a snapshot of the deck's names, then registers with
   `ON CONFLICT` overwriting the hash (`internal/store/anki_import.go:1982-2046`, `media_names.go:61-80`).
   Two transactions that both see `cover.png` free both keep the name, and the later commit points it at
@@ -479,6 +479,34 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Acceptance:* take a per-deck lock before the naming decision, or insert conditionally so a different
   hash cannot overwrite and rename/rewrite the package's references on conflict; a regression imports two
   packages with the same file name and different bytes into one deck concurrently.
+  *Closed by this commit (`fix(store): serialise concurrent imports into one deck`).*
+  `importAnkiInTx` (`internal/store/anki_import.go:1040`) now calls `lockAnkiTargetDeck` (`:2014`) once
+  the target deck is resolved and before `replace_deck` clears notes or the media naming decision
+  runs. The no-op `UPDATE decks SET name = name` takes the deck row's lock on PostgreSQL, so a second
+  import into the same deck waits for the first to commit and `renameAnkiMedia` then reads the
+  committed names instead of a pre-commit snapshot; SQLite's production connection is a single one,
+  whose write transaction already serialises the import, so a plain update is enough there.
+  `TestAnkiImportSerialisesConcurrentIntoDeckMediaNames`
+  (`internal/store/anki_import_deck_lock_test.go`) prepares two packages that both carry
+  `placeholder.png` with different bytes, runs the first import in a transaction it leaves open,
+  starts the second import, observes through `pg_stat_activity` that the second backend is waiting on
+  the deck row lock, then commits. It asserts two `media_names` rows, the first package keeping
+  `placeholder.png`, the second renamed, and the first package's imported note still referencing
+  `placeholder.png`. Raw output of
+  `TEST_PG_DSN=... go test ./internal/store/ -run TestAnkiImportSerialisesConcurrentIntoDeckMediaNames -count=1 -v`:
+  ```
+  === RUN   TestAnkiImportSerialisesConcurrentIntoDeckMediaNames
+  --- PASS: TestAnkiImportSerialisesConcurrentIntoDeckMediaNames (0.31s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.320s
+  ```
+  With `lockAnkiTargetDeck` returning before its update, the same test failed with `the second import
+  did not wait for the target deck's row lock` and
+  `media_names rows = 1 ([{DeckID:1 Name:placeholder.png Sha256:52e7287e...}]), want 2: one name per
+  package's bytes`, that sha being the second package's: the entry's defect, reproduced through the
+  whole store import rather than the rename/register calls alone.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestAnkiImport|TestPackage|TestImportPackage|TestExportAnkiPackage|TestAnkiExport|TestMedia' -count=1`
+  passes on both drivers in `14.235s`.
 
 - [x] **M19-19 A media-name clash rewrite corrupts HTML attribute names instead of the reference** —
   *should-fix.* The clash handler replaces the first occurrence of the name inside the whole match
