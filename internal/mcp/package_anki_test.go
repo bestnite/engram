@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/base64"
 	"os"
+	"strings"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/store"
@@ -55,5 +56,41 @@ func TestImportDeckRejectsInvalidPackage(t *testing.T) {
 				t.Fatalf("import_deck accepted invalid package: %s", text)
 			}
 		})
+	}
+}
+
+// TestImportDeckReportsBadConflictOptionAsInvalidRequest is the MCP half of M19-107: a malformed
+// on_conflict is a request mistake and must carry the same invalid_request code as the REST entry,
+// not package_bad_format.
+func TestImportDeckReportsBadConflictOptionAsInvalidRequest(t *testing.T) {
+	_, db, keys, ts := newEnv(t)
+	u := seedUser(t, db, "mcp_bad_conflict")
+	key := newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite})
+	cs := connect(t, ts.URL, key)
+
+	raw, err := os.ReadFile("../notetype/testdata/anki/stock.anki21b.apkg")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	_, isErr, text := callTool(t, cs, "import_deck", map[string]any{
+		"package":     base64.StdEncoding.EncodeToString(raw),
+		"target":      "new_deck",
+		"on_conflict": "bogus",
+	})
+	if !isErr {
+		t.Fatalf("import_deck accepted on_conflict=bogus: %s", text)
+	}
+	if !strings.Contains(text, "invalid_request") {
+		t.Errorf("import_deck error text = %q, want the invalid_request code", text)
+	}
+	if strings.Contains(text, store.CodePackageBadFormat) {
+		t.Errorf("import_deck error text = %q, want no package_bad_format code", text)
+	}
+	var decks int64
+	if err := db.Model(&store.Deck{}).Count(&decks).Error; err != nil {
+		t.Fatalf("count decks: %v", err)
+	}
+	if decks != 0 {
+		t.Errorf("rejected import left %d deck(s), want none", decks)
 	}
 }

@@ -432,7 +432,9 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		opts.OnConflict = "update"
 	}
 	if opts.OnConflict != "skip" && opts.OnConflict != "update" && opts.OnConflict != "fail" {
-		return nil, &PackageError{Code: CodePackageBadFormat, Message: "on_conflict must be one of skip, update, fail"}
+		// A malformed option is a client mistake about the request, not a corrupt archive, so it carries the shared
+		// request-validation code every import entry reports rather than package_bad_format.
+		return nil, &PackageError{Code: CodeInvalidRequest, Message: "on_conflict must be one of skip, update, fail"}
 	}
 	targetKind, targetDeckID, err := ParsePackageTarget(opts.Target)
 	if err != nil {

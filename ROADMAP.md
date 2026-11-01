@@ -2427,7 +2427,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   and authorizes the target and preset before it consumes the archive part, and a test posts an oversized part with a
   target deck the caller cannot edit and shows the request is refused without spooling.
 
-- [ ] **M19-107 A bad `on_conflict` is `package_bad_format` on import and `invalid_request` at ticket issuance** —
+- [x] **M19-107 A bad `on_conflict` is `package_bad_format` on import and `invalid_request` at ticket issuance** —
   *should-fix.* `internal/store/package_import.go:432-434` wraps the option check in
   `&PackageError{Code: CodePackageBadFormat}`, while `internal/api/package_upload.go:92-97` returns `InvalidRequest`
   for the same value with the same text; a client branches on the code and reads `package_bad_format` as "the package
@@ -2436,6 +2436,45 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   answered `invalid_request: …` with the identical detail. *Acceptance:* every import entry reports a bad request
   option as 400 `invalid_request` and keeps the package codes for archive content, and a table test feeds the invalid
   option to each entry and asserts one code.
+  *Closed by this commit (`fix(store): report a bad import option as invalid_request`).*
+  `ImportPackage` (`internal/store/package_import.go:437`) now returns a `PackageError` carrying the shared
+  `CodeInvalidRequest` (`internal/store/package.go:33`) instead of `CodePackageBadFormat`. The archive's own
+  failures keep their package codes, and `mapPackageError` already passes a package error's code through at 400, so
+  the multipart, direct-link and MCP entries answer `invalid_request` without a transport change. Ticket issuance
+  already validated the same value with `InvalidRequest`; it does not reach this branch.
+  `TestImportEntriesReportBadConflictOptionAsInvalidRequest` (`internal/api/package_option_code_test.go:16`) feeds
+  `on_conflict=bogus` to the multipart import, the direct-link import and ticket issuance, and asserts each is 400
+  `invalid_request`; `TestImportDeckReportsBadConflictOptionAsInvalidRequest`
+  (`internal/mcp/package_anki_test.go:65`) sends the same option through `import_deck` and asserts the tool error
+  carries `invalid_request`, not `package_bad_format`, and that no deck was written. Raw output of
+  `go test ./internal/api/ -run TestImportEntriesReportBadConflictOptionAsInvalidRequest -count=1 -v`:
+  ```
+  === RUN   TestImportEntriesReportBadConflictOptionAsInvalidRequest
+  === RUN   TestImportEntriesReportBadConflictOptionAsInvalidRequest/multipart
+  === RUN   TestImportEntriesReportBadConflictOptionAsInvalidRequest/direct_link
+  === RUN   TestImportEntriesReportBadConflictOptionAsInvalidRequest/upload_ticket_issuance
+  --- PASS: TestImportEntriesReportBadConflictOptionAsInvalidRequest (0.02s)
+      --- PASS: TestImportEntriesReportBadConflictOptionAsInvalidRequest/multipart (0.00s)
+      --- PASS: TestImportEntriesReportBadConflictOptionAsInvalidRequest/direct_link (0.00s)
+      --- PASS: TestImportEntriesReportBadConflictOptionAsInvalidRequest/upload_ticket_issuance (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.028s
+  ```
+  and of `go test ./internal/mcp/ -run TestImportDeckReportsBadConflictOptionAsInvalidRequest -count=1 -v`:
+  ```
+  === RUN   TestImportDeckReportsBadConflictOptionAsInvalidRequest
+  --- PASS: TestImportDeckReportsBadConflictOptionAsInvalidRequest (0.05s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/mcp	0.058s
+  ```
+  With only `internal/store/package_import.go` reverted, the API run failed with
+  `multipart import code = "package_bad_format", want "invalid_request" (body {"error":{"code":"package_bad_format","message":"The package format is invalid. — on_conflict must be one of skip, update, fail"}})`
+  and the same line for the direct-link entry, and the MCP run failed with
+  `import_deck error text = "package_bad_format: The package format is invalid. — on_conflict must be one of skip, update, fail", want the invalid_request code`.
+  `go vet ./internal/api/ ./internal/mcp/ ./internal/store/`,
+  `go test ./internal/api/ -run 'TestImport|TestPackage|TestCreateImportUpload|TestAnki|TestExport' -count=1`,
+  `go test ./internal/mcp/ -run 'TestImport|TestPackage|TestCreateImportUpload|TestExport|TestAnki' -count=1`
+  and `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestPackage|TestAnkiImport|TestImportPackage' -count=1` pass.
 
 - [ ] **M19-108 The key-revocation handler has no test of its own scoping** — *nit.* `internal/api/keys.go:80-109`
   resolves any key by public id and then revokes it scoped to the caller; the ownership refusal exists only at the

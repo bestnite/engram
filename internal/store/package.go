@@ -28,6 +28,9 @@ const (
 	// the rejected references are listed one by one. It is the same rule as media_not_readable on single-card writes,
 	// carried as a stable code on the package import chain.
 	CodePackageMediaForbidden = "package_media_forbidden"
+	// CodeInvalidRequest is the request-validation code the HTTP API and the MCP tools share. A package import uses it
+	// for a malformed import option, which is a client mistake about the request, not about the archive's content.
+	CodeInvalidRequest = "invalid_request"
 )
 
 // PackageError is a deck package error carrying a stable code.
