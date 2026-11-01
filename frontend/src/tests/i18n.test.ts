@@ -76,6 +76,22 @@ describe('i18n language resolution and formatting', () => {
     }
   });
 
+  it('applies the locale plural rule to count-driven messages', () => {
+    // English distinguishes one from other; the base key is the plural form and
+    // a `.one` variant supplies the singular. Chinese has no singular form, so
+    // both counts keep the base text.
+    expect(formatMessage('en', 'decks.count', { count: 1 })).toBe('1 deck');
+    expect(formatMessage('en', 'decks.count', { count: 2 })).toBe('2 decks');
+    expect(formatMessage('en', 'stats.streak.days', { days: '1', count: 1 })).toBe('1 day');
+    expect(formatMessage('en', 'stats.streak.days', { days: '2', count: 2 })).toBe('2 days');
+    expect(formatMessage('en', 'notetype.empty.cleanup.count', { count: 1 })).toBe('1 empty card');
+    expect(formatMessage('en', 'notetype.empty.cleanup.count', { count: 2 })).toBe('2 empty cards');
+    expect(formatMessage('en', 'deck.tag_review.notes', { count: 1 })).toBe('1 card');
+    expect(formatMessage('en', 'deck.tag_review.notes', { count: 2 })).toBe('2 cards');
+    expect(formatMessage('zh-CN', 'decks.count', { count: 1 })).toBe('1 个卡组');
+    expect(formatMessage('zh-CN', 'decks.count', { count: 2 })).toBe('2 个卡组');
+  });
+
   it('updates reactive localeStore correctly', () => {
     let observed: string | undefined;
     const unsub = localeStore.subscribe((val) => {

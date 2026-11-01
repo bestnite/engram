@@ -2514,7 +2514,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `npx vitest run` passes 593 tests in 58 files, and `npm run check` reports
   `svelte-check found 0 errors and 0 warnings`.
 
-- [ ] **M19-66 English has no singular form, so counts of one read "1 decks" and "1 days"** — *nit.*
+- [x] **M19-66 English has no singular form, so counts of one read "1 decks" and "1 days"** — *nit.*
   `formatMessage` only substitutes placeholders (`frontend/src/lib/i18n/index.ts:121-136`) and the catalogs hold
   one form per key (`frontend/src/lib/i18n/locales/en.ts:324,383,1199,1568` among others). *Reproduced* with the
   real function: `decks.count` with `count: 1` gives `1 decks`, `stats.streak.days` gives `1 days`,
@@ -2522,6 +2522,34 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   list header and the stats streak print these. *Acceptance:* apply one plural rule per locale through
   `formatMessage` (an `Intl.PluralRules` variant key or an explicit singular key), with a test asserting both
   one and two for the count keys.
+  *Closed by this commit (`fix(i18n): apply each locale's plural rule to count messages`).*
+  `formatMessage` (`frontend/src/lib/i18n/index.ts:121`) now selects a variant key from the locale's own
+  `Intl.PluralRules` category whenever `count`, `total` or `days` is a finite number, and falls back to the
+  base text when that variant is absent. Every English count message whose number changes a noun therefore
+  has a `.one` form: the four the entry names plus `notes.total_count`, the two preset shortfalls,
+  `admin.audit.total_label`, `notes.bulk_delete_desc`, `package.toast.entries_failed`, the three
+  `decks.bulk_delete` messages and `occlusion.shape_count`. The matching zh-CN `.one` keys are present so the
+  catalogs keep the same key set, but `Intl.PluralRules('zh-CN')` never selects them, so Chinese text is
+  unchanged. `StatsView.svelte:227,231` passes the numeric `count` beside the formatted `days`, which is the
+  value the rule reads.
+  `frontend/src/tests/i18n.test.ts:79` asserts one and two for `decks.count`, `stats.streak.days`,
+  `notetype.empty.cleanup.count` and `deck.tag_review.notes`, and Chinese one and two for the deck count. Raw
+  output of `npx vitest run src/tests/i18n.test.ts --reporter=verbose`:
+  ```
+   ✓ src/tests/i18n.test.ts > i18n language resolution and formatting > resolves locale following the documented priority hierarchy 1ms
+   ✓ src/tests/i18n.test.ts > i18n language resolution and formatting > formats messages with parameter interpolation and fallback 0ms
+   ✓ src/tests/i18n.test.ts > i18n language resolution and formatting > inserts a parameter literally instead of expanding replacement patterns 0ms
+   ✓ src/tests/i18n.test.ts > i18n language resolution and formatting > applies the locale plural rule to count-driven messages 1ms
+   ✓ src/tests/i18n.test.ts > i18n language resolution and formatting > updates reactive localeStore correctly 0ms
+
+   Test Files  1 passed (1)
+        Tests  5 passed (5)
+  ```
+  With only the variant lookup removed, the same run failed with
+  `AssertionError: expected '1 decks' to be '1 deck' // Object.is equality`.
+  `npx vitest run src/tests/i18n.test.ts src/tests/parity.test.ts` passes 8 tests in 2 files,
+  `npx vitest run src/tests/views.test.ts src/tests/labels.test.ts` passes 19 tests in 2 files, and
+  `npm run check` ends `svelte-check found 0 errors and 0 warnings`.
 
 - [x] **M19-67 `Note.external_ref` is typed as non-null while the server sends null** — *nit.* The response type
   declares `external_ref: string` (`frontend/src/lib/api/types.ts:165`), but the server writes `n.ExternalRef`,

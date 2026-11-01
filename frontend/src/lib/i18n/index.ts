@@ -127,6 +127,15 @@ export function formatMessage(
   let text = catalog[key] || catalogs[DEFAULT_LOCALE][key] || key;
 
   if (params) {
+    // A count-driven key may carry a `.one` variant; every other plural category
+    // and every single-form key fall back to the base text. The category comes
+    // from the locale's own plural rule, so a language that has no singular form
+    // simply has no variant to select.
+    const count = pluralCount(params);
+    if (count !== null) {
+      const category = new Intl.PluralRules(locale).select(count);
+      text = catalog[`${key}.${category}`] || text;
+    }
     for (const [k, v] of Object.entries(params)) {
       // A function replacement keeps `$&`, `$'`, `` $` `` and `$$` in the value literal: a string
       // replacement would expand them as replacement patterns and corrupt the message.
@@ -135,6 +144,19 @@ export function formatMessage(
   }
 
   return text;
+}
+
+/**
+ * Returns the value that selects a plural variant, or null when the message is
+ * not count-driven. `count`, `total` and `days` are the parameter names the
+ * catalogs use for a number that changes a noun.
+ */
+function pluralCount(params: Record<string, string | number>): number | null {
+  for (const name of ['count', 'total', 'days']) {
+    const value = params[name];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
 }
 
 /**

@@ -224,11 +224,11 @@
               {$t('stats.streak.current_label')}
               <HelpTip testId="stats-streak-help" label={$t('stats.streak.heading')} text={$t('help.stats.streak')} />
             </dt>
-            <dd data-testid="stats-streak-current" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.current, $localeStore) })}</dd>
+            <dd data-testid="stats-streak-current" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.current, $localeStore), count: detail.streak.current })}</dd>
           </dl>
           <dl class="px-4 py-2">
             <dt class="text-xs text-muted-foreground">{$t('stats.streak.longest_label')}</dt>
-            <dd data-testid="stats-streak-longest" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.longest, $localeStore) })}</dd>
+            <dd data-testid="stats-streak-longest" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{$t('stats.streak.days', { days: formatNumber(detail.streak.longest, $localeStore), count: detail.streak.longest })}</dd>
           </dl>
         </div>
       </div>
