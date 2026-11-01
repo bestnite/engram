@@ -341,7 +341,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   the reading once, keep legal nesting; add a regression that runs real old Markdown through 0012 and
   then 0017.
 
-- [ ] **M19-9 A batch note update silently clears `source_url` and `extra_json`** — *should-fix.* The
+- [x] **M19-9 A batch note update silently clears `source_url` and `extra_json`** — *should-fix.* The
   bulk import path builds a fresh note without the stored `SourceURL`/`ExtraJSON` and the store writes
   both columns unconditionally (`internal/store/note.go:537-545`; callers
   `internal/api/service.go:473-480,600-608,700-702`), while a single PATCH preserves them. The import
@@ -351,6 +351,35 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   carries the metadata fields and distinguishes absent from empty, or updates only named columns; a
   regression creates a note, updates it through a batch import keyed by `external_ref`, and asserts the
   metadata survived, plus one that sends the top-level schema keys and asserts they land.
+  *Closed by this commit (`fix(api): keep note metadata the import does not name`).*
+  `ImportNote` (`internal/api/service.go:496`) now decodes the schema's top-level `source_url` and
+  `extra`. The planning loop copies the stored columns into the note being updated and then applies only
+  the keys the request named (`:628-645`): a nil `source_url` or an absent `extra` keeps the row's value,
+  an explicit value writes it, and an empty `source_url` or a `null` extra clears the column. The store
+  still writes both columns on every update, so no column-scoped store API was added; the transport now
+  supplies the value the single-note update already copied forward.
+  `TestBulkImportKeepsUnnamedNoteMetadata` and `TestBulkImportWritesTopLevelMetadata`
+  (`internal/api/import_metadata_test.go`) cover the two halves: the first rewrites a note through the
+  import and asserts both columns survive, then sends `source_url: ""` and asserts only that column
+  clears; the second creates through the import with both top-level keys and reads them back from the
+  row. Raw output of
+  `go test ./internal/api/ -run 'TestBulkImportKeepsUnnamedNoteMetadata|TestBulkImportWritesTopLevelMetadata' -count=1 -v`:
+  ```
+  === RUN   TestBulkImportKeepsUnnamedNoteMetadata
+  --- PASS: TestBulkImportKeepsUnnamedNoteMetadata (0.01s)
+  === RUN   TestBulkImportWritesTopLevelMetadata
+  --- PASS: TestBulkImportWritesTopLevelMetadata (0.02s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.046s
+  ```
+  With only the planning loop's metadata block removed, the same tests failed with
+  `source_url after import = <nil>, want the stored value kept`,
+  `extra_json after import = <nil>, want the stored value kept`,
+  `source_url = <nil>, want the top-level value written` and
+  `extra_json = <nil>, want the top-level value written`.
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/api/ -run 'TestImport|TestBulk|TestNote' -count=1`
+  passes on both drivers, and `go test ./internal/mcp/ -count=1` passes.
+
 
 - [ ] **M19-10 Exported learning steps round to zero and lose the review history** — *should-fix.*
   `interval_days` is stored in fractional days but exported through `math.Round`

@@ -489,6 +489,12 @@ type ImportNote struct {
 	// NoteID addresses an existing note by external id; mutually exclusive with ExternalRef. An empty string means not addressed by id.
 	NoteID string   `json:"note_id"`
 	Tags   []string `json:"tags"`
+	// SourceURL and Extra are the note's metadata columns, which schema/note-import.schema.json declares at
+	// this level. A nil SourceURL, or an absent Extra, keeps the value stored on the note being updated, so an
+	// import that only rewrites content does not erase metadata it never named. An explicit value writes over
+	// it, and an empty source_url or a null extra clears the column.
+	SourceURL *string         `json:"source_url"`
+	Extra     json.RawMessage `json:"extra"`
 }
 
 // ImportRequest is the bulk create/update body; dry_run and on_conflict are body fields.
@@ -618,6 +624,24 @@ func (a *API) ImportNotes(ctx context.Context, userID, deckID uint64, apiKeyID *
 		}
 		if ref != "" {
 			n.ExternalRef = store.Ptr(ref)
+		}
+		if existing != nil {
+			// An update rewrites content only: metadata the request does not name keeps what the row holds, as
+			// the single-note update does.
+			n.SourceURL = existing.SourceURL
+			n.ExtraJSON = existing.ExtraJSON
+		}
+		if item.SourceURL != nil {
+			n.SourceURL = nil
+			if text := strings.TrimSpace(*item.SourceURL); text != "" {
+				n.SourceURL = store.Ptr(text)
+			}
+		}
+		if item.Extra != nil {
+			n.ExtraJSON = nil
+			if raw := strings.TrimSpace(string(item.Extra)); raw != "" && raw != "null" {
+				n.ExtraJSON = store.Ptr(raw)
+			}
 		}
 
 		action := "create"
