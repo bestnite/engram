@@ -64,6 +64,37 @@ release; a task moves into a release milestone when it is scheduled.
 
 ---
 
+### M19 — Repository review findings (static analysis, not yet verified)
+
+A domain-by-domain review of the whole repository was started with a second model. The API and MCP
+domain produced three leads before the review run was cut short; they are recorded here as **static
+analysis only** — they were read out of the code, not reproduced against a running instance, and the
+reviewer's report was never written. Treat each one as a hypothesis to confirm first, and open with the
+confirmation, not with the fix.
+
+- [ ] **M19-1 A preset identifier may be resolvable across accounts** — the review reported that a
+  request can name a preset belonging to another account and have it resolved rather than refused,
+  through the code path that turns a preset public id into a row. *Unverified:* the reviewer stopped
+  before writing the reproduction. *Acceptance:* a test in `internal/api` (or `internal/store` where the
+  lookup lives) sends a write request naming another account's preset public id and shows that it is
+  refused with the documented code and that no row is written; if the report turns out to be wrong, the
+  test stays as the regression that pins the refusal. Evidence is the raw test output on both drivers.
+
+- [ ] **M19-2 Template media may be exportable by a caller who cannot read the deck** — the review
+  reported that a deck export can carry media referenced only by a note type template, and that the
+  export path does not apply the same media-readable check the single-card write path applies. *Unverified:*
+  no reproduction. *Acceptance:* a test exports a deck containing templated media as a caller with read
+  access and as a caller without it, and shows the second is refused (`media_not_readable` or the code
+  the rules name) while the first succeeds; the export of an unreadable media name must not appear in
+  the archive. Evidence is the raw test output.
+
+- [ ] **M19-3 An evicted MCP session may answer with stale identity** — the review reported that after
+  an MCP session is evicted (idle expiry or credential change), a later call on that session is answered
+  with the identity bound at creation instead of being re-authenticated or refused. *Unverified:* no
+  reproduction. *Acceptance:* a test evicts the session and shows the next tool call is refused with the
+  documented code, and that a call carrying a revoked API key is refused even when the session object
+  still exists. Evidence is the raw test output.
+
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
