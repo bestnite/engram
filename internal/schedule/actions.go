@@ -35,7 +35,7 @@ type UndoInput struct {
 // Rollback undoes the card's last grade: it uses the last reviews row as the log to drive fsrs.Rollback and restore the state,
 // deletes that log row, and writes the restored state back to card_states.
 //
-// Why the "previous log" is needed: reviews only records the post-grade scheduling result (interval_days/stability/difficulty),
+// Why the "previous log" is needed: reviews only records the post-grade scheduling result (interval_days/scheduled_days/stability/difficulty),
 // and the pre-grade FSRS snapshot has no column of its own. The post-grade result of the previous log is exactly this one's pre-grade
 // snapshot, so it is used to rebuild ReviewLog's pre-grade fields; that way due_at and interval are restored exactly to the values before this grade.
 // step_index (remaining learning steps) is restored exactly from the step_index_before of the log being undone; when that column is
@@ -113,7 +113,7 @@ func Rollback(ctx context.Context, tx *gorm.DB, in UndoInput) (store.CardState, 
 
 	// Assemble the restored state row. state/stability/difficulty/reps/lapses/step_index come from the Rollback result
 	// (step_index's snapshot has already been rebuilt by rebuildReviewLog from step_index_before);
-	// due/last_review/scheduled_days are rebuilt from the previous log, restoring the due date and interval exactly.
+	// due/last_review/scheduled_days are rebuilt from the previous log's snapshot, restoring the due date and interval exactly.
 	next := store.CardState{
 		CardID:        in.CardID,
 		UserID:        in.UserID,
@@ -186,14 +186,27 @@ func rebuildReviewLog(last store.Review, prev *store.Review) (fsrs.ReviewLog, *t
 		log.Difficulty = *prev.Difficulty
 	}
 	due := prev.ReviewedAt.UTC()
-	scheduled := 0
+	scheduled := snapshotScheduledDays(*prev)
 	if prev.IntervalDays != nil {
-		scheduled = int(math.Round(*prev.IntervalDays))
 		due = addDays(prev.ReviewedAt.UTC(), *prev.IntervalDays)
 	}
 	log.ScheduledDays = uint64(max(scheduled, 0))
 	lastReview := prev.ReviewedAt.UTC()
 	return log, &due, &lastReview, scheduled
+}
+
+// snapshotScheduledDays returns the whole-day interval a review stored, as the scheduler wrote it.
+// interval_days is the same result as a float; rounding it does not reproduce the stored integer, because a
+// 1.5-day step stores 1 while rounding gives 2. Old rows predate the scheduled_days snapshot, so the
+// closest reconstruction is a truncation of interval_days, which matches the scheduler's floor for a step.
+func snapshotScheduledDays(r store.Review) int {
+	if r.ScheduledDays != nil {
+		return *r.ScheduledDays
+	}
+	if r.IntervalDays == nil {
+		return 0
+	}
+	return int(math.Floor(*r.IntervalDays))
 }
 
 // addDays adds d days to t; rounded to milliseconds because interval_days is REAL and sub-millisecond precision is meaningless.

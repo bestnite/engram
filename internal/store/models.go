@@ -289,10 +289,17 @@ type Review struct {
 	// entry's due date' and 'the due date before this rating' disagree, and an undo that rebuilt only from the previous entry would turn the buried
 	// due date back into NULL or a wrong value. Nullable: a brand-new card has no due date before its first rating (NULL), and old rows have no snapshot either,
 	// so undo falls back to deriving it from the previous entry on NULL.
-	DueBefore    *time.Time `gorm:"column:due_before" json:"due_before,omitempty"`
-	IntervalDays *float64   `json:"interval_days,omitempty"`
-	Stability    *float64   `json:"stability,omitempty"`
-	Difficulty   *float64   `json:"difficulty,omitempty"`
+	DueBefore *time.Time `gorm:"column:due_before" json:"due_before,omitempty"`
+	// ScheduledDays is a snapshot of card_states.scheduled_days after this rating.
+	//
+	// interval_days is the same result as a float (days since the grade, learning steps included), and rounding it back
+	// to an integer does not reproduce what the scheduler stored: a 1.5-day step stores 1, while rounding gives 2, and the
+	// value is exported to Anki as the card's interval and handed to the next grade. Nullable: old rows and rows imported
+	// from Anki before this column existed have no snapshot, and undo falls back to truncating interval_days on NULL.
+	ScheduledDays *int     `gorm:"column:scheduled_days" json:"scheduled_days,omitempty"`
+	IntervalDays  *float64 `json:"interval_days,omitempty"`
+	Stability     *float64 `json:"stability,omitempty"`
+	Difficulty    *float64 `json:"difficulty,omitempty"`
 }
 
 func (Review) TableName() string { return "reviews" }

@@ -162,6 +162,13 @@ var BuiltinMigrations = []Migration{
 		Name: "0020_repair_preset_scheduler_limits",
 		Up:   repairPresetSchedulerLimits,
 	},
+	{
+		// reviews gained a post-grade scheduled_days snapshot: interval_days alone cannot reproduce the stored
+		// integer (a 1.5-day step stores 1 while rounding gives 2). Old rows are filled from floor(interval_days),
+		// which is the value the scheduler records for the same interval.
+		Name: "0021_backfill_review_scheduled_days",
+		Up:   backfillReviewScheduledDays,
+	},
 }
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).

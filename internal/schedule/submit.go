@@ -224,11 +224,12 @@ func upsertState(ctx context.Context, tx *gorm.DB, st *store.CardState, expected
 
 // reviewFromOutcome constructs the append-only review log row.
 //
-// Value semantics: state_before is the state enum before the grade; interval_days / stability / difficulty are
+// Value semantics: state_before is the state enum before the grade; interval_days / scheduled_days / stability / difficulty are
 // the new values produced by this grade (for retention and memory-strength statistics); duration_days is the number of days since the previous review
 // (i.e. the elapsed days before this grade, nullable — the first grade has no previous one).
 func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBefore State, now time.Time) store.Review {
 	interval := o.IntervalDays
+	scheduledDays := o.ScheduledDays
 	stability := o.Stability
 	difficulty := o.Difficulty
 	loc := resolveLocation(in.Location, in.Timezone)
@@ -259,6 +260,7 @@ func reviewFromOutcome(in SubmitInput, base *store.CardState, o Outcome, stateBe
 		StateBefore:     int(stateBefore),
 		StepIndexBefore: &stepIndexBefore,
 		DueBefore:       dueBefore,
+		ScheduledDays:   &scheduledDays,
 		IntervalDays:    &interval,
 		Stability:       &stability,
 		Difficulty:      &difficulty,

@@ -169,6 +169,58 @@ func TestUndoRestoresPreviousDueAndInterval(t *testing.T) {
 	}
 }
 
+// TestUndoRestoresScheduledDaysExactly asserts Undo restores the whole-day interval the scheduler stored rather
+// than a value rounded back from interval_days.
+//
+// A 1.5-day learning step stores 1 day (the scheduler floors a step's days) while rounding interval_days gives 2,
+// so the fixture must carry a step of at least one day: with the default 1m/10m steps both values are 0 and the
+// assertion cannot fail.
+func TestUndoRestoresScheduledDaysExactly(t *testing.T) {
+	db := newTestDB(t)
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	deckID := seedDeck(t, db, now)
+	cardID := seedCard(t, db, deckID, "forward", now)
+	preset := testPreset(t)
+	preset.LearningSteps = "10m,1.5d"
+	preset.RelearningSteps = "10m,1.5d"
+	s := mustScheduler(t, preset)
+
+	first := mustSubmit(t, db, SubmitInput{
+		CardID: cardID, UserID: 1, Rating: Good, ExpectedVersion: 0,
+		Scheduler: s, Now: now, Location: time.UTC,
+	})
+	var afterFirst store.CardState
+	if err := db.Where("card_id = ? AND user_id = ?", cardID, 1).First(&afterFirst).Error; err != nil {
+		t.Fatalf("load state after first review: %v", err)
+	}
+	if afterFirst.ScheduledDays != 1 {
+		t.Fatalf("scheduled_days after the 1.5-day step = %d, want 1 (the fixture must differ from rounding)", afterFirst.ScheduledDays)
+	}
+	var firstReview store.Review
+	if err := db.First(&firstReview, first.ReviewID).Error; err != nil {
+		t.Fatalf("load first review: %v", err)
+	}
+	if firstReview.ScheduledDays == nil || *firstReview.ScheduledDays != 1 {
+		t.Errorf("review scheduled_days = %v, want 1 (the post-grade snapshot)", firstReview.ScheduledDays)
+	}
+
+	second := mustSubmit(t, db, SubmitInput{
+		CardID: cardID, UserID: 1, Rating: Good, ExpectedVersion: first.State.Version,
+		Scheduler: s, Now: now.Add(time.Hour), Location: time.UTC,
+	})
+	restored := mustUndo(t, db, cardID, 1, s, now.Add(time.Hour))
+	if restored.ScheduledDays != afterFirst.ScheduledDays {
+		t.Errorf("undo scheduled_days = %d, want %d (the previous review's snapshot)", restored.ScheduledDays, afterFirst.ScheduledDays)
+	}
+	var logs int64
+	if err := db.Model(&store.Review{}).Where("card_id = ? AND user_id = ?", cardID, 1).Count(&logs).Error; err != nil {
+		t.Fatalf("count reviews: %v", err)
+	}
+	if logs != 1 || second.ReviewID == 0 {
+		t.Errorf("reviews = %d, want 1 after undoing the second grade", logs)
+	}
+}
+
 // TestUndoFirstReviewReturnsCardToNew asserts undoing the first grade restores the card to a brand-new state (no due date, no log).
 func TestUndoFirstReviewReturnsCardToNew(t *testing.T) {
 	db := newTestDB(t)

@@ -1858,6 +1858,8 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		if interval < 0 {
 			interval = -interval / 86400
 		}
+		// scheduled_days is the same interval in whole days, as the review would have stored it for itself.
+		scheduledDays := max(int(math.Floor(interval)), 0)
 		var duration, stability, difficulty *float64
 		if value, ok := rowDuration[r.ID]; ok {
 			duration = &value
@@ -1865,7 +1867,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		if memory, ok := rowMemory[r.ID]; ok {
 			stability, difficulty = &memory.Stability, &memory.Difficulty
 		}
-		review := Review{CardID: id, UserID: userID, Rating: r.Ease, GradeSource: "self", ReviewedAt: at, ReviewDay: reviewday.Day(at, loc, cutoff), ElapsedMS: &elapsed, IntervalDays: &interval, DurationDays: duration, Stability: stability, Difficulty: difficulty, StateBefore: before}
+		review := Review{CardID: id, UserID: userID, Rating: r.Ease, GradeSource: "self", ReviewedAt: at, ReviewDay: reviewday.Day(at, loc, cutoff), ElapsedMS: &elapsed, IntervalDays: &interval, ScheduledDays: &scheduledDays, DurationDays: duration, Stability: stability, Difficulty: difficulty, StateBefore: before}
 		pendingReviews = append(pendingReviews, review)
 		reviewKeys[key] = true
 		report.ReviewsApplied++

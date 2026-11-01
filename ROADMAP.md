@@ -1266,7 +1266,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   'TestPreset|TestRepairPresetSchedulerLimits|TestCreateAnkiPreset|TestMigratePreset' -count=1`
   pass.
 
-- [ ] **M19-29 Undo restores `scheduled_days` by rounding a float, so the restored state is not what the
+- [x] **M19-29 Undo restores `scheduled_days` by rounding a float, so the restored state is not what the
   scheduler wrote** — *should-fix.* `rebuildReviewLog` recomputes the field as
   `int(math.Round(prev.IntervalDays))` (`internal/schedule/actions.go:166-197`, esp. `:189-194`), while the
   scheduler truncates: `Floor(delayMinutes/1440)` for a step and `uint64(interval)` for a graduation
@@ -1278,6 +1278,38 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   float — snapshot the post-grade `scheduled_days` in the append-only log (nullable column, backfill
   `floor(interval_days)`) and restore it verbatim; add a regression with a ≥ 1-day step plus a mutation
   control that fails when the field is left unrestored.
+  *Closed by this commit (`fix(schedule): restore the logged scheduled days on undo`).*
+  `reviews.scheduled_days` is a nullable snapshot of the post-grade `card_states.scheduled_days`. The submit
+  path writes it (`internal/schedule/submit.go:263`), the Anki progress import writes it from `floor(ivl)`
+  (`internal/store/anki_import.go:1862-1870`), and migration `0021_backfill_review_scheduled_days`
+  (`internal/store/migrate_review_scheduled_days.go`) fills rows written before the column existed with
+  `floor(interval_days)`. `rebuildReviewLog` now restores that column verbatim and truncates `interval_days`
+  only when the snapshot is NULL (`internal/schedule/actions.go:186-215`); the due date is unchanged.
+  `TestUndoRestoresScheduledDaysExactly` (`internal/schedule/actions_test.go:178`) grades twice with a
+  `10m,1.5d` step, requires the stored value to be 1, and compares the undone state with it. Raw output of
+  `go test ./internal/schedule/ -run 'TestUndoRestoresScheduledDaysExactly|TestUndoRestoresPreviousDueAndInterval|TestUndoFirstReviewReturnsCardToNew' -count=1`:
+  ```
+  ok  	git.nite07.com/nite/engram/internal/schedule	0.063s
+  ```
+  The mutation control replaced the verbatim restore with `int(math.Round(*r.IntervalDays))`, the pre-fix
+  derivation, and the same run failed:
+  ```
+  --- FAIL: TestUndoRestoresScheduledDaysExactly (0.01s)
+      actions_test.go:213: undo scheduled_days = 2, want 1 (the previous review's snapshot)
+  FAIL
+  FAIL	git.nite07.com/nite/engram/internal/schedule	0.023s
+  ```
+  `TestBackfillReviewScheduledDays` runs on SQLite and PostgreSQL and asserts that the backfill truncates,
+  keeps an existing snapshot, leaves a row without an interval NULL, and changes nothing on a second run:
+  ```
+  --- PASS: TestBackfillReviewScheduledDays (0.36s)
+      --- PASS: TestBackfillReviewScheduledDays/sqlite (0.02s)
+      --- PASS: TestBackfillReviewScheduledDays/postgres (0.29s)
+  ```
+  `go test ./internal/schedule/ -count=1` and `/home/nite/.hermes/cache/scratch/pgtest ./internal/schedule/
+  -count=1` pass. One reading note: the entry's `200000d` reproduction is no longer reachable, because
+  M19-28 (`4a4f573`) now refuses any step above 36 500 days (`NewScheduler() error = schedule: parse learning
+  steps: step "200000d" exceeds the supported range`); the `1.5d` case reproduced unchanged.
 
 - [x] **M19-30 The retrievability order has no caller, and when reached it applies the daily cap before
   ranking** — *should-fix.* `OrderByRetrievability` is the documented default (`internal/schedule/queue.go:
