@@ -381,34 +381,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   Evidence is the output of `grep -n -E 'M18-(10|11|12|36|37)\b' ROADMAP.md` limited to the ledger
   section.
 
-- [ ] **M18-59 Stored presets the scheduler cannot use are repaired** — v0.2.0 and v0.2.1 accepted every
-  positive `maximum_interval_days` on `POST` and `PATCH /api/v1/presets`, because
-  `validatePresetForWrite` checked only `<= 0`. `.apkg` imports before `238ede0` copied the package's
-  maximum interval and steps unchecked, and `.edeck` imports do so until `M18-58` lands. A deployed
-  database can therefore hold presets that go-fsrs v4.0.0 refuses. A maximum interval above 36 500, or a
-  negative step, makes `NewFSRS` replace every parameter with `fsrs.DefaultParam()`. A step stored as
-  `NaNm` or `+Infm` makes `schedule.NewScheduler` return an error, so every preview and every review
-  submission in the deck fails. Since `M18-17`, such a preset also cannot be saved. Reproduced on `main`:
-  `PresetStore.Update` of a preset with 50 000 days refuses a rename with
-  `maximum interval days must be between 1 and 36500: 50000`. The fix is a versioned migration, numbered
-  after the last entry of `BuiltinMigrations` in `internal/store/migrate.go` when the task starts. It
-  sets `maximum_interval_days` to 36 500 where it is above 36 500. It sets `learning_steps` to
-  `DefaultLearningSteps` where a part of the stored text is refused by `ankiStepMinutes` or is negative.
-  The same rule applies to `relearning_steps`, with `DefaultRelearningSteps`. It changes no other
-  column. The maintainer has decided that a versioned migration may rewrite stored preset values: the
-  migration clamps a maximum interval above 36 500 to 36 500, replaces a negative or non-finite step set
-  with the default steps, and records in its doc comment how many rows it changed. Rewriting is allowed
-  because a preset the scheduler refuses is unusable as stored, and the alternative — leaving rows that
-  go-fsrs replaces wholesale at schedule time yet display as imported values — is the failure this entry
-  exists to remove. The migration must be idempotent and must not touch a preset whose values are already
-  acceptable.
-  *Acceptance:* a migration test in `internal/store`, on both drivers, seeds presets with 50 000 days,
-  `-1m`, `NaNm`, `+Infm` and one valid preset. After the migration, the first four hold the repaired
-  values and the valid preset is unchanged. A second run changes nothing. A test in `internal/schedule`
-  builds the scheduler from each repaired value and asserts that its go-fsrs parameters hold the
-  preset's maximum interval, steps and first weight, which shows that `NewFSRS` did not reset them.
-  Evidence is the raw scoped `go test` and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set.
-
 - [ ] **M18-60 The preset page and API state the 36 500-day bound** — since `M18-17` the store refuses a
   maximum interval above 36 500. The layers in front of it still describe the old rule.
   `parsePresetRequest` in `internal/web/presets_api.go` refuses only `<= 0`, and its doc comment says
