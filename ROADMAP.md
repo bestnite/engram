@@ -276,26 +276,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   present. *Acceptance:* section 2.7 of `AGENTS.md` names `reuse`, `copy` and `last_review_at`. Evidence
   is the `AGENTS.md` diff.
 
-- [ ] **M18-90 README names every entry that takes the preset choice, and lists only registered MCP
-  tools** — `M18-46` required that the commit landing `M18-6` add the Import page to the sentence on
-  line 49 of `README.md`, which lists the entries that take `preset_mode` and `preset_id`. `M18-6`
-  (`92830b1`) changed no README line. The Import page now sends both fields (`frontend/src/lib/api/client.ts`),
-  and the sentence still names only the three routes, the CLI flags and the two MCP tools. Line 60 says
-  that `apply_weights` is "allowed only with `new_deck` and `preset_mode` `new`". `ValidateImportPreset`
-  in `internal/store/package_import.go` refuses it with `reuse` and `copy`. With `into_deck` and
-  `replace_deck`, it accepts the option and the preset is left unchanged. "Allowed only" therefore has two
-  readings: refused elsewhere, or ignored elsewhere. The `apply_weights` jsonschema texts of
-  `importDeckIn` and `createImportUploadIn` in `internal/mcp/tools.go` say "(new_deck only)" and have the
-  same two readings. They also do not say that `reuse` and `copy` refuse it. Line 106 lists an
-  `export_deck` MCP tool, but `internal/mcp/mcp.go` registers none since `M18-84`, and line 93 states a
-  tool count. The fix: the line 49 sentence names the Import page. Line 60 and both jsonschema texts state
-  the two `apply_weights` rules separately: `reuse` and `copy` refuse it, and `into_deck` and
-  `replace_deck` ignore it. Line 106 lists only registered tools, and line 93 states the count of tools
-  that `internal/mcp/mcp.go` registers. *Acceptance:* each statement of the changed lines matches
-  `ValidateImportPreset`, `resolveAnkiTargetDeck`, `frontend/src/lib/api/client.ts` and the `addTool`
-  calls in `internal/mcp/mcp.go`; the scoped `go vet` and `go test` of `internal/mcp` pass. Evidence is
-  the diff and the raw scoped output.
-
 - [ ] **M18-91 `README.zh.md` describes the same import as `README.md`** — `M18-21`, `M18-46` and `M18-64`
   changed only `README.md`. The import section of `README.zh.md` still says the opposite of the code. Line
   43 offers two package formats, Engram's `.edeck` and Anki's `.apkg`, although `M18-5` removed `.edeck`.
