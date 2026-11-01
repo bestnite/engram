@@ -328,8 +328,12 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   filtered deck with rescheduling on, and in a filtered deck with rescheduling off. It also holds one
   review card in each of the two filtered decks. Anki's own scheduler and filtered-deck operations put
   the cards in these states; the script does not write the columns by hand. The golden records, per
-  card, the package's `type`, `queue`, `due`, `odue` and `odid`, and the due date Anki reports for the
-  card through its own API after importing the package with scheduling. Third, a test that imports the
+  card, the package's `type`, `queue`, `due`, `odue` and `odid`, the package's `crt`, and the deck
+  Anki assigns the card after import. For a card whose due value is a timestamp it also records the
+  due date Anki reports through its own API, and the test compares that timestamp exactly. A
+  day-number due is asserted as `crt` plus that many days instead, because Anki's API anchors a day
+  number at the importing collection's current day boundary, so its value moves with the wall clock
+  and cannot be a committed golden. Third, a test that imports the
   committed fixture on both drivers and compares every card's `due_at` with the golden replaces
   `TestAnkiFilteredOraclePackage`. `interday_probe.py` is deleted, and its section in
   `tools/anki-oracle/README.md` is replaced by a description of the new fixture. *Acceptance:* each of
