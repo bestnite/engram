@@ -232,6 +232,15 @@ func noteFieldValues(cfg notetype.Config, fields map[string]any) (map[string]str
 	return values, nil
 }
 
+// NotePayloadError means a note write payload cannot be turned into stored field values: an unknown field
+// name, or a field value whose shape the store does not accept. It is the client's error, not a storage
+// failure, so every transport answers it as a request error instead of 500.
+type NotePayloadError struct {
+	Detail string
+}
+
+func (e *NotePayloadError) Error() string { return e.Detail }
+
 // fieldValueHTML converts one payload value to the stored HTML string.
 func fieldValueHTML(value any) (string, error) {
 	switch typed := value.(type) {
@@ -307,7 +316,7 @@ func (s *NoteStore) prepareNoteFields(ctx context.Context, tx *gorm.DB, n *Note,
 	fields = extractNoteColumns(fields, n, cfg)
 	values, err := noteFieldValues(cfg, fields)
 	if err != nil {
-		return nil, nil, fmt.Errorf("validate note fields: %w", err)
+		return nil, nil, fmt.Errorf("validate note fields: %w", &NotePayloadError{Detail: err.Error()})
 	}
 	// The editor inserts /media/<sha256> and [sound:<sha256>]; store them as deck-scoped names and register those
 	// names in the same transaction, so the frame, media_notes, garbage collection and export all see the reference.

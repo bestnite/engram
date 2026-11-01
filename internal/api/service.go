@@ -808,8 +808,14 @@ func (a *API) UpdateNote(ctx context.Context, userID, noteID uint64, apiKeyID *u
 			// Rejected by the pre-write check: referenced media the caller cannot read, an item-level stable code.
 			return nil, newServiceError(http.StatusForbidden, CodeMediaNotReadable, strings.Join(mwe.Entries, ", "))
 		}
-		a.logger.Error("update note failed", "note_id", existing.ID, "error", err)
-		return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
+		var payloadErr *store.NotePayloadError
+		if errors.As(err, &payloadErr) {
+			// The payload named an unknown field or carried a value shape the store does not accept.
+			return nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, payloadErr.Detail)
+		}
+		// An unrecognised store failure is not the client's fault: it reaches asServiceError, which answers 500
+		// internal_error with the code's static text and logs the underlying error instead of echoing it.
+		return nil, fmt.Errorf("update note: %w", err)
 	}
 	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),

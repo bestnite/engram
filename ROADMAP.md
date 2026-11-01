@@ -2215,7 +2215,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `lines = 2, want header, one row and the truncation marker`. `go test ./internal/api/ -run 'TestExport' -count=1`
   passes.
 
-- [ ] **M19-101 An unrecognised store failure on a write is answered 400 `invalid_request` with the driver's text** —
+- [x] **M19-101 An unrecognised store failure on a write is answered 400 `invalid_request` with the driver's text** —
   *should-fix.* `internal/api/service.go:764-772` (note update), `internal/api/note_types.go:322-335` (note type
   write) and `internal/api/keys.go:67-70` (key creation) map every error that is not one of their named sentinels to
   400 `invalid_request`, and the note and key paths put `err.Error()` into the envelope. A storage outage is
@@ -2226,6 +2226,42 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   constraint failed: probe_internal_marker (1811)"}`. *Acceptance:* every unrecognised store error reaches the caller
   as 500 `internal_error` with the code's static text, and a test that aborts a write inside the database asserts the
   status and a body free of driver text.
+  *Closed by this commit (`fix(api): answer an unrecognised store failure as internal_error`).*
+  The three sites now hand the store error to the existing fallback instead of building a 400: `UpdateNote`
+  returns the wrapped error after its named branches (`internal/api/service.go:818`), `noteTypeWriteError`
+  does the same (`internal/api/note_types.go:337`), and `createKey` calls `writeServiceError`
+  (`internal/api/keys.go:78`). `asServiceError` maps the result to 500 `internal_error` with an empty message,
+  which `formatErrorMessage` renders as the catalog text, and logs the underlying error.
+  Two client-error classes that were only distinguishable by text had to become typed, or they would have
+  turned into 500s: the store now returns `*store.NotePayloadError` (`internal/store/note.go:238`) for an
+  unknown field name or an unsupported value shape, which `UpdateNote` maps to 400 `invalid_request`, and
+  `validateAnswerSpecs` returns a `*notetype.ValidationError` with the new `RuleAnswerSpec`
+  (`internal/store/notetype.go:97`, `internal/notetype/notetype.go:117`), which `noteTypeWriteError` already
+  maps to 400. Key creation keeps `ErrAPIKeyNameRequired`, `ErrAPIKeyUserRequired` and
+  `ErrAPIKeyInvalidScope` as 400 and answers everything else with `writeServiceError`.
+  `TestStoreFailureIsAnsweredAsInternalError` (`internal/api/internal_error_test.go`) installs a SQLite trigger
+  that aborts the write for each of the three paths and asserts 500, `internal_error`, and a body free of the
+  marker, `constraint failed` and `SQL`; it then drops the key trigger and shows an ordinary create still
+  answers 201. Raw output of `go test ./internal/api/ -run TestStoreFailureIsAnsweredAsInternalError -count=1 -v`:
+  ```
+  === RUN   TestStoreFailureIsAnsweredAsInternalError
+  === RUN   TestStoreFailureIsAnsweredAsInternalError/note_update
+  === RUN   TestStoreFailureIsAnsweredAsInternalError/note_type_write
+  === RUN   TestStoreFailureIsAnsweredAsInternalError/key_creation
+  --- PASS: TestStoreFailureIsAnsweredAsInternalError (0.02s)
+      --- PASS: TestStoreFailureIsAnsweredAsInternalError/note_update (0.00s)
+      --- PASS: TestStoreFailureIsAnsweredAsInternalError/note_type_write (0.00s)
+      --- PASS: TestStoreFailureIsAnsweredAsInternalError/key_creation (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.034s
+  ```
+  With the three sites reverted, the same run failed with
+  `PATCH note = 400 {"error":{"code":"invalid_request","message":"The request is invalid. — update note 1: constraint failed: probe_internal_marker (1811) (1811)"}}, want 500`,
+  which is the reported defect. `go test ./internal/api/ -count=1` passes in `5.354s`, `go test ./internal/mcp/ -count=1`
+  in `3.354s`, `go test ./internal/notetype/ -count=1` passes, and
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/api/ -run 'TestNote|TestKey|TestStoreFailure' -count=1`
+  and `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run 'TestNoteType|TestNote|TestMediaName' -count=1`
+  pass on both drivers.
 
 - [ ] **M19-102 A failed bulk-import row puts the driver's text into the 200 report** — *should-fix.*
   `internal/api/service.go:709` copies `rowErr.Error()` into `ImportResponse.Errors[].reason`, and `:657` does the

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -65,7 +67,16 @@ func (a *API) createKey(c *gin.Context) {
 		ExpiresAt: req.ExpiresAt,
 	})
 	if err != nil {
-		abortError(c, http.StatusBadRequest, CodeInvalidRequest, err.Error())
+		// Named request errors keep their 400; anything else is a storage failure, and writeServiceError answers
+		// it as 500 internal_error with the code's static text instead of echoing the driver's.
+		switch {
+		case errors.Is(err, store.ErrAPIKeyNameRequired), errors.Is(err, store.ErrAPIKeyUserRequired):
+			abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
+		case errors.Is(err, store.ErrAPIKeyInvalidScope):
+			abortError(c, http.StatusBadRequest, CodeInvalidRequest, err.Error())
+		default:
+			writeServiceError(c, fmt.Errorf("create api key: %w", err))
+		}
 		return
 	}
 	a.auditor.Record(c.Request.Context(), store.AuditEntry{

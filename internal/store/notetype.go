@@ -92,7 +92,9 @@ func validateAnswerSpecs(cfg notetype.Config) error {
 			continue
 		}
 		if err := answer.ValidateSpec(*template.Answer, fieldIDs); err != nil {
-			return fmt.Errorf("template %q: %w", template.Name, err)
+			// A typed ValidationError keeps this a client error at every transport: without it the API could not
+			// tell a rejected spec from a storage failure and answered both as 400 with the driver's text.
+			return &notetype.ValidationError{Rule: notetype.RuleAnswerSpec, Detail: fmt.Sprintf("template %q: %v", template.Name, err)}
 		}
 	}
 	return nil

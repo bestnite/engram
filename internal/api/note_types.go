@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -331,7 +332,9 @@ func noteTypeWriteError(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return newServiceError(http.StatusNotFound, CodeNotFound, "note type not found")
 	}
-	return newServiceError(http.StatusBadRequest, CodeInvalidRequest, err.Error())
+	// An unrecognised store failure is not the client's fault: it reaches asServiceError, which answers 500
+	// internal_error with the code's static text and logs the underlying error instead of echoing it.
+	return fmt.Errorf("write note type: %w", err)
 }
 
 // ---- REST handlers ----

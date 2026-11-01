@@ -112,6 +112,9 @@ const (
 	// RuleAnswerTypePlaceholder reports a template that carries an answer spec
 	// but does not have exactly one type placeholder on its front.
 	RuleAnswerTypePlaceholder Rule = "answer_type_placeholder"
+	// RuleAnswerSpec reports an answer spec a control rejected: an unknown control, a missing
+	// required role, or a role bound to a field the note type does not declare.
+	RuleAnswerSpec Rule = "answer_spec"
 )
 
 // ValidationError reports the first rule a note type violates. Detail is English
