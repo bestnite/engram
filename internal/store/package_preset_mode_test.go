@@ -3,6 +3,8 @@ package store
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -10,6 +12,71 @@ import (
 
 	"git.nite07.com/nite/engram/internal/anki"
 )
+
+func TestAnkiImportPresetRefusals(t *testing.T) {
+	raw, err := os.ReadFile(ankiFixturePath("stock.anki21.apkg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for driver, db := range packageDatabases(t) {
+		t.Run(driver, func(t *testing.T) {
+			users := seedUsers(t, db, "preset_refusal_owner", "preset_refusal_other")
+			ownerPreset := seedPresetRow(t, db, users[0])
+			otherPreset := seedPresetRow(t, db, users[1])
+			deckID := seedPresetDeck(t, db, users[0])
+			type selection struct {
+				target, mode, preset string
+				weights              bool
+			}
+			var cases []selection
+			for _, mode := range []string{PackagePresetReuse, PackagePresetCopy} {
+				cases = append(cases,
+					selection{"new_deck", mode, "none", false},
+					selection{"new_deck", mode, "other", false},
+					selection{"new_deck", mode, "owner", true},
+					selection{"into_deck", mode, "owner", false},
+					selection{"replace_deck", mode, "owner", false},
+				)
+			}
+			for _, target := range []string{"new_deck", "into_deck", "replace_deck"} {
+				cases = append(cases, selection{target, PackagePresetNew, "owner", false})
+			}
+			cases = append(cases, selection{"new_deck", "unknown", "none", false},
+				selection{"into_deck", "", "owner", false}, selection{"replace_deck", "", "owner", false})
+			models := []any{&Deck{}, &Preset{}, &Note{}, &Card{}}
+			counts := func(t *testing.T) []int64 {
+				t.Helper()
+				result := make([]int64, len(models))
+				for i, model := range models {
+					if err := db.Model(model).Count(&result[i]).Error; err != nil {
+						t.Fatal(err)
+					}
+				}
+				return result
+			}
+			for _, tc := range cases {
+				name := fmt.Sprintf("target=%s/mode=%q/preset=%s/weights=%t", tc.target, tc.mode, tc.preset, tc.weights)
+				t.Run(name, func(t *testing.T) {
+					target := tc.target
+					if target != PackageTargetNewDeck {
+						target = fmt.Sprintf("%s:%d", target, deckID)
+					}
+					ids := map[string]uint64{"none": 0, "owner": ownerPreset, "other": otherPreset}
+					opts := PackageImportOptions{Target: target, PresetMode: tc.mode, PresetID: ids[tc.preset], ApplyWeights: tc.weights, MediaRoot: t.TempDir()}
+					before := counts(t)
+					report, err := NewDeckStore(db).ImportPackage(context.Background(), users[0], bytes.NewReader(raw), opts)
+					var pe *PackageError
+					if !errors.As(err, &pe) || pe.Code != CodePresetSelectionInvalid {
+						t.Errorf("report=%+v error=%v, want preset selection PackageError", report, err)
+					}
+					if after := counts(t); !reflect.DeepEqual(before, after) {
+						t.Errorf("deck, preset, note, card counts: before=%v after=%v", before, after)
+					}
+				})
+			}
+		})
+	}
+}
 
 func TestAnkiImportPresetModes(t *testing.T) {
 	raw, err := os.ReadFile(ankiFixturePath("stock.anki21.apkg"))
