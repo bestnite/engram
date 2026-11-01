@@ -278,13 +278,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   internal/api cmd` prints nothing; the transport tests pass on SQLite and with `TEST_PG_DSN` set, with the
   `postgres` subtests PASS. Evidence is the grep output and the raw scoped test output.
 
-- [ ] **M18-85 The export dialog offers only `.apkg`** — first part of the split of `M18-5`, run first. The export
-  dialog in `frontend/src/lib/views/DeckDetailView.svelte` offers the `.apkg` package with its four
-  switches and no `.edeck` choice; user-facing text comes from the catalog and both catalogs keep identical
-  key sets. *Acceptance:* `git grep -n edeck -- '*.ts' '*.svelte'` prints nothing; component tests pass and
-  `npm --prefix frontend run build` succeeds. Evidence is the grep output, the component test output and the
-  build output.
-
 - [ ] **M18-86 Single-format documentation and the removal in the release ledger** — fourth part of the
   split of `M18-5`. Delete `schema/deck-package.schema.json` and `schema/examples/deck-package.example.json`,
   remove the `.edeck` section of `schema/README.md`, state the single format in `README.md` and
