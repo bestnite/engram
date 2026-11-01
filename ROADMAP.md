@@ -536,31 +536,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   *Acceptance:* each new statement matches `importAnkiProgress` and `createAnkiPreset` in
   `internal/store/anki_import.go`. Evidence is the `README.md` diff.
 
-- [ ] **M18-65 Decide what happens to a skipped card's review rows with `include_progress` on** — since `M18-26`, `readCards` in `internal/anki/sqlite.go` skips a card row whose `type`, `queue`, `odid`
-  or `flags` holds a REAL value and counts it in `Package.CardsSkipped`. The revlog rows of that card are
-  still readable, but `importAnkiProgress` in `internal/store/anki_import.go` finds no engram card for
-  them, counts them in `reviews_skipped` and writes no `reviews` row. `M18-23` fails an import that has
-  `include_progress` on when one revlog row cannot be read, because a dropped review row cannot be
-  recovered later and the review log is the only input to parameter optimisation. A skipped card loses
-  its readable review rows in the same way, yet the import succeeds. Reproduced on `main` on both
-  drivers: the schema-11 stock package with one revlog row, whose card has `queue` = 1.5 and `type` = 2,
-  imported with `include_progress` on, reports `cards_skipped` 1, `reviews_skipped` 1 and
-  `reviews_applied` 0, and the importer has no `reviews` row. The `M18-26` rule says that the rest of the
-  import continues; it does not say whether that also holds with `include_progress` on. The maintainer has
-  decided rule (b), with one addition: the import continues with `include_progress` on, the skipped card's
-  review rows are counted in `reviews_discarded` and logged at warn level so they are visible rather than
-  silently gone, and the comment on the skip in `readCards` states that neither the card nor its review
-  rows are imported. Rule (a) was rejected because `M18-26` exists precisely so that one corrupt row does
-  not stop a content import, and a card row that cannot be read is as unrecoverable as an unreadable
-  revlog row — refusing the whole package for it would reintroduce the failure `M18-13` removed.
-  *Acceptance:* under rule (a),
-  a table test in `internal/store` imports the package above through `ImportPackage`. With
-  `include_progress` on it returns a `PackageError` with code `package_bad_format` and adds no deck, note,
-  card, `card_states` or `reviews` row and no media file. With `include_progress` off it creates every
-  other card of the package and reports `cards_skipped` 1. Under rule (b), the same test shows that with
-  `include_progress` on the import succeeds and reports `reviews_skipped` 1. Evidence is the raw scoped
-  `go test` and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set.
-
 - [ ] **M18-67 The import page shows `cards_skipped`** — since `M18-26` the import report carries
   `cards_skipped`, the number of package card rows that could not be read and were not imported.
   `PackageImportReport` in `frontend/src/lib/api/types.ts` has no such field, and `reportRows` in
