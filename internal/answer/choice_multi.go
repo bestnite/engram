@@ -128,12 +128,28 @@ func choiceMultiParts(bindings Bindings) ([]string, []int, error) {
 	if len(answers) == 0 {
 		return nil, nil, fmt.Errorf(`role "answers" must not be empty`)
 	}
+	answers = distinctIndices(answers)
 	for _, index := range answers {
 		if index >= len(options) {
 			return nil, nil, fmt.Errorf(`role "answers" index %d is out of range for %d options`, index, len(options))
 		}
 	}
 	return options, answers, nil
+}
+
+// distinctIndices drops repeated indices while keeping the stored order, so a
+// correct answer that names the same option twice counts as one option.
+func distinctIndices(indices []int) []int {
+	seen := make(map[int]bool, len(indices))
+	distinct := make([]int, 0, len(indices))
+	for _, index := range indices {
+		if seen[index] {
+			continue
+		}
+		seen[index] = true
+		distinct = append(distinct, index)
+	}
+	return distinct
 }
 
 // isPermutation reports whether order is a permutation of 0..n-1; anything else

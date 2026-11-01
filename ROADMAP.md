@@ -877,7 +877,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   have both `RenderBack` implementations treat an out-of-range stored index as an error; a regression
   asserts an error and no panic.
 
-- [ ] **M19-32 `choice_multi` halves the score when the correct-index list repeats an index** —
+- [x] **M19-32 `choice_multi` halves the score when the correct-index list repeats an index** —
   *should-fix.* `correct` is built as a set but the denominator is `len(answers)`
   (`internal/answer/choice_multi.go:69-99`, denominator at `:92`), and `choiceMultiParts` validates range
   but not duplicates (`:112-137`). `answers = "0<br>0"` therefore scores `(1-0)/2 = 0.5`, i.e. `Hard` for a
@@ -885,6 +885,25 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   selected:[0]]`. *Acceptance:* deduplicate `answers` or refuse the duplicate at parse time, so the
   denominator is the number of distinct correct options; a regression selects the duplicated index once and
   expects score 1.
+  *Closed by this commit (`fix(answer): score a repeated correct index once`).*
+  `choiceMultiParts` (`internal/answer/choice_multi.go:128`) passes the parsed correct indices through
+  `distinctIndices` (`:141`), which drops a repeated index and keeps the stored order. The denominator is
+  therefore the number of distinct correct options, and `RenderBack` lists each correct option once. The
+  range check runs on the distinct list, which is the same set the grade compares against.
+  `TestChoiceMultiDuplicateCorrectIndexScoresFullCredit` (`internal/answer/choice_multi_duplicate_test.go`)
+  grades a single selection of the duplicated index and asserts score 1, rating `Good`, and the detail
+  carrying `answers:[0]`. Raw output of
+  `go test ./internal/answer/ -run TestChoiceMultiDuplicateCorrectIndexScoresFullCredit -count=1 -v`:
+  ```
+  === RUN   TestChoiceMultiDuplicateCorrectIndexScoresFullCredit
+  --- PASS: TestChoiceMultiDuplicateCorrectIndexScoresFullCredit (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/answer	0.002s
+  ```
+  Before the change the same test failed with
+  `score = 0.5, want 1 (detail map[answers:[0 0] hits:1 misses:0 rating:2 score:0.5 selected:[0]])`.
+  `go test ./internal/answer/ -count=1` passes, and
+  `go test ./internal/web/ -run 'TestGrade|TestReview|TestOptionOrder|TestChoice' -count=1` passes.
 
 - [ ] **M19-33 `IsMachineGraded` special-cases a control name in core code** — *nit.*
   `internal/answer/answer.go:136-147` returns false when `spec.Control == "short_answer"`, while the package
