@@ -371,32 +371,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `M18-26` and `cards_skipped`; one ledger row names `M18-19`. Evidence is the output of
   `grep -n -E 'M18-(19|23|24|25|26)\b|cards_skipped' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-77 The `M18-41` tests check which rule produced the state, and one preview test covers both
-  drivers** — `M18-41` added four cases to `TestAnkiProgressMissingMemory` in
-  `internal/store/anki_progress_import_test.go`: `relearning history`, `relearning SM2`,
-  `review stability only` and `review difficulty only`. Like the four older cases, they check only that
-  stability is at least 0.001 and that difficulty lies from 1 to 10. Any rule that yields a value in that
-  range passes. A relearning card with history that took the SM-2 path would pass, and so would a card
-  whose single package value was kept. Measured on `main` with the default weights: the three new cases
-  with history store stability 11.6875 and difficulty 1.0000, the replay of Good and Easy one day apart;
-  `relearning SM2` stores stability 7.0000 and difficulty 7.1498, the result of
-  `MemoryStateFromSM2(2.5, 7, 0.9)`. Second, `M18-41` moved `TestAnkiImportedMemoryPreview` into
-  `internal/schedule/anki_memory_import_test.go`, beside `TestImportedAnkiMemoryPreview` in
-  `internal/schedule/anki_memory_preview_test.go`, which `M18-36` added. The two names differ only in word
-  order. Both import a package and check that `Preview` accepts each stored state. The moved test runs on
-  SQLite only, while its sibling also runs on PostgreSQL. The moved test's four card shapes repeat the
-  first four cases of `TestAnkiProgressMissingMemory`. The fix changes tests only. Each case of
-  `TestAnkiProgressMissingMemory` that is not skipped compares the stored stability and difficulty, within
-  1e-4, with the value its rule gives, computed in the test with go-fsrs. For a case with history, that
-  value is the replay of the case's revlog rows. For a case without history, it is `MemoryStateFromSM2`
-  from the case's factor and interval with retention 0.9. The cases of `TestAnkiImportedMemoryPreview`
-  become cases of `TestImportedAnkiMemoryPreview`, which runs them on both drivers, and
-  `internal/schedule/anki_memory_import_test.go` is deleted. *Acceptance:* in one run with the replay
-  branch of `deriveAnkiMemory` replaced by the SM-2 branch, `TestAnkiProgressMissingMemory` fails;
-  without that change it passes. `TestImportedAnkiMemoryPreview` passes and its output shows a `postgres`
-  subtest for each moved case. `internal/schedule/anki_memory_import_test.go` no longer exists. Evidence is
-  the raw scoped `go test` and `go vet` output of both runs, the PostgreSQL run with `TEST_PG_DSN` set.
-
 - [ ] **M18-79 Anki's replay selection rule is measured before the importer copies it** — `M18-49`
   was attempted twice without a result, and its oracle work is kept on an unmerged branch. Measured
   against Anki 26.09.3: a review card with Good, Easy (+40 days), Easy (+60 days) gives stability
