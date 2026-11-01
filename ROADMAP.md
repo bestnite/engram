@@ -1485,7 +1485,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   in-flight generation per list (bump a counter and drop stale results, or abort the previous request) and add a
   client regression with two out-of-order filter responses that must end on the newest result and address.
 
-- [ ] **M19-60 The sidebar shows the previous account's deck names after a 401 session switch** — *should-fix.*
+- [x] **M19-60 The sidebar shows the previous account's deck names after a 401 session switch** — *should-fix.*
   `refreshSidebarDecks` returns without a request inside its 15-second throttle
   (`frontend/src/lib/components/shell/sidebar.ts:83`), and `resetSidebarDecks` is called only from the explicit
   logout path (`frontend/src/lib/components/shell/UserMenu.svelte:43-44`); `clearSession` on a 401 neither clears
@@ -1497,6 +1497,27 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Acceptance:* clear the sidebar cache and its throttle whenever the session becomes unauthenticated and on
   login, cancel a refresh belonging to the previous session, and add a test that switches two clients and shows
   only the second client's decks.
+  *Closed by this commit (`fix(frontend): keep the sidebar to the current account`).*
+  `sidebar.ts:71` now keeps a session generation; `resetSidebarDecks` (`:135`) bumps it, clears the throttle, the
+  cached list and the shared in-flight slot, and a refresh that resolves under an older generation is discarded
+  instead of written back. `clearSession` (`frontend/src/lib/auth/index.ts:75`) resets the sidebar, and `initAuth`,
+  `login`, `completeTOTP` and `logout` reset it on every boundary where the session identity is established or
+  lost, so the 15-second throttle cannot carry one account's window into the next. A request already in flight is
+  not cancelled at the network level (the API client has no abort hook) but its result is dropped and it no
+  longer blocks the new session's first refresh.
+  `sidebar-session.test.ts` switches Alice to Bob after `clearSession`, asserts the cache is empty in between,
+  that Bob's non-forced refresh still issues a request, and that Alice's late in-flight response leaves Bob's
+  list intact; a third case asserts a successful `login` clears the list. Raw output of
+  `cd frontend && npx vitest run src/tests/sidebar-session.test.ts src/tests/sidebar-sync.test.ts src/tests/auth.test.ts`:
+  ```
+   Test Files  3 passed (3)
+        Tests  15 passed (15)
+  ```
+  The same test before the change failed with `expected [ 'A private deck' ] to deeply equal []` (the 401 switch
+  kept the cache), `expected [ 'A private deck' ] to deeply equal []` (login kept it) and
+  `expected "vi.fn()" to be called 1 times, but got 0 times` (Bob's refresh joined Alice's in-flight request).
+  `npx vitest run` passes 588 tests in 58 files, and `npm run check` still reports exactly the 11 pre-existing
+  `M19-62` errors in 2 files.
 
 - [ ] **M19-61 Every review render computes four interval previews that no page displays** — *should-fix.*
   The SPA render handler calls `api.PreviewIntervals` for each card render and returns `intervals`

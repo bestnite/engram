@@ -67,6 +67,8 @@ let lastLoadedAt = 0;
 let inflight: Promise<void> | null = null;
 // Set when a forced refresh collides with an in-flight request: that request may have started before the change, so another fetch is required once it finishes.
 let refreshAgain = false;
+// Bumped whenever the session changes identity. A response started under the previous session must not be written back, because it carries that account's deck names.
+let sessionGeneration = 0;
 
 /**
  * Refresh the sidebar's deck shortcuts. When force is false, repeated calls within 15 seconds return immediately.
@@ -82,24 +84,31 @@ export function refreshSidebarDecks(client: ApiClient, force = false): Promise<v
   }
   if (!force && now - lastLoadedAt < REFRESH_INTERVAL_MS) return Promise.resolve();
   lastLoadedAt = now;
-  inflight = (async () => {
+  const generation = sessionGeneration;
+  const request = (async () => {
     try {
       const [decksRes, counts] = await Promise.all([
         client.getDecks(),
         client.getDeckQueueCounts().catch(() => null),
       ]);
+      // The account may have changed while this request was in flight; its decks belong to the previous session.
+      if (generation !== sessionGeneration) return;
       sidebarDecks.set(buildSidebarDecks(decksRes.decks, counts));
     } catch {
-      lastLoadedAt = 0;
+      if (generation === sessionGeneration) lastLoadedAt = 0;
     } finally {
-      inflight = null;
-      if (refreshAgain) {
-        refreshAgain = false;
-        void refreshSidebarDecks(client, true);
+      // A reset during the request already cleared the shared state; only the current generation may touch it.
+      if (generation === sessionGeneration) {
+        inflight = null;
+        if (refreshAgain) {
+          refreshAgain = false;
+          void refreshSidebarDecks(client, true);
+        }
       }
     }
   })();
-  return inflight;
+  inflight = request;
+  return request;
 }
 
 /**
@@ -122,8 +131,12 @@ export function handleDataChanged(client: ApiClient, kind: DataChangeKind): void
   void refreshSidebarDecks(client, true);
 }
 
-/** Cleared on logout, so the next person to log in does not briefly see the previous user's decks. */
+/** Cleared on logout and whenever the session changes, so the next person to log in does not briefly see the previous user's decks. */
 export function resetSidebarDecks(): void {
+  // Invalidate any refresh that started under the old session and start the next one unthrottled.
+  sessionGeneration += 1;
   lastLoadedAt = 0;
+  inflight = null;
+  refreshAgain = false;
   sidebarDecks.set({ decks: [], totalDue: null });
 }

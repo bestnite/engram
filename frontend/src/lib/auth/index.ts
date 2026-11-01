@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { apiClient } from '../api';
+import { resetSidebarDecks } from '../components/shell/sidebar';
 import type {
   User,
   SessionResponse,
@@ -48,6 +49,8 @@ export async function initAuth(): Promise<SessionResponse | null> {
     if (session.user?.locale && isSupportedLocale(session.user.locale)) {
       setLocale(session.user.locale);
     }
+    // The page may be reloaded into a different account; never carry the previous sidebar list into it.
+    resetSidebarDecks();
     return session;
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
@@ -58,6 +61,7 @@ export async function initAuth(): Promise<SessionResponse | null> {
       user: null,
       error: errorMsg,
     });
+    resetSidebarDecks();
     return null;
   }
 }
@@ -76,6 +80,8 @@ export function clearSession(): void {
     user: null,
     error: null,
   });
+  // The sidebar list belongs to the account that just lost its session; drop it before the shell renders a signed-out page.
+  resetSidebarDecks();
 }
 
 /**
@@ -96,6 +102,8 @@ export async function login(username: string, password: string): Promise<LoginRe
       if (res.user.locale && isSupportedLocale(res.user.locale)) {
         setLocale(res.user.locale);
       }
+      // A new login owns a new sidebar; the previous account's list and its throttle must not survive it.
+      resetSidebarDecks();
     } else {
       authStore.update((s) => ({ ...s, loading: false }));
     }
@@ -129,6 +137,8 @@ export async function completeTOTP(code: string): Promise<TOTPLoginResponse> {
       if (res.user.locale && isSupportedLocale(res.user.locale)) {
         setLocale(res.user.locale);
       }
+      // A new login owns a new sidebar; the previous account's list and its throttle must not survive it.
+      resetSidebarDecks();
     } else {
       authStore.update((s) => ({ ...s, loading: false }));
     }
@@ -157,6 +167,7 @@ export async function logout(): Promise<LogoutResponse> {
       user: null,
       error: null,
     });
+    resetSidebarDecks();
     return res;
   } catch (err) {
     authStore.update((s) => ({
