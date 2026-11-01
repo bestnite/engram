@@ -21,6 +21,15 @@ function decodeComponent(value: string): string | null {
 }
 
 /**
+ * Decode one query-string component. A form-encoded query writes a space as `+`, and `URLSearchParams` on the
+ * writing side does the same, so `+` must read as a space here or a filter reloads as a literal plus. A percent
+ * escape still wins: `%2B` decodes to a literal `+`.
+ */
+function decodeQueryComponent(value: string): string | null {
+  return decodeComponent(value.replaceAll('+', ' '));
+}
+
+/**
  * Parse a query string into a key/value object
  */
 export function parseQuery(queryString: string): Record<string, string> {
@@ -33,8 +42,8 @@ export function parseQuery(queryString: string): Record<string, string> {
     if (!pair) continue;
     const [rawKey, rawValue] = pair.split('=');
     if (!rawKey) continue;
-    const key = decodeComponent(rawKey);
-    const value = rawValue ? decodeComponent(rawValue) : '';
+    const key = decodeQueryComponent(rawKey);
+    const value = rawValue ? decodeQueryComponent(rawValue) : '';
     // A malformed key or value cannot be named or shown: drop the pair rather than the whole page.
     if (key === null || value === null) continue;
     query[key] = value;

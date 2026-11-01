@@ -9,6 +9,18 @@ describe('SPA router matching and query parsing', () => {
     expect(parseQuery('lang=zh-CN')).toEqual({ lang: 'zh-CN' });
   });
 
+  it('decodes a plus as a space and round-trips a filter written by URLSearchParams', () => {
+    // A form-encoded address writes a space as `+`; reading it literally searched for a plus sign.
+    expect(parseQuery('?q=two+words')).toEqual({ q: 'two words' });
+    expect(matchRoute('/decks/abc?q=two+words').query).toEqual({ q: 'two words' });
+
+    // The deck view writes its filter and tags through URLSearchParams, which encodes a space as `+`, a literal
+    // plus as `%2B` and a percent sign as `%25`. Every one of them must come back unchanged.
+    const value = 'two words a+b 50%';
+    const search = new URLSearchParams({ q: value, tag: value }).toString();
+    expect(parseQuery(`?${search}`)).toEqual({ q: value, tag: value });
+  });
+
   it('drops a malformed percent-encoded query pair instead of throwing', () => {
     // A broken escape used to throw a URIError out of decodeURIComponent, and the route store is built at
     // module load, so one bad bookmark blanked the whole app.

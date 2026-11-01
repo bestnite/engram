@@ -1941,7 +1941,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   (`review-key-activation`, `review-scroll`, `review-edit-return`) and the node suites
   `review-shortcuts.test.ts`, `review.test.ts`, `review-view.test.ts` pass 42 tests in 3 files.
 
-- [ ] **M19-56 A deck filter does not survive a reload because the router decodes `+` literally** — *should-fix.*
+- [x] **M19-56 A deck filter does not survive a reload because the router decodes `+` literally** — *should-fix.*
   `parseQuery` splits the query and calls `decodeURIComponent` (`frontend/src/lib/router/index.ts:11-24`, the
   decode at `:21`), which leaves `+` as a plus, while the deck view writes the same address through
   `URLSearchParams` (`frontend/src/lib/views/DeckDetailView.svelte:192-199`), which encodes a space as `+`.
@@ -1952,6 +1952,24 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   (`ReviewView.svelte:249-266`), so the two readers of one address disagree about a tag that holds a space.
   *Acceptance:* parse the address with one implementation that treats `+` as a space, and add a round-trip test
   for a filter and a tag containing a space, a plus and a percent sign.
+  *Closed by this commit (`fix(frontend): read a form-encoded plus as a space in query strings`).*
+  `parseQuery` (`frontend/src/lib/router/index.ts:35`) now decodes each key and value through
+  `decodeQueryComponent` (`:28`), which replaces a literal `+` with a space before the existing guarded
+  `decodeURIComponent`; a percent escape still wins, so `%2B` stays a literal plus and `%25` a percent sign. The
+  malformed-escape behaviour from M19-57 is unchanged, and a path segment still keeps a literal `+` because
+  only the query decoder changed.
+  `router.test.ts:12` checks `parseQuery('?q=two+words')` and `matchRoute('/decks/abc?q=two+words').query` for
+  `two words`, then round-trips `two words a+b 50%` through `URLSearchParams` for both a filter (`q`) and a tag
+  (`tag`). Raw output of
+  `npx vitest run src/tests/router.test.ts src/tests/return-to.test.ts`:
+  ```
+   Test Files  2 passed (2)
+        Tests  35 passed (35)
+  ```
+  With only the two `decodeQueryComponent` calls reverted to `decodeComponent`, the same run failed with
+  `AssertionError: expected { q: 'two+words' } to deeply equal { q: 'two words' }`. `npm run check` ends
+  `svelte-check found 0 errors and 0 warnings`, and the client suites that read a query pass 7 tests in 2 files
+  (`deck-notes-list.client.ts`, `review-due-split.client.ts`).
 
 - [x] **M19-57 A malformed percent-encoded path throws during bootstrap and blanks the app** — *should-fix.*
   `matchRoute` calls `decodeURIComponent` on each path segment and each query part with no guard
