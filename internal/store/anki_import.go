@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"path"
 	"regexp"
@@ -1896,19 +1895,7 @@ func createAnkiPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName s
 		if cfg.MaximumReviewInterval > 0 {
 			preset.MaximumIntervalDays = min(cfg.MaximumReviewInterval, DefaultMaximumIntervalDays)
 		}
-		if len(cfg.Weights) > 0 && applyWeights {
-			if _, err := fsrs.MigrateWeights(cfg.Weights); err == nil {
-				raw, err := json.Marshal(cfg.Weights)
-				if err != nil {
-					return Preset{}, err
-				}
-				text := string(raw)
-				preset.WeightsJSON = &text
-			} else {
-				report.WeightsInvalid = true
-				slog.Warn("Anki package weights rejected", "user_id", owner, "error", err)
-			}
-		}
+		preset.WeightsJSON = importPresetWeights(owner, cfg.Weights, applyWeights, report)
 	}
 	if err := NewPresetStore(tx).Create(ctx, &preset); err != nil {
 		return Preset{}, err

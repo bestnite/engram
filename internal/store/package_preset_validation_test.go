@@ -26,7 +26,7 @@ func TestCreatePackagePresetSchedulerLimits(t *testing.T) {
 			for _, tc := range cases {
 				t.Run(tc.name, func(t *testing.T) {
 					pp := &PackagePreset{LearningSteps: tc.learning, RelearningSteps: tc.relearning, MaximumIntervalDays: tc.max}
-					p, err := createPresetFromPackage(context.Background(), db, owner, pp, tc.name, false)
+					p, err := createPresetFromPackage(context.Background(), db, owner, pp, tc.name, false, &PackageImportReport{})
 					if err != nil {
 						t.Fatal(err)
 					}

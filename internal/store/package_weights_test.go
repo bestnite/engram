@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -20,6 +21,36 @@ func packageTestWeights() []float64 {
 		w[i] = 0.5 + float64(i)/100
 	}
 	return w
+}
+
+func TestImportPackageRefusedWeightsWarn(t *testing.T) {
+	dbs := packageDatabases(t)
+	for driver, db := range dbs {
+		t.Run(driver, func(t *testing.T) {
+			owner := seedUsers(t, db, "pkg_w_warn")[0]
+			deck := seedWeightedPackageDeck(t, db, owner)
+			if err := db.Model(&Preset{}).Where("id = ?", deckPreset(t, db, deck).ID).Update("weights_json", "[1,2,3]").Error; err != nil {
+				t.Fatal(err)
+			}
+			raw := exportZip(t, db, owner, deck, PackageOptions{IncludeWeights: true})
+			var logs bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+			defer slog.SetDefault(previous)
+			report, err := NewDeckStore(db).ImportPackage(context.Background(), owner, bytes.NewReader(raw), PackageImportOptions{Target: PackageTargetNewDeck, ApplyWeights: true})
+			if err != nil || !report.WeightsInvalid {
+				t.Fatalf("import report = %+v, error = %v", report, err)
+			}
+			var record map[string]any
+			if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &record); err != nil {
+				t.Fatalf("expected one log: %s: %v", logs.String(), err)
+			}
+			if record["level"] != "WARN" || record["msg"] != "package weights rejected" || fmt.Sprint(record["user_id"]) != fmt.Sprint(owner) || record["error"] == nil || record["error"] == "" {
+				t.Fatalf("unexpected log: %v", record)
+			}
+			t.Logf("captured warning: %s", bytes.TrimSpace(logs.Bytes()))
+		})
+	}
 }
 
 // seedWeightedPackageDeck builds a source deck and puts its preset into the state that has weights and optimization metadata.

@@ -20,7 +20,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	fsrs "github.com/open-spaced-repetition/go-fsrs/v4"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -1292,16 +1291,7 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 			return 0, err
 		}
 		preset, err := selectImportPreset(ctx, tx, actorUserID, opts, func() (Preset, error) {
-			if opts.ApplyWeights && len(pkg.Preset.Weights) > 0 {
-				if _, err := fsrs.MigrateWeights(pkg.Preset.Weights); err != nil {
-					report.WeightsInvalid = true
-				}
-			}
-			p, err := createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset, name, opts.ApplyWeights)
-			if err == nil && p.WeightsJSON != nil {
-				report.WeightsApplied = true
-			}
-			return p, err
+			return createPresetFromPackage(ctx, tx, actorUserID, &pkg.Preset, name, opts.ApplyWeights, report)
 		})
 		if err != nil {
 			return 0, err
@@ -1402,9 +1392,9 @@ func nextFreeSuffixedName(base string, taken map[string]bool) string {
 // is the default preset's identity -- the duplicate would be presented as a default preset and could not be deleted. An absent, blank or
 // reserved name therefore becomes "Imported — <deck name>", and the result is made unique among the owner's presets like any other name.
 //
-// With applyWeights false the weights and their two metadata fields are not written: the importer's review log lacks the reviews that fitted these weights,
-// and keeping weights_review_count would make the preset show an optimization record with no traceable source in this account.
-func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset, deckName string, applyWeights bool) (Preset, error) {
+// The two weight metadata fields are written only when valid weights are applied. Otherwise,
+// the preset would show an optimization record without the weights that it describes.
+func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset, deckName string, applyWeights bool, report *PackageImportReport) (Preset, error) {
 	now := time.Now().UTC()
 	base := strings.TrimSpace(pp.Name)
 	if base == "" || base == DefaultPresetName {
@@ -1439,14 +1429,8 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 	if !validPackageSteps(p.RelearningSteps) {
 		p.RelearningSteps = DefaultRelearningSteps
 	}
-	_, weightsErr := fsrs.MigrateWeights(pp.Weights)
-	if applyWeights && len(pp.Weights) > 0 && weightsErr == nil {
-		raw, err := json.Marshal(pp.Weights)
-		if err != nil {
-			return Preset{}, err
-		}
-		s := string(raw)
-		p.WeightsJSON = &s
+	p.WeightsJSON = importPresetWeights(owner, pp.Weights, applyWeights, report)
+	if p.WeightsJSON != nil {
 		p.WeightsReviewCount = pp.WeightsReviewCount
 		if pp.WeightsOptimizedAt != nil {
 			if t, err := time.Parse(time.RFC3339, *pp.WeightsOptimizedAt); err == nil {
@@ -1456,6 +1440,9 @@ func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp 
 	}
 	if err := tx.WithContext(ctx).Create(&p).Error; err != nil {
 		return Preset{}, fmt.Errorf("import package: create preset: %w", err)
+	}
+	if p.WeightsJSON != nil {
+		report.WeightsApplied = true
 	}
 	return p, nil
 }
