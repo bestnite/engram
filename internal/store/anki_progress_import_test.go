@@ -316,7 +316,7 @@ func TestAnkiImportFilteredHomeDeck(t *testing.T) {
 	}
 }
 
-func TestAnkiImportReportsSkippedCard(t *testing.T) {
+func TestAnkiImportSkippedCardReviews(t *testing.T) {
 	raw, err := os.ReadFile(ankiFixturePath("stock.anki2.apkg"))
 	if err != nil {
 		t.Fatal(err)
@@ -346,7 +346,13 @@ func TestAnkiImportReportsSkippedCard(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := col.Exec("UPDATE cards SET queue = 1.5 WHERE id = (SELECT MIN(id) FROM cards)").Error; err != nil {
+			if err := col.Exec("UPDATE cards SET queue = 1.5, type = 2 WHERE id = (SELECT MIN(id) FROM cards)").Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := col.Exec("DELETE FROM revlog").Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := col.Exec("INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type) SELECT 1600000000000, MIN(id), 0, 3, 1, 0, 2500, 100, 1 FROM cards").Error; err != nil {
 				t.Fatal(err)
 			}
 			sqlDB, err := col.DB()
@@ -374,20 +380,50 @@ func TestAnkiImportReportsSkippedCard(t *testing.T) {
 	}
 	for driver, db := range packageDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
-			user := seedUsers(t, db, "skipped_card_"+driver)[0]
-			report, err := NewDeckStore(db).ImportPackage(context.Background(), user, bytes.NewReader(archive.Bytes()), PackageImportOptions{Target: PackageTargetNewDeck, MediaRoot: t.TempDir()})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if report.CardsSkipped != 1 {
-				t.Fatalf("cards_skipped = %d", report.CardsSkipped)
-			}
-			encoded, err := json.Marshal(report)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Contains(encoded, []byte(`"cards_skipped":1`)) {
-				t.Fatalf("report = %s", encoded)
+			for _, tc := range []struct {
+				name     string
+				progress bool
+			}{{"progress_on", true}, {"progress_off", false}} {
+				t.Run(tc.name, func(t *testing.T) {
+					user := seedUsers(t, db, "skipped_card_"+driver+"_"+tc.name)[0]
+					var logs bytes.Buffer
+					previous := slog.Default()
+					slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+					defer slog.SetDefault(previous)
+					report, err := NewDeckStore(db).ImportPackage(context.Background(), user, bytes.NewReader(archive.Bytes()), PackageImportOptions{Target: PackageTargetNewDeck, IncludeProgress: tc.progress, MediaRoot: t.TempDir()})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if report.CardsSkipped != 1 {
+						t.Fatalf("cards_skipped = %d", report.CardsSkipped)
+					}
+					if report.ReviewsDiscarded != 1 || report.ReviewsSkipped != 0 || report.ReviewsApplied != 0 {
+						t.Fatalf("report = %+v", report)
+					}
+					var count int64
+					if err := db.Model(&Review{}).Where("user_id = ?", user).Count(&count).Error; err != nil || count != 0 {
+						t.Fatalf("reviews = %d, error = %v", count, err)
+					}
+					if tc.progress {
+						var logEntry struct {
+							Level   string `json:"level"`
+							Message string `json:"msg"`
+							Reviews int    `json:"reviews_discarded"`
+							UserID  uint64 `json:"user_id"`
+						}
+						if err := json.Unmarshal(bytes.TrimSpace(logs.Bytes()), &logEntry); err != nil || logEntry.Level != "WARN" || logEntry.Message != "Anki import discarded reviews for skipped cards" || logEntry.Reviews != 1 || logEntry.UserID != user {
+							t.Fatalf("warn log = %q, error = %v", logs.String(), err)
+						}
+						t.Logf("warn: %s", bytes.TrimSpace(logs.Bytes()))
+					}
+					encoded, err := json.Marshal(report)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Contains(encoded, []byte(`"cards_skipped":1`)) {
+						t.Fatalf("report = %s", encoded)
+					}
+				})
 			}
 		})
 	}

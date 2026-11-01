@@ -1771,7 +1771,13 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	}
 	seen := make(map[int64]bool)
 	var pendingReviews []Review
+	discarded := 0
 	for _, r := range pkg.Reviews {
+		if pkg.SkippedCardIDs[r.CardID] {
+			report.ReviewsDiscarded++
+			discarded++
+			continue
+		}
 		// Anki's log has no pre-rating state, so deriving it from the review type is lossy.
 		earlier := seen[r.CardID]
 		if isAnkiReset(r) {
@@ -1826,6 +1832,9 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		pendingReviews = append(pendingReviews, review)
 		reviewKeys[key] = true
 		report.ReviewsApplied++
+	}
+	if discarded > 0 {
+		slog.Warn("Anki import discarded reviews for skipped cards", "user_id", userID, "reviews_discarded", discarded)
 	}
 	if len(pendingReviews) > 0 {
 		if err := tx.WithContext(ctx).CreateInBatches(&pendingReviews, 100).Error; err != nil {

@@ -281,7 +281,12 @@ func readCards(db *gorm.DB, pkg *Package) ([]Card, error) {
 			}
 		}
 		if typeType == "real" || queueType == "real" || odidType == "real" || flagsType == "real" {
+			// A card with ambiguous scheduling fields cannot be imported, nor can its review rows.
 			pkg.CardsSkipped++
+			if pkg.SkippedCardIDs == nil {
+				pkg.SkippedCardIDs = make(map[int64]bool)
+			}
+			pkg.SkippedCardIDs[card.ID] = true
 			continue
 		}
 		var typ, queue, odid, flags sql.NullInt64
