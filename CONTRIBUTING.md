@@ -171,8 +171,8 @@ Follow these compatibility rules:
    0–3 (New/Learning/Review/Relearning). This matches the FSRS ecosystem log format.
 4. **One business layer, two transports.** REST handlers and MCP tools call the same service
    methods. Never duplicate validation or scheduling logic per transport.
-5. **Card types are registered, not hardcoded.** Adding a type means adding one file and
-   registering it; core code must not change.
+5. **Note types are data. Answer controls are registered:** adding one means adding one file
+   and registering it; core code must not change.
 6. **Review submission is idempotent.** Enforce the `expected_version` check and return `409`
    on mismatch; write the state update and the review row in one transaction.
 
@@ -195,7 +195,7 @@ ones.
 - Use **table-driven** tests.
 - Use a **real SQLite database** (in-memory or a temp file). **Do not mock the database.**
 - Handler tests use `httptest`.
-- Core coverage targets are `internal/schedule` and `internal/cardtype`.
+- Core coverage targets: `internal/schedule`, `internal/notetype` and `internal/answer`.
 - **Negative cases are required, not optional.** Every new behaviour needs its failure path
   asserted: permission denials, CSRF failures, expired keys, scope violations, rejected
   input, and conflict paths. A test that only proves the happy path is incomplete.

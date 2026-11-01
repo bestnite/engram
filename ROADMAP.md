@@ -2979,7 +2979,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   The refusal itself was not run: no Go 1.26 toolchain is installed, so the paragraph states the rule the
   toolchain applies from Go 1.21 onward rather than a captured failure.
 
-- [ ] **M19-82 CONTRIBUTING still documents the removed card-type system and names a package that does not
+- [x] **M19-82 CONTRIBUTING still documents the removed card-type system and names a package that does not
   exist** — *should-fix.* `CONTRIBUTING.md:173-174` restates the registration rule as "**Card types are
   registered, not hardcoded.** Adding a type means adding one file and registering it", and `:197` names
   `internal/cardtype` as a core coverage target. That package was removed with the M17 content-model merge (the
@@ -2991,6 +2991,25 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Reproduced:* `ls internal` lists 24 packages and none is `cardtype`; the removal is also stated in the ledger.
   *Acceptance:* CONTRIBUTING restates the note-type/answer-control rule and the three coverage targets in the
   words `AGENTS.md` uses.
+  *Closed by this commit (`docs(contributing): restate the note-type rule and the coverage targets`).*
+  `CONTRIBUTING.md:174-175` now reads "**Note types are data. Answer controls are registered:** adding one
+  means adding one file and registering it; core code must not change.", the sentence `AGENTS.md:74-75`
+  keeps, and `CONTRIBUTING.md:198` now names `internal/schedule`, `internal/notetype` and `internal/answer`,
+  the three packages `AGENTS.md:111-113` names. That the registration the rule describes is the answer-control
+  registry is visible in the code it points at: `Register` (`internal/answer/answer.go:100`) plus one
+  `init()` per control (`internal/answer/choice_multi.go:25`). Raw output of the checks that the old text
+  named something absent and the new text names something present:
+  ```
+  $ git grep -n "cardtype\|Card types" CONTRIBUTING.md
+  $ ls internal | tr '\n' ' '
+  anki answer api auth config digest i18n jobs mail mailstyle mcp media mediatype notetype pgtest reminder retention reviewday schedule store texmath urlfetch web worker
+  $ for p in schedule notetype answer; do test -d internal/$p && echo "internal/$p exists"; done
+  internal/schedule exists
+  internal/notetype exists
+  internal/answer exists
+  ```
+  The first command prints nothing, so CONTRIBUTING no longer states the removed rule or names the removed
+  package.
 
 - [ ] **M19-83 The optimiser README says the service does not run the adapter, which the service does** —
   *should-fix.* `tools/optimizer/README.md:142-144`, under "Current limits (not yet verified)", says "The Go side
