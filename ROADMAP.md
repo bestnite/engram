@@ -317,31 +317,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   component test output, the output of `npm --prefix frontend run build`, the grep output and the raw
   scoped `go vet` output.
 
-- [ ] **M18-98 The preset-limit tests measure their own layer, and the comments state the rules** — four
-  defects in the code `M18-59`, `M18-60` and `M18-81` landed. First,
-  `TestPresetWriteRejectsExcessiveMaximumInterval` in `internal/web/presets_api_test.go` passes with the
-  `> 36500` check removed from `parsePresetRequest` in `internal/web/presets_api.go`: `PresetStore.Create`
-  and `Update` refuse the value with `ErrInvalidMaximumInterval`, which `presetStoreCode` maps to the same
-  code, status and message. Measured with a temporary copy of `presets_api.go` through `go test -overlay`:
-  both subtests pass. The test therefore proves the store's refusal, not the handler's. Second,
-  `TestMigratedPresetSchedulerLimits` in `internal/schedule/migrate_preset_limits_test.go` takes the last
-  entry of `store.BuiltinMigrations` and fails unless its name is `0020_repair_preset_scheduler_limits`,
-  so the next migration that is appended fails it. Third, the doc comment of
-  `repairPresetSchedulerLimits` in `internal/store/migrate_preset_limits.go` and its `BuiltinMigrations`
-  entry in `internal/store/migrate.go` do not state which values the migration rewrites, or why a
-  migration may rewrite stored values. The reason is that go-fsrs v4 replaces every parameter with its
-  defaults for a maximum interval above 36 500 or a negative step, and the scheduler refuses a non-finite
-  step, so such a preset is unusable as stored. Fourth, the template comment above the maximum-interval
-  input in `frontend/src/lib/views/PresetsView.svelte` says that `parseForm` validates a "positive
-  integer"; since `M18-60`, it also refuses a value above 36 500. The fix: a table test in
-  `internal/web` calls `parsePresetRequest` directly with 0, 1, 36 500 and 36 501 and checks the returned
-  code. The schedule test looks the migration up by name. The two Go comments state the two rewrites and
-  the reason above. The template comment states the range 1 to 36 500. *Acceptance:* with the `> 36500`
-  check removed for one run, the new `internal/web` test fails, and without that change it passes;
-  `TestMigratedPresetSchedulerLimits` and `TestRepairPresetSchedulerLimits` pass on both drivers.
-  Evidence is the raw scoped `go test` and `go vet` output of `internal/web`, `internal/schedule` and
-  `internal/store` for both runs, the PostgreSQL run with `TEST_PG_DSN` set, and the diff.
-
 - [ ] **M18-100 The schema-18 weights fixture is generated, documented and checked like every oracle
   fixture** — `M18-20` added `internal/schedule/testdata/weights.anki21b.apkg` and
   `tools/anki-oracle/weights_fixture.py`. The script writes only to that path; it has no output-directory
