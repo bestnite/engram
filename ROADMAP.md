@@ -127,7 +127,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Closed by `6e10423`.* The report is confirmed at the store layer and is reachable through the
   transport: `ExportAnkiPackage` checks deck read access, but the media rule is narrower than deck
   visibility, and a template reference is not covered by `media_notes`. `ankiMediaFiles`
-  (`internal/store/anki_export.go:682`) now receives the exporting user, checks every resolved sha
+  (`internal/store/anki_export.go:680`) now receives the exporting user, checks every resolved sha
   with `mediaReadableByUser` and refuses the whole export with `package_media_forbidden` listing the
   unreadable shas before any file is read. That is the package chain's existing code for this rule
   (`internal/store/package.go:27-30`), which `mapPackageError` answers as 403, so the REST and web
@@ -648,8 +648,8 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   discarding logger, and no test covers `requestLogger`).
   *Acceptance:* log a redacted path (or the matched route pattern) for `/fm/` and the two ticket routes and
   add a test that drives `/fm` and asserts the token does not appear in the captured log line.
-  *Closed by `8a5de83`.* `requestLogger` (`internal/web/server.go:534`) now passes the path through
-  `redactedRequestPath` (`:552`), which replaces the first segment after `/fm/`,
+  *Closed by `8a5de83`.* `requestLogger` (`internal/web/server.go:535`) now passes the path through
+  `redactedRequestPath` (`:555`), which replaces the first segment after `/fm/`,
   `/api/v1/decks/import-uploads/` or `/api/v1/decks/export-downloads/` with `<token>`. The frame media
   name and the rest of a normal path stay in the line, so the log still locates the request without
   holding the credential. The frame-media file's "never logged" statement is now true.
