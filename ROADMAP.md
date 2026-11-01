@@ -193,18 +193,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-28 The release ledger row for `M18-2` records what `M18-13` changed** — `M18-22` writes
-  each ledger row from the commits whose messages name that row's ID, and the `M18-13` commit
-  (`2b1f2e8`) names only `M18-13`. The `M18-2` row would therefore leave out a change visible through
-  the HTTP API, the MCP tools and the CLI: since `M18-13`, an `.apkg` import accepts packages it
-  rejected with `package_bad_format` before. A REAL value in a scheduling column is rounded, an
-  undecodable deck configuration leaves the preset defaults, and an unreadable revlog no longer rejects
-  a package imported with `include_progress` off. The fix: when `M18-22` writes the `M18-2` row, that
-  row also states these three points, names `M18-13`, and names each of `M18-23` to `M18-26` that has
-  landed by then. Only the parent edits this file, with the maintainer present. *Acceptance:* the ledger row that
-  names `M18-2` also names `M18-13`. Evidence is the output of `grep -n 'M18-13' ROADMAP.md` limited to
-  the ledger section.
-
 - [ ] **M18-35 Release ledger and `AGENTS.md` record `M18-4`** — the commit that closed `M18-4`
   (`5ff830d`) removed the backlog entry but added no ledger row, and `M18-22` lists only `M18-1`,
   `M18-2`, `M18-3` and `M18-9`. `M18-4` changes the HTTP API (the multipart import and the upload
@@ -483,6 +471,6 @@ bluemonday-sanitised `internal/render` are gone.
 | Unmapped templates the target declares keep their cards (M17-63) | A template the mapping leaves out keeps its card when the target config declares the same template id: the card keeps its id, template and `card_states` and counts only in `cards_moved`, so a change between two types that share `forward` and `reverse` no longer asks to confirm a removal that removes nothing. An unmapped template the target does not declare is still removed after confirmation. | No |
 | Orphan marks cleared for media an import reuses (M17-64) | Before the import transaction opens, `placeAnkiMedia` clears `orphaned_at` on every media row the package will reuse, so a garbage-collection run during a long import cannot delete the row and its file and fail the transaction. A dry run clears nothing, and an import still removes only the files it created. | No |
 | Legacy `.apkg` export (M18-1) | A deck export writes an Anki package the reference release imports: legacy schema 11 in `collection.anki21`, a `meta` entry and the media table; one switch each for scheduling, deck configurations, media and FSRS weights; the weights travel in `fsrsParams6` and answer specs in the `engram` note type key, and the package is byte-for-byte deterministic. | No — a new export format, with the export switches on the HTTP route, the CLI and the MCP tool |
-| `.apkg` import of scheduling data (M18-2) | An `.apkg` import applies the package's deck configuration to the new deck's preset and, when `include_progress` is on and off by default, the package's card states and review log to the importing account, with the counts and skips in the report. | No — a new option and new report fields; imported cards still start as new when the option is off |
+| `.apkg` import of scheduling data (M18-2, with the tolerance of M18-13 and the reader rules of M18-23 to M18-26) | An `.apkg` import applies the package's deck configuration to the new deck's preset and, when `include_progress` is on and off by default, the package's card states and review log to the importing account, with the counts and skips in the report. Since M18-13 the reader tolerates layouts it used to reject with `package_bad_format`: a REAL value in a scheduling column is rounded, an undecodable deck configuration leaves the preset defaults, and an unreadable revlog no longer rejects a package imported with `include_progress` off (with it on, the import fails, as M18-23 requires). | No — a new option and new report fields; imported cards still start as new when the option is off |
 | `.apkg` exports on every transport (M18-3) | The deck export route, the web download, the CLI and the `export_deck` MCP tool take `format=apkg`, and `create_export_download` issues a single-use download ticket for the same package. | No — one new format value and one ticket route |
 | Imported FSRS weights are opt-in and validated (M18-9) | An `.apkg` import writes the package's FSRS weights only when `apply_weights` is on, the target is `new_deck` and `fsrs.MigrateWeights` accepts them; the report's `weights_applied` and `weights_discarded` now describe an `.apkg` import as well. | No — a new option and report meaning |
