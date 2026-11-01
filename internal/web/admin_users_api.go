@@ -193,7 +193,8 @@ func (s *Server) adminUserStatus(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	if strings.TrimSpace(req.Action) == "disable" {
+	switch req.Action {
+	case "disable":
 		if target.ID == actor.ID {
 			adminError(c, http.StatusBadRequest, "self_forbidden")
 			return
@@ -216,7 +217,7 @@ func (s *Server) adminUserStatus(c *gin.Context) {
 			TargetType: "user", TargetID: store.Ptr(target.ID),
 		})
 		s.notifyAccountStatus(ctx, target, "disabled")
-	} else {
+	case "enable":
 		if err := s.accounts.EnableUser(ctx, target.ID); err != nil {
 			s.logger.Error("spa admin: enable user failed", "user_id", target.ID, "error", err)
 			adminError(c, http.StatusInternalServerError, "save_failed")
@@ -226,6 +227,10 @@ func (s *Server) adminUserStatus(c *gin.Context) {
 			UserID: store.Ptr(actor.ID), Action: store.ActionUserEnable,
 			TargetType: "user", TargetID: store.Ptr(target.ID),
 		})
+	default:
+		// Every other string used to enable the account, so a typo silently lifted a suspension.
+		adminError(c, http.StatusBadRequest, "invalid_request")
+		return
 	}
 	c.Status(http.StatusNoContent)
 }

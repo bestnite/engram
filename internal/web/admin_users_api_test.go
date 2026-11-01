@@ -270,3 +270,52 @@ func TestAdminWriteEndpointsGuard(t *testing.T) {
 		t.Errorf("non-admin write = %d, want 403", rec.Code)
 	}
 }
+
+// TestAdminUserStatusAcceptsOnlyEnableAndDisable pins the status action domain: the handler used to treat
+// every string other than "disable" as an enable, so a typo or an empty action silently lifted a suspension.
+func TestAdminUserStatusAcceptsOnlyEnableAndDisable(t *testing.T) {
+	srv, db, _, cookies, csrf := newNotesServer(t)
+	ctx := context.Background()
+
+	rec := adminPostJSON(t, srv, "/api/v1/admin/users", adminUserCreateRequest{
+		Username: "statususer", Email: "statususer@example.com", Password: "Sup3rSecret!", Role: store.RoleUser,
+	}, cookies, csrf)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create user = %d, want 201 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	created, err := store.NewUserStore(db).ByUsername(ctx, "statususer")
+	if err != nil || created == nil {
+		t.Fatalf("created user not found: %v", err)
+	}
+	id := created.PublicID
+	status := func() string {
+		u, err := store.NewUserStore(db).ByID(ctx, created.ID)
+		if err != nil || u == nil {
+			t.Fatalf("reload user: %v", err)
+		}
+		return u.Status
+	}
+
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/users/"+id+"/status", map[string]any{"action": "disable"}, cookies, csrf); rec.Code != http.StatusNoContent {
+		t.Fatalf("disable = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if got := status(); got != store.StatusDisabled {
+		t.Fatalf("status after disable = %q, want %q", got, store.StatusDisabled)
+	}
+
+	for _, action := range []string{"", "disabled", "enable ", "ENABLE"} {
+		if rec := adminPostJSON(t, srv, "/api/v1/admin/users/"+id+"/status", map[string]any{"action": action}, cookies, csrf); rec.Code != http.StatusBadRequest {
+			t.Errorf("status action %q = %d, want 400 (body %s)", action, rec.Code, snippet(rec.Body.String()))
+		}
+		if got := status(); got != store.StatusDisabled {
+			t.Fatalf("status action %q left status %q, want %q", action, got, store.StatusDisabled)
+		}
+	}
+
+	if rec := adminPostJSON(t, srv, "/api/v1/admin/users/"+id+"/status", map[string]any{"action": "enable"}, cookies, csrf); rec.Code != http.StatusNoContent {
+		t.Fatalf("enable = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+	if got := status(); got != store.StatusActive {
+		t.Fatalf("status after enable = %q, want %q", got, store.StatusActive)
+	}
+}

@@ -1223,12 +1223,31 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   by reading the handler; *Unverified:* no measurement. *Acceptance:* cap the deck count and the total bytes
   (413 when exceeded), stream the archive instead of buffering it, and add a test over the count cap.
 
-- [ ] **M19-46 Any status action other than `disable` enables the account** — *should-fix.*
+- [x] **M19-46 Any status action other than `disable` enables the account** — *should-fix.*
   `adminUserStatus` treats exactly `"disable"` as disable and every other string as enable
   (`internal/web/admin_users_api.go:196-231`, the `else` at `:219`). A typo (`"disabled"`, a trailing space,
   an empty action) silently re-enables a suspended account and returns 204. Verified by reading the branch;
   *Unverified:* no test sends an unknown action. *Acceptance:* accept only `enable` and `disable`, answer 400
   otherwise, and add table cases for `""`, `"disabled"` and `"enable"`.
+  *Closed by this commit (`fix(web): refuse an unknown user status action`).*
+  `adminUserStatus` (`internal/web/admin_users_api.go:197`) now switches on the exact request value: `disable`
+  keeps the gated disable path, `enable` the enable path, and every other value returns 400 `invalid_request`
+  before any write. No trimming was added, so a trailing space or a different case is refused rather than
+  guessed.
+  `TestAdminUserStatusAcceptsOnlyEnableAndDisable` (`internal/web/admin_users_api_test.go`) disables the
+  account through the handler, then sends `""`, `"disabled"`, `"enable "` and `"ENABLE"` and asserts each is
+  400 and leaves the account disabled, then sends `"enable"` and asserts 204 and an active account. Raw
+  output of `go test ./internal/web/ -run TestAdminUserStatusAcceptsOnlyEnableAndDisable -count=1 -v`:
+  ```
+  === RUN   TestAdminUserStatusAcceptsOnlyEnableAndDisable
+  --- PASS: TestAdminUserStatusAcceptsOnlyEnableAndDisable (0.04s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.059s
+  ```
+  With only the handler reverted, the same test failed with
+  `status action "" = 204, want 400` and `status action "" left status "active", want "disabled"`.
+  `go vet ./internal/web/` and
+  `go test ./internal/web/ -run 'TestAdminUser' -count=1` pass.
 
 - [ ] **M19-47 A refused user deletion has already mailed the user and signed them out** — *nit.*
   `adminUserDelete` sends the "account deleted" notice and calls `ForceLogout` before the authoritative
