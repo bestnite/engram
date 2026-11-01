@@ -56,10 +56,10 @@ func loadTemplateGolden(t *testing.T, fixture string) templateGolden {
 	return golden
 }
 
-// TestRenderGolden renders every card of the stock, syntax and filter fixtures
-// and compares the result with Anki's recorded output byte for byte.
+// TestRenderGolden renders every card of the stock, syntax, filter, cloze and
+// type-in fixtures and compares the result with Anki's recorded output byte for byte.
 func TestRenderGolden(t *testing.T) {
-	for _, fixture := range []string{"stock", "template-syntax", "template-filters", "cloze"} {
+	for _, fixture := range []string{"stock", "template-syntax", "template-filters", "cloze", "typeanswer"} {
 		t.Run(fixture, func(t *testing.T) {
 			golden := loadTemplateGolden(t, fixture)
 			configs := make(map[string]Config, len(golden.NoteTypes))

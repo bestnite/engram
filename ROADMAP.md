@@ -2101,7 +2101,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `parseImageCloze("hexagon:left=0.1:top=0.2") ok = true, want false (shape "hexagon")`.
   `go test ./internal/notetype/ -count=1` passes.
 
-- [ ] **M19-52 The type-in golden records rendered card HTML that no test compares** — *nit.*
+- [x] **M19-52 The type-in golden records rendered card HTML that no test compares** — *nit.*
   `internal/notetype/testdata/anki/typeanswer.golden.json` holds `question_nodes_text` and
   `answer_nodes_text` for four notes, including the `{{cloze:Text}} {{type:cloze:Text}}` and
   `{{type:nc:Back}}` forms whose filter chains `applyFilters` folds (`filters.go:37-44`), but
@@ -2112,6 +2112,34 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   would still pass: the wiring from `splitReplacement` to the folded filter is unpinned end to end. Verified
   by reading the fixture's three consumers. *Acceptance:* add `typeanswer` to `TestRenderGolden`'s fixture
   list, or drop the two fields from the golden so it no longer claims coverage it lacks.
+  *Closed by this commit (`test(notetype): compare the type-in golden's card HTML`).*
+  `TestRenderGolden` (`internal/notetype/template_golden_test.go:65`) now walks `typeanswer` beside the four
+  existing fixtures, so its four notes and five cards are rendered through `Render` and compared with
+  `question_nodes_text` and `answer_nodes_text`, the same comparison the other fixtures use. The golden was
+  not changed. Raw output of `go test ./internal/notetype/ -run TestRenderGolden -count=1 -v`:
+  ```
+  === RUN   TestRenderGolden
+  === RUN   TestRenderGolden/stock
+      template_golden_test.go:84: stock: 6 note types, 8 notes, 11 cards
+  === RUN   TestRenderGolden/template-syntax
+      template_golden_test.go:84: template-syntax: 10 note types, 23 notes, 24 cards
+  === RUN   TestRenderGolden/template-filters
+      template_golden_test.go:84: template-filters: 8 note types, 8 notes, 8 cards
+  === RUN   TestRenderGolden/cloze
+      template_golden_test.go:84: cloze: 9 note types, 9 notes, 14 cards
+  === RUN   TestRenderGolden/typeanswer
+      template_golden_test.go:84: typeanswer: 3 note types, 4 notes, 5 cards
+  --- PASS: TestRenderGolden (0.00s)
+      --- PASS: TestRenderGolden/stock (0.00s)
+      --- PASS: TestRenderGolden/template-syntax (0.00s)
+      --- PASS: TestRenderGolden/template-filters (0.00s)
+      --- PASS: TestRenderGolden/cloze (0.00s)
+      --- PASS: TestRenderGolden/typeanswer (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/notetype	0.004s
+  ```
+  The `typeanswer` row reports 3 note types, 4 notes and 5 cards, which are the fixture's own counts, so the
+  cards are no longer unread. `go test ./internal/notetype/ -count=1` passes.
 
 - [x] **M19-53 Three archive-hardening branches have no hostile-input test** — *nit.* `indexEntries`
   rejects a symlink entry (`internal/anki/archive.go:99-101`) and a duplicate entry name (`:102-104`), and
