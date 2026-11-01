@@ -334,25 +334,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   Evidence is the raw scoped `go test` and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set,
   and the oracle script's output.
 
-- [ ] **M18-50 The first learning row after a reset was given to a new card** — `importAnkiProgress`
-  in `internal/store/anki_import.go` stores `state_before` 1 for a learning row (revlog type 0) when the
-  card has any earlier revlog row. Rows up to and including a reset (type 4) count as earlier rows.
-  After a reset the card is new, and since `M18-37` the replay already drops the rows up to the reset.
-  Reproduced on `main`: a learning card with the rows learning Good, review Good (+1 day), a type 4 row
-  with ease 0 and factor 0 (+200 days) and learning Again (+201 days) stores the last row with
-  `state_before` 1. The wrong value breaks undo. A review card with the rows learning Good, review Good
-  (+1 day, `ivl` 3), a type 4 reset row, learning Good and review Good (+3 days, `ivl` 7) is imported
-  with progress, and `Rollback` runs twice. The card ends in state `learning` with stability 0,
-  difficulty 0 and the due date of the pre-reset review plus 3 days. `Preview` then fails with `fsrs:
-  invalid stability: 0 (minimum 0.001 for non-New cards)`. The fix: as the importer walks the revlog in
-  order, a reset row clears its card's earlier-row mark, so the first learning row after it gets
-  `state_before` 0. The reset test is the expression the replay uses to drop rows, shared rather than
-  copied, so that `M18-49` changes both at once. *Acceptance:* a table test in
-  `internal/store/anki_progress_import_test.go` stores `state_before` 0, 2 and 0 for the three graded
-  rows of the first history above. A test in `internal/schedule` imports the second history, runs
-  `Rollback` twice and gets state `new`, after which `Preview` returns no error. Evidence is the raw
-  scoped `go test` and `go vet` output.
-
 - [ ] **M18-51 Undoing an imported review never restores an unusable memory state** — since `M18-10`,
   an imported review row carries stability and difficulty in two cases only: the card's last kept row
   carries the card's state, and an earlier kept row carries `HistoricalMemoryStates` when the importer
