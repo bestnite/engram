@@ -21,6 +21,73 @@ import (
 	"git.nite07.com/nite/engram/internal/anki"
 )
 
+func TestAnkiImportFilteredHomeDeck(t *testing.T) {
+	for driver, db := range packageDatabases(t) {
+		for _, tc := range []struct {
+			name      string
+			decks     [][2]int64
+			paths     []string
+			retention float64
+		}{
+			{"filtered_home", [][2]int64{{99, 10}}, []string{""}, .85},
+			{"filtered_subdeck", [][2]int64{{10, 0}, {99, 11}}, []string{"", "Sub"}, .85},
+			{"unfiltered", [][2]int64{{10, 0}, {11, 0}}, []string{"", "Sub"}, .85},
+			{"home_preset", [][2]int64{{99, 10}}, []string{""}, .85},
+		} {
+			t.Run(driver+"/"+tc.name, func(t *testing.T) {
+				pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				pkg.Notes, pkg.Cards = pkg.Notes[:len(tc.decks)], pkg.Cards[:len(tc.decks)]
+				pkg.Decks = []anki.Deck{
+					{ID: 10, Name: "Home", Description: "Home description", ConfigID: 20},
+					{ID: 11, Name: "Home::Sub", ConfigID: 20},
+					{ID: 99, Name: "Filtered", Description: "Filtered description", ConfigID: 21},
+				}
+				pkg.DeckConfigs = []anki.DeckConfig{
+					{ID: 20, DesiredRetention: .85, LearnSteps: []float64{1}, RelearnSteps: []float64{10}, MaximumReviewInterval: 100},
+					{ID: 21, DesiredRetention: .95, LearnSteps: []float64{2}, RelearnSteps: []float64{20}, MaximumReviewInterval: 200},
+				}
+				for i, ids := range tc.decks {
+					pkg.Cards[i].DeckID, pkg.Cards[i].OriginalDeckID = ids[0], ids[1]
+				}
+				user := seedUsers(t, db, "filtered_home_"+driver+"_"+tc.name)[0]
+				plan, report := planAnkiDecks(pkg), &PackageImportReport{}
+				if err := NewDeckStore(db).importAnkiInTx(context.Background(), db, user, pkg, nil, nil, &plan, PackageTargetNewDeck, 0, PackageImportOptions{PresetMode: PackagePresetNew, Now: time.Now}, report); err != nil {
+					t.Fatal(err)
+				}
+				var deck Deck
+				if err := db.First(&deck, report.DeckID).Error; err != nil {
+					t.Fatal(err)
+				}
+				if deck.Name != "Home" || deck.Description != "Home description" {
+					t.Fatalf("deck = %+v", deck)
+				}
+				var preset Preset
+				if err := db.First(&preset, deck.PresetID).Error; err != nil {
+					t.Fatal(err)
+				}
+				if preset.DesiredRetention != tc.retention {
+					t.Fatalf("retention = %v, want %v", preset.DesiredRetention, tc.retention)
+				}
+				var cards []Card
+				if err := db.Joins("JOIN notes ON notes.id = cards.note_id").Where("notes.deck_id = ?", deck.ID).Order("cards.id").Find(&cards).Error; err != nil {
+					t.Fatal(err)
+				}
+				if len(cards) != len(tc.paths) {
+					t.Fatalf("cards = %d, want %d", len(cards), len(tc.paths))
+				}
+				for i, want := range tc.paths {
+					if want == "" && cards[i].DeckPath != nil || want != "" && (cards[i].DeckPath == nil || *cards[i].DeckPath != want) {
+						t.Errorf("card %d path = %v, want %q", i, cards[i].DeckPath, want)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestAnkiImportReportsSkippedCard(t *testing.T) {
 	raw, err := os.ReadFile(ankiFixturePath("stock.anki2.apkg"))
 	if err != nil {

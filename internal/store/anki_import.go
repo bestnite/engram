@@ -123,6 +123,13 @@ func ankiSharedDeckPrefix(a, b []string) []string {
 	return a[:n]
 }
 
+func ankiCardDeckID(card anki.Card) int64 {
+	if card.OriginalDeckID != 0 {
+		return card.OriginalDeckID
+	}
+	return card.DeckID
+}
+
 // planAnkiDecks chooses the top-level deck and computes every subdeck path.
 //
 // Only decks that at least one package card references take part in the choice: an Anki package
@@ -146,10 +153,11 @@ func planAnkiDecks(pkg *anki.Package) ankiDeckPlan {
 	}
 	cardCount := make(map[int64]int, len(names))
 	for _, card := range pkg.Cards {
-		if names[card.DeckID] == "" {
+		id := ankiCardDeckID(card)
+		if names[id] == "" {
 			continue
 		}
-		cardCount[card.DeckID]++
+		cardCount[id]++
 	}
 
 	var prefix []string
@@ -1231,7 +1239,7 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 			})
 			continue
 		}
-		deckPath := plan.Paths[card.DeckID]
+		deckPath := plan.Paths[ankiCardDeckID(card)]
 		var pathPtr *string
 		if deckPath != "" {
 			p := deckPath
