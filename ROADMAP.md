@@ -193,23 +193,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `include_progress=1` only when ticked; the five counters appear in the report; a captured state of
   each mode is reported. Evidence is the component test output and the captured states.
 
-- [ ] **M18-45 The `M18-4` ledger row states what `M18-29` to `M18-33` changed** — `M18-35` was
-  written before `M18-29` to `M18-33` landed. It describes the import report as gaining
-  `preset_mode` and `preset_name`, it names only `M18-29` to `M18-31`, and it names no refusal. Since
-  then four behaviours have changed. First, the report carries both fields only for `new_deck` and omits
-  them for `into_deck` and `replace_deck` (`M18-29`). Second, a `preset_id` sent with `preset_mode`
-  `new` or with no `preset_mode` is refused with 400 `invalid_request` for `new_deck` (`M18-30`), and
-  for every target once `M18-42` lands. Third, `POST /api/v1/decks/import-url` takes `preset_mode` and
-  `preset_id` and refuses an invalid selection before the rate limiter and before the download
-  (`M18-31`). Fourth, a store failure while resolving `preset_id` answers 500 `internal` instead of 400
-  `invalid_request` (`M18-33`). None of the four is breaking, because `preset_mode` and `preset_id`
-  exist in no release yet. The fix: the `M18-4` ledger row that `M18-35` adds states each of the four
-  points and names `M18-29`, `M18-30`, `M18-31` and `M18-33`, and also `M18-42` if it has landed by
-  then. Only the parent edits this file, with the maintainer present, in the same change as `M18-35`.
-  *Acceptance:* the ledger row that names `M18-4` also names `M18-29`, `M18-30`, `M18-31` and `M18-33`.
-  Evidence is the output of `grep -n -E 'M18-(29|30|31|33)\b' ROADMAP.md` limited to the ledger
-  section.
-
 - [ ] **M18-49 The replay selects the rows Anki selects** — `deriveAnkiMemory` in
   `internal/store/anki_import.go` replays the kept rows from an empty state, except when the first kept
   row is a review row (revlog type 1): then it builds SM-2 from the card's `factor` and `ivl` and
@@ -459,4 +442,4 @@ bluemonday-sanitised `internal/render` are gone.
 | `.apkg` import of scheduling data (M18-2, with the tolerance of M18-13 and the reader rules of M18-23 to M18-26) | An `.apkg` import applies the package's deck configuration to the new deck's preset and, when `include_progress` is on and off by default, the package's card states and review log to the importing account, with the counts and skips in the report. Since M18-13 the reader tolerates layouts it used to reject with `package_bad_format`: a REAL value in a scheduling column is rounded, an undecodable deck configuration leaves the preset defaults, and an unreadable revlog no longer rejects a package imported with `include_progress` off (with it on, the import fails, as M18-23 requires). | No — a new option and new report fields; imported cards still start as new when the option is off |
 | `.apkg` exports on every transport (M18-3) | The deck export route, the web download, the CLI and the `export_deck` MCP tool take `format=apkg`, and `create_export_download` issues a single-use download ticket for the same package. | No — one new format value and one ticket route |
 | Imported FSRS weights are opt-in and validated (M18-9) | An `.apkg` import writes the package's FSRS weights only when `apply_weights` is on, the target is `new_deck` and `fsrs.MigrateWeights` accepts them; the report's `weights_applied` and `weights_discarded` now describe an `.apkg` import as well. | No — a new option and report meaning |
-| Preset choice on import (M18-4, with M18-29 to M18-31) | The multipart import, the upload ticket and the URL import take `preset_mode` and `preset_id`; the MCP tools `import_deck` and `create_import_upload` take the same two inputs and the CLI takes `--preset-mode` and `--preset-id`. `new` (the default) builds the preset from the package, `reuse` points the new deck at the caller's preset, and `copy` points it at a copy of that preset; the import report gains `preset_mode` and `preset_name`. | No — every change is additive and the default mode keeps the earlier behaviour |
+| Preset choice on import (M18-4, with M18-29 to M18-33 and M18-42) | The multipart import, the upload ticket and the URL import take `preset_mode` and `preset_id`; the MCP tools `import_deck` and `create_import_upload` take the same two inputs and the CLI takes `--preset-mode` and `--preset-id`. `new` (the default) builds the preset from the package, `reuse` points the new deck at the caller's preset, and `copy` points it at a copy of that preset. The report carries `preset_mode` and `preset_name` for `new_deck` only and omits them for `into_deck` and `replace_deck` (M18-29). A `preset_id` sent with mode `new` or with no mode is refused with 400 `invalid_request` for `new_deck` (M18-30) and for every target (M18-42); `reuse` and `copy` are refused with any target other than `new_deck`, and an invalid selection on the URL import is refused before the rate limiter and before the download (M18-31). A store failure while resolving `preset_id` answers 500 `internal` (M18-33). | No — `preset_mode` and `preset_id` exist in no release yet, and the default mode keeps the earlier behaviour |
