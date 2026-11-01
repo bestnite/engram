@@ -371,49 +371,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `M18-26` and `cards_skipped`; one ledger row names `M18-19`. Evidence is the output of
   `grep -n -E 'M18-(19|23|24|25|26)\b|cards_skipped' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-75 Preset-choice texts state the existing-deck rule, and the remaining preset errors are
-  wrapped** — since `M18-42`, `ValidateImportPreset` in `internal/store/package_import.go` treats the two
-  kinds of target differently. For `new_deck`, an empty `preset_mode` becomes `new`; `preset_id` is
-  required with `reuse` and `copy` and refused with `new`. For `into_deck` and `replace_deck`, an empty
-  mode and `new` are accepted and change nothing; `reuse`, `copy`, any other mode and any non-zero
-  `preset_id` are refused. Five texts do not state this, and four errors are returned unwrapped. First, the
-  `jsonschema` texts that `M18-44` wrote for `preset_mode` and `preset_id` of `importDeckIn` and
-  `createImportUploadIn` in `internal/mcp/tools.go` say "for new_deck only" and "refused for any other
-  mode". An agent cannot tell from them whether a `preset_id` sent with `into_deck` is ignored or refused.
-  It is refused whatever the mode is, and the silent drop of that id was the `M18-42` defect. The
-  `preset_mode` text also omits that an empty value means `new`. The Go comments of the four fields do not
-  state the existing-deck rule either. Second, the help texts of `--preset-mode` and `--preset-id` in
-  `cmd/engram/package.go` read "preset mode: new, reuse or copy" and "public id of the preset to reuse or
-  copy", and state no target rule. Third, `M18-44` replaced the comment of `ValidateImportPreset`, and the
-  new comment no longer says that the function writes `new` into `opts.PresetMode` for `new_deck`.
-  Callers depend on that write: `selectImportPreset` calls the create function only when the mode equals
-  `new`, so an empty mode that skipped validation would reach the preset lookup with `PresetID` 0 and be
-  refused. Fourth, the comment `M18-44` added to `validateImportPreset` in `internal/api/package_upload.go`
-  says when the check runs but not why, and the `M18-44` entry asked for the reason. The reason is that a
-  request the import would refuse must not spend rate-limit quota, an import slot or an outbound download,
-  and must not obtain an upload ticket that the upload would refuse. Fifth, the comment of
-  `ImportDeckPackageURL` in `internal/api/package_url.go` says that the authorization `ImportDeckPackage`
-  repeats after the download preserves "the invariant that authorization precedes fetching bytes". The
-  authorization before the download keeps that invariant. The repeated one re-checks a decision that a
-  role change during the download could have invalidated. The unwrapped errors: `ValidateImportPreset`
-  returns the error of its preset count as it is, and `selectImportPreset` returns the errors of its preset
-  lookup, of `uniqueOwnerName` and of the copy's `Create` as they are; section 2.4 of `AGENTS.md` requires
-  wrapping with `%w`. The fix: the two `jsonschema` texts and the four Go comments state the `new_deck`
-  rule and the existing-deck rule separately. They say that an empty mode means `new` for `new_deck`, and
-  that a `preset_id` sent with `into_deck` or `replace_deck` is refused whatever the mode is. The two CLI
-  help texts state the same two rules. The `ValidateImportPreset` comment states the write into
-  `opts.PresetMode` and why `selectImportPreset` needs it. The `validateImportPreset` comment states the
-  reason above. The `ImportDeckPackageURL` comment states that the first authorization keeps the invariant
-  and why the second one runs. The four errors are wrapped with `%w` and an English context; a
-  `PackageError` is still returned unwrapped, so the transports keep answering it with 400. No status code
-  and no error code changes. *Acceptance:* each statement of each changed text and comment matches
-  `ValidateImportPreset`, `selectImportPreset`, `ImportDeckPackageURL` and `CreateImportUpload`;
-  `TestImportPresetModes`, `TestImportPresetID`, `TestImportUploadPresetModes`,
-  `TestImportMultipartRejectsPresetOptions`, `TestImportURLPresetSelection` and
-  `TestImportToolsRejectPresetOptions` keep their results. Evidence is the diff and the raw scoped
-  `go test` and `go vet` output of `internal/store`, `internal/api`, `internal/mcp` and `cmd/engram`, the
-  PostgreSQL run with `TEST_PG_DSN` set.
-
 - [ ] **M18-76 `deriveAnkiMemory` derives memory only, and its comment states its contract** — `M18-40`
   moved the memory-state derivation of `importAnkiProgress` in `internal/store/anki_import.go` into
   `deriveAnkiMemory`. That function also decodes `cards.data` and returns the card's `lrt`. The `lrt`
