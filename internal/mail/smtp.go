@@ -57,32 +57,45 @@ func (c SMTPConfig) Addr() string {
 // Send performs one delivery: connect -> auth -> MAIL/RCPT/DATA -> QUIT. Any step that fails returns
 // an error prefixed with the stage, with the server text preserved verbatim (the admin panel shows
 // it).
+//
+// net/smtp takes no context and sets no deadline, so every stage here refreshes the connection's
+// deadline and a watcher closes the connection when ctx ends. Without that, a relay that accepts the
+// connection and then stops talking blocks this call, the outbox round and shutdown forever.
 func (s SMTPSender) Send(ctx context.Context, cfg SMTPConfig, m Message) error {
-	client, err := s.dial(ctx, cfg)
+	client, conn, stop, err := s.dial(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = client.Close() }()
+	defer stop()
+	timeout := s.timeout()
+	refreshDeadline(conn, timeout)
 	if err := s.authenticate(client, cfg); err != nil {
 		return err
 	}
+	refreshDeadline(conn, timeout)
 	if err := client.Mail(cfg.From); err != nil {
 		return fmt.Errorf("MAIL FROM: %w", err)
 	}
+	refreshDeadline(conn, timeout)
 	if err := client.Rcpt(m.To); err != nil {
 		return fmt.Errorf("RCPT TO: %w", err)
 	}
+	refreshDeadline(conn, timeout)
 	w, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("DATA: %w", err)
 	}
+	refreshDeadline(conn, timeout)
 	if _, err := w.Write(buildMessage(cfg, m)); err != nil {
 		_ = w.Close()
 		return fmt.Errorf("write message: %w", err)
 	}
+	refreshDeadline(conn, timeout)
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("finish message: %w", err)
 	}
+	refreshDeadline(conn, timeout)
 	if err := client.Quit(); err != nil {
 		return fmt.Errorf("QUIT: %w", err)
 	}
@@ -91,14 +104,17 @@ func (s SMTPSender) Send(ctx context.Context, cfg SMTPConfig, m Message) error {
 
 // Test only connects and authenticates, then QUITs; used by the admin panel's "test connection".
 func (s SMTPSender) Test(ctx context.Context, cfg SMTPConfig) error {
-	client, err := s.dial(ctx, cfg)
+	client, conn, stop, err := s.dial(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = client.Close() }()
+	defer stop()
+	refreshDeadline(conn, s.timeout())
 	if err := s.authenticate(client, cfg); err != nil {
 		return err
 	}
+	refreshDeadline(conn, s.timeout())
 	if err := client.Quit(); err != nil {
 		return fmt.Errorf("QUIT: %w", err)
 	}
@@ -111,38 +127,74 @@ func TestConnection(ctx context.Context, cfg SMTPConfig) error {
 	return SMTPSender{}.Test(ctx, cfg)
 }
 
-// dial opens the connection to the SMTP server according to the TLS mode.
-func (s SMTPSender) dial(ctx context.Context, cfg SMTPConfig) (*smtp.Client, error) {
+// dial opens the connection to the SMTP server according to the TLS mode. It returns the
+// underlying connection with the client so the caller can bound each stage, and a stop function
+// for the watcher that closes the connection when the context ends.
+func (s SMTPSender) dial(ctx context.Context, cfg SMTPConfig) (*smtp.Client, net.Conn, func(), error) {
 	addr := cfg.Addr()
 	d := net.Dialer{Timeout: s.timeout()}
+	conn, err := s.connect(ctx, &d, cfg, addr)
+	if err != nil {
+		return nil, nil, func() {}, err
+	}
+	stop := closeConnOnContext(ctx, conn)
+	refreshDeadline(conn, s.timeout())
+	client, err := smtp.NewClient(conn, cfg.Host)
+	if err != nil {
+		stop()
+		_ = conn.Close()
+		return nil, nil, func() {}, fmt.Errorf("smtp handshake: %w", err)
+	}
+	if NormalizeTLSMode(cfg.TLSMode) == TLSModeStartTLS {
+		refreshDeadline(conn, s.timeout())
+		if err := client.StartTLS(&tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12}); err != nil {
+			stop()
+			_ = client.Close()
+			return nil, nil, func() {}, fmt.Errorf("STARTTLS: %w", err)
+		}
+	}
+	return client, conn, stop, nil
+}
+
+// connect opens the TCP (or implicit-TLS) connection. The TLS variant uses a Dialer so the context
+// also bounds the handshake.
+func (s SMTPSender) connect(ctx context.Context, d *net.Dialer, cfg SMTPConfig, addr string) (net.Conn, error) {
 	if NormalizeTLSMode(cfg.TLSMode) == TLSModeImplicit {
-		conn, err := tls.DialWithDialer(&d, "tcp", addr, &tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12})
+		dialer := &tls.Dialer{
+			NetDialer: d,
+			Config:    &tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12},
+		}
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
 		if err != nil {
 			return nil, fmt.Errorf("connect %s (implicit TLS): %w", addr, err)
 		}
-		client, err := smtp.NewClient(conn, cfg.Host)
-		if err != nil {
-			_ = conn.Close()
-			return nil, fmt.Errorf("smtp handshake: %w", err)
-		}
-		return client, nil
+		return conn, nil
 	}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("connect %s: %w", addr, err)
 	}
-	client, err := smtp.NewClient(conn, cfg.Host)
-	if err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("smtp handshake: %w", err)
-	}
-	if NormalizeTLSMode(cfg.TLSMode) == TLSModeStartTLS {
-		if err := client.StartTLS(&tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12}); err != nil {
-			_ = client.Close()
-			return nil, fmt.Errorf("STARTTLS: %w", err)
+	return conn, nil
+}
+
+// refreshDeadline restarts the interaction timeout, so one stage may take the full timeout but the
+// whole interaction is still bounded stage by stage.
+func refreshDeadline(conn net.Conn, timeout time.Duration) {
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+}
+
+// closeConnOnContext closes conn when ctx ends, which unblocks a read or write net/smtp is waiting
+// on. The returned function stops the watcher.
+func closeConnOnContext(ctx context.Context, conn net.Conn) func() {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-done:
 		}
-	}
-	return client, nil
+	}()
+	return func() { close(done) }
 }
 
 // authenticate does PLAIN auth when a username/password is configured; when both are empty it is

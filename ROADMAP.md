@@ -2041,7 +2041,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `status/error = "running"/<nil>, want failed with the failing step named`. `/home/nite/.hermes/cache/scratch/pgtest
   ./internal/jobs/ -count=1` and `go test ./internal/web/ -run 'TestPreset|TestOptimize|TestJob' -count=1` pass.
 
-- [ ] **M19-74 A stalled SMTP relay blocks the send forever; the configured timeout only covers the dial** —
+- [x] **M19-74 A stalled SMTP relay blocks the send forever; the configured timeout only covers the dial** —
   *should-fix.* `DefaultTimeout` is documented as "the timeout of a single SMTP interaction (connect +
   handshake + delivery)" (`internal/mail/smtp.go:25-26`) and `SMTPSender.timeout` is passed only to
   `net.Dialer.Timeout` and `tls.DialWithDialer` (`:115-146`). After `smtp.NewClient` nothing sets a deadline on
@@ -2054,6 +2054,31 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   connection, set or refresh it per stage, and close the connection when the context is cancelled, so that one
   `Send` is bounded by the configured timeout; a regression points the sender at a silent listener and asserts
   it returns an error within the timeout and that a subsequent round can still deliver.
+  *Closed by this commit (`fix(mail): bound every SMTP stage and close a cancelled connection`).*
+  `dial` (`internal/mail/smtp.go:133`) now returns the underlying connection and starts
+  `closeConnOnContext` (`:188`), which closes it when `ctx` ends and therefore unblocks any read or write
+  `net/smtp` is waiting on. `refreshDeadline` (`:182`) restarts the configured timeout before the greeting,
+  `AUTH`, `MAIL`, `RCPT`, `DATA`, the message write, the terminating dot and `QUIT`; `Test` follows the same
+  pattern. The implicit-TLS path uses a `tls.Dialer` so the context also bounds that handshake. One `Send` is
+  now bounded stage by stage, and shutdown no longer waits on a silent relay.
+  `TestSMTPSenderBoundsAStalledRelay` and `TestSMTPSenderStopsOnContextCancellation`
+  (`internal/mail/smtp_test.go:103,143`) point the sender at `silentRelay` (`:79`), a listener that accepts
+  and never writes: the first asserts `Send` errors within two seconds with `Timeout` 200 ms and that the next
+  round delivers to a working relay; the second uses a 30-second timeout and asserts a cancelled context ends
+  the handshake within two seconds. Raw output of `go test ./internal/mail/ -run
+  'TestSMTPSenderBoundsAStalledRelay|TestSMTPSenderStopsOnContextCancellation' -count=1 -v`:
+  ```
+  === RUN   TestSMTPSenderBoundsAStalledRelay
+  --- PASS: TestSMTPSenderBoundsAStalledRelay (0.20s)
+  === RUN   TestSMTPSenderStopsOnContextCancellation
+  --- PASS: TestSMTPSenderStopsOnContextCancellation (0.10s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/mail	0.316s
+  ```
+  With only `internal/mail/smtp.go` reverted, the same run failed with
+  `Send() did not return within 2s with Timeout=200ms: the stalled relay held the delivery` and
+  `Test() did not return within 2s of the context being cancelled`. `go vet ./internal/mail/` and
+  `go test ./internal/mail/ -count=1` pass.
 
 - [ ] **M19-75 The multipart boundary is a constant, so a value containing that line splits the message** —
   *nit.* `buildMessage` hard-codes `const boundary = "engram-mail-boundary"` (`internal/mail/smtp.go:177-193`),
