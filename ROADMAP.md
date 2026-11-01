@@ -3011,7 +3011,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   The first command prints nothing, so CONTRIBUTING no longer states the removed rule or names the removed
   package.
 
-- [ ] **M19-83 The optimiser README says the service does not run the adapter, which the service does** —
+- [x] **M19-83 The optimiser README says the service does not run the adapter, which the service does** —
   *should-fix.* `tools/optimizer/README.md:142-144`, under "Current limits (not yet verified)", says "The Go side
   (`internal/jobs`) does not call the adapter at runtime yet; the command injection point is exercised by a Go
   integration test that skips when the binary is absent." The production wiring exists: `cmd/engram/main.go:335`
@@ -3022,6 +3022,37 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   was run for this entry; the call chain is read at the lines above. *Acceptance:* the section lists only limits
   that are still true (real-review-data correctness, no exit-4 fixture) and states that the job runner invokes
   the adapter in production.
+  *Closed by this commit (`docs(optimizer): state that the job runner runs the adapter`).*
+  `tools/optimizer/README.md:139-142` is now headed "## Current limits" and holds only the two limits that are
+  still true (correctness on real review data unverified, no dedicated exit-4 fixture); the false bullet is
+  gone. A new "## Runtime wiring" section (`:144-151`) states the production path: `cmd/engram/main.go`
+  passes `jobs.Optimizer.CommandBuilder()` to the runner, the runner runs that command in a separate process
+  under a 30-minute default timeout, and `internal/jobs/optimize.go` writes the returned weights back to the
+  target preset; an absent binary fails the job with `ErrOptimizerNotFound`. The lines that hold each claim:
+  ```
+  $ grep -n "Command:  optimizer.CommandBuilder()" cmd/engram/main.go
+  341:		Command:  optimizer.CommandBuilder(),
+  $ grep -n "func (o \*Optimizer) CommandBuilder" internal/jobs/optimizer.go
+  147:func (o *Optimizer) CommandBuilder() CommandBuilder {
+  $ grep -n "DefaultTimeout = " internal/jobs/jobs.go
+  66:	DefaultTimeout = 30 * time.Minute
+  $ grep -n "func (r \*Runner) applyOptimizedWeights" internal/jobs/optimize.go
+  82:func (r *Runner) applyOptimizedWeights(ctx context.Context, db *gorm.DB, jobID uint64, result store.OptimizeResult) error {
+  ```
+  The path was also run, not only read: the built adapter was present, so
+  `TestOptimizeEndToEndRunsRealAdapter` executed it through the job runner. Raw output of
+  `go test ./internal/jobs/ -run 'TestOptimizeEndToEndRunsRealAdapter|TestOptimizeJobFailsWhenAdapterMissing' -count=1 -v`:
+  ```
+  === RUN   TestOptimizeEndToEndRunsRealAdapter
+      optimizer_wiring_test.go:168: job 1 succeeded: reviews_used=320 weights=21 tail="optimizer: read 320 reviews for 8 cards, 312 training items\noptimizer: training with seed 2023 on 1 thread(s)\noptimizer: wrote 21 weights\n"
+      optimizer_wiring_test.go:169: preset 1 weights_json=[0.212,1.2931,2.3065,8.2956,6.4133,0.8334,3.0194,0.001,1.8722,0.1666,0.796,1.4835,0.0614,0.2629,1.6483,0.6014,1.8729,0.5425,0.0912,0.0658,0.1542] optimized_at=2026-11-01 22:58:45.989343059 +0000 UTC review_count=0x1009ba49aae8
+  --- PASS: TestOptimizeEndToEndRunsRealAdapter (0.06s)
+  === RUN   TestOptimizeJobFailsWhenAdapterMissing
+      optimizer_wiring_test.go:203: job 1 status=failed error="build command: optimizer adapter not found: /tmp/TestOptimizeJobFailsWhenAdapterMissing2964519961/002/no-such-optimizer"
+  --- PASS: TestOptimizeJobFailsWhenAdapterMissing (0.02s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/jobs	0.089s
+  ```
 
 - [ ] **M19-84 The README publishes a real host name and a demo account's password, and the sanitisation rule
   admits neither** — *should-fix.* `README.md:12` (and `README.zh.md:12`) carries a live demo URL on a real

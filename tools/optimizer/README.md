@@ -136,10 +136,17 @@ explicit day-boundary cases). Reordering its lines yields the same weights,
 because items are ordered by card key and per-card review time rather than by
 input order.
 
-## Current limits (not yet verified)
+## Current limits
 
 - Correctness on real review data is **not** verified; only the fixture is.
-- The Go side (`internal/jobs`) does not call the adapter at runtime yet; the
-  command injection point is exercised by a Go integration test that skips when
-  the binary is absent.
 - The exit-4 path (optimiser error) is documented but has no dedicated fixture.
+
+## Runtime wiring
+
+The adapter runs in production. `cmd/engram/main.go` passes
+`jobs.Optimizer.CommandBuilder()` to the job runner (`internal/jobs/optimizer.go`), the
+runner executes that command in a separate process under a 30-minute default timeout
+(`internal/jobs/jobs.go`), and `internal/jobs/optimize.go` writes the returned weights
+back to the job's target preset. When the binary is absent the command builder fails with
+`ErrOptimizerNotFound` and the job fails; the integration tests that run the real binary
+skip when it has not been built.
