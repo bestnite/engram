@@ -70,7 +70,7 @@
         },
         "extra": {
           "type": "object",
-          "description": "Free-form metadata kept as-is for the caller and round-tripped on export. It is stored in the note's own column, not as a note type field. A note type that declares a field named 'extra' keeps that field instead."
+          "description": "Free-form metadata kept as-is for the caller and returned in every note response (list, single note and the MCP read tools). It is stored in the note's own column, not as a note type field. A note type that declares a field named 'extra' keeps that field instead."
         },
         "source_url": {
           "type": "string",

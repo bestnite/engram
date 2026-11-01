@@ -2243,7 +2243,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   directory on every terminal path (a defer in `execute`, or a cleanup call in `fail`) and sweep the per-pid
   roots at startup; a regression runs a failing job and asserts no `review-log.jsonl` remains.
 
-- [ ] **M19-78 A note's `extra` can be written and preserved but never read back** — *should-fix.* The import
+- [x] **M19-78 A note's `extra` can be written and preserved but never read back** — *should-fix.* The import
   schema advertises `extra` as "Free-form metadata kept as-is for the caller and round-tripped on export"
   (`schema/note-import.schema.json:71-74`), and the store does keep it: `extractNoteColumns` turns a field-map key
   named `extra` into `notes.extra_json` (`internal/store/note.go:200-226`), the single-note update copies the
@@ -2258,6 +2258,27 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   *Acceptance:* one read surface (the note list/get shape, MCP `get_note`, or the JSON/CSV export) returns the
   stored value, with a test that writes `fields.extra` and reads the same JSON back; if the column is meant to
   stay server-side, the schema description says so instead of promising a round trip.
+  *Closed by this commit (`fix(api): return a note's stored extra metadata`).*
+  `NotesJSON` (`internal/api/notes.go:75`) now includes `extra`, decoded by `noteExtra` (`:122`) from
+  `notes.extra_json`: a note without metadata, or a row whose text is not valid JSON, yields `null` instead of
+  failing the read. Because REST list, REST get, update responses and the MCP `search_notes`/`get_note`/update
+  tools all go through this one function, the value is retrievable from every read surface without a second
+  mapping. The schema description for `extra` now says it is "returned in every note response (list, single
+  note and the MCP read tools)" instead of promising a round trip that the JSON/CSV export and the `.apkg`
+  writer do not perform.
+  `TestNoteExtraRoundTrip` (`internal/api/notes_test.go`) imports a note with
+  `"extra":{"licence":"example","level":2}` and asserts the same object on both `GET /api/v1/notes/{id}` and the
+  deck note list. Raw output of `go test ./internal/api/ -run TestNoteExtraRoundTrip -count=1 -v`:
+  ```
+  === RUN   TestNoteExtraRoundTrip
+  --- PASS: TestNoteExtraRoundTrip (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/api	0.029s
+  ```
+  With only `internal/api/notes.go` reverted, the same run failed with
+  `single note response has no extra key: {"created_at":...,"external_ref":null,"fields":{"back":"a","front":"q"},...}`.
+  `go vet ./internal/api/`, `go test ./internal/api/ -run 'TestNote|TestBulkImport|TestImport' -count=1` and
+  `go test ./internal/mcp/ -count=1` pass.
 
 - [ ] **M19-79 The schema README documents a `kind` request alias the server rejects** — *should-fix.*
   `schema/README.md:55-59` tells a client that `kind` "remains accepted as a transitional alias for `note_type`",

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -188,6 +189,65 @@ func TestImportRejectsScopeAndMalformedBody(t *testing.T) {
 	}
 	if err := json.Unmarshal(raw, &body); err != nil || body.Error.Code != CodeInvalidRequest {
 		t.Fatalf("error envelope = %s, want code %q", raw, CodeInvalidRequest)
+	}
+}
+
+// TestNoteExtraRoundTrip covers the promise the import schema makes for note-level metadata: a caller
+// writes it under fields.extra and reads the same value back. Both read shapes share NotesJSON, so the
+// single-note GET and the deck list are asserted against the same stored object.
+func TestNoteExtraRoundTrip(t *testing.T) {
+	env := newTestEnv(t, 1000, 1000)
+	router := env.router()
+	owner := seedUser(t, env.db, "extra_owner", store.RoleUser)
+	deck := seedDeck(t, env.db, owner.ID)
+	key := seedKey(t, env.keys, owner.ID, []string{store.ScopeRead, store.ScopeWrite}, nil).Plaintext
+	noteType := createStockNoteType(t, env.db, deck.ID, "basic")
+
+	body := fmt.Sprintf(`{"notes":[{"note_type":%q,"fields":{"front":"q","back":"a"},`+
+		`"extra":{"licence":"example","level":2}}]}`, noteType.PublicID)
+	code, raw := doJSON(t, router, http.MethodPost, "/api/v1/decks/"+deck.PublicID+"/notes", key, body)
+	if code != http.StatusOK {
+		t.Fatalf("bulk import = %d (body %s)", code, raw)
+	}
+	note := noteOfDeck(t, env, deck.ID)
+
+	want := map[string]any{"licence": "example", "level": float64(2)}
+	check := func(raw []byte, what string) {
+		t.Helper()
+		var body map[string]any
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("%s response is not JSON: %v (%s)", what, err, raw)
+		}
+		got, ok := body["extra"]
+		if !ok {
+			t.Fatalf("%s response has no extra key: %s", what, raw)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s extra = %#v, want %#v", what, got, want)
+		}
+	}
+
+	code, raw = doJSON(t, router, http.MethodGet, "/api/v1/notes/"+note.PublicID, key, "")
+	if code != http.StatusOK {
+		t.Fatalf("GET note = %d (body %s)", code, raw)
+	}
+	check(raw, "single note")
+
+	code, raw = doJSON(t, router, http.MethodGet, "/api/v1/decks/"+deck.PublicID+"/notes", key, "")
+	if code != http.StatusOK {
+		t.Fatalf("GET deck notes = %d (body %s)", code, raw)
+	}
+	var list struct {
+		Notes []map[string]any `json:"notes"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		t.Fatalf("deck note list is not JSON: %v (%s)", err, raw)
+	}
+	if len(list.Notes) != 1 {
+		t.Fatalf("deck note list = %d notes, want 1", len(list.Notes))
+	}
+	if !reflect.DeepEqual(list.Notes[0]["extra"], want) {
+		t.Errorf("list extra = %#v, want %#v", list.Notes[0]["extra"], want)
 	}
 }
 

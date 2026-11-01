@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -71,7 +73,8 @@ func (a *API) listDeckTags(c *gin.Context) {
 // suspended means the caller suspended the cards under this note (suspension is personal), fetched for a whole page of notes in one query.
 //
 // note_type is the note's note type public id. fields maps each field id to the stored HTML string, unchanged, so an editor
-// round-trips content without interpreting it.
+// round-trips content without interpreting it. extra is the decoded value of the note-level metadata column: the import
+// schema promises the caller can write it and read it back, so it is part of every note response (list, get and MCP).
 func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) []map[string]any {
 	ids := make([]uint64, 0, len(notes))
 	for i := range notes {
@@ -105,10 +108,24 @@ func (a *API) NotesJSON(ctx context.Context, userID uint64, notes []store.Note) 
 			"updated_at":   n.UpdatedAt,
 			"external_ref": n.ExternalRef,
 			"source_url":   n.SourceURL,
+			"extra":        noteExtra(n.ExtraJSON),
 			"suspended":    suspended[n.ID],
 		})
 	}
 	return out
+}
+
+// noteExtra decodes the note-level metadata stored as JSON text, so a caller reads back the value it wrote.
+// A note without metadata, or a row whose text is not valid JSON, yields nil rather than failing the read.
+func noteExtra(raw *string) any {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil
+	}
+	var value any
+	if err := json.Unmarshal([]byte(*raw), &value); err != nil {
+		return nil
+	}
+	return value
 }
 
 // noteTypePublicID returns a note type's external id, or nil when the note has no type.
