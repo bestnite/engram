@@ -462,6 +462,9 @@ func (r *Runner) execute(ctx context.Context, job *store.Job) {
 	}
 	if err := r.store.FinishSucceeded(ctx, job.ID, r.now(), "", tail); err != nil {
 		r.logger.Error("finish job succeeded failed", "job_id", job.ID, "error", err)
+		// A terminal write that never lands leaves the row running forever, which makes Store.Active
+		// refuse every later enqueue; end it as failed with the failing step in the message.
+		r.fail(ctx, job.ID, fmt.Sprintf("finish job succeeded: %v", err), tail)
 		return
 	}
 	r.notifySuccess(ctx, job.ID)

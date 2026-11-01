@@ -60,30 +60,34 @@ func (r *Runner) EnqueueOptimize(ctx context.Context, ownerUserID, presetID uint
 // and writes the 21-dimension weights back to the job's target preset (the preset page polls for the real result).
 // It can also be called explicitly with no adapter present (for example a test's placeholder path).
 //
-// Write-back order: write the preset first, then persist the job state. If the preset write-back fails, this function returns an error and the caller marks
-// the job failed — avoiding a half-done state where "the job succeeded but the weights never took effect".
+// The weight write-back and the terminal job row commit in one transaction: a failing final write must not leave
+// the new weights applied while the job is reported as running or failed, and a failing write-back must not
+// write the job row at all. The caller marks the job failed when this returns an error.
 func (r *Runner) FinishOptimize(ctx context.Context, jobID uint64, result store.OptimizeResult, tail string) error {
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("encode optimize result: %w", err)
 	}
-	if err := r.applyOptimizedWeights(ctx, jobID, result); err != nil {
-		return err
-	}
-	return r.store.FinishSucceeded(ctx, jobID, r.now(), string(raw), tail)
+	return r.store.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := r.applyOptimizedWeights(ctx, tx, jobID, result); err != nil {
+			return err
+		}
+		return r.store.finishSucceeded(ctx, tx, jobID, r.now(), string(raw), tail)
+	})
 }
 
 // applyOptimizedWeights writes the optimized weights back to the job's target preset. When the job has no target preset, or the target preset
 // has been deleted, it skips silently (there is nowhere to write and a retry is pointless); only a genuine write failure returns an error.
-func (r *Runner) applyOptimizedWeights(ctx context.Context, jobID uint64, result store.OptimizeResult) error {
-	job, err := r.store.ByID(ctx, jobID)
+// db is the caller's handle so the preset write can share the job's terminal transaction.
+func (r *Runner) applyOptimizedWeights(ctx context.Context, db *gorm.DB, jobID uint64, result store.OptimizeResult) error {
+	job, err := r.store.byID(db, jobID)
 	if err != nil {
 		return fmt.Errorf("load job %d: %w", jobID, err)
 	}
 	if job.Kind != KindOptimize || job.TargetID == nil || *job.TargetID == 0 {
 		return nil
 	}
-	presets := store.NewPresetStore(r.db)
+	presets := store.NewPresetStore(db)
 	preset, err := presets.ByID(ctx, *job.TargetID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

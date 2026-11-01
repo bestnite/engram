@@ -1700,7 +1700,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   grace period; a regression uses a `setsid` grandchild and asserts the job is terminal well before that
   process would have exited on its own.
 
-- [ ] **M19-73 The preset write-back and the job's terminal write are two writes, so a failing finish either
+- [x] **M19-73 The preset write-back and the job's terminal write are two writes, so a failing finish either
   leaves the job running or reports failure after the weights were applied** — *should-fix.* `FinishOptimize`
   writes the preset first and the job row second (`internal/jobs/optimize.go:65-74`), and `execute` maps any
   error from it to `fail` (`jobs.go:427-431`); on the generic path a failing `FinishSucceeded` is only logged
@@ -1714,6 +1714,37 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   effect. *Acceptance:* write the preset and the job row in one transaction, or make the write-back idempotent
   and resumable from `result_json`, and retry or fail the terminal write instead of returning; regressions cover
   a failing finish and a failing write-back and assert that nothing is half-applied and no job is non-terminal.
+  *Closed by this commit (`fix(jobs): commit the preset write-back with the job's terminal row`).*
+  `FinishOptimize` (`internal/jobs/optimize.go:66`) now opens one transaction and runs both writes inside it:
+  `applyOptimizedWeights` (`:82`) takes the caller's handle and loads the job and the preset from it, and the new
+  `Store.finishSucceeded` (`internal/jobs/store.go:185`, through `updateDB` at `:213`) writes the terminal row on
+  the same handle. A failure in either write rolls both back, so `execute`'s existing `fail` path
+  (`jobs.go:456-459`) leaves `failed` with the old weights intact instead of `failed` with the new ones applied.
+  The generic path (`jobs.go:463-468`) no longer only logs a failed `FinishSucceeded`: it now calls `fail` with the
+  failing step in the message, so the row ends terminal and `Store.Active` stops counting it.
+  `TestOptimizeFinishIsAtomic` (`internal/jobs/optimize_atomic_test.go`) runs a real `execute` against SQLite
+  triggers that abort (a) the `status='succeeded'` update, (b) the preset update and (c) the generic terminal
+  update, and asserts in each case that the job ends `failed` with `finished_at` set and `result_json` empty, that
+  the preset still carries its old weights, and that `Store.Active` finds nothing. `TestOptimizeFinishFailureNamesTheStep`
+  pins the `finish job succeeded:` text the operator sees. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/jobs/ -run 'TestOptimizeFinish' -count=1 -v`:
+  ```
+  === RUN   TestOptimizeFinishIsAtomic
+  === RUN   TestOptimizeFinishIsAtomic/a_failing_terminal_write_rolls_the_preset_back
+  === RUN   TestOptimizeFinishIsAtomic/a_failing_write-back_leaves_the_job_terminal
+  === RUN   TestOptimizeFinishIsAtomic/a_failed_generic_finish_ends_the_job
+  --- PASS: TestOptimizeFinishIsAtomic (0.04s)
+  === RUN   TestOptimizeFinishFailureNamesTheStep
+  --- PASS: TestOptimizeFinishFailureNamesTheStep (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/jobs	0.061s
+  ```
+  With only `optimize.go`, `store.go` and `jobs.go` reverted, the same run failed with
+  `preset weights = "[0.4,0.6]", want the old "[\"old\"]": a rolled-back finish must not apply them`,
+  `job status = "running", want "failed" (the failed write must not leave the job non-terminal)`,
+  `Active() = job 1 "running", want none: the row must be terminal` and
+  `status/error = "running"/<nil>, want failed with the failing step named`. `/home/nite/.hermes/cache/scratch/pgtest
+  ./internal/jobs/ -count=1` and `go test ./internal/web/ -run 'TestPreset|TestOptimize|TestJob' -count=1` pass.
 
 - [ ] **M19-74 A stalled SMTP relay blocks the send forever; the configured timeout only covers the dial** —
   *should-fix.* `DefaultTimeout` is documented as "the timeout of a single SMTP interaction (connect +

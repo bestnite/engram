@@ -36,8 +36,13 @@ func (s *Store) CreateQueued(ctx context.Context, kind string, targetID *uint64,
 
 // ByID reads a job by primary key.
 func (s *Store) ByID(ctx context.Context, id uint64) (*store.Job, error) {
+	return s.byID(s.db.WithContext(ctx), id)
+}
+
+// byID reads a job through the caller's handle, so a terminal write inside a transaction sees its own snapshot.
+func (s *Store) byID(db *gorm.DB, id uint64) (*store.Job, error) {
 	var job store.Job
-	if err := s.db.WithContext(ctx).First(&job, "id = ?", id).Error; err != nil {
+	if err := db.First(&job, "id = ?", id).Error; err != nil {
 		return nil, fmt.Errorf("load job %d: %w", id, err)
 	}
 	return &job, nil
@@ -172,6 +177,12 @@ func (s *Store) SetStage(ctx context.Context, id uint64, stage string) error {
 
 // FinishSucceeded sets the job to succeeded: it writes finished_at, the log tail and the result, and clears error.
 func (s *Store) FinishSucceeded(ctx context.Context, id uint64, at time.Time, resultJSON, tail string) error {
+	return s.finishSucceeded(ctx, s.db, id, at, resultJSON, tail)
+}
+
+// finishSucceeded is FinishSucceeded on the caller's handle, so the optimize write-back commits the preset and
+// this terminal row together.
+func (s *Store) finishSucceeded(ctx context.Context, db *gorm.DB, id uint64, at time.Time, resultJSON, tail string) error {
 	updates := map[string]any{
 		"status":      StatusSucceeded,
 		"finished_at": at.UTC(),
@@ -179,7 +190,7 @@ func (s *Store) FinishSucceeded(ctx context.Context, id uint64, at time.Time, re
 		"result_json": nullableString(resultJSON),
 		"error":       nil,
 	}
-	return s.update(ctx, id, updates)
+	return s.updateDB(ctx, db, id, updates)
 }
 
 // FinishFailed sets the job to failed: it writes finished_at, the failure reason and the log tail.
@@ -195,7 +206,12 @@ func (s *Store) FinishFailed(ctx context.Context, id uint64, at time.Time, msg, 
 
 // update updates several columns by id; a missing row returns an error, so state is never silently lost.
 func (s *Store) update(ctx context.Context, id uint64, updates map[string]any) error {
-	res := s.db.WithContext(ctx).Model(&store.Job{}).Where("id = ?", id).Updates(updates)
+	return s.updateDB(ctx, s.db, id, updates)
+}
+
+// updateDB is update on the caller's handle, for writes that must commit with another table's write.
+func (s *Store) updateDB(ctx context.Context, db *gorm.DB, id uint64, updates map[string]any) error {
+	res := db.WithContext(ctx).Model(&store.Job{}).Where("id = ?", id).Updates(updates)
 	if res.Error != nil {
 		return fmt.Errorf("update job %d: %w", id, res.Error)
 	}
