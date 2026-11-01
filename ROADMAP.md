@@ -360,23 +360,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   writes no `review.undo` audit row. Evidence is the raw scoped `go test` and `go vet` output.
   *Do not start until the maintainer chooses between (B) and (A) with (B).*
 
-- [ ] **M18-54 Comments state the imported progress rules** — the code `M18-10`, `M18-11` and `M18-36`
-  added states its rules without saying why, and `M18-11` left one comment and one error text stale. The
-  gaps are four. First, `usableAnkiMemory` in `internal/store/anki_import.go` has no doc comment. The
-  comment states each bound and its reason: go-fsrs v4 refuses a non-new card with stability below
-  0.001 or difficulty below 1, and 10 is the highest difficulty FSRS produces. Second, the last-review
-  chain in `importAnkiProgress` has no comment. The chain takes `lrt`, then the last kept revlog row,
-  then the due date minus `ivl` for a review or relearning card, and leaves a learning card NULL. The
-  comment states why each step comes in that order and why a learning card stays NULL. Third, the
-  columns of an imported review row have no comment. `interval_days` is `ivl`, a negative `ivl` being
-  seconds; `duration_days` counts days from the previous kept row; stability and difficulty come from
-  the replay. The comment states what engram's own review rows mean by each column, so the reader sees
-  why the importer fills them this way. Fourth, in `internal/anki/write.go`, the comment above the card
-  loop says that `cards.data` retains memory state, but the column now also carries `lrt`. The error
-  text `encode card %d memory state` becomes `encode card %d data`. *Acceptance:* the diff adds or
-  corrects each of the four comments and the error text; the scoped `go vet` and `go test` of
-  `internal/store` and `internal/anki` pass. Evidence is the diff and the raw scoped output.
-
 - [ ] **M18-55 The `M18-1` and `M18-2` ledger rows record what `M18-10` to `M18-12`, `M18-36` and
   `M18-37` changed** — `M18-22` writes each ledger row from the commits whose messages name that row's
   ID. The commits of `M18-10`, `M18-11`, `M18-12`, `M18-36` and `M18-37` name only their own IDs, so
