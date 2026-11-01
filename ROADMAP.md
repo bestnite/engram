@@ -303,27 +303,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `internal/mcp/tools.go` and the two request functions in `frontend/src/lib/api/client.ts`. Evidence
   is the `README.md` diff.
 
-- [ ] **M18-48 A card in a filtered deck is placed in its home deck** — `planAnkiDecks` and the card
-  loop (`plan.Paths[card.DeckID]`) in `internal/store/anki_import.go` place a card by `did`. For a card
-  in a filtered deck, `did` names the filtered deck. Since `M18-12` the importer reads such a card's due
-  date from `odue`, because a filtered deck is temporary, but the card's deck still comes from `did`.
-  Reproduced on `main`: the stock fixture's card, moved to a deck named `Filtered Deck 1` (id 999) with
-  `odid` naming its home deck `Default`, is imported as a new deck named `Filtered Deck 1`. The filtered
-  deck also supplies the deck description, and `ankiTopConfig` looks up the filtered deck's
-  configuration instead of the home deck's. engram has no filtered decks. The fix: wherever the importer
-  uses a card's deck, a card with `odid` ≠ 0 uses `odid`. That covers the card counts and the shared
-  prefix in `planAnkiDecks`, the card's `deck_path`, and the deck whose configuration `ankiTopConfig`
-  reads. A deck that then holds no card takes no part, as today. The golden that `M18-47` adds records
-  the deck Anki assigns each filtered card after import, and it shows that Anki keeps such a card in
-  the filtered deck, which engram cannot represent; the maintainer therefore decided that a card with
-  `odid` ≠ 0 belongs to its home deck, and the filtered deck itself is not created.
-  *Acceptance:* a table test in `internal/store/anki_progress_import_test.go` covers four
-  packages. A package whose only card sits in a filtered deck with `odid` naming `Home` imports as a
-  deck named `Home`, and the card has no `deck_path`. A card whose home deck is `Home::Sub` and which
-  sits in a filtered deck gets `deck_path` `Sub`, in a package where another card sits in `Home`. A
-  package whose cards are all in their home decks imports as before. The preset of a new deck comes from
-  the home deck's configuration. Evidence is the raw scoped `go test` and `go vet` output.
-
 - [ ] **M18-49 The replay selects the rows Anki selects** — `deriveAnkiMemory` in
   `internal/store/anki_import.go` replays the kept rows from an empty state, except when the first kept
   row is a review row (revlog type 1): then it builds SM-2 from the card's `factor` and `ivl` and
