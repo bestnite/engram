@@ -118,10 +118,12 @@ type bulkActionIn struct {
 
 // importDeckIn is the input of import_deck: it accepts a deck package, with the source being one of two alternatives.
 type importDeckIn struct {
-	// PresetMode selects how a new deck obtains its preset; reuse and copy require PresetID.
-	PresetMode string `json:"preset_mode,omitempty" jsonschema:"preset choice for new_deck only: new, reuse or copy; reuse and copy require preset_id; other modes refuse preset_id"`
-	// PresetID identifies the owned preset to reuse or copy for a new deck; other modes refuse it.
-	PresetID string `json:"preset_id,omitempty" jsonschema:"public id of the owned preset for new_deck only; required for reuse and copy; refused for any other mode"`
+	// PresetMode defaults to new for new_deck; reuse and copy require PresetID, while new refuses it.
+	// For into_deck and replace_deck, only empty or new is accepted, and PresetID is always refused.
+	PresetMode string `json:"preset_mode,omitempty" jsonschema:"for new_deck: empty means new; reuse and copy require preset_id; new refuses preset_id; for into_deck and replace_deck: only empty or new is accepted and preset_id is always refused"`
+	// PresetID identifies the owned preset required by reuse or copy for new_deck; empty mode means new and new refuses it.
+	// For into_deck and replace_deck, PresetID is always refused; only empty or new mode is accepted.
+	PresetID string `json:"preset_id,omitempty" jsonschema:"for new_deck: empty preset_mode means new; reuse and copy require the owned preset's public id; new refuses preset_id; for into_deck and replace_deck: preset_id is always refused and only empty or new mode is accepted"`
 	// Package is the package body itself: the JSON document export_deck outputs, a base64-encoded .edeck zip, or a base64-encoded .apkg archive. Mutually exclusive with URL.
 	Package any `json:"package,omitempty" jsonschema:"the deck package: export_deck's JSON document, or a base64-encoded .edeck/.apkg archive; mutually exclusive with url"`
 	// URL is a public HTTPS direct link (.edeck/.zip/.apkg); it is downloaded and validated by the server, and is mutually exclusive with Package.
@@ -141,10 +143,12 @@ type importDeckIn struct {
 
 // createImportUploadIn is the input of create_import_upload: the import options are fixed into the ticket when it is issued.
 type createImportUploadIn struct {
-	// PresetMode selects how a new deck obtains its preset; reuse and copy require PresetID.
-	PresetMode string `json:"preset_mode,omitempty" jsonschema:"preset choice for new_deck only: new, reuse or copy; reuse and copy require preset_id; other modes refuse preset_id"`
-	// PresetID identifies the owned preset to reuse or copy for a new deck; other modes refuse it.
-	PresetID string `json:"preset_id,omitempty" jsonschema:"public id of the owned preset for new_deck only; required for reuse and copy; refused for any other mode"`
+	// PresetMode defaults to new for new_deck; reuse and copy require PresetID, while new refuses it.
+	// For into_deck and replace_deck, only empty or new is accepted, and PresetID is always refused.
+	PresetMode string `json:"preset_mode,omitempty" jsonschema:"for new_deck: empty means new; reuse and copy require preset_id; new refuses preset_id; for into_deck and replace_deck: only empty or new is accepted and preset_id is always refused"`
+	// PresetID identifies the owned preset required by reuse or copy for new_deck; empty mode means new and new refuses it.
+	// For into_deck and replace_deck, PresetID is always refused; only empty or new mode is accepted.
+	PresetID string `json:"preset_id,omitempty" jsonschema:"for new_deck: empty preset_mode means new; reuse and copy require the owned preset's public id; new refuses preset_id; for into_deck and replace_deck: preset_id is always refused and only empty or new mode is accepted"`
 	// Target takes new_deck (default), into_deck:<public id>, or replace_deck:<public id>.
 	Target     string `json:"target,omitempty" jsonschema:"import target: new_deck (default), into_deck:<public id> or replace_deck:<public id>"`
 	DryRun     bool   `json:"dry_run,omitempty" jsonschema:"validate and count without writing"`

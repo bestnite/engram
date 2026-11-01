@@ -136,8 +136,8 @@ func (a *API) CreateImportUpload(ctx context.Context, u *store.User, apiKeyID *u
 	}, nil
 }
 
-// validateImportPreset rejects invalid choices early: URL import checks it before authorization,
-// rate limiting and download, and upload ticket issuance checks it before authorization.
+// validateImportPreset rejects invalid choices before URL import spends rate-limit quota, takes an
+// import slot or starts a download, and before ticket issuance gives out a ticket the upload would refuse.
 func (a *API) validateImportPreset(ctx context.Context, userID uint64, opts *store.PackageImportOptions) error {
 	kind, _, err := store.ParsePackageTargetRef(opts.Target)
 	if err != nil {

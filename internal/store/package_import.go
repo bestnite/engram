@@ -608,8 +608,9 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 }
 
 // ValidateImportPreset validates the selection before import or ticket issuance.
-// For new_deck, an empty mode defaults to new. For into_deck and replace_deck,
-// only an empty mode or new is accepted, and PresetID must be zero.
+// For new_deck, it writes new into opts.PresetMode when the mode is empty, because
+// selectImportPreset calls the create function only for new and otherwise looks up PresetID.
+// For into_deck and replace_deck, only an empty mode or new is accepted, and PresetID must be zero.
 func (s *DeckStore) ValidateImportPreset(ctx context.Context, owner uint64, targetKind string, opts *PackageImportOptions) error {
 	if targetKind != PackageTargetNewDeck && opts.PresetID != 0 {
 		return &PackageError{Message: "invalid preset selection"}
@@ -637,7 +638,7 @@ func (s *DeckStore) ValidateImportPreset(ctx context.Context, owner uint64, targ
 	}
 	var count int64
 	if err := s.db.WithContext(ctx).Model(&Preset{}).Where("id = ? AND owner_user_id = ?", opts.PresetID, owner).Count(&count).Error; err != nil {
-		return err
+		return fmt.Errorf("count import presets: %w", err)
 	}
 	if count != 1 {
 		return &PackageError{Message: "invalid preset selection"}
@@ -1335,20 +1336,20 @@ func selectImportPreset(ctx context.Context, tx *gorm.DB, owner uint64, opts Pac
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return Preset{}, &PackageError{Message: "invalid preset selection"}
 		}
-		return Preset{}, err
+		return Preset{}, fmt.Errorf("look up import preset: %w", err)
 	}
 	if opts.PresetMode == PackagePresetReuse {
 		return p, nil
 	}
 	name, err := uniqueOwnerName(ctx, tx, &Preset{}, owner, p.Name+" (copy)")
 	if err != nil {
-		return Preset{}, err
+		return Preset{}, fmt.Errorf("choose import preset copy name: %w", err)
 	}
 	p.ID, p.PublicID, p.Name = 0, "", name
 	p.CreatedAt = opts.Now().UTC()
 	p.UpdatedAt = p.CreatedAt
 	if err := tx.WithContext(ctx).Create(&p).Error; err != nil {
-		return Preset{}, err
+		return Preset{}, fmt.Errorf("create import preset copy: %w", err)
 	}
 	return p, nil
 }

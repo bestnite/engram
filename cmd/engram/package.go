@@ -206,8 +206,8 @@ func runImport(args []string) error {
 	onConflict := fs.String("on-conflict", "", "conflict policy: skip, update (default) or fail")
 	skipMissing := fs.Bool("skip-missing-media", false, "skip missing media instead of failing")
 	applyWeights := fs.Bool("apply-weights", false, "use the package's FSRS weights for the new deck's preset (new_deck only)")
-	presetMode := fs.String("preset-mode", "new", "preset mode: new, reuse or copy")
-	presetRef := fs.String("preset-id", "", "public id of the preset to reuse or copy")
+	presetMode := fs.String("preset-mode", "new", "for new_deck: empty means new; reuse and copy require preset-id; new refuses preset-id; for into_deck and replace_deck: only empty or new is accepted and preset-id is always refused")
+	presetRef := fs.String("preset-id", "", "for new_deck: empty preset-mode means new; reuse and copy require the owned preset's public id; new refuses preset-id; for into_deck and replace_deck: preset-id is always refused and only empty or new mode is accepted")
 	includeProgress := fs.Bool("include-progress", false, "import Anki scheduling progress")
 	if err := fs.Parse(args); err != nil {
 		return err
