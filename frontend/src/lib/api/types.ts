@@ -1785,6 +1785,8 @@ export interface EmailSettingsResponse {
 /** POST /api/v1/settings/email (session): request an email change; the stored address stays unchanged until confirmation. */
 export interface EmailChangeRequest {
   email: string;
+  /** The current password: the server requires proof of the local credential before moving the mailbox. */
+  password: string;
 }
 
 export interface EmailChangeResponse {

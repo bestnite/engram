@@ -217,6 +217,20 @@ func (s *AccountService) Authenticate(ctx context.Context, username, password st
 	return u, nil
 }
 
+// VerifyPassword reports whether password matches the user's local password hash. A user without a local
+// password (a pure OIDC account) never matches: there is no password to prove, so a caller that needs
+// proof of the local credential has to refuse the operation instead of accepting an empty secret.
+func (s *AccountService) VerifyPassword(ctx context.Context, u *store.User, password string) (bool, error) {
+	if u == nil || u.PasswordHash == nil {
+		return false, nil
+	}
+	ok, err := s.hasher.verify(*u.PasswordHash, password)
+	if err != nil {
+		return false, fmt.Errorf("verify password: %w", err)
+	}
+	return ok, nil
+}
+
 // ChangePassword validates the old password, its strength and that the new one differs, writes the new hash and revokes all of the user's sessions.
 func (s *AccountService) ChangePassword(ctx context.Context, userID uint64, oldPassword, newPassword string) error {
 	return s.changePassword(ctx, userID, oldPassword, newPassword, "")

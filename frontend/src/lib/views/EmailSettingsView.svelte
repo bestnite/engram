@@ -22,6 +22,7 @@
   let loadErrorKey = $state<string | null>(null);
 
   let newEmail = $state('');
+  let password = $state('');
   let submitting = $state(false);
   let resending = $state(false);
 
@@ -42,7 +43,8 @@
     e.preventDefault();
     submitting = true;
     try {
-      await apiClient.requestEmailChange({ email: newEmail.trim() });
+      await apiClient.requestEmailChange({ email: newEmail.trim(), password });
+      password = '';
       toast.success($t('account.email.change_sent'));
     } catch (err) {
       toast.error($t(getAccountErrorMessageKey(err)));
@@ -103,7 +105,20 @@
             class="field-input mt-1.5 w-full text-sm disabled:opacity-50"
           />
         </div>
-        <Button type="submit" loading={submitting} disabled={!mailReady || !newEmail.trim()} variant="primary" size="lg">
+        <div class="min-w-56 flex-1">
+          <label for="email-password" class="block text-sm font-medium text-foreground">{$t('account.email.password_label')}</label>
+          <input
+            id="email-password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            bind:value={password}
+            disabled={submitting || !mailReady}
+            class="field-input mt-1.5 w-full text-sm disabled:opacity-50"
+          />
+        </div>
+        <Button type="submit" loading={submitting} disabled={!mailReady || !newEmail.trim() || !password} variant="primary" size="lg">
           {$t('account.email.change_submit')}
         </Button>
       </form>

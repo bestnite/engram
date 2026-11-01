@@ -430,7 +430,7 @@ func TestSecurityMailEmailVerifyAndChangeFlow(t *testing.T) {
 
 	// Email change: a confirmation mail goes to the new address, and nothing in the database changes before confirmation.
 	change := postJSON(ts.srv, "/api/v1/settings/email",
-		map[string]string{"email": "new-owner@example.com"}, ts.cookies, map[string]string{auth.CSRFHeaderName: ts.csrf})
+		map[string]string{"email": "new-owner@example.com", "password": "Sup3rSecret!"}, ts.cookies, map[string]string{auth.CSRFHeaderName: ts.csrf})
 	if change.Code != http.StatusOK {
 		t.Fatalf("POST /api/v1/settings/email status = %d, want 200 (body %s)", change.Code, snippet(change.Body.String()))
 	}

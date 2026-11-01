@@ -80,13 +80,13 @@ describe('SPA account security and email client flows', () => {
 
     const settings = await client.getEmailSettings();
     expect(settings).toEqual({ email: 'a@example.com', email_verified: false, mail_ready: true });
-    await expect(client.requestEmailChange({ email: 'b@example.com' })).resolves.toEqual({ sent: true });
+    await expect(client.requestEmailChange({ email: 'b@example.com', password: 'Sup3rSecret!' })).resolves.toEqual({ sent: true });
     await expect(client.resendVerification()).resolves.toEqual({ sent: true });
 
     expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/settings/email');
     const [changeUrl, changeInit] = mockFetch.mock.calls[1]!;
     expect(changeUrl).toBe('/api/v1/settings/email');
-    expect(JSON.parse(String(changeInit?.body))).toEqual({ email: 'b@example.com' });
+    expect(JSON.parse(String(changeInit?.body))).toEqual({ email: 'b@example.com', password: 'Sup3rSecret!' });
     expect(mockFetch.mock.calls[2]?.[0]).toBe('/api/v1/settings/verify-email');
   });
 
@@ -100,6 +100,8 @@ describe('SPA account security and email client flows', () => {
       'email_same',
       'email_taken',
       'email_conflict',
+      'invalid_current_password',
+      'password_not_set',
       'password_required',
       'password_too_short',
       'password_too_long',

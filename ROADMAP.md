@@ -1121,7 +1121,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `server.go`. `go test ./internal/web/ -run 'TestRequestLogger|TestFrameMedia|TestHealthz|TestNewRequires' -count=1`
   passes.
 
-- [ ] **M19-38 A stolen session can change the account email and then reset the password, so the change
+- [x] **M19-38 A stolen session can change the account email and then reset the password, so the change
   outlives the session** — *should-fix.* `emailChangeSubmit` accepts a new address from any signed-in
   session without asking for the current password (`internal/web/account.go:271-315`); the confirmation mail
   goes only to the new address (`internal/web/security_mail.go:172-178`), the old address is not notified,
@@ -1133,6 +1133,48 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   instance. *Acceptance:* require the current password (or a fresh OIDC re-authentication) for an email
   change, notify the old address, revoke the other sessions, and add a negative test that a session without
   the password cannot change the email.
+  *Closed by this commit (`fix(web): require the password before an email change`).*
+  `emailChangeSubmit` (`internal/web/account.go:285`) now verifies the current password through
+  `AccountService.VerifyPassword` (`internal/auth/account.go:220`) before issuing the confirmation token:
+  an empty password is `password_required`, a wrong one is `invalid_current_password` (the code the
+  password-change path already uses), and a pure-OIDC account with no local password is refused with
+  `password_not_set` until it sets one from the settings page (which it can do without an old password,
+  because the OIDC login is the proof; a fresh OIDC re-authentication was not implemented, so no passwordless
+  path is left open). The confirmation handler now loads the user before the update, revokes every session of
+  that user after the address changes (`s.sessions.RevokeAllForUser`), and sends the existing
+  `credential_changed` notice to the replaced address with the new `mail.notice.credential.email` wording
+  (`internal/web/security_mail.go:122`), so the mailbox that loses the account learns about it.
+  `TestEmailChangeRequiresPasswordAndRevokesSessions` (`internal/web/email_change_security_test.go`) sends a
+  valid new address without a password and with a wrong password, asserts both are refused with no mail and
+  no row change, then requests with the right password, confirms the token, and asserts the address changed,
+  zero sessions remain live, both pre-change cookies answer 401, and the old address received the notice.
+  Raw output of `go test ./internal/web/ -run 'TestAccount|TestEmailChangeRequiresPassword|TestSecurityMailEmailVerifyAndChangeFlow' -count=1 -v`:
+  ```
+  === RUN   TestAccountRouteCutover
+  --- PASS: TestAccountRouteCutover (0.03s)
+  === RUN   TestAccountJSON_CSRFRejections
+  --- PASS: TestAccountJSON_CSRFRejections (0.03s)
+  === RUN   TestAccountForgotResetFlow
+  --- PASS: TestAccountForgotResetFlow (0.04s)
+  === RUN   TestAccountEmailVerifyFlows
+  --- PASS: TestAccountEmailVerifyFlows (0.03s)
+  === RUN   TestEmailChangeRequiresPasswordAndRevokesSessions
+  --- PASS: TestEmailChangeRequiresPasswordAndRevokesSessions (0.04s)
+  === RUN   TestSecurityMailEmailVerifyAndChangeFlow
+  --- PASS: TestSecurityMailEmailVerifyAndChangeFlow (0.03s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.223s
+  ```
+  With only the three production files reverted, the same new test failed with
+  `email change without a password = 200 , want 400 password_required`,
+  `email change with a wrong password = 200 , want 401 invalid_current_password`,
+  `refused requests queued 2 email_verification mail(s), want none` (both went to `attacker@example.com`),
+  and `confirmation not enqueued to the new address`. The frontend form now sends the password
+  (`frontend/src/lib/views/EmailSettingsView.svelte`); `npx vitest run src/tests/account.test.ts` reports
+  `Test Files 1 passed (1)`, `Tests 12 passed (12)`. The package-wide `go test ./internal/web/ -count=1`
+  still fails on the pre-existing session-rotation assertions in `TestPasswordChangeSecurityFlow`,
+  `TestInitialPasswordForPasswordlessAccount`, `TestSecurityMailFiveClassATypesDeliveredAtTriggers` and
+  `TestSecurityMailClassAHasNoUnsubscribeHeader`; those fail identically on the unmodified `main`.
 
 - [x] **M19-39 A password change keeps the same session ID, so a copied session cookie survives it** —
   *should-fix.* `ChangePasswordKeepingSession` keeps `keepSessionID` and revokes only the other rows

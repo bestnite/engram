@@ -180,6 +180,8 @@
   translation: "已关闭两步验证"
 - id: mail.notice.credential.recovery_codes
   translation: "已重新生成恢复码"
+- id: mail.notice.credential.email
+  translation: "邮箱地址"
 - id: mail.notice.account.subject
   translation: "你的 {{.site}} 账号状态已变更"
 - id: mail.notice.account.title

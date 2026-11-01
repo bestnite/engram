@@ -180,6 +180,8 @@ It renders with sample variables; real recipients see their own data."
   translation: "two-factor authentication disabled"
 - id: mail.notice.credential.recovery_codes
   translation: "recovery codes regenerated"
+- id: mail.notice.credential.email
+  translation: "email address"
 - id: mail.notice.account.subject
   translation: "Your {{.site}} account status changed"
 - id: mail.notice.account.title

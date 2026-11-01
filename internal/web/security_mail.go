@@ -119,6 +119,20 @@ func (s *Server) notifyCredentialChanged(ctx context.Context, u *store.User, kin
 	})
 }
 
+// notifyEmailChanged tells the previous mailbox that the account's address was replaced.
+// u is the user as loaded before the update, so u.Email is the address that lost the account and is still
+// reachable; the new address received the confirmation link instead.
+func (s *Server) notifyEmailChanged(ctx context.Context, u *store.User) {
+	if u == nil || strings.TrimSpace(u.Email) == "" {
+		return
+	}
+	loc := s.userLocalizer(u)
+	s.sendMail(ctx, loc, mail.Mail{
+		Type: mail.TypeCredentialChanged, To: u.Email, UserID: u.ID,
+		Vars: mail.Vars{"what": loc.T("mail.notice.credential.email")},
+	})
+}
+
 // notifyAccountStatus delivers the notice after an account is disabled or deleted.
 // status is the key suffix of mail.notice.account.* (disabled / deleted).
 func (s *Server) notifyAccountStatus(ctx context.Context, u *store.User, status string) {

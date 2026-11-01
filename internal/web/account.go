@@ -221,12 +221,24 @@ func (s *Server) confirmEmailChangeSubmit(c *gin.Context) {
 		apiAuthError(c, http.StatusBadRequest, "token_invalid", "The confirmation link is invalid.")
 		return
 	}
+	old, err := s.users.ByID(ctx, tok.UserID)
+	if err != nil {
+		s.logger.Error("security mail: load user before email change failed", "user_id", tok.UserID, "error", err)
+		apiAuthError(c, http.StatusBadRequest, "token_invalid", "The confirmation link is invalid.")
+		return
+	}
 	now := time.Now().UTC()
 	if err := s.users.SetEmail(ctx, tok.UserID, newEmail, now); err != nil {
 		s.logger.Error("security mail: update email from confirmation failed", "user_id", tok.UserID, "error", err)
 		apiAuthError(c, http.StatusConflict, "email_conflict", "That email address could not be used.")
 		return
 	}
+	// The mailbox is a credential: sign out every session that was opened before the change, and tell the
+	// address being replaced, so a stolen session cannot keep the account after moving the mailbox.
+	if err := s.sessions.RevokeAllForUser(ctx, tok.UserID); err != nil {
+		s.logger.Error("security mail: revoke sessions after email change failed", "user_id", tok.UserID, "error", err)
+	}
+	s.notifyEmailChanged(ctx, old)
 	s.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(tok.UserID),
 		Action:     store.ActionUserEmailChanged,
@@ -261,11 +273,16 @@ func (s *Server) emailSettingsGet(c *gin.Context) {
 
 // apiEmailChangeRequest is the request body for POST /api/v1/settings/email.
 type apiEmailChangeRequest struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // emailChangeSubmit submits an email-change request (POST /api/v1/settings/email): sends a confirmation mail to the new address and does not touch the DB before confirmation.
 //
+// The current password is required, as it is for a password change: an email address is a credential because the
+// normal reset flow delivers to it, so a stolen session must not be able to move the mailbox. An account without a
+// local password is refused until it sets one, which it can do from the settings page without proving an old
+// password because the OIDC login is the proof.
 // SMTP unconfigured, malformed format, same as the original mailbox and already taken are all rejected with
 // no DB write; success only enqueues the confirmation mail and writes an audit row (ActionUserEmailChangeRequest), and the mailbox in the DB stays unchanged until the confirmation link is clicked.
 func (s *Server) emailChangeSubmit(c *gin.Context) {
@@ -298,6 +315,30 @@ func (s *Server) emailChangeSubmit(c *gin.Context) {
 	} else if err != nil && !store.IsNotFound(err) {
 		s.logger.Error("security mail: check email availability failed", "error", err)
 		apiAuthError(c, http.StatusBadRequest, "email_invalid", "Enter a valid email address.")
+		return
+	}
+	fresh, err := s.users.ByID(ctx, user.ID)
+	if err != nil {
+		s.logger.Error("security mail: load user for email change failed", "user_id", user.ID, "error", err)
+		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
+		return
+	}
+	if fresh.PasswordHash == nil {
+		apiAuthError(c, http.StatusBadRequest, "password_not_set", "Set a password before changing your email address.")
+		return
+	}
+	if strings.TrimSpace(req.Password) == "" {
+		apiAuthError(c, http.StatusBadRequest, "password_required", "Enter your current password.")
+		return
+	}
+	verified, err := s.accounts.VerifyPassword(ctx, fresh, req.Password)
+	if err != nil {
+		s.logger.Error("security mail: verify password for email change failed", "user_id", user.ID, "error", err)
+		apiAuthError(c, http.StatusInternalServerError, api.CodeInternal, "An internal error occurred.")
+		return
+	}
+	if !verified {
+		apiAuthError(c, http.StatusUnauthorized, "invalid_current_password", "The current password is incorrect.")
 		return
 	}
 	if !s.sendEmailChangeConfirmation(c, user, newEmail) {

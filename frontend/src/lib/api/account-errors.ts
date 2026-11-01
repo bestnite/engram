@@ -14,6 +14,8 @@ const accountErrorCodes = new Set([
   'email_same',
   'email_taken',
   'email_conflict',
+  'invalid_current_password',
+  'password_not_set',
   'password_required',
   'password_too_short',
   'password_too_long',

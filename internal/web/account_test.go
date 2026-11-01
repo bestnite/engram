@@ -246,7 +246,7 @@ func TestAccountEmailVerifyFlows(t *testing.T) {
 
 	// Successful email-change request: enqueued to the new address, and the DB stays unchanged before confirmation.
 	before := len(outboxByType(t, ts.db, mail.TypeEmailVerification))
-	change := postJSONWithSession(ts.srv, "/api/v1/settings/email", map[string]string{"email": "new-owner@example.com"}, ts.cookies, ts.csrf)
+	change := postJSONWithSession(ts.srv, "/api/v1/settings/email", map[string]string{"email": "new-owner@example.com", "password": "Sup3rSecret!"}, ts.cookies, ts.csrf)
 	if change.Code != http.StatusOK {
 		t.Fatalf("email change request status = %d, want 200 (body %s)", change.Code, snippet(change.Body.String()))
 	}
