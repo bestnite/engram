@@ -3036,7 +3036,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   link) are written into `AGENTS.md` §2.2 and `CONTRIBUTING.md`, naming exactly those cases, or the values are
   replaced with placeholders and the demo credentials are no longer committed.
 
-- [ ] **M19-85 CONTRIBUTING states the review log is append-only and omits the one deletion the code performs** —
+- [x] **M19-85 CONTRIBUTING states the review log is append-only and omits the one deletion the code performs** —
   *should-fix.* `CONTRIBUTING.md:167-168` restates the invariant as "**`reviews` is append-only.** Every column is
   written from the first commit — it is the only fuel for parameter optimisation and cannot be reconstructed
   later", with no exception. The contract states the same rule with its single exception: undoing a review
@@ -3046,6 +3046,30 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   request was not run in this review; the deletion is read at the cited line and stated by the contract.
   *Acceptance:* CONTRIBUTING restates the exception with the rule, in the words `AGENTS.md` uses, so a reviewer of
   a review deletion does not have to guess which document wins.
+  *Closed by this commit (`docs(contributing): state the review log's one permitted deletion`).*
+  `CONTRIBUTING.md:168-173` now carries the rule as `AGENTS.md:64-69` states it: the heading is
+  "**`reviews` is append-only, with one exception: undoing a review.**", the single permitted deletion is the
+  row a review-undo removes, and the undo writes a `review.undo` audit row recording the removed review.
+  The paragraph names no fact the code does not hold, checked at the lines it describes:
+  ```
+  $ grep -n "Delete(&store.Review" internal/schedule/actions.go
+  149:	if err := tx.WithContext(ctx).Delete(&store.Review{}, last.ID).Error; err != nil {
+  $ grep -n "ActionReviewUndo =" internal/store/audit.go
+  56:	ActionReviewUndo = "review.undo"
+  ```
+  `TestUndoRestoresPreviousDueAndInterval` (`internal/schedule/actions_test.go:95`) asserts both halves the
+  paragraph states: the log being undone is deleted (`reviews = 1, want 1 after undo` when it fails) and one
+  `review.undo` audit row is written. Raw output of
+  `go test ./internal/schedule/ -run 'TestUndoRestoresPreviousDueAndInterval|TestUndoFirstReviewReturnsCardToNew' -count=1 -v`:
+  ```
+  --- PASS: TestUndoRestoresPreviousDueAndInterval (0.01s)
+  === RUN   TestUndoFirstReviewReturnsCardToNew
+  --- PASS: TestUndoFirstReviewReturnsCardToNew (0.01s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/schedule	0.031s
+  ```
+  The undo request itself was not run through HTTP: the deletion and the audit row are pinned at the
+  transaction the service calls, not at the transport.
 
 - [x] **M19-86 The bulk schema promises it never accepts a body the server rejects, and a whitespace tag breaks
   that** — *nit.* `schema/note-bulk.schema.json:5` says the schema "is therefore the stricter of the two for a
