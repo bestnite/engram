@@ -318,6 +318,9 @@ func New(addr string, deps Deps) (*Server, error) {
 	// Security headers are mounted globally, covering static assets, /media, /api/v1, /mcp and the 404 fallback;
 	// they sit before session/locale so that any response aborted early still carries the full set. The CSP is enforcing, not report-only.
 	router.Use(securityHeaders())
+	// JSON bodies are capped and given a read deadline here, before any handler binds them. The middleware is mounted
+	// globally so it also covers the internal/api routes; multipart uploads keep their own per-endpoint caps.
+	router.Use(jsonBodyLimit(maxJSONBodyBytes, jsonBodyReadTimeout))
 	// The session middleware comes before the locale middleware: the language from personal settings takes part in the i18n resolution precedence,
 	// and it can only be read from an already resolved session user. Session resolution itself does not depend on the language, so the order is safe.
 	if s.sessions != nil {

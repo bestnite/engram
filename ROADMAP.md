@@ -1336,7 +1336,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `password change set cookies [], want a new "engram_session" cookie`. `go test ./internal/auth/ -run
   'TestSession|TestAuthSuite' -count=1` and `go test ./internal/store/ -run 'TestSession' -count=1` pass.
 
-- [ ] **M19-40 JSON endpoints have no request-body cap and the server has no read timeout** — *should-fix.*
+- [x] **M19-40 JSON endpoints have no request-body cap and the server has no read timeout** — *should-fix.*
   `newHTTPServer` sets only `ReadHeaderTimeout` and `IdleTimeout` (`internal/web/server.go:443-459`), and the
   only `http.MaxBytesReader` calls are the media upload (`internal/web/media.go:94`) and the package paths
   (`internal/api/package.go:229,243`). Every JSON handler decodes an unbounded body; `apiLogin` binds at
@@ -1347,6 +1347,47 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   the allocation and the hold were not measured. *Acceptance:* cap JSON bodies with `http.MaxBytesReader`
   before binding (and keep the existing package limit on uploads), give request bodies a deadline that does
   not cut off the documented large uploads, and add a test that an oversized login body answers 413.
+  *Closed by this commit (`fix(web): cap and time-bound JSON request bodies`).*
+  `jsonBodyLimit` (`internal/web/request_body.go:37`) is mounted globally before the session middleware
+  (`internal/web/server.go:321`). For `application/json` and `+json` media types it refuses a declared
+  `Content-Length` over 32 MiB before reading, and otherwise reads the body through `http.MaxBytesReader` with the
+  same cap and replaces it with the buffered bytes, so no handler ever binds an unbounded body. The same read runs
+  under a 30-second per-connection deadline set with `http.NewResponseController`, cleared before the response; an
+  over-cap body answers 413 `request_too_large` (registered in `internal/api/errors.go`), and any other read failure,
+  including the deadline firing, answers 408 `invalid_request` without handing a partial body to a handler. Multipart
+  package and media uploads do not pass through this middleware and keep their own caps; `http.Server.ReadTimeout`
+  remains unset.
+  `TestJSONBodyLimitRejectsOversizedLogin`, `TestJSONBodyLimitAllowsBodyUnderCap`,
+  `TestJSONBodyLimitReadDeadlineClosesTrickledBody`, `TestJSONBodyLimitLeavesMultipartUntouched` and
+  `TestJSONBodyLimitOnlyAppliesToJSONMediaTypes` (`internal/web/request_body_test.go`) cover both rejection paths on
+  the assembled server, an under-cap control request that still reaches the login handler, a raw TCP connection that
+  trickles a JSON body and is answered within the shortened test deadline, a multipart body object that is not
+  replaced, and the media-type gate. Raw output of `go test ./internal/web/ -run 'TestJSONBodyLimit' -count=1 -v`:
+  ```
+  === RUN   TestJSONBodyLimitRejectsOversizedLogin
+  === RUN   TestJSONBodyLimitRejectsOversizedLogin/declared_content_length_over_the_cap
+  === RUN   TestJSONBodyLimitRejectsOversizedLogin/streamed_body_over_the_cap
+  --- PASS: TestJSONBodyLimitRejectsOversizedLogin (0.07s)
+      --- PASS: TestJSONBodyLimitRejectsOversizedLogin/declared_content_length_over_the_cap (0.00s)
+      --- PASS: TestJSONBodyLimitRejectsOversizedLogin/streamed_body_over_the_cap (0.03s)
+  === RUN   TestJSONBodyLimitAllowsBodyUnderCap
+  --- PASS: TestJSONBodyLimitAllowsBodyUnderCap (0.02s)
+  === RUN   TestJSONBodyLimitReadDeadlineClosesTrickledBody
+  --- PASS: TestJSONBodyLimitReadDeadlineClosesTrickledBody (0.25s)
+  === RUN   TestJSONBodyLimitLeavesMultipartUntouched
+  --- PASS: TestJSONBodyLimitLeavesMultipartUntouched (0.00s)
+  === RUN   TestJSONBodyLimitOnlyAppliesToJSONMediaTypes
+  --- PASS: TestJSONBodyLimitOnlyAppliesToJSONMediaTypes (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.360s
+  ```
+  With the `router.Use(jsonBodyLimit(...))` line removed, the oversized cases answered 403 `csrf_failed` instead of
+  413, because the unbounded body reached the route's CSRF middleware. `go vet ./internal/web/ ./internal/api/`,
+  `go test ./internal/web/ -run 'TestJSONBodyLimit' -count=1` and `go test ./internal/api/ -count=1` pass.
+  `go test ./internal/web/ -count=1` still reports the four failures
+  `TestInitialPasswordForPasswordlessAccount`, `TestPasswordChangeSecurityFlow`,
+  `TestSecurityMailFiveClassATypesDeliveredAtTriggers` and `TestSecurityMailClassAHasNoUnsubscribeHeader`; the same
+  four fail in a detached worktree at `e06f46e`, the parent of this commit, so they are pre-existing and unrelated.
 
 - [x] **M19-41 One successful login clears the per-IP failure budget, so password spraying is not limited
   by IP** — *should-fix.* `Reset` deletes both the account bucket and the `ip:` bucket

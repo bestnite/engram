@@ -81,6 +81,8 @@ const (
 	// imports already run in this server process. The request is refused before its body is read,
 	// so nothing is spooled to a temporary file.
 	CodeDeckImportBusy = "deck_import_busy"
+	// CodeRequestTooLarge means a JSON request body exceeded the server's JSON body cap.
+	CodeRequestTooLarge = "request_too_large"
 )
 
 // errorBody is the error object of the error envelope: {"error":{"code":"...","message":"..."}}.
@@ -126,6 +128,9 @@ var errorMessages = map[string]string{
 
 	// Stable code for a package import refused because every import slot is taken.
 	CodeDeckImportBusy: "Too many package imports are already running. Try again when one finishes.",
+
+	// Stable code for a JSON request body over the server's JSON body cap.
+	CodeRequestTooLarge: "The request body is too large.",
 
 	// Stable codes for deck package import (store.PackageError.Code).
 	store.CodePackageUnsafeEntry:     "The package contains an unsafe entry.",
