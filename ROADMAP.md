@@ -418,23 +418,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   *Acceptance:* each new statement matches `importAnkiProgress` and `createAnkiPreset` in
   `internal/store/anki_import.go`. Evidence is the `README.md` diff.
 
-- [ ] **M18-70 Comments state the reader's skip rules without a task ID** — the code of `M18-24` to
-  `M18-27` carries four comment defects. First, the comment on `roundedIntegers` in
-  `internal/anki/sqlite.go` gives as its reason "before M18-13 one such value rejected the whole package";
-  `M18-13` is a retired ID that no committed file defines any more, so the reason resolves only through
-  `git log`. Second, `rejectRealIntegers` has no doc comment, and the doc comment of `readCards` does not
-  say that a card row is skipped and counted. Third, in `internal/anki/model.go`, `Package.CardsSkipped`
-  and `Package.DeckConfigsSkipped` have no comment, while `RevlogErr` beside them has one. Fourth, in
-  `internal/store/package_import.go`, `PackageImportReport.CardsSkipped` has no comment, so nothing says
-  that it counts package card rows that were not imported. The fix: the `roundedIntegers` comment states
-  the reason in its own words, namely that one REAL value would otherwise reject a package whose content
-  is readable, and cites no task ID. `rejectRealIntegers` gains a doc comment that begins with its name
-  and states why a REAL value in an identifier or code column is refused instead of rounded: rounding it
-  invents a reference, a rating or a state. `readCards` states the skip rule. The three fields gain one
-  comment each. This entry changes comments only. *Acceptance:* `git grep -n 'M18-' -- internal/anki`
-  prints nothing; the scoped `go vet` of `internal/anki` and `internal/store` passes. Evidence is the grep
-  output, the diff and the raw scoped `go vet` output.
-
 - [ ] **M18-71 The import tests share one fixture helper and record what they measure** — the commits of
   `M18-23` to `M18-27` added four copies of one procedure: open a fixture `.apkg`, run SQL on its
   collection, and write the archive again. Two copies are inline in `TestAnkiImportReportsSkippedCard` and
