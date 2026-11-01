@@ -923,20 +923,39 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   both drivers. Evidence is the two `sha256sum` outputs and the raw scoped `go test` output.
 
 - [ ] **M18-79 Anki's replay selection rule is measured before the importer copies it** — `M18-49`
-  was attempted twice without a result. The oracle now builds the six histories the entry names and
-  prints Anki's `compute_memory_state()`, but the values do not match a replay of the kept rows:
-  a review card with Good, Easy (+40 days), Easy (+60 days) gives stability 177.09 and difficulty
-  3.01, while the importer's replay gives 222.90 and 1.00; a review card with Good, Again (+10 days),
-  Again (+11 days) gives 0.493 and 9.558 against 0.256 and 9.129; a card whose history begins with a
-  relearning row gives 1.00 and 8.216 against 1.887 and 6.402. The two histories that already had
-  goldens still match, so the difference is in the selection or the entry construction, not in the
-  FSRS parameters. The uncommitted oracle work also gave the Set due date, Forget and filtered-off
-  rows a different history from the one the entry names, so that fixture is not yet the evidence the
-  entry asks for. The fix: settle, from Anki's own values for the six histories, which rows are
-  replayed, how `DeltaT` is measured, and what the type 2, 3 and 4 rows mean; only then change the
-  importer and `M18-51`. *Acceptance:* a note in the committed oracle README states the measured
-  rule with the values that establish it, and `M18-49` can then be executed against a fixture whose
-  histories are the ones it names. Evidence is the oracle's printed values and the golden.
+  was attempted twice without a result, and its oracle work is kept on an unmerged branch. Measured
+  against Anki 26.09.3: a review card with Good, Easy (+40 days), Easy (+60 days) gives stability
+  177.09 and difficulty 3.01, while replaying the kept rows gives 222.90 and 1.00; a review card with
+  Good, Again (+10 days), Again (+11 days) gives 0.493 and 9.558 against 0.256 and 9.129; a card whose
+  history begins with a relearning row gives 1.00 and 8.216 against 1.887 and 6.402. The two histories
+  that already had goldens (`partial` 300.0/3.799, `reset` 1.8868/6.402) still match, so the gap is in
+  row selection or in how a row becomes a review entry, not in the FSRS parameters. Three selection
+  rules were tried and each failed on the same cards: replaying every readable row from an empty
+  state; treating only a type 4 row whose factor is 0 as a reset; and ignoring type 3 rows. Truncating
+  the history at a learning row was tried as well and broke `partial_review`, which used to pass. The
+  fixture the attempt produced is not yet the evidence the entry asks for either: its Set due date,
+  Forget and filtered-off cards were built from learning/review histories instead of the single
+  review-start history the entry names, so the rows those rows produce cannot be compared with the
+  histories the entry specifies. The fix: settle, from Anki's own values for the six named histories,
+  which rows are replayed, how `DeltaT` is measured, and what the type 2, 3 and 4 rows mean; only then
+  change the importer and `M18-51`, and rebuild the fixture on the histories the entry names.
+  *Acceptance:* a note in the committed oracle README states the measured rule with the values that
+  establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
+  names. Evidence is the oracle's printed values and the golden.
+
+- [ ] **M18-80 Until the replay rule is measured, the approximation says so** — `deriveAnkiMemory` in
+  `internal/store/anki_import.go` starts a card's memory state from `MemoryStateFromSM2` whenever its
+  first kept revlog row is not a learning row, following `M18-37`. Anki computes those states
+  differently (see `M18-79`), so the imported stability and difficulty can be wrong and the card can be
+  scheduled earlier or later than Anki would schedule it. The fix: that branch writes one English
+  `slog.Warn` line per import run carrying the importing user's id, the number of cards that took the
+  approximation, and a statement that the value is not aligned with Anki. The branch's comment
+  states the same limitation and names `M18-79`. When `M18-49` lands, the warning and the limitation go
+  with it. *Acceptance:* a test captures the warning for a history whose first kept row is not a
+  learning row, and a history whose first kept row is a learning row writes none. Evidence is the raw
+  scoped `go test` and `go vet` output and the captured log line.
+
+
 
 ---
 
@@ -1033,6 +1052,7 @@ bluemonday-sanitised `internal/render` are gone.
 | Transitional card-kind layer removed (M17-36) | `GET /api/v1/card-types`, the description catalog and every `kind` alias are gone: a note write, the list filter, `DueCard`, `ExportRow`, the MCP tools and the exports speak note types only, and the flat `front_html`, `back_html`, `options_html`, `option_order`, `blanks` and top-level `media_base` fields are replaced by the `front` and `back` face objects. A note write that carries `kind` without `note_type` returns 400 `invalid_request`, the import schema requires `note_type`, and the deck list loses its kind filter and column. | Yes — the `kind` field, the card-types endpoint and the flat face fields are removed from the HTTP API, the MCP tools, the CSV/JSON export and the import schema |
 | Ruby shortcode migration (M17-38) | Migration `0017` rewrites `{{ruby:B\|R}}` in every note field as `<ruby>B<rt>R</rt></ruby>`, converting a wrapping `{{tts:…}}` afterwards with the base as its speech text; a marker the old renderer rejected stays literal, `plain_text` fields are untouched, `search_text` is recomputed for changed notes and `updated_at` stays. | No — a versioned migration is added; stored content changes |
 | Cards generated on a note type change (M17-60) | Changing a note's type creates the cards the target config generates for it and the note lacks, through the note write's card sync, so a basic note moved to a basic-and-reversed type gains its reverse card. A template-id permutation between two types succeeds through a two-phase write inside the transaction; a soft-deleted row that already holds a mapped target template is still refused. The impact, the 409 body, the audit row and the dialog carry `cards_added`. | No — one response field is added |
+| Anki memory state is approximate until the replay rule is measured (M18-79, M18-80, M18-49) | An `.apkg` import derives a missing FSRS memory state from SM-2 whenever a card's first kept revlog row is not a learning row, as `M18-37` defined; that value is not aligned with the state Anki computes for the same history, so an imported card can be scheduled earlier or later than Anki would schedule it. The approximation writes a warning on every import that uses it, and `M18-79` measures Anki's selection rule before the importer is changed. | No — the warning is additive; the scheduling difference is a known gap |
 | Import media outside the transaction, bounded imports (M17-61) | An `.apkg` import places its new media files at their content address before the database transaction opens, and removes exactly those files when the transaction rolls back, when the run is a dry run, or when placement fails; a file that existed before is never removed. `package_max_concurrent_imports` (environment variable, then settings row, then default 2) bounds simultaneous imports per process; the multipart, URL, upload-ticket and MCP entries take a slot before reading or downloading and answer 429 `deck_import_busy` at once when none is free. The CLI import takes no slot. | No — one configuration key and one 429 code are added; imported media is now written before the transaction |
 | Every image-occlusion shape checked against Anki (M17-62) | The oracle builds six image-occlusion notes through Anki's own API — rect, ellipse, polygon, text, two shapes under one cloze number, and inactive masks (`oi=1`, the hide-all guess-one mode) — and records their fields and rendered faces. The editor's shape model rebuilds each field byte for byte, so parsing and saving an untouched note reproduces Anki's stored value exactly. | No |
 | Unmapped templates the target declares keep their cards (M17-63) | A template the mapping leaves out keeps its card when the target config declares the same template id: the card keeps its id, template and `card_states` and counts only in `cards_moved`, so a change between two types that share `forward` and `reverse` no longer asks to confirm a removal that removes nothing. An unmapped template the target does not declare is still removed after confirmation. | No |
