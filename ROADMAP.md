@@ -559,47 +559,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `M18-26` and `cards_skipped`; one ledger row names `M18-19`. Evidence is the output of
   `grep -n -E 'M18-(19|23|24|25|26)\b|cards_skipped' ROADMAP.md` limited to the ledger section.
 
-- [ ] **M18-73 The export follows the scheduler's weight rule, and the rule is stated where it lives** —
-  `M18-38` moved the scheduler's weight rule into `PresetWeights` in `internal/store/preset_weights.go`.
-  `ankiWeights` in `internal/store/anki_export.go` still decodes the same column with its own copy of the
-  rule, and the two copies disagree on one value. `PresetWeights` passes an empty JSON array `[]` to
-  `fsrs.MigrateWeights`, which refuses it, so no scheduler can be built from that preset. `ankiWeights`
-  returns no weights for `[]`, so the export succeeds. The comment `M18-39` wrote on `ankiWeights` says
-  that the export refuses a value "because the scheduler refuses the same value"; for `[]` the scheduler
-  refuses and the export accepts. Reproduced on `main` on both drivers: the preset of `seedAnkiExportDeck`
-  with `weights_json` set to `[]`, exported with `IncludeWeights` and `IncludeDeckConfigs` on, returns no
-  error, while `PresetWeights` on the same text returns `store: migrate preset weights: fsrs: invalid
-  weights slice length: must be 17, 19, or 21`. No write path in the current code stores `[]`, so only a
-  row written by hand or by an earlier release reaches this case. Three comment and error gaps sit beside
-  it. First, the doc comment of `PresetWeights` names NULL, empty and `null`, but not a whitespace-only
-  value, which the code also treats as the defaults. It also does not say why the function lives in
-  `internal/store`: the progress import derives a memory state that the scheduler later continues from,
-  so both must decode the weights with one rule, and `internal/schedule` imports `internal/store`, so the
-  rule cannot live in the scheduler. Second, the comments on `NewScheduler` and `Parameters` in
-  `internal/schedule/scheduler.go` say that the default weights apply "when NULL" and name no other value.
-  Third, `Parameters` returns the error of `PresetWeights` without context, so a scheduler failure reads
-  `store: migrate preset weights: …`, while every other error of that function begins with `schedule:`.
-  The fix: `ankiWeights` keeps returning no weights for an empty string and for `null`, both after
-  trimming, and passes every other value to `PresetWeights`, returning its error wrapped with `%w`.
-  `ankiWeights` then calls neither `json.Unmarshal` nor `fsrs.MigrateWeights` itself, and `[]` fails the
-  export. The comment of `ankiWeights` states that the export accepts exactly the values the scheduler
-  accepts, and that the empty string and `null` write no weights. The `PresetWeights` comment names the
-  whitespace-only value and states the reason above. The `NewScheduler` and `Parameters` comments name
-  the four values that give the default weights: NULL, an empty string, a whitespace-only string and
-  `null`. `Parameters` wraps the error as `schedule: preset weights: %w`. `presetToPackage` in
-  `internal/store/package.go`, the `.edeck` export, keeps its own rule, because `M18-5` deletes it.
-  *Acceptance:* `grep -nE 'fsrs\.MigrateWeights\(|json\.Unmarshal\(' internal/store/anki_export.go`
-  prints nothing. A table test in `internal/store/preset_weights_test.go` calls `ankiWeights` with `""`,
-  `" null "`, `[]`, a 21-value set, a 17-value set, `[1,2,3]` and `not json`. It gets no weights and no
-  error for the first two, an error for `[]`, the `fsrs.MigrateWeights` result for the two sets, and an
-  error for the last two. A test in the same file exports the `seedAnkiExportDeck` deck with `weights_json`
-  `[]` on both drivers: with `IncludeWeights` on it gets an error, and with `IncludeWeights` off it gets a
-  package. A test in `internal/schedule` builds a scheduler from a preset whose `weights_json` is
-  `not json` and gets an error whose text begins with `schedule:`. `TestPresetWeights` and
-  `TestExportAnkiPackageRoundTrip` keep their results. Evidence is the grep output and the raw scoped
-  `go test` and `go vet` output of `internal/store` and `internal/schedule`, the PostgreSQL run with
-  `TEST_PG_DSN` set.
-
 - [ ] **M18-74 The `M18-42` refusal is tested on every transport, and the refusal cases carry names** —
   `M18-42` named five entries that dropped a `preset_id` sent with an existing-deck target and no
   `preset_mode`: the multipart route, the URL import, the upload ticket, and the `import_deck` and
