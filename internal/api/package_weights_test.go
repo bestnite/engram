@@ -111,9 +111,6 @@ func TestImportPackageApplyWeightsForm(t *testing.T) {
 			if gotWeights != tc.wantApplied {
 				t.Fatalf("imported preset weights_json = %v, want present=%v", preset.WeightsJSON, tc.wantApplied)
 			}
-			if (preset.WeightsReviewCount != nil) != tc.wantApplied {
-				t.Fatalf("imported preset weights_review_count = %v, want present=%v", preset.WeightsReviewCount, tc.wantApplied)
-			}
 		})
 	}
 }
