@@ -262,20 +262,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   establish it, and `M18-49` can then be executed against a fixture whose histories are the ones it
   names. Evidence is the oracle's printed values and the golden.
 
-- [ ] **M18-89 `AGENTS.md` section 2.7 states the preset modes and the re-import rule** — `M18-35` and
-  `M18-63` were closed (`f937c04`, `91933ee`) with only their ledger half done. Both closing commits say
-  that the `AGENTS.md` sentence "is proposed separately", but no commit changed `AGENTS.md`, and both
-  acceptances required the `AGENTS.md` diff. Section 2.7, under "Importing an `.apkg`", still says "the
-  package's deck configuration becomes the new deck's preset". Since `M18-4`, that holds only for
-  `preset_mode` `new`: `reuse` points the new deck at the caller's preset, and `copy` points it at a copy
-  of that preset. The same paragraph says that card states and the review log are applied "only when the
-  import asks for them", and does not state the rule `M18-15` and `M18-57` settled. A card whose
-  `last_review_at` in Engram is not earlier than the package's keeps the engram state; a NULL package
-  time counts as the oldest; and a package review is written only when it is later than the importer's
-  latest review of that card. The fix: the "Importing an `.apkg`" paragraph names the three modes and
-  states the re-import rule in those words. Only the parent edits `AGENTS.md`, with the maintainer
-  present. *Acceptance:* section 2.7 of `AGENTS.md` names `reuse`, `copy` and `last_review_at`. Evidence
-  is the `AGENTS.md` diff.
 
 ---
 

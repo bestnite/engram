@@ -152,10 +152,24 @@ this file, and commit messages.
   burying, display order, new-card position, leeches, subdeck limits, auto-advance, timers), deck
   hierarchy behaviour, and Anki's browser, search syntax, sync, statistics and add-ons. Adding any of
   them is a new decision, not a compatibility fix.
+- **One deck-package format.** `.apkg` is the only deck package engram reads or writes; the earlier
+  `.edeck` JSON document was removed with `M18-5`, together with the `export_deck` MCP tool and its
+  upload-ticket branch. The reader decides by content, never by the file name: an archive named `.zip`
+  whose entries hold an Anki collection is accepted.
 - **Importing an `.apkg`.** Content, note types (with the `engram` answer-spec key when present) and
-  media always travel; the package's deck configuration becomes the new deck's preset; card states and
-  the review log are applied to the importer's own account only when the import asks for them, and
-  every imported card starts as new otherwise.
+  media always travel; the new deck's preset is built from the package's deck configuration for
+  `preset_mode` `new` (the default), points at the caller's own preset for `reuse`, or at a copy of it
+  for `copy`, and a `preset_id` is refused for every target other than `new_deck`. The package's FSRS
+  weights are written only with `apply_weights` on, only for `new_deck`, and only when
+  `fsrs.MigrateWeights` accepts them; the preset keeps at most 36 500 days and the default steps when
+  the package's values cannot be scheduled. Card states and the review log are applied to the
+  importer's own account only when the import asks for them, every imported card starts as new
+  otherwise, and a re-import never overwrites progress newer than the package's (the importer's row
+  wins; only review rows later than the importer's latest review are written). A revlog row that
+  cannot be read fails an import with `include_progress` on; a card row that cannot be read is skipped,
+  counted in `cards_skipped`, and its review rows are counted and logged. Card memory states derived
+  from a package's review history are an approximation that is logged at import time: they are not yet
+  aligned with what Anki computes for the same history (`M18-49`, `M18-51`, `M18-79`).
 - **Export format.** engram writes an `.apkg` the reference release imports: the collection is legacy
   schema 11 in `collection.anki21`; note types, notes, cards, media and one deck configuration travel;
   the caller's own card states, review log and FSRS weights travel only when requested; and answer
