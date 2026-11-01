@@ -1757,6 +1757,7 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	for _, r := range pkg.Reviews {
 		if pkg.SkippedCardIDs[r.CardID] {
 			report.ReviewsDiscarded++
+			report.ProgressDiscarded = true
 			discarded++
 			continue
 		}

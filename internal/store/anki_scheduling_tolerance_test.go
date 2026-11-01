@@ -94,7 +94,7 @@ func TestAnkiImportSchedulingTolerance(t *testing.T) {
 	}
 }
 
-func TestAnkiImportReportsSkippedCard(t *testing.T) {
+func TestAnkiImportProgressDiscardedForSkippedCard(t *testing.T) {
 	pkg, err := anki.ReadFile(ankiFixturePath("stock.anki2.apkg"))
 	if err != nil {
 		t.Fatal(err)
@@ -128,6 +128,9 @@ func TestAnkiImportReportsSkippedCard(t *testing.T) {
 					}
 					if report.ReviewsDiscarded != 1 || report.ReviewsSkipped != 0 || report.ReviewsApplied != 0 {
 						t.Fatalf("report = %+v", report)
+					}
+					if !report.ProgressDiscarded {
+						t.Fatalf("progress_discarded = false, want true: %+v", report)
 					}
 					var count int64
 					if err := db.Model(&Review{}).Where("user_id = ?", user).Count(&count).Error; err != nil || count != 0 {

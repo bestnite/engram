@@ -238,7 +238,7 @@ describe('ImportView — package weights', () => {
     expect(reportSection()?.textContent?.includes(formatMessage('zh-CN', 'package.report.deck_config_skipped'))).toBe(skipped);
   });
 
-  it.each(['zh-CN', 'en'] as const)('shows the progress label and boolean weight rows in %s', async (locale) => {
+  it.each(['zh-CN', 'en'] as const)('shows the progress and boolean weight rows in %s', async (locale) => {
     setLocale(locale);
     vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
     const importPackage = vi.spyOn(apiClient, 'importDeckPackage');
@@ -247,15 +247,23 @@ describe('ImportView — package weights', () => {
     setFile('import-file', new File(['x'], 'deck.apkg'));
     await flush();
     for (const value of [true, false]) {
-      importPackage.mockResolvedValueOnce(reportFixture({ progress_discarded: true, weights_applied: value, weights_discarded: value, weights_invalid: value }));
+      importPackage.mockResolvedValueOnce(
+        reportFixture({
+          progress_discarded: value,
+          weights_applied: value,
+          weights_discarded: value,
+          weights_invalid: value,
+        })
+      );
       submitForm();
       await flush();
       const rows = Array.from(reportSection()!.querySelectorAll('dt'));
-      const label = locale === 'en' ? 'Package progress not imported' : '未导入包内进度';
-      expect(rows.some((row) => row.textContent === label)).toBe(true);
-      for (const key of ['weights_applied', 'weights_discarded', 'weights_invalid']) {
+      for (const key of ['progress_discarded', 'weights_applied', 'weights_discarded', 'weights_invalid']) {
         const row = rows.find((el) => el.textContent === formatMessage(locale, `package.report.${key}`));
-        expect(row?.nextElementSibling?.textContent).toBe(formatMessage(locale, value ? 'package.value.yes' : 'package.value.no'));
+        expect(row).toBeTruthy();
+        expect(row?.nextElementSibling?.textContent).toBe(
+          formatMessage(locale, value ? 'package.value.yes' : 'package.value.no')
+        );
       }
     }
   });
