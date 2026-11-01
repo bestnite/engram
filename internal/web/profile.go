@@ -97,6 +97,15 @@ func (s *Server) passwordPatch(c *gin.Context) {
 		passwordError(c, status, code, message)
 		return
 	}
+	// Rotate the credential the browser holds: the old cookie is revoked and the response carries a new session ID and
+	// CSRF token, so a copy taken before the change no longer authenticates.
+	if sess != nil {
+		if _, err := s.sessions.RotateSession(ctx, c, u.ID, sess.ID); err != nil {
+			s.logger.Error("rotate session after password change failed", "user_id", u.ID, "error", err)
+			passwordError(c, http.StatusInternalServerError, "internal_error", "An internal error occurred.")
+			return
+		}
+	}
 	detail := map[string]any(nil)
 	if initial {
 		detail = map[string]any{"initial": true}

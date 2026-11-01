@@ -900,7 +900,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   change, notify the old address, revoke the other sessions, and add a negative test that a session without
   the password cannot change the email.
 
-- [ ] **M19-39 A password change keeps the same session ID, so a copied session cookie survives it** —
+- [x] **M19-39 A password change keeps the same session ID, so a copied session cookie survives it** —
   *should-fix.* `ChangePasswordKeepingSession` keeps `keepSessionID` and revokes only the other rows
   (`internal/auth/account.go:228-264`, `internal/store/session.go:69-85`), and the web handler passes the
   current session's ID (`internal/web/profile.go:72-84`). Keeping the user signed in is reasonable, but the
@@ -911,6 +911,33 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   cookie. *Acceptance:* when keeping the current login, create a new session row with a new ID and CSRF token,
   revoke the old one and set the new cookie; a regression copies the pre-change cookie and expects 401 while
   the new cookie works.
+  *Closed by this commit (`fix(auth): rotate the session when the password changes`).* After the password
+  write succeeds, `passwordPatch` (`internal/web/profile.go:104`) calls `Manager.RotateSession`
+  (`internal/auth/session.go:167`), which builds a fresh session row and hands out its cookie;
+  `SessionStore.Rotate` (`internal/store/session.go:84`) creates the replacement and revokes the old row
+  (scoped to the same user) in one transaction, so a failure cannot leave both usable. The previous
+  `ChangePasswordKeepingSession` call still keeps this device signed in until the rotation, which then
+  revokes that exact session ID; the other devices were already revoked.
+  `TestSelfPasswordChangeRotatesSession` (`internal/web/password_reset_keys_test.go`) changes the password
+  through `PATCH /api/v1/settings/password`, asserts the response carries a new `engram_session` cookie, that
+  the pre-change cookie answers `"authenticated":false`, that the new cookie answers
+  `"authenticated":true`, that the old row has `revoked_at`, and that exactly one active row remains with a
+  different ID and CSRF token. Raw output of
+  `go test ./internal/web/ -run 'TestSelfPasswordChangeRotatesSession|TestSelfPasswordChangeKeepsAPIKeys|TestForgotPasswordResetRevokesAPIKeys' -count=1 -v`:
+  ```
+  === RUN   TestForgotPasswordResetRevokesAPIKeys
+  --- PASS: TestForgotPasswordResetRevokesAPIKeys (0.04s)
+  === RUN   TestSelfPasswordChangeKeepsAPIKeys
+  --- PASS: TestSelfPasswordChangeKeepsAPIKeys (0.05s)
+  === RUN   TestSelfPasswordChangeRotatesSession
+  --- PASS: TestSelfPasswordChangeRotatesSession (0.04s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/web	0.151s
+  ```
+  With only the three production changes reverted, the same test failed with
+  `pre-change cookie still authenticates: {"authenticated":true,"csrf_token":"PKyc…","user":{…}}` and
+  `password change set cookies [], want a new "engram_session" cookie`. `go test ./internal/auth/ -run
+  'TestSession|TestAuthSuite' -count=1` and `go test ./internal/store/ -run 'TestSession' -count=1` pass.
 
 - [ ] **M19-40 JSON endpoints have no request-body cap and the server has no read timeout** — *should-fix.*
   `newHTTPServer` sets only `ReadHeaderTimeout` and `IdleTimeout` (`internal/web/server.go:443-459`), and the

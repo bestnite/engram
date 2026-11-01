@@ -161,6 +161,36 @@ func (m *Manager) Logout(ctx context.Context, c *gin.Context) error {
 	return nil
 }
 
+// RotateSession replaces the current session with a fresh row (new ID and CSRF token), revokes the old row in the
+// same transaction, and hands out the new cookie. A password change uses it so a copy of the pre-change cookie stops
+// authenticating even though this device stays signed in.
+func (m *Manager) RotateSession(ctx context.Context, c *gin.Context, userID uint64, oldSessionID string) (*store.Session, error) {
+	if oldSessionID == "" {
+		return nil, errors.New("auth: no session to rotate")
+	}
+	id, err := randomToken(32)
+	if err != nil {
+		return nil, err
+	}
+	csrf, err := randomToken(32)
+	if err != nil {
+		return nil, err
+	}
+	now := m.now()
+	sess := &store.Session{
+		ID:        id,
+		UserID:    userID,
+		CSRFToken: csrf,
+		CreatedAt: now,
+		ExpiresAt: now.Add(m.ttl),
+	}
+	if err := m.sessions.Rotate(ctx, oldSessionID, sess, now); err != nil {
+		return nil, err
+	}
+	m.setCookie(c, id)
+	return sess, nil
+}
+
 // RevokeAllForUser revokes all sessions of a user: password change, disable and forced logout go through here.
 func (m *Manager) RevokeAllForUser(ctx context.Context, userID uint64) error {
 	return m.sessions.RevokeAllForUser(ctx, userID, m.now())

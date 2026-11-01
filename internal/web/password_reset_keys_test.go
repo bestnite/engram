@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"gorm.io/gorm"
@@ -143,5 +144,69 @@ func TestSelfPasswordChangeKeepsAPIKeys(t *testing.T) {
 	}
 	if code := apiGetDecks(t, rest, k1.Plaintext); code != http.StatusOK {
 		t.Errorf("old api key after self change = %d, want 200", code)
+	}
+}
+
+// TestSelfPasswordChangeRotatesSession is the acceptance for M19-39: a self-service password change keeps the browser
+// signed in but must not keep the same session ID. The old cookie is revoked, the response carries a new one, and the
+// new session has its own CSRF token, so a copy taken before the change cannot authenticate afterwards.
+func TestSelfPasswordChangeRotatesSession(t *testing.T) {
+	ts := newSecurityServer(t, true)
+	member, err := ts.srv.accounts.CreateLocalUser(context.Background(), auth.CreateUserInput{
+		Username: "rotating", Email: "rotating@example.com", Password: "Sup3rSecret!", Role: store.RoleUser, Locale: "en",
+	})
+	if err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	cookies, csrf := loginJSON(t, ts.srv, ts.db, "rotating", "Sup3rSecret!")
+	var before store.Session
+	if err := ts.db.Where("user_id = ?", member.ID).Order("created_at desc").First(&before).Error; err != nil {
+		t.Fatalf("load pre-change session: %v", err)
+	}
+
+	rec := jsonRequest(t, ts.srv, http.MethodPatch, "/api/v1/settings/password",
+		`{"old_password":"Sup3rSecret!","new_password":"N3wSup3rSecret!"}`, cookies, csrf)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("PATCH /api/v1/settings/password status = %d, want 204 (body %s)", rec.Code, snippet(rec.Body.String()))
+	}
+
+	oldSession := getWithCookies(t, ts.srv, "/api/v1/auth/session", cookies)
+	if !strings.Contains(oldSession.Body.String(), `"authenticated":false`) {
+		t.Errorf("pre-change cookie still authenticates: %s", snippet(oldSession.Body.String()))
+	}
+
+	var newCookie *http.Cookie
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == ts.srv.sessions.CookieName() && cookie.Value != "" {
+			newCookie = cookie
+		}
+	}
+	if newCookie == nil {
+		t.Fatalf("password change set cookies %v, want a new %q cookie", rec.Result().Cookies(), ts.srv.sessions.CookieName())
+	}
+	newSession := getWithCookies(t, ts.srv, "/api/v1/auth/session", []*http.Cookie{newCookie})
+	if !strings.Contains(newSession.Body.String(), `"authenticated":true`) {
+		t.Errorf("new cookie does not authenticate: %s", snippet(newSession.Body.String()))
+	}
+
+	var old store.Session
+	if err := ts.db.First(&old, "id = ?", before.ID).Error; err != nil {
+		t.Fatalf("reload old session: %v", err)
+	}
+	if old.RevokedAt == nil {
+		t.Errorf("pre-change session %s was not revoked", before.ID)
+	}
+	var active []store.Session
+	if err := ts.db.Where("user_id = ? AND revoked_at IS NULL", member.ID).Find(&active).Error; err != nil {
+		t.Fatalf("list active sessions: %v", err)
+	}
+	if len(active) != 1 {
+		t.Fatalf("active sessions after change = %d, want exactly the rotated one", len(active))
+	}
+	if active[0].ID == before.ID {
+		t.Errorf("session ID did not rotate: still %s", before.ID)
+	}
+	if active[0].CSRFToken == "" || active[0].CSRFToken == before.CSRFToken {
+		t.Errorf("CSRF token did not rotate with the session")
 	}
 }

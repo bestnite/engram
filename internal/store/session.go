@@ -78,6 +78,26 @@ func (s *SessionStore) RevokeAllForUserExceptTx(ctx context.Context, tx *gorm.DB
 	return nil
 }
 
+// Rotate creates replacement and revokes oldID in one transaction, scoped to the same user. A credential change uses
+// it so the old session ID stops authenticating while the user stays signed in under the new one; creating the new row
+// and revoking the old one together means a failure leaves neither half applied.
+func (s *SessionStore) Rotate(ctx context.Context, oldID string, replacement *Session, at time.Time) error {
+	if replacement == nil || replacement.ID == "" {
+		return fmt.Errorf("rotate session: replacement is required")
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(replacement).Error; err != nil {
+			return fmt.Errorf("create replacement session: %w", err)
+		}
+		if err := tx.Model(&Session{}).
+			Where("id = ? AND user_id = ? AND revoked_at IS NULL", oldID, replacement.UserID).
+			Update("revoked_at", at).Error; err != nil {
+			return fmt.Errorf("revoke replaced session: %w", err)
+		}
+		return nil
+	})
+}
+
 // Touch updates the session's last-active time; best effort, a failure should not interrupt the request.
 func (s *SessionStore) Touch(ctx context.Context, id string, at time.Time) error {
 	return s.db.WithContext(ctx).Model(&Session{}).Where("id = ?", id).
