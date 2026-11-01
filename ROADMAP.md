@@ -668,30 +668,6 @@ entry that changes `internal/store/anki_progress_import_test.go`.
   `include_progress` on the import succeeds and reports `reviews_skipped` 1. Evidence is the raw scoped
   `go test` and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set.
 
-- [ ] **M18-66 Only a REAL value skips a card, and a refused REAL value names its column** — the
-  `M18-26` rule makes a REAL value in `cards.type`, `cards.queue`, `cards.odid` or `cards.flags` skip the
-  card row. `readCards` in `internal/anki/sqlite.go` scans those four columns into `any` and then into
-  `sql.NullInt64`, and skips the row whenever that scan fails or yields NULL. A TEXT value that is not a
-  number therefore skips the card too, although the rule names REAL only; before `M18-26` such a value
-  failed the import. The quantity columns kept the old behaviour, so the two kinds of column disagree.
-  Reproduced on `main` on both drivers with the schema-11 stock package: `cards.flags` = `'x'` imports
-  with `cards_skipped` 1, while `cards.due` = `'x'` fails with `package_bad_format`. Second defect:
-  `rejectRealIntegers` turns a REAL value into NULL, so the error text that reaches the client describes a
-  NULL. Reproduced on `main`: a REAL `cards.nid` fails with the message `not a valid Anki package: anki
-  package: cannot decode collection: cards table: sql: Scan error on column index 1, name "CASE WHEN
-  typeof(nid) = 'real' THEN NULL ELSE nid END": converting NULL to int64 is unsupported`, and a REAL
-  `revlog.ease` with `include_progress` on fails with the same kind of text. The fix: a card row is
-  skipped only when one of the four code columns holds a REAL value; any other value the scan refuses
-  fails the import with `ErrCorruptCollection`, as before `M18-26`. A REAL value in `cards.nid`,
-  `cards.did`, `cards.ord`, `revlog.cid`, `revlog.ease` or `revlog.type` yields an `ErrCorruptCollection`
-  error whose text names the table and the column and says that the value is REAL, in the form
-  `cards.nid holds a REAL value`. The `M18-26` rule itself does not change. *Acceptance:* the table of
-  `TestRealColumnRules` in `internal/anki/scheduling_test.go` gains a TEXT `'x'` case for each of the
-  four code columns, which returns `ErrCorruptCollection` from `readCards` and leaves `CardsSkipped` at
-  0. Each `fail` case and each `revlog` case checks that the error text contains `<table>.<column>` and
-  `REAL` and does not contain `NULL`. Every existing case keeps its result. Evidence is the raw scoped
-  `go test` and `go vet` output.
-
 - [ ] **M18-67 The import page shows `cards_skipped`** — since `M18-26` the import report carries
   `cards_skipped`, the number of package card rows that could not be read and were not imported.
   `PackageImportReport` in `frontend/src/lib/api/types.ts` has no such field, and `reportRows` in
