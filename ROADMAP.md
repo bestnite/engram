@@ -126,6 +126,18 @@ entry that does not touch that file. `M18-54` lands after `M18-47` to `M18-51`, 
 comments. `M18-55` edits this file, so only the parent does it, with the maintainer present, in the same
 change as `M18-22`.
 
+`M18-56` to `M18-64` fix defects that a review of the landed `M18-8`, `M18-14`, `M18-15`, `M18-16`,
+`M18-17` and `M18-18` (commits `a0e9326` to `c3888b8`) found. They also land before `M18-5`. `M18-56` and
+`M18-57` change `internal/store/anki_import.go`, so each runs alone like the entries above, and `M18-57`
+lands after `M18-56`, because both change the same block of `importAnkiProgress`. `M18-58` and `M18-61`
+both change `internal/store/package_import.go`, so they never run at the same time. `M18-59` waits for a
+maintainer decision. `M18-60` and `M18-61` both change `frontend/src/lib/views/` and the locale catalogs,
+so they never run at the same time, and neither runs beside `M18-6`. `M18-62` changes only tests and
+lands after `M18-56` and `M18-57`, which change the code it measures. `M18-63` edits this file and
+`AGENTS.md`, so only the parent does it, with the maintainer present, in the same change as `M18-22` and
+`M18-55`. `M18-64` changes only `README.md`, lands after `M18-21`, `M18-46` and `M18-57`, and never runs
+beside `M18-21` or `M18-46`, which edit the same file.
+
 - [ ] **M18-5 Remove `.edeck`** — delete the `.edeck` path: `internal/store/package.go`, the `.edeck`
   half of `internal/store/package_import.go`, `internal/store/package_document.go`,
   `schema/deck-package.schema.json`, `schema/examples/deck-package.example.json`, the `.edeck` section
@@ -460,6 +472,206 @@ change as `M18-22`.
   the ledger row that names `M18-2` also names `M18-10`, `M18-11`, `M18-12`, `M18-36` and `M18-37`.
   Evidence is the output of `grep -n -E 'M18-(10|11|12|36|37)\b' ROADMAP.md` limited to the ledger
   section.
+
+- [ ] **M18-56 A progress import never overwrites a review committed during the import** — since
+  `M18-16`, `importAnkiProgress` in `internal/store/anki_import.go` loads the importer's `card_states`
+  rows once, in batches, before its card loop, and later updates a row with
+  `Where("card_id = ? AND user_id = ?")`, without a lock and without a version check. Since `M18-15`, the
+  decision whether the local row wins is also taken from that early copy. On PostgreSQL a review
+  submission for a card of the import can commit between the load and the update:
+  `loadStateForUpdate` in `internal/schedule/submit.go` finds the row unlocked. The import then writes
+  the package state over the review's state and stores `version` as the loaded version plus 1. That is
+  the same number the submission wrote, so a client holding it gets no `409`. The package's review rows
+  are also appended after the submission's row, so an undo removes an imported row instead of the
+  user's own review, the case `M18-15` excluded. A deployment on SQLite is not affected, because
+  `store.Open` gives SQLite one connection, so a submission cannot run inside an import. Reproduced on
+  `main` for the state, on both drivers, with `importAnkiProgress` called outside a transaction. A GORM
+  callback runs right after the batched `card_states` load and applies the update a submission makes
+  (reps 99, `version` 0 to 1, `last_review_at` now). The import of a review card with `lrt` 1600000000
+  then stores reps 7, `last_review_at` 2020-09-13 and `version` 1, with `progress_applied` 1. The fix
+  has two parts. First,
+  on PostgreSQL the batched load takes `clause.Locking{Strength: "UPDATE"}`, as `loadStateForUpdate`
+  does, so a submission for a loaded card waits for the import's commit and then fails its version
+  check with `409`. Second, the create of a state row that did not exist at the load uses
+  `clause.OnConflict{DoNothing: true}`. When that create inserts no row, the card counts in
+  `states_skipped`, and none of its package review rows is written. *Acceptance:* two tests in
+  `internal/store/anki_progress_import_test.go`. The first runs on PostgreSQL only, gated by
+  `internal/pgtest`. It runs `importAnkiProgress` inside `db.Transaction`, for a card whose package
+  `lrt` is later than the importer's `last_review_at`, so the import writes the package state. A
+  callback registered after the `card_states` load starts a goroutine. On a second connection, the
+  goroutine runs `UPDATE card_states SET version = version + 1 WHERE card_id = ? AND user_id = ? AND
+  version = ?` with the loaded version. The callback then waits 200 ms. After the import commits, that
+  update has affected 0 rows, and the stored row holds the package state. The second test
+  runs on both drivers. A callback inserts a state row, after the load, for a card that had none. The
+  import counts that card in `states_skipped`, keeps the inserted row and writes none of the card's
+  package review rows. Evidence is the raw scoped `go test` and `go vet` output, the PostgreSQL run with
+  `TEST_PG_DSN` set.
+
+- [ ] **M18-57 A learning card's package time is not its due date** — `M18-15` keeps the importer's
+  `card_states` row unless the package time is later than the row's `last_review_at`. The package time
+  is `state.LastReviewAt`, which the `M18-11` chain sets from `lrt`, then from the last kept revlog row,
+  then from the due date minus `ivl` for a review or relearning card. A learning card that has none of
+  these keeps NULL, by the `M18-11` rule. When `state.LastReviewAt` is NULL and the card has a due date,
+  the comparison computes the due date minus `ivl` a second time, in its own copy of that code. Only a
+  learning card reaches that copy. For a learning card, `ivl` is 0, so the package time becomes the
+  card's next due date. That date lies after the package's last review.
+  Reproduced on `main` on both drivers: a learning card (type 1, queue 1, `due` 1600000600, `ivl` 0,
+  `cards.data` `{"s":3,"d":5}`, no `lrt`, no revlog row). First, the importer's row with reps 42 and
+  `last_review_at` 1600000300 is replaced by the package state, with reps 9, `last_review_at` NULL and
+  `progress_applied` 1. Second, each later import of the same package again reports `progress_applied`
+  1 and raises `version`, from 1 to 2 and then to 3. A repeated import therefore invalidates the
+  `expected_version` of an open review session, which `M18-8` had removed. Two leftovers sit in the same
+  block. `equalAnkiState`, which `M18-8` added, has had no caller since `M18-15`. The `reviews` rows
+  loaded into `reviewKeys` can never match: `M18-15` skips every package row that is not later than the
+  importer's latest review, and every loaded row is at or before it. The state comparison also has no
+  comment, so the rule the maintainer chose for `M18-15` is written only in a commit message. The fix: the
+  comparison uses `state.LastReviewAt` as the chain leaves it, and the second due-minus-`ivl` block is
+  deleted. A NULL package time counts as the zero time, the way a new card already counts. It therefore
+  never replaces an existing row, and a zero time on both sides writes nothing. `equalAnkiState` is
+  deleted. The batched `reviews` query feeds only `latestReview`, and `reviewKeys` holds only the rows
+  this import appends. A comment on the comparison states the rule and its reasons. A later local review
+  wins, because it is newer progress. A later package review writes the package state. Equal times
+  write nothing, so a repeated import changes no `version`. A NULL package time counts as oldest,
+  because the package has no evidence of a later review. *Acceptance:* a table test in
+  `internal/store/anki_progress_import_test.go` imports the learning card above. With the importer's row
+  in place, the row is unchanged and `states_skipped` is 1. With no row, three imports in a row leave
+  `version` at its value after the first import, and the second and third report `progress_applied` 0
+  and `states_skipped` 1. `TestAnkiProgressLocalWins` and `TestUndoImportedReviewMemory` still pass.
+  `git grep -n equalAnkiState` is empty. Evidence is the raw scoped `go test` and `go vet` output, the
+  PostgreSQL run with `TEST_PG_DSN` set, and the grep output.
+
+- [ ] **M18-58 `.edeck` import applies the scheduler limits `M18-17` gave `.apkg`** —
+  `createPresetFromPackage` in `internal/store/package_import.go` copies `maximum_interval_days`,
+  `learning_steps` and `relearning_steps` of `preset.json` unchecked. It replaces only a maximum
+  interval that is 0 or less. It writes the row with `tx.Create`, not `PresetStore.Create`, so the
+  36 500-day bound `M18-17` added to `validatePresetForWrite` never runs on this path. Reproduced on
+  `main` on both drivers: a package preset with `maximum_interval_days` 50 000 and `learning_steps`
+  `-1m` is stored with both values. go-fsrs v4.0.0 `NewFSRS` then finds `Parameters.Validate` failing
+  and schedules the deck with `fsrs.DefaultParam()`. A preset with weights whose first value is 0.5 and
+  retention 0.85, and with either of these values, gets the default first weight 0.212 and retention
+  0.9. The fix applies the rule `createAnkiPreset` follows since `M18-17`. A maximum interval above
+  36 500 is stored as 36 500. A step list whose parts `ankiStepMinutes` in
+  `internal/store/anki_export.go` refuses, or which holds a negative step, keeps the preset's default
+  steps. The relearning steps follow the same rule. If `M18-5` lands first, this entry is deleted with
+  a commit message that names `M18-5`. *Acceptance:* a table test in `internal/store` calls
+  `createPresetFromPackage` with a maximum interval of 50 000, learning steps `-1m`, learning steps
+  `abc` and relearning steps `-10m`, and checks the stored preset. Every existing case of
+  `TestImportPackageApplyWeights` keeps its result. Evidence is the raw scoped `go test` and `go vet`
+  output.
+
+- [ ] **M18-59 Stored presets the scheduler cannot use are repaired** — v0.2.0 and v0.2.1 accepted every
+  positive `maximum_interval_days` on `POST` and `PATCH /api/v1/presets`, because
+  `validatePresetForWrite` checked only `<= 0`. `.apkg` imports before `238ede0` copied the package's
+  maximum interval and steps unchecked, and `.edeck` imports do so until `M18-58` lands. A deployed
+  database can therefore hold presets that go-fsrs v4.0.0 refuses. A maximum interval above 36 500, or a
+  negative step, makes `NewFSRS` replace every parameter with `fsrs.DefaultParam()`. A step stored as
+  `NaNm` or `+Infm` makes `schedule.NewScheduler` return an error, so every preview and every review
+  submission in the deck fails. Since `M18-17`, such a preset also cannot be saved. Reproduced on `main`:
+  `PresetStore.Update` of a preset with 50 000 days refuses a rename with
+  `maximum interval days must be between 1 and 36500: 50000`. The fix is a versioned migration, numbered
+  after the last entry of `BuiltinMigrations` in `internal/store/migrate.go` when the task starts. It
+  sets `maximum_interval_days` to 36 500 where it is above 36 500. It sets `learning_steps` to
+  `DefaultLearningSteps` where a part of the stored text is refused by `ankiStepMinutes` or is negative.
+  The same rule applies to `relearning_steps`, with `DefaultRelearningSteps`. It changes no other
+  column. The maintainer has decided that a versioned migration may rewrite stored preset values: the
+  migration clamps a maximum interval above 36 500 to 36 500, replaces a negative or non-finite step set
+  with the default steps, and records in its doc comment how many rows it changed. Rewriting is allowed
+  because a preset the scheduler refuses is unusable as stored, and the alternative — leaving rows that
+  go-fsrs replaces wholesale at schedule time yet display as imported values — is the failure this entry
+  exists to remove. The migration must be idempotent and must not touch a preset whose values are already
+  acceptable.
+  *Acceptance:* a migration test in `internal/store`, on both drivers, seeds presets with 50 000 days,
+  `-1m`, `NaNm`, `+Infm` and one valid preset. After the migration, the first four hold the repaired
+  values and the valid preset is unchanged. A second run changes nothing. A test in `internal/schedule`
+  builds the scheduler from each repaired value and asserts that its go-fsrs parameters hold the
+  preset's maximum interval, steps and first weight, which shows that `NewFSRS` did not reset them.
+  Evidence is the raw scoped `go test` and `go vet` output, the PostgreSQL run with `TEST_PG_DSN` set.
+
+- [ ] **M18-60 The preset page and API state the 36 500-day bound** — since `M18-17` the store refuses a
+  maximum interval above 36 500. The layers in front of it still describe the old rule.
+  `parsePresetRequest` in `internal/web/presets_api.go` refuses only `<= 0`, and its doc comment says
+  "maximum interval a positive integer". The English fallback message for `preset_max_interval_invalid`
+  says "The maximum interval must be a positive number of days." `frontend/src/lib/views/PresetsView.svelte`
+  refuses only `<= 0` on the client. It shows `presets.form.error.max_interval` ("Maximum interval must
+  be a positive whole number of days." / "最大间隔必须是正整数天数。") for the server's
+  `preset_max_interval_invalid` as well. A user who types 40 000 therefore sees a message that 40 000
+  satisfies. The fix: `parsePresetRequest` returns `preset_max_interval_invalid` for a value above
+  36 500 as well, and its doc comment says so. The fallback message and both catalogs' text for
+  `presets.form.error.max_interval` state the range 1 to 36 500. `PresetsView.svelte` refuses a value
+  above 36 500 before sending. The catalog lines keep their keys and their positions; only their text
+  changes, and the two catalogs keep identical key sets. *Acceptance:* a handler test in
+  `internal/web/presets_api_test.go` shows that 36 501 is refused with the new message on create and on
+  update. A component test shows that 36 501 displays the error and sends no request, and that 36 500
+  is sent. Evidence is the raw scoped `go test` and `go vet` output and the component test output.
+
+- [ ] **M18-61 The import report labels say what an `.apkg` import did** — `M18-14` made
+  `progress_discarded` true for an `.apkg` import that carries progress and has `include_progress` off.
+  `frontend/src/lib/views/ImportView.svelte` labels that row `package.report.progress_discarded`, which
+  reads "Other users’ progress dropped" / "舍弃他人进度". That text describes the `.edeck` case only, where
+  the field means that another user's progress was refused. An Anki package has no users. The same view
+  prints `weights_applied`, `weights_discarded` and, since `M18-18`, `weights_invalid` as `1` or `0`, while
+  `dry_run` and `progress_discarded` print the catalog's yes and no. In
+  `internal/store/package_import.go`, `ProgressDiscarded` has no doc comment for its two meanings, and
+  `WeightsInvalid` has none at all, while its neighbours have one. The fix: the text of
+  `package.report.progress_discarded` in both catalogs states that the package's progress was not
+  imported, without naming other users. The line keeps its key and position, and the two catalogs keep
+  identical key sets. The view prints the three weight rows as yes or no. `ProgressDiscarded` gains a
+  comment that states the `.edeck` meaning and the `.apkg` meaning. `WeightsInvalid` gains a comment
+  that states the four conditions `M18-18` defined. *Acceptance:* a component test shows the new
+  `progress_discarded` text, and shows yes or no in each of the three weight rows for `true` and `false`.
+  The scoped `go vet` of `internal/store` passes. Evidence is the component test output and the diff.
+
+- [ ] **M18-62 The batching test measures many cards and skipped notes** — `TestAnkiProgressBatchStatements`
+  in `internal/store/anki_progress_import_test.go` imports one card with 5 000 revlog rows. It catches a
+  query per revlog row. It cannot catch a query per card: with one card, the per-card `card_states`
+  lookup that `M18-16` removed runs one statement, as the batched load does. It never runs the batched
+  lookup of skipped notes' cards, because it calls `importAnkiProgress` directly and that lookup lives in
+  `importAnkiInTx`. The fix adds a case. A package with 1 000 cards, each with one review row, is
+  imported once, and then imported again through `importAnkiInTx` with `into_deck`, `on_conflict`
+  `skip` and `include_progress` on, so every note is skipped. A GORM query callback counts the
+  `SELECT` statements on `card_states`, `reviews` and `cards` during the second import. *Acceptance:* in
+  the second import, the `SELECT` statements on `card_states` and `reviews` number at most 4. The second
+  import of 1 000 cards runs at most 2 more `SELECT` statements on `cards` than the same import of 10
+  cards. With the batched
+  `card_states` load replaced by a per-card query for one run, the test fails. Evidence is the raw
+  scoped `go test` and `go vet` output of both runs, the PostgreSQL one with `TEST_PG_DSN` set.
+
+- [ ] **M18-63 The release ledger and `AGENTS.md` record `M18-14` to `M18-18`** — `M18-22` writes each
+  ledger row from the commits whose messages name that row's ID. The commits of `M18-14`, `M18-15`,
+  `M18-17` and `M18-18` name only their own IDs. Their changes are visible through the HTTP API, the
+  MCP tools and the CLI. One of them changes a route that v0.2.0 and v0.2.1 already shipped. That route
+  is `POST` and `PATCH /api/v1/presets`, which since `M18-17` refuse a `maximum_interval_days` above
+  36 500 with 400 `preset_max_interval_invalid`. That needs its own ledger row, marked not breaking in
+  shape: a request that was accepted is now refused. The `M18-2` row would leave out four points. First,
+  with `include_progress` off, `states_discarded` counts only cards with scheduling state, and
+  `progress_discarded` is true only when a state or a review was discarded (`M18-14`). Second, a
+  re-import with `include_progress` on keeps the importer's row when its `last_review_at` is not
+  earlier than the package's, and writes only the review rows later than the importer's latest review
+  (`M18-15`). Third, an `.apkg` preset stores at most 36 500 days and keeps the default steps when the
+  package's steps are negative or not finite (`M18-17`). Fourth, the report gains `weights_invalid`
+  (`M18-18`). The rows also name each of `M18-56` to `M18-62` that has landed by then. `AGENTS.md`
+  section 2.7, under "Importing an `.apkg`", says that card states and the review log are applied when
+  the import asks for them. It does not state the `M18-15` rule. A decision that must outlive its change
+  belongs in a committed file (section 1 of `AGENTS.md`). The fix: the ledger gains the preset row, the
+  `M18-2` row states the four points, and section 2.7 gains one sentence that states the `M18-15` rule.
+  Only the parent edits these two files, with the maintainer present, in the same change as `M18-22`
+  and `M18-55`. *Acceptance:* the ledger row that names `M18-2` also names `M18-14`, `M18-15`, `M18-17`
+  and `M18-18`; one ledger row names `preset_max_interval_invalid`; section 2.7 of `AGENTS.md` names
+  `last_review_at`. Evidence is the output of `grep -n -E 'M18-(14|15|17|18)\b|preset_max_interval_invalid' ROADMAP.md`
+  limited to the ledger section, and the `AGENTS.md` diff.
+
+- [ ] **M18-64 README states the re-import progress rule and `weights_invalid`** — `README.md` line 65
+  says that a re-import keeps "their cards and progress". It does not say what happens when the
+  re-import carries progress: since `M18-15`, the importer's own newer progress wins, and older package
+  review rows are not written. The paragraph on line 47 names `apply_weights` but not the report field
+  `weights_invalid`, which `M18-18` added to tell a refused weight set from an unused one. The fix: the
+  line 65 paragraph gains the `M18-15` rule, in the form `M18-57` leaves it. A card whose last review in
+  engram is not earlier than the package's keeps its engram state. A package review is written only
+  when it is later than the importer's latest review of that card. The line 47 paragraph states that
+  `weights_invalid` is true when `apply_weights` was on and the package's weights were refused. This
+  entry lands after `M18-21`, `M18-46` and `M18-57`, and never runs beside `M18-21` or `M18-46`.
+  *Acceptance:* each new statement matches `importAnkiProgress` and `createAnkiPreset` in
+  `internal/store/anki_import.go`. Evidence is the `README.md` diff.
 
 ---
 
