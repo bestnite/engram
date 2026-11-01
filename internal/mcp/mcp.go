@@ -108,11 +108,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sid := r.Header.Get(mcpSessionHeader)
-	if sid != "" && s.sessionOwnerMismatch(sid, id.User.ID) {
-		s.logger.Warn("mcp session owner mismatch",
-			"session_id", sid, "key_id", id.KeyID, "user_id", id.User.ID)
-		http.Error(w, "session user mismatch", http.StatusForbidden)
-		return
+	if sid != "" {
+		known, own := s.sessionOwner(sid, id.User.ID)
+		if !known {
+			// The owner record can be gone while the SDK still holds the session object (capacity eviction).
+			// Passing such an id through would let the SDK serve the handshake identity to whoever presents it,
+			// so a session with no owner record is refused as gone and the client must initialize again.
+			s.logger.Warn("mcp session is not registered",
+				"session_id", sid, "key_id", id.KeyID, "user_id", id.User.ID)
+			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+		if !own {
+			s.logger.Warn("mcp session owner mismatch",
+				"session_id", sid, "key_id", id.KeyID, "user_id", id.User.ID)
+			http.Error(w, "session user mismatch", http.StatusForbidden)
+			return
+		}
 	}
 	// Rule 3: carry the identity of this request's key. Tool visibility and permissions are computed from this request's key, not from the
 	// copy fixed at handshake time — so switching to a lower-scope key within a high-scope session of the same user cannot escalate privileges.
@@ -138,13 +150,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// sessionOwnerMismatch reports whether the session is registered and its owner is not userID. An unregistered session returns false,
-// leaving it to the SDK's existing "no such session" behavior.
-func (s *Server) sessionOwnerMismatch(sid string, userID uint64) bool {
+// sessionOwner classifies a presented session id against the owner table: known reports whether the table holds
+// the session, and own whether its owner is userID. A session the table no longer holds is not passed to the SDK,
+// because the SDK may still serve it with the handshake identity; callers refuse it instead.
+func (s *Server) sessionOwner(sid string, userID uint64) (known, own bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry, known := s.sessions[sid]
-	return known && entry.userID != userID
+	return known, known && entry.userID == userID
 }
 
 // now returns the current instant; falls back to time.Now when clock was not injected (normal assembly injects a real clock via New).
