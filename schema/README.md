@@ -1,6 +1,6 @@
 # JSON Schemas
 
-Three JSON Schema (draft 2020-12) documents that describe the data exchanged with the
+Two JSON Schema (draft 2020-12) documents that describe the data exchanged with the
 HTTP API, so external tools and agents can validate and generate payloads without
 reading the server code. They mirror the payloads the server accepts; the
 server remains the source of truth for validation.
@@ -9,7 +9,6 @@ server remains the source of truth for validation.
 |---|---|
 | `note-import.schema.json` | Request body of the bulk note endpoint `POST /api/v1/decks/:id/notes`: `note_type` plus `fields` as a map from field name to HTML string |
 | `note-bulk.schema.json` | Request body of the notes bulk action endpoint `POST /api/v1/notes/bulk` |
-| `deck-package.schema.json` | Logical content of a `.edeck` deck package (export and import) |
 
 ## `note-bulk.schema.json`
 
@@ -84,66 +83,7 @@ What JSON Schema cannot express and the server enforces instead:
 - `numeric` accepts an answer when either tolerance matches; both tolerances are
   optional and their combination is a runtime rule.
 
-`unknown fields` inside a note object are allowed and ignored (see the version policy).
-
-## `deck-package.schema.json`
-
-A deck package is one zip archive with the extension `.edeck` (or a plain
-`.edeck.json` when no media is included). The schema models the package as an object
-whose properties are the package's entry names, and defines each file under `$defs`:
-
-- `manifest.json` (required) — `format_version`, export time, application version,
-  deck metadata, the `include_*` flags and the entry counts.
-- `note_types.json` (required) — every note type of the deck: a package-local `ref`,
-  the type's `name` and its `config` (generation kind, fields, templates, CSS).
-  Note types are content, so they travel with the package; the importer creates a row
-  for each one in the target deck, or reuses an existing row with the same name and
-  config.
-- `notes.json` (required) — the note content. Each note names its type with `note_type`
-  (a `ref` from `note_types.json`) and sends `fields` as a map from field id to that
-  field's HTML value. `source_url` and `extra` are the note's own columns, not fields,
-  unless the note type declares fields of those names.
-- `cards.json` (required) — one entry per card: `note_index`, `template` (the note
-  type's template id, or `cloze:<n>`), `ordinal` and the optional `deck_path` subdeck
-  path.
-- `preset.json` (required) — scheduling parameters. The 21 FSRS weights are exported
-  only when `include_weights` is requested, because they are fitted to the exporting
-  user's own review log; otherwise `weights`, `weights_optimized_at` and
-  `weights_review_count` are all `null`, the same as a preset on the library defaults.
-  The importer uses the package's weights only for a new deck and only when
-  `apply_weights` is requested.
-- `progress.json` (optional) — the exporting user's own `card_states` and optional
-  `reviews`.
-- `media.json` (optional) — a map from `sha256` to `path`, `mime`, dimensions and
-  `names`: the deck-scoped file names that resolve to that sha. A field's HTML refers
-  to media by name, so the importer registers the names for the target deck.
-- `media/<sha256>.<ext>` entries — the media binaries themselves.
-
-Field limits: `manifest.deck.name` is at most 200 Unicode characters (counted as runes,
-not bytes) and `manifest.deck.description` at most 2000; the importer rejects a package
-that exceeds either bound. The name bound is shared with the deck create/rename paths,
-so a name that can be created can always be exported and imported unchanged.
-
-## Version policy
-
-- `manifest.json` carries `format_version`, currently `2`. This schema file describes
-  version 2, and this release writes and accepts exactly version 2.
-- **One-time exception to the N-1 rule.** Version 2 replaced the note model: format 1
-  stored a note as a `kind` plus typed field values, while a note is now a reference to
-  a note type plus field-id keyed HTML. No faithful conversion from format 1 exists
-  without the migration generation that this release no longer ships, so format 1 is
-  not kept readable. A format-1 package is rejected with
-  `package_format_obsolete`, and the message tells the user to import it with an older
-  engram release and export it again. This is the only version that was dropped instead
-  of supported alongside its successor; every later version follows the N-1 rule again.
-- Unknown fields inside any object are ignored, never fatal.
-- Unknown extra entries in the package itself are ignored, so a newer package can still
-  be read by an older importer.
-- A note that names a `note_type` reference `note_types.json` does not declare is an
-  error, and the importer must list every offending entry instead of dropping it
-  silently. In an import request, an unknown `note_type` or field name is a row error
-  naming the offending id or field.
-- `manifest.app_version` is informational and never used for compatibility decisions.
+Unknown fields inside a note object are allowed and ignored.
 
 ## Validating with check-jsonschema
 
@@ -157,26 +97,17 @@ uvx check-jsonschema \
 uvx check-jsonschema \
   --schemafile schema/note-bulk.schema.json \
   schema/examples/note-bulk.example.json
-
-uvx check-jsonschema \
-  --schemafile schema/deck-package.schema.json \
-  schema/examples/deck-package.example.json
 ```
 
 Each command prints `ok -- validation done` when the example is valid. To validate your
-own payload, pass its path in place of the example file. The deck-package note shape is
-chosen with `oneOf`, so add `--verbose` there to make the offending field appear by name,
-for example `$.notes[0].fields: 'value' is a required property`. If `uvx` is unavailable,
-a syntax-only fallback is `python3 -m json.tool <file>`.
+own payload, pass its path in place of the example file. If `uvx` is unavailable, a
+syntax-only fallback is `python3 -m json.tool <file>`.
 
 ## Examples
 
 - `examples/note-import.example.json` — a valid bulk import request exercising five note
   types, with `fields` as a map from field name to HTML string.
 - `examples/note-bulk.example.json` — a valid bulk tag action on three notes.
-- `examples/deck-package.example.json` — a valid format-2 package with a manifest, two
-  note types, two notes, their cards (one with a subdeck path), a preset and one named
-  media entry.
 
 Both examples are sanitised: they use `example.com`, a neutral `example-system` source
 namespace and a placeholder `example-agent`. No real domain, host name, address,
