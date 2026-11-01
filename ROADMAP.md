@@ -3332,12 +3332,29 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   prints those four entries. *Acceptance:* the tree comment lists the two schemas the directory holds, or the
   removed schema is restored together with the decision that restores it.
 
-- [ ] **M19-88 ARCHITECTURE's dependency table is not what its own regeneration command reports** — *nit.* The
+- [x] **M19-88 ARCHITECTURE's dependency table is not what its own regeneration command reports** — *nit.* The
   table's heading says the rows are "Imports between internal packages, as reported by `go list`"
   (`ARCHITECTURE.md:80`) and gives the command at `:100-102`, but the `web` and `api` rows (`:84`, `:86`) omit
   `internal/answer`, which both packages import. *Reproduced:* the documented `go list -f ...` command prints
   `internal/answer` in the import list of both `internal/api` and `internal/web`; neither documented row has it.
   *Acceptance:* regenerating with the command in the file yields a table that equals the file.
+  *Closed by this commit (`docs(architecture): regenerate the internal dependency table`).*
+  The `web` and `api` rows now list `answer`, and the table gains the row it was missing:
+  `mailstyle → texmath`. The regeneration note now says the rows keep only the imports under
+  `git.nite07.com/nite/engram/internal/`, which is what the table means, and explains that the
+  `frontend` package `internal/web` embeds is deliberately not a row entry. Raw output of the two
+  regenerated facts the entry reports:
+  ```
+  $ go list -f '{{.ImportPath}}:{{range .Imports}}{{if eq . "git.nite07.com/nite/engram/internal/answer"}} answer{{end}}{{end}}' ./internal/api ./internal/web
+  git.nite07.com/nite/engram/internal/api: answer
+  git.nite07.com/nite/engram/internal/web: answer
+  $ go list -f '{{.ImportPath}}: {{join .Imports " "}}' ./internal/mailstyle | tr ' ' '\n' | grep 'engram/internal'
+  git.nite07.com/nite/engram/internal/mailstyle:
+  git.nite07.com/nite/engram/internal/texmath
+  ```
+  All 25 rows were then compared as sets against the internal imports `go list` reports for
+  `./internal/... ./cmd/...`; the comparison printed `table rows matched: 25 actual packages: 25
+  EQUAL`, so no row differs from its regeneration.
 
 - [x] **M19-89 No test validates the shipped note-import example against its schema** — *nit.* The bulk example
   is validated against its schema by `internal/api/note_bulk_schema_test.go:58-68`, and the import side validates

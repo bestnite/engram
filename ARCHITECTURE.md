@@ -81,13 +81,14 @@ Imports between internal packages, as reported by `go list`:
 
 ```
 cmd/engram → web, api, mcp, auth, config, digest, i18n, jobs, mail, media, reminder, retention, store
-web        → api, mcp, auth, config, i18n, jobs, mail, media, mediatype, notetype, reminder, reviewday, schedule, store
+web        → answer, api, mcp, auth, config, i18n, jobs, mail, media, mediatype, notetype, reminder, reviewday, schedule, store
 mcp        → api, store
-api        → auth, media, notetype, reviewday, schedule, store, urlfetch
+api        → answer, auth, media, notetype, reviewday, schedule, store, urlfetch
 digest     → i18n, mail, reminder, reviewday, schedule, store, worker
 reminder   → i18n, mail, reviewday, schedule, store, worker
 jobs       → schedule, store
 mail       → config, mailstyle, notetype, store, worker
+mailstyle  → texmath
 schedule   → reviewday, store
 auth       → store
 media      → mediatype, store
@@ -99,7 +100,8 @@ anki, config, i18n, mediatype, notetype, reviewday, texmath, urlfetch, worker, p
 
 Regenerate it with
 `go list -f '{{.ImportPath}}: {{join .Imports " "}}' ./internal/... ./cmd/...` when packages
-change.
+change, keeping for each row only the imports under `git.nite07.com/nite/engram/internal/` (this
+table lists the internal packages; the `frontend` package `internal/web` embeds is not one of them).
 
 ## 4. Request paths
 
