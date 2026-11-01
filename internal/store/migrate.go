@@ -154,6 +154,11 @@ var BuiltinMigrations = []Migration{
 		Name: "0019_remove_unresolvable_cards",
 		Up:   removeUnresolvableCards,
 	},
+	{
+		// Invalid stored scheduler settings are repaired explicitly rather than by additive schema migration.
+		Name: "0020_repair_preset_scheduler_limits",
+		Up:   repairPresetSchedulerLimits,
+	},
 }
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).
