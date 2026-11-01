@@ -480,7 +480,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   hash cannot overwrite and rename/rewrite the package's references on conflict; a regression imports two
   packages with the same file name and different bytes into one deck concurrently.
 
-- [ ] **M19-19 A media-name clash rewrite corrupts HTML attribute names instead of the reference** —
+- [x] **M19-19 A media-name clash rewrite corrupts HTML attribute names instead of the reference** —
   *should-fix.* The clash handler replaces the first occurrence of the name inside the whole match
   (`internal/store/media_clash.go:107-113`); the name is an attribute value, so with a short extensionless
   name the first hit can be inside `src`, `href` or `url(`. *Reproduced* by calling the production
@@ -488,6 +488,39 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `background:url(u) -> background:u-abc.pngrl(u)`. The end-to-end import of such a package is
   unverified. *Acceptance:* replace inside the value capture group, never the first substring of the
   whole match; cover single and double quotes, unquoted `src`, CSS `url()`, `sound:` and short names.
+  *Closed by this commit (`fix(store): rewrite only the media reference, not the attribute name`).*
+  `rewriteMediaRefs` (`internal/store/media_clash.go:90`) now calls `replaceMediaRefNamesIn`, which takes
+  the capture offsets from `FindStringSubmatchIndex` on the match and splices the new name between them,
+  so only the value changes; the previous `strings.Replace(match, name, newName, 1)` is gone.
+  `TestRewriteMediaRefsRewritesOnlyTheReference` (`internal/store/media_clash_test.go`) covers double- and
+  single-quoted `src`, unquoted `src`, `href`, all three `url()` quoting forms, `[sound:]`, a reference
+  whose name equals the attribute or function name (`src`, `href`, `url`), a second occurrence in `alt`
+  that must stay, and ordinary text. Raw output of
+  `go test ./internal/store/ -run 'TestRewriteMediaRefsRewritesOnlyTheReference|TestAddHashSuffixToFileStem' -count=1 -v`:
+  ```
+  --- PASS: TestAddHashSuffixToFileStem (0.00s)
+  --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/double_quoted_src (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/single_quoted_src (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/unquoted_src (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/href (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/css_double_quoted_url (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/css_single_quoted_url (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/css_quoted_url (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/sound (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/src_name_equals_the_attribute (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/href_name_equals_the_attribute (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/css_name_equals_the_function (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/only_the_reference_is_rewritten (0.00s)
+      --- PASS: TestRewriteMediaRefsRewritesOnlyTheReference/ordinary_text_is_untouched (0.00s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.013s
+  ```
+  The same test against the previous body failed with `rewriteMediaRefs("<img src=\"s\">") =
+  "<img s-abc.pngrc=\"s\">", want "<img src=\"s-abc.png\">"`, plus the same corruption for `href`,
+  `url()`, `[sound:]` and the name-equals-attribute cases; `<p>s</p>` and the `alt` occurrence stayed
+  intact as expected. `TestAnkiImportKeepsFilesThatExistedBefore` passes, so the import path that calls the
+  rewriter still runs.
 
 - [ ] **M19-20 A preset write-back lets the optimiser and the settings form overwrite each other** —
   *should-fix.* The settings PATCH changes scheduling fields but carries the stale weights, the

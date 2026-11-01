@@ -24,3 +24,40 @@ func TestAddHashSuffixToFileStem(t *testing.T) {
 		t.Fatalf("renamed name = %q, want the hash suffix and a 10-byte extension", got)
 	}
 }
+
+// TestRewriteMediaRefsRewritesOnlyTheReference pins that a clash rename lands inside the reference value. A short
+// name also occurs inside the attribute name (src, href) or the CSS function (url); replacing the first occurrence
+// in the whole match corrupts the markup instead of the reference.
+func TestRewriteMediaRefsRewritesOnlyTheReference(t *testing.T) {
+	renames := map[string]string{
+		"s":       "s-abc.png",
+		"h":       "h-abc.png",
+		"u":       "u-abc.png",
+		"src":     "src-abc.png",
+		"href":    "href-abc.png",
+		"url":     "url-abc.png",
+		"img.png": "img-abc.png",
+	}
+	cases := []struct{ name, in, want string }{
+		{"double quoted src", `<img src="s">`, `<img src="s-abc.png">`},
+		{"single quoted src", `<img src='s'>`, `<img src='s-abc.png'>`},
+		{"unquoted src", `<img src=s>`, `<img src=s-abc.png>`},
+		{"href", `<a href="h">s</a>`, `<a href="h-abc.png">s</a>`},
+		{"css double quoted url", `<div style="background:url(u)"></div>`, `<div style="background:url(u-abc.png)"></div>`},
+		{"css single quoted url", `<div style="background:url('u')"></div>`, `<div style="background:url('u-abc.png')"></div>`},
+		{"css quoted url", `<div style="background:url("u")"></div>`, `<div style="background:url("u-abc.png")"></div>`},
+		{"sound", `[sound:s]`, `[sound:s-abc.png]`},
+		{"src name equals the attribute", `<img src="src">`, `<img src="src-abc.png">`},
+		{"href name equals the attribute", `<a href="href">x</a>`, `<a href="href-abc.png">x</a>`},
+		{"css name equals the function", `<div style="background:url(url)"></div>`, `<div style="background:url(url-abc.png)"></div>`},
+		{"only the reference is rewritten", `<img src="img.png" alt="img.png">`, `<img src="img-abc.png" alt="img.png">`},
+		{"ordinary text is untouched", `<p>s</p>`, `<p>s</p>`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := rewriteMediaRefs(tc.in, renames); got != tc.want {
+				t.Fatalf("rewriteMediaRefs(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}

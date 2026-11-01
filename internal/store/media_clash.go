@@ -10,6 +10,7 @@ package store
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -85,30 +86,31 @@ func rewriteMediaRefs(value string, renames map[string]string) string {
 	if len(renames) == 0 {
 		return value
 	}
-	value = mediaSrcRE.ReplaceAllStringFunc(value, func(match string) string {
-		sub := mediaSrcRE.FindStringSubmatch(match)
-		return replaceMediaRefName(match, sub[1]+sub[2]+sub[3], renames)
-	})
-	value = mediaHrefRE.ReplaceAllStringFunc(value, func(match string) string {
-		sub := mediaHrefRE.FindStringSubmatch(match)
-		return replaceMediaRefName(match, sub[1]+sub[2]+sub[3], renames)
-	})
-	value = mediaSoundRE.ReplaceAllStringFunc(value, func(match string) string {
-		sub := mediaSoundRE.FindStringSubmatch(match)
-		return replaceMediaRefName(match, sub[1], renames)
-	})
-	return mediaCSSURLRE.ReplaceAllStringFunc(value, func(match string) string {
-		sub := mediaCSSURLRE.FindStringSubmatch(match)
-		return replaceMediaRefName(match, sub[1]+sub[2]+sub[3], renames)
-	})
+	value = replaceMediaRefNamesIn(value, mediaSrcRE, renames)
+	value = replaceMediaRefNamesIn(value, mediaHrefRE, renames)
+	value = replaceMediaRefNamesIn(value, mediaSoundRE, renames)
+	return replaceMediaRefNamesIn(value, mediaCSSURLRE, renames)
 }
 
-// replaceMediaRefName substitutes one captured reference name when it is in the rename set.
-func replaceMediaRefName(match, name string, renames map[string]string) string {
-	key := normaliseMediaName(strings.TrimPrefix(strings.TrimSpace(name), "./"))
-	newName, ok := renames[key]
-	if !ok {
+// replaceMediaRefNamesIn substitutes the captured reference name of every match when it is in the rename set. The
+// capture offset is used, not the first occurrence of the name in the match: a short name such as "s" also occurs
+// inside the attribute name (src) or the CSS function (url), and rewriting that corrupts the markup.
+func replaceMediaRefNamesIn(value string, re *regexp.Regexp, renames map[string]string) string {
+	return re.ReplaceAllStringFunc(value, func(match string) string {
+		loc := re.FindStringSubmatchIndex(match)
+		for group := 2; group+1 < len(loc); group += 2 {
+			start, end := loc[group], loc[group+1]
+			if start < 0 || start == end {
+				continue
+			}
+			name := match[start:end]
+			key := normaliseMediaName(strings.TrimPrefix(strings.TrimSpace(name), "./"))
+			newName, ok := renames[key]
+			if !ok {
+				continue
+			}
+			return match[:start] + newName + match[end:]
+		}
 		return match
-	}
-	return strings.Replace(match, name, newName, 1)
+	})
 }
