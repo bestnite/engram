@@ -64,13 +64,15 @@ release; a task moves into a release milestone when it is scheduled.
 
 ---
 
-### M19 — Repository review findings (static analysis, not yet verified)
+### M19 — Repository review findings
 
-A domain-by-domain review of the whole repository was started with a second model. The API and MCP
-domain produced three leads before the review run was cut short; they are recorded here as **static
-analysis only** — they were read out of the code, not reproduced against a running instance, and the
-reviewer's report was never written. Treat each one as a hypothesis to confirm first, and open with the
-confirmation, not with the fix.
+A domain-by-domain review of the whole repository was run with a second model. The `internal/store`
+domain completed — 155 files, 23 findings (3 blocker, 19 should-fix, 1 nit), each with a reproduction or
+an explicit "unverified" — and its report is kept outside the repository at
+`~/.hermes/reports/engram-repo-review-store-20261102.md`. The API and MCP domain was stopped by the
+provider's content filter before it could write its report, so M19-1..M19-3 are static analysis that was
+read out of the code but never reproduced. Every entry says which it is: "unverified" does not mean
+"probably fine", and it does not mean "confirmed broken".
 
 - [ ] **M19-1 A preset identifier may be resolvable across accounts** — the review reported that a
   request can name a preset belonging to another account and have it resolved rather than refused,
@@ -94,6 +96,263 @@ confirmation, not with the fix.
   reproduction. *Acceptance:* a test evicts the session and shows the next tool call is refused with the
   documented code, and that a call carrying a revoked API key is refused even when the session object
   still exists. Evidence is the raw test output.
+
+- [ ] **M19-4 Concurrent migration applies one step twice and drops note metadata** — *Blocker.* `Apply`
+  reads the schema version once outside the migration transaction and takes no database-level lock
+  (`internal/store/migrate.go:747-761`), so two processes that both read version 11 both run `0012`.
+  The second pass reads fields the first pass already moved out, nulls them and creates a second note
+  type (`migrate_notes.go:302-327,342-348`). *Reproduced* on PostgreSQL with a barrier holding both
+  callers past the version read: `first Apply: applied=1; source_url=<set> extra_json=<set>` then
+  `second Apply: applied=1; source_url=<nil> extra_json=<nil> note_types=2`. The full `Sync`-level DDL
+  interleaving is unverified. *Acceptance:* a database-level lock held across `Up` and the version
+  write, with the version re-read inside it; a regression with two connections migrating at once shows
+  metadata intact and exactly one note type. A process mutex alone is not a fix.
+
+- [ ] **M19-5 A cancelled import deletes a media file another import committed** — *Blocker.*
+  `cleanupMediaWrites` treats "the lookup failed" as "no metadata row"
+  (`internal/store/package_import.go:506-519`, esp. `:512-515`; called from `anki_import.go:917-922`).
+  A places the file outside its transaction, B reuses that file and commits the metadata row, A then
+  cancels; A's lookup runs on the cancelled context, fails, and calls `os.Remove` on a file B depends on.
+  Later uploads dedup on the metadata row without checking the file exists (`media_write.go:70-74,141-154`).
+  *Reproduced* through the real `prepareAnkiImport` / `importAnkiPlacement` path: `A import err =
+  context canceled` / `B row after A = true; file missing = true`, while a healthy-context failure keeps
+  the file. *Acceptance:* a lookup error keeps the file and reports; deletion requires proof of
+  absence, not a failed query. Cover it with a regression that cancels one import mid-flight while a
+  second commits the same sha, and shows the file surviving and a later upload reusing it.
+
+- [ ] **M19-6 Deleting a note type can succeed while a note is created against it** — *Blocker.* The
+  delete counts referencing notes and then deletes in the same transaction
+  (`internal/store/notetype.go:293-340`, count at `:297,305`, delete at `:329`), but a transaction is
+  not serialisation on PostgreSQL at READ COMMITTED: another session can still read the type and create
+  the note and card, and the delete also succeeds, leaving `notes.note_type_id` dangling. *Reproduced*
+  on PostgreSQL with a `BEFORE DELETE` trigger as a barrier: `delete err=<nil>; insert err=<nil>;
+  cards=1; notes=1 note_types=0; NoteTypeFor=record not found`. Production SQLite serialises through a
+  single connection, so this is a PostgreSQL-path defect. *Acceptance:* a foreign key with `RESTRICT`,
+  or a shared lock on the type for note writes and an exclusive one re-checked under the delete;
+  a regression must show the two operations cannot both succeed leaving an orphan.
+
+- [ ] **M19-7 Saving your own profile writes back a stale role or status** — *should-fix.*
+  `UserStore.Update` omits only `PasswordHash` and saves the whole row (`internal/store/user.go:65-73`),
+  and the profile/locale handlers load a user, change profile fields and save
+  (`internal/web/profile.go:176-214,240-250`). A disable or demotion committed between the read and the
+  write is overwritten by the stale snapshot. *Reproduced* on both drivers: `status after stale
+  whole-row Update = "active", want "disabled"` and `role after stale whole-row Update = "admin", want
+  "user"`. The probability of a real concurrent HTTP request winning the window is unverified; the
+  overwrite itself is deterministic once the window is hit. *Acceptance:* column-scoped updates for
+  profile, locale and reminder writes, with role, status, email verification and quota written only by
+  their own methods; extend the existing "a stale snapshot must not clear `PasswordHash`" test to those
+  security fields.
+
+- [ ] **M19-8 The 0017 ruby migration rewrites already-converted content** — *should-fix.* The step
+  applies a context-free string substitution to HTML that 0012 already produced
+  (`internal/store/migrate_notes.go:803-805,848-880`): readings double-escape, a literal shortcode
+  inside a code span is executed, and a cloze nested in a ruby annotation is cut at the first `}}` and
+  left as literal text. *Reproduced* through a full `Sync` on both drivers: `{{ruby:B|a&b}} ->
+  <ruby>B<rt>a&amp;amp;b</rt></ruby>` / `` `{{ruby:B|R}}` -> <code><ruby>B<rt>R</rt></ruby></code> `` /
+  `{{ruby:{{c1::漢字}}|かんじ}} -> unchanged shortcode`. A database already marked version 17 needs its
+  own remedy, not just a corrected step. *Acceptance:* convert by HTML context, skip `code`/`pre`, escape
+  the reading once, keep legal nesting; add a regression that runs real old Markdown through 0012 and
+  then 0017.
+
+- [ ] **M19-9 A batch note update silently clears `source_url` and `extra_json`** — *should-fix.* The
+  bulk import path builds a fresh note without the stored `SourceURL`/`ExtraJSON` and the store writes
+  both columns unconditionally (`internal/store/note.go:537-545`; callers
+  `internal/api/service.go:473-480,600-608,700-702`), while a single PATCH preserves them. The import
+  schema documents top-level `source_url`/`extra`, but `ImportNote` has no such fields, so following the
+  schema does not help. *Reproduced* on both drivers: `before {"extra":"{\"k\":\"v\"}","source_url":
+  "https://example.com/a"}` then `after {"extra":null,"source_url":null}`. *Acceptance:* the import path
+  carries the metadata fields and distinguishes absent from empty, or updates only named columns; a
+  regression creates a note, updates it through a batch import keyed by `external_ref`, and asserts the
+  metadata survived, plus one that sends the top-level schema keys and asserts they land.
+
+- [ ] **M19-10 Exported learning steps round to zero and lose the review history** — *should-fix.*
+  `interval_days` is stored in fractional days but exported through `math.Round`
+  (`internal/store/anki_export.go:547-560`), so a 10-minute step (600/86400 days) exports `ivl=0`;
+  Anki encodes a sub-day interval as negative seconds, and the same conversion corrupts `lastIvl`.
+  *Reproduced* by exporting and reading `collection.anki21` on both drivers: `10m learning review
+  exported: ivl=0 lastIvl=0 type=0 (want ivl=-600)`. The scheduler does produce fractional days
+  (`scheduler.go:322-337`, written at `submit.go:262`) and the import path already converts negative
+  seconds back (`anki_import.go:1850-1860`), so this is not dirty data. Re-importing the archive into
+  the Anki client is unverified. *Acceptance:* one interval encoding used by both `ivl` and `lastIvl` —
+  negative seconds below a day, whole days above — with regressions for learning and relearning steps
+  and for import→export, not just whole-day reviews.
+
+- [ ] **M19-11 Clone fails on imported note types and drops custom styling** — *should-fix.* Clone
+  reverse-engineers the source type into an engram stock kind and creates the default stock type
+  (`internal/store/clone.go:68-93`, esp. `:74-80`). Anki-imported types carry `f0`/`f1`/`t0` identifiers,
+  so they do not match a stock shape and the clone fails; a stock-shaped type with custom CSS clones as
+  default styling. `SourceURL`/`ExtraJSON`, deck-scoped `media_names` and the card `deck_path` are not
+  copied either. *Reproduced* on SQLite: `Clone(imported note type) error = clone note 1: its note type
+  is not an engram stock type`, and with a source CSS marker the clone carries the stock `.card` block
+  instead. The HTTP 500 mapping and the missing media names' effect on a rendered frame are unverified.
+  *Acceptance:* copy the source type's config and content into a new ID instead of rebuilding a stock
+  type; regressions clone a real imported type and a custom-CSS type and show the clone still renders
+  after the source deck is deleted.
+
+- [ ] **M19-12 A cloze→cloze change reports card removals that do not happen** — *should-fix.* Cloze
+  produces an empty template plan, so every card is first listed as stale and soft-deleted, then the
+  sync restores the same IDs (`internal/store/note_type_change.go:450-456,334-354,560-568,619-628`).
+  The report counts the same cards in both `CardsAdded` and `CardsRemoved`, breaking the documented
+  "a card is never counted in both" rule, and demands confirmation for deletions that do not occur.
+  *Reproduced* on both drivers: `dry-run: CardsAdded:2 CardsRemoved:2`, then `unconfirmed: note type
+  update would remove cards without confirmation`, then `confirmed: live cloze:1 id=1; live cloze:2
+  id=2`. *Acceptance:* plan cards from the cloze numbers each note actually keeps, count surviving cards
+  as moved/kept, and add a regression that a cloze→cloze change succeeds without confirmation and leaves
+  IDs and progress untouched.
+
+- [ ] **M19-13 Editing a note type leaves the search index stale** — *should-fix.* The update rebuilds
+  media references and cards but never recomputes `notes.search_text`, which depends on the field set
+  and `exclude_from_search` (`internal/store/notetype.go:234-238`, `card.go:186-215`, derivation in
+  `note_search.go:47-58`). Excluding a field leaves its old text searchable; re-including one does not
+  make it searchable. *Reproduced* on both drivers: `search_text before = "alpha\nbeta"` then
+  `search_text after exclude_from_search on A = "alpha\nbeta"` and `List(alpha) total=1`. *Acceptance:*
+  recompute affected notes' `search_text` in the same transaction as the config version, with a
+  regression that excluding, including and deleting a field each change the search result immediately.
+
+- [ ] **M19-14 A tag filter matches different notes on SQLite and PostgreSQL** — *should-fix.* Stored
+  `tags_json` is folded by SQL `LOWER`, the query string by Go `strings.ToLower`
+  (`internal/store/note.go:847-861`); SQLite's built-in `LOWER` only folds ASCII, so a tag stored as
+  `Été` matches nothing on SQLite even with its own spelling. The same predicate serves note listing and
+  tag-scoped study. *Reproduced*: `sqlite: query "été" -> 0 row(s); query "ÉTÉ" -> 0 row(s)` versus
+  `postgres: query "été" -> 1 row(s); query "ÉTÉ" -> 1 row(s)`. *Acceptance:* one Unicode normalisation
+  rule on both the stored and the queried side (a derived normalised tag column with a backfill is the
+  obvious shape), with a two-driver regression covering accented and non-ASCII case folding.
+
+- [ ] **M19-15 Deleting a deck leaves the note-type and media rows behind, so the files are never
+  collected** — *should-fix.* The cascade clears notes and cards but not `note_types`, `media_names`
+  or `media_note_types` (`internal/store/deck.go:332-355`; account deletion calls the same function at
+  `user_admin.go:159-163`). The leftover template references keep the collector convinced the media is
+  in use. *Reproduced* on both drivers: `note_types=1; media_names=1; media_note_types=1` and
+  `MarkOrphanedMedia marked 0 rows, want 1`, with the uploader's usage still counting the byte. Usage not
+  dropping to zero immediately is acceptable during a grace period; never being markable as orphan is
+  not. *Acceptance:* in the same transaction clear `media_note_types` by note-type ID, then
+  `note_types` and the deck's `media_names`; a regression deletes a deck with template assets, runs the
+  mark and the expiry, and asserts no residue and the quota released.
+
+- [ ] **M19-16 The collector keeps an orphan alive because another deck uses the same file name** —
+  *should-fix.* The orphan query joins `media_note_types` to `media_names` on name alone
+  (`internal/store/media_gc.go:23-24`) without carrying `note_types.deck_id`; media names are keyed by
+  `(deck_id, name)`, not globally. Deck B's `_font.woff2` template reference therefore keeps deck A's
+  already-unreferenced file of the same name alive. *Reproduced* by running the real GC SQL on SQLite:
+  `GC with cross-deck name collision: marked=0 reclaimed=0`. The PostgreSQL repro of this scenario is
+  unverified; the missing join is confirmed by reading the SQL. This is not a cross-account read, it is
+  a cross-account effect on collection and disk use. *Acceptance:* join through `note_types` on
+  `mn.deck_id = nt.deck_id AND mn.name = mnt.media_name`; a regression with two live decks holding the
+  same file name and different hashes, one of them no longer referenced.
+
+- [ ] **M19-17 Soft-deleting a note frees its quota but keeps its media forever** — *should-fix.* The
+  quota reference set ignores soft-deleted notes, the pending set counts nothing as long as any
+  `media_notes` row exists, and the collector keeps the mappings so the media can be restored
+  (`internal/store/media_quota.go:38-43`, `media_gc.go:13-24`). Media referenced only by soft-deleted
+  notes is therefore neither charged nor collected: upload, reference, soft-delete, repeat, and disk use
+  grows while reported usage returns to zero. *Reproduced* on SQLite and confirmed on PostgreSQL:
+  `before delete: uploader usage = 1000 bytes` / `after soft delete: uploader usage = 0 bytes` /
+  `1 mapping rows, marked=0, reclaimed=0`. *Acceptance:* one policy for physical retention and charging
+  — restorable content still needs a budget or a retention cap, or it becomes pending when only
+  soft-deleted notes reference it, or restoration is explicitly not guaranteed once collected — plus a
+  regression that runs several upload/soft-delete/collect rounds against a budget.
+
+- [ ] **M19-18 Two concurrent `into_deck` imports can point a note at another package's media** —
+  *should-fix.* `renameAnkiMedia` reads a snapshot of the deck's names, then registers with
+  `ON CONFLICT` overwriting the hash (`internal/store/anki_import.go:1982-2046`, `media_names.go:61-80`).
+  Two transactions that both see `cover.png` free both keep the name, and the later commit points it at
+  its own bytes; the `into_deck` target is resolved by a plain SELECT (`:1926-1931`) with no row lock, and
+  the default import slot allows two concurrent imports. *Reproduced* on PostgreSQL through the
+  production rename/register calls: `after both commits: media_names rows=1; cover.png -> <B's hash>`
+  with A and B holding different bytes. The full note/card import in that interleaving is unverified.
+  *Acceptance:* take a per-deck lock before the naming decision, or insert conditionally so a different
+  hash cannot overwrite and rename/rewrite the package's references on conflict; a regression imports two
+  packages with the same file name and different bytes into one deck concurrently.
+
+- [ ] **M19-19 A media-name clash rewrite corrupts HTML attribute names instead of the reference** —
+  *should-fix.* The clash handler replaces the first occurrence of the name inside the whole match
+  (`internal/store/media_clash.go:107-113`); the name is an attribute value, so with a short extensionless
+  name the first hit can be inside `src`, `href` or `url(`. *Reproduced* by calling the production
+  function: `<img src="s"> -> <img s-abc.pngrc="s">`, `<a href="h">x</a> -> <a h-abc.pngref="h">x</a>`,
+  `background:url(u) -> background:u-abc.pngrl(u)`. The end-to-end import of such a package is
+  unverified. *Acceptance:* replace inside the value capture group, never the first substring of the
+  whole match; cover single and double quotes, unquoted `src`, CSS `url()`, `sound:` and short names.
+
+- [ ] **M19-20 A preset write-back lets the optimiser and the settings form overwrite each other** —
+  *should-fix.* The settings PATCH changes scheduling fields but carries the stale weights, the
+  optimiser changes weights but carries stale scheduling fields, and `Update` writes both groups with no
+  compare-and-set (`internal/store/preset.go:227-240`; callers `internal/web/presets_api.go:193-204`,
+  `internal/jobs/optimize.go:86-110`); the re-read of `existing` is only used for authorisation.
+  *Reproduced* on both drivers with two stale snapshots: `after stale scheduling Update: weights_json=[0.5,
+  ...,2.5] review_count=512` and `after optimizer write-back: retention=0.90 steps="1m,10m" max=36500
+  fuzz=true`, each undoing the other's committed change. *Acceptance:* separate the scheduling columns
+  from the weight columns, or use an explicit field mask (a version check if edit conflicts must be
+  surfaced); regressions show a settings save after a reset does not restore weights, and an optimiser
+  write from a stale snapshot does not roll settings back.
+
+- [ ] **M19-21 Two concurrent `AddTags` both succeed and one addition is lost** — *should-fix.* Tags are
+  read outside the transaction, merged in Go, and written unconditionally inside it
+  (`internal/store/note.go:696-727,731-743`); serialising the write transaction cannot save a stale read,
+  so production SQLite with a single connection has the same defect. *Reproduced* with 200 notes and 20
+  rounds on SQLite (confirmed `MaxOpenConns=1`) and on PostgreSQL: `errors nil; affected A=200 B=200;
+  lost tag=true; first row "[\"a\"]"` and `rounds=20 lost=20` on both drivers, with both calls' errors
+  checked so this is not a swallowed write. `AddTags`, `RemoveTags` and `SetTags` share the path; the
+  reproduction pins two `AddTags`. *Acceptance:* move read, merge and write into one locked transaction,
+  or compare-and-set on the old tag value with a retry (moving only the SELECT into a plain PostgreSQL
+  transaction is not enough); add a concurrent union/difference regression.
+
+- [ ] **M19-22 A large but legal deck cannot be exported** — *should-fix.* Export expands every note
+  and card ID into one `IN` list with no batching (`internal/store/anki_export.go:68-71,122-125,135-138`).
+  SQLite's bind cap is reached at 33,000 notes, and one collection entry can hold any number of notes,
+  so the zip entry limit is no protection. *Reproduced* with 33,000 real notes: `export anki package:
+  list cards: SQL logic error: too many SQL variables (1)`. PostgreSQL's 65,535-parameter ceiling is
+  visible in the same queries; the whole oversized export on PostgreSQL is unverified. The call returns
+  an error rather than crashing. *Acceptance:* join or subquery the deck inside the database, or load in
+  fixed batches preserving order and dedup, at all three sites; a regression exports a deck above the
+  SQLite bind cap and one with few notes but many cards.
+
+- [ ] **M19-23 The due forecast uses a fixed 24 hours in place of the local day boundary** — *should-fix.*
+  `stats.go` builds forecast buckets from `start+24h` while the review-day code uses local `AddDate`
+  (`internal/store/stats.go:92-95,111-116`), so the boundary is an hour off on the day before a DST
+  change; `<=` also puts a card due exactly at the next cut-off into today. *Reproduced* on both drivers
+  with the clock pinned to New York noon: `spring eve: NextStart=2026-03-08T08:00Z; e1=09:00Z` and
+  `due=2026-03-08T08:30Z: want tomorrow, got today`; `fall eve: NextStart=2026-11-01T09:00Z; e1=08:00Z`
+  and `due=2026-11-01T08:30Z: want today, got tomorrow`. *Acceptance:* derive every boundary from the
+  local calendar day, use half-open intervals, and test both sides of a DST change and the exact
+  cut-off. The neighbouring `reviewday.Start` behaviour inside the DST cut-off hour needs fixing
+  together with this.
+
+- [ ] **M19-24 The upgrade preflight cannot inspect an early database and calls unconvertible data
+  clean** — *should-fix.* The preflight probes `decks.public_id` for compatibility but still selects
+  `notes.public_id` unconditionally (`internal/store/migrate_notes.go:79-90`), so a genuinely early
+  database fails with a SQL error; separately, a `fields_json` decode failure is skipped with `continue`,
+  so the preflight returns empty `Blocking` although `0012` will fail on that same row. *Reproduced* on
+  both drivers: `SQLite old schema: no such column: public_id` / `PG old schema: column "public_id" does
+  not exist (SQLSTATE 42703)` and `corrupt: preflight={Blocking:[] Warnings:[]} error=<nil>` followed by
+  `conversion_error=... decode fields_json: invalid character 'b'`. The CLI then prints that the
+  migration can run. *Acceptance:* probe `notes` the way `decks` is probed and fall back to numeric IDs;
+  a decode failure is `Blocking` or a non-zero error; regressions start from a schema without
+  `public_id` in either table and from a corrupt field row.
+
+- [ ] **M19-25 The unique-constraint test still passes with the business constraints dropped** —
+  *should-fix.* The duplicate object is built as `dup := first; dup.ID = 0`, which keeps `PublicID`
+  (`internal/store/models_test.go:119-121,131-133`), so the insert can fail on `public_id` alone while the
+  test treats any error as proof that the composite business constraint exists. *Reproduced* by dropping
+  `idx_notes_deck_external_ref` and `idx_cards_note_template` from the test database under an overlay,
+  leaving the inserts and assertions unchanged: the test still reports `--- PASS`, and the errors it
+  actually saw were `notes.public_id` / `idx_notes_public_id (SQLSTATE 23505)`. A follow-up probe that
+  cleared `PublicID` inserted both business duplicates. The production indexes do exist; this is a
+  false-negative test, not a missing constraint. *Acceptance:* clear `ID` and `PublicID` or build a
+  fresh object duplicating only the business key, assert the specific constraint error rather than any
+  error, and keep the mutation control so deleting the business index makes the test fail.
+
+- [ ] **M19-26 Dead `.edeck` preset and limit code is kept alive by tests that exercise nothing in
+  production** — *nit.* `createPresetFromPackage`, `PackagePreset`, `PackageLimits` and
+  `DefaultPackageLimits` belong to the removed `.edeck` path; they have no production caller and only
+  `preset_fuzz_test` and `package_preset_validation_test` keep them compiling
+  (`internal/store/package_import.go:35-45,618-668`, `package.go:81-92`). Real `.apkg` imports use
+  `createAnkiPreset` and `PackageImportLimits` (`anki_import.go:1940-1965`). Two sets of defaulting and
+  repair logic mean green tests can cover a path nothing runs. This one is static call-graph evidence
+  from searching the four symbols. *Acceptance:* delete the dead helpers, types and the tests that only
+  serve them, or move the still-valid boundary cases onto `createAnkiPreset`/the import path; do not keep
+  a second set of business rules to keep a test alive. Confirm no compatibility promise exists before
+  removing an exported symbol.
+
 
 ## 2. Release ledger
 
