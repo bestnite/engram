@@ -594,3 +594,102 @@ func readAnkiCollection(t *testing.T, raw []byte) *sql.DB {
 	t.Cleanup(func() { db.Close() })
 	return db
 }
+
+// TestExportAnkiPackageSubDayIntervals checks that a learning or relearning grade whose
+// interval is shorter than a day travels as Anki's negative seconds, in both ivl and
+// lastIvl, and that the encoding survives an import back into an export.
+func TestExportAnkiPackageSubDayIntervals(t *testing.T) {
+	sources := packageDatabases(t)
+	destinations := packageDatabases(t)
+	for driver, db := range sources {
+		dst := destinations[driver]
+		t.Run(driver, func(t *testing.T) {
+			ctx := context.Background()
+			owner := seedUsers(t, db, "anki_subday_owner")[0]
+			presetID := seedPresetRow(t, db, owner)
+			deck := Deck{OwnerUserID: owner, Name: "Steps deck", PresetID: presetID, CreatedAt: time.Now().UTC()}
+			if err := NewDeckStore(db).Create(ctx, &deck); err != nil {
+				t.Fatalf("create deck: %v", err)
+			}
+			typeID := stockNoteTypeID(t, db, deck.ID, "basic")
+			note := Note{DeckID: deck.ID, NoteTypeID: Ptr(typeID), CreatedBy: Ptr(owner)}
+			cards, err := NewNoteStore(db).Create(ctx, &note, map[string]any{"front": "q", "back": "a"})
+			if err != nil {
+				t.Fatalf("create note: %v", err)
+			}
+			first := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+			fixture := []Review{
+				{
+					CardID: cards[0].ID, UserID: owner, Rating: 3, GradeSource: "self", ReviewedAt: first,
+					ReviewDay: "2026-10-01", ElapsedMS: Ptr(1000), StateBefore: 0,
+					IntervalDays: Ptr(10.0 / 1440.0), Stability: Ptr(0.1), Difficulty: Ptr(5.0),
+				},
+				{
+					CardID: cards[0].ID, UserID: owner, Rating: 3, GradeSource: "self", ReviewedAt: first.Add(time.Hour),
+					ReviewDay: "2026-10-01", ElapsedMS: Ptr(1000), StateBefore: 3,
+					IntervalDays: Ptr(20.0 / 1440.0), Stability: Ptr(0.2), Difficulty: Ptr(5.0),
+				},
+			}
+			if err := db.Create(&fixture).Error; err != nil {
+				t.Fatalf("create reviews: %v", err)
+			}
+			opts := PackageOptions{IncludeProgress: true, IncludeReviews: true}
+			raw, err := NewDeckStore(db).ExportAnkiPackage(ctx, owner, deck.ID, opts)
+			if err != nil {
+				t.Fatalf("ExportAnkiPackage: %v", err)
+			}
+			assertAnkiSubDayRevlog(t, raw, "source export")
+
+			importer := seedUsers(t, dst, "anki_subday_importer")[0]
+			report, err := NewDeckStore(dst).ImportPackage(ctx, importer, bytes.NewReader(raw), PackageImportOptions{
+				Target: PackageTargetNewDeck, NewDeckName: "Imported steps", IncludeProgress: true,
+				MediaRoot: t.TempDir(),
+			})
+			if err != nil {
+				t.Fatalf("ImportPackage: %v", err)
+			}
+			if report.ReviewsApplied != 2 {
+				t.Fatalf("reviews applied = %d, want 2", report.ReviewsApplied)
+			}
+			again, err := NewDeckStore(dst).ExportAnkiPackage(ctx, importer, report.DeckID, opts)
+			if err != nil {
+				t.Fatalf("re-export after import: %v", err)
+			}
+			assertAnkiSubDayRevlog(t, again, "import to export")
+		})
+	}
+}
+
+// assertAnkiSubDayRevlog reads the two revlog rows the fixture produces: a 10-minute
+// learning step and a 20-minute relearning step, where the second row's lastIvl names
+// the first row's interval.
+func assertAnkiSubDayRevlog(t *testing.T, raw []byte, label string) {
+	t.Helper()
+	col := readAnkiCollection(t, raw)
+	rows, err := col.Query(`SELECT ivl, lastIvl, type FROM revlog ORDER BY id`)
+	if err != nil {
+		t.Fatalf("%s: read revlog: %v", label, err)
+	}
+	defer rows.Close()
+	type row struct{ ivl, lastIvl, reviewType int }
+	var got []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.ivl, &r.lastIvl, &r.reviewType); err != nil {
+			t.Fatalf("%s: scan revlog: %v", label, err)
+		}
+		got = append(got, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("%s: read revlog: %v", label, err)
+	}
+	want := []row{{-600, 0, 0}, {-1200, -600, 2}}
+	if len(got) != len(want) {
+		t.Fatalf("%s: revlog rows = %v, want %v", label, got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("%s: revlog row %d = %v, want %v", label, i, got[i], want[i])
+		}
+	}
+}

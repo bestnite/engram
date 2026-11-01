@@ -544,10 +544,7 @@ func (c *ankiWriteConfig) writeReviews(reviews []Review) []anki.WriteReview {
 			id++
 		}
 		usedIDs[id] = true
-		interval := 0
-		if rv.IntervalDays != nil {
-			interval = int(math.Round(*rv.IntervalDays))
-		}
+		interval := ankiRevlogInterval(rv.IntervalDays)
 		elapsed := 0
 		if rv.ElapsedMS != nil {
 			elapsed = *rv.ElapsedMS
@@ -560,6 +557,20 @@ func (c *ankiWriteConfig) writeReviews(reviews []Review) []anki.WriteReview {
 		previousInterval[rv.CardID] = interval
 	}
 	return out
+}
+
+// ankiRevlogInterval encodes a scheduled interval the way the revlog stores it: an
+// interval shorter than a day as negative seconds, and a whole-day interval as days.
+// Anki writes the same encoding to both ivl and lastIvl, so a 10-minute learning step
+// is -600 rather than the zero a day-based round would produce.
+func ankiRevlogInterval(days *float64) int {
+	if days == nil {
+		return 0
+	}
+	if *days < 1 {
+		return -int(math.Round(*days * 86400))
+	}
+	return int(math.Round(*days))
 }
 
 // ankiReviewType maps engram's state_before onto Anki's revlog type values: learn,

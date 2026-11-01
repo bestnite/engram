@@ -381,7 +381,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   passes on both drivers, and `go test ./internal/mcp/ -count=1` passes.
 
 
-- [ ] **M19-10 Exported learning steps round to zero and lose the review history** — *should-fix.*
+- [x] **M19-10 Exported learning steps round to zero and lose the review history** — *should-fix.*
   `interval_days` is stored in fractional days but exported through `math.Round`
   (`internal/store/anki_export.go:547-560`), so a 10-minute step (600/86400 days) exports `ivl=0`;
   Anki encodes a sub-day interval as negative seconds, and the same conversion corrupts `lastIvl`.
@@ -392,6 +392,34 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   the Anki client is unverified. *Acceptance:* one interval encoding used by both `ivl` and `lastIvl` —
   negative seconds below a day, whole days above — with regressions for learning and relearning steps
   and for import→export, not just whole-day reviews.
+  *Closed by this commit (`fix(store): keep sub-day revlog intervals in exported packages`).*
+  `writeReviews` (`internal/store/anki_export.go:532`) passes every review interval through
+  `ankiRevlogInterval` (`:566`): below one day it writes negative seconds
+  (`-round(days*86400)`), one day or more it writes whole days, and the encoded value feeds
+  `lastIvl` through the same `previousInterval` map, so both columns use one encoding. The
+  reader already converted a negative interval back to days
+  (`internal/store/anki_import.go:1849-1852`), so the value round-trips unchanged.
+  `TestExportAnkiPackageSubDayIntervals` (`internal/store/anki_export_test.go`) exports a
+  10-minute learning grade and a 20-minute relearning grade, imports that package, and exports
+  it again; each archive must carry `ivl`/`lastIvl` `-600`/`0` and `-1200`/`-600` with revlog
+  types 0 and 2. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestExportAnkiPackageSubDayIntervals -count=1 -v`:
+  ```
+  === RUN   TestExportAnkiPackageSubDayIntervals
+  === RUN   TestExportAnkiPackageSubDayIntervals/sqlite
+  === RUN   TestExportAnkiPackageSubDayIntervals/postgres
+  --- PASS: TestExportAnkiPackageSubDayIntervals (0.68s)
+      --- PASS: TestExportAnkiPackageSubDayIntervals/sqlite (0.01s)
+      --- PASS: TestExportAnkiPackageSubDayIntervals/postgres (0.04s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.688s
+  ```
+  Before the change the same test failed on both drivers with
+  `source export: revlog row 0 = {0 0 0}, want {-600 0 0}` and
+  `source export: revlog row 1 = {0 0 2}, want {-1200 -600 2}`, and the same pair for
+  `import to export`. `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run
+  'TestExportAnkiPackage|TestAnkiExport|TestImportPackage|TestPackageImport' -count=1` passes on
+  both drivers.
 
 - [ ] **M19-11 Clone fails on imported note types and drops custom styling** — *should-fix.* Clone
   reverse-engineers the source type into an engram stock kind and creates the default stock type
