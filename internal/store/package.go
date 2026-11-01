@@ -81,19 +81,6 @@ func (o PackageOptions) DeckConfigsEnabled() bool {
 	return o.IncludeDeckConfigs == nil || *o.IncludeDeckConfigs
 }
 
-// PackagePreset is the scheduling parameters that travel with the package; weights are 21 numbers or null (null = use the default weights).
-type PackagePreset struct {
-	Name                string    `json:"name,omitempty"`
-	DesiredRetention    float64   `json:"desired_retention"`
-	LearningSteps       string    `json:"learning_steps"`
-	RelearningSteps     string    `json:"relearning_steps"`
-	MaximumIntervalDays int       `json:"maximum_interval_days"`
-	EnableFuzz          bool      `json:"enable_fuzz"`
-	Weights             []float64 `json:"weights"`
-	WeightsOptimizedAt  *string   `json:"weights_optimized_at"`
-	WeightsReviewCount  *int      `json:"weights_review_count"`
-}
-
 var (
 	// ErrPackageDeckRequired means the export named no deck.
 	ErrPackageDeckRequired = errors.New("deck package: deck id is required")

@@ -33,18 +33,6 @@ const (
 	PackagePresetCopy = "copy"
 )
 
-// PackageLimits holds the extraction safety caps ("safety").
-type PackageLimits struct {
-	MaxEntries    int
-	MaxFileBytes  int64
-	MaxTotalBytes int64
-}
-
-// DefaultPackageLimits gives conservative default caps against zip bombs.
-func DefaultPackageLimits() PackageLimits {
-	return PackageLimits{MaxEntries: 2000, MaxFileBytes: 32 << 20, MaxTotalBytes: 128 << 20}
-}
-
 // Settings keys and environment variables for the import caps. Each resolves as environment
 // variable, then settings table, then its default, the same order media_max_bytes uses.
 const (
@@ -614,68 +602,6 @@ func nextFreeSuffixedName(base string, taken map[string]bool) string {
 			return candidate
 		}
 	}
-}
-
-// createPresetFromPackage creates a new preset owned by actorUserID from the package's parameters.
-//
-// The package's preset name is only a hint, never the stored name: the exporter writes its own preset name verbatim, so a deck on the default
-// preset exports the literal "Default". Copying that name would create a second preset called "Default" in the importer's account, where the name
-// is the default preset's identity -- the duplicate would be presented as a default preset and could not be deleted. An absent, blank or
-// reserved name therefore becomes "Imported — <deck name>", and the result is made unique among the owner's presets like any other name.
-//
-// The two weight metadata fields are written only when valid weights are applied. Otherwise,
-// the preset would show an optimization record without the weights that it describes.
-func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset, deckName string, applyWeights bool, report *PackageImportReport) (Preset, error) {
-	now := time.Now().UTC()
-	base := strings.TrimSpace(pp.Name)
-	if base == "" || base == DefaultPresetName {
-		importedFrom := strings.TrimSpace(deckName)
-		if importedFrom == "" {
-			// resolveTargetDeck always passes a non-empty deck name; this keeps the fallback self-contained rather than relying on the caller.
-			importedFrom = "Imported"
-		}
-		base = "Imported — " + importedFrom
-	}
-	// base is never DefaultPresetName (the rule above replaces it) and the suffix candidates extend base, so the final name cannot be that literal either.
-	name, err := uniqueOwnerName(ctx, tx, &Preset{}, owner, base)
-	if err != nil {
-		return Preset{}, fmt.Errorf("list preset names: %w", err)
-	}
-	p := Preset{
-		OwnerUserID: owner, Name: name, DesiredRetention: pp.DesiredRetention,
-		LearningSteps: pp.LearningSteps, RelearningSteps: pp.RelearningSteps,
-		MaximumIntervalDays: pp.MaximumIntervalDays, EnableFuzz: Ptr(pp.EnableFuzz),
-		CreatedAt: now, UpdatedAt: now,
-	}
-	if p.DesiredRetention <= 0 || p.DesiredRetention > 1 {
-		p.DesiredRetention = DefaultDesiredRetention
-	}
-	if p.MaximumIntervalDays <= 0 {
-		p.MaximumIntervalDays = DefaultMaximumIntervalDays
-	}
-	p.MaximumIntervalDays = min(p.MaximumIntervalDays, DefaultMaximumIntervalDays)
-	if !validPackageSteps(p.LearningSteps) {
-		p.LearningSteps = DefaultLearningSteps
-	}
-	if !validPackageSteps(p.RelearningSteps) {
-		p.RelearningSteps = DefaultRelearningSteps
-	}
-	p.WeightsJSON = importPresetWeights(owner, pp.Weights, applyWeights, report)
-	if p.WeightsJSON != nil {
-		p.WeightsReviewCount = pp.WeightsReviewCount
-		if pp.WeightsOptimizedAt != nil {
-			if t, err := time.Parse(time.RFC3339, *pp.WeightsOptimizedAt); err == nil {
-				p.WeightsOptimizedAt = &t
-			}
-		}
-	}
-	if err := tx.WithContext(ctx).Create(&p).Error; err != nil {
-		return Preset{}, fmt.Errorf("import package: create preset: %w", err)
-	}
-	if p.WeightsJSON != nil {
-		report.WeightsApplied = true
-	}
-	return p, nil
 }
 
 func validPackageSteps(steps string) bool {

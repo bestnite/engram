@@ -7,10 +7,9 @@ import (
 
 // TestPresetEnableFuzzPointerSemantics covers AGENTS.md §2.3 item 9: enable_fuzz is a boolean column with a database
 // default of true, so the model must use *bool; otherwise GORM omits the zero value and the database default silently overrides an explicit false.
-// Three assertions:
+// Two assertions:
 //  1. when the field is not passed (nil), the stored value is the database default true;
-//  2. when false is passed explicitly, false really is stored (still true now that PresetStore.Create's compensatory write is gone);
-//  3. the package import path (whose equivalent compensatory write in package_import.go is also gone) likewise stores false as false.
+//  2. when false is passed explicitly, false really is stored (still true now that PresetStore.Create's compensatory write is gone).
 func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -62,24 +61,6 @@ func TestPresetEnableFuzzPointerSemantics(t *testing.T) {
 				t.Errorf("enable_fuzz = true, want false (explicit)")
 			}
 			t.Logf("explicit false enable_fuzz stored as %v", *gotOff.EnableFuzz)
-
-			// 3) Package import path: createPresetFromPackage's compensatory write is gone, and false must still be stored as false.
-			imported, err := createPresetFromPackage(ctx, db, owner, &PackagePreset{
-				Name: "Imported", DesiredRetention: DefaultDesiredRetention,
-				LearningSteps: DefaultLearningSteps, RelearningSteps: DefaultRelearningSteps,
-				MaximumIntervalDays: DefaultMaximumIntervalDays, EnableFuzz: false,
-			}, "Imported deck", false, &PackageImportReport{})
-			if err != nil {
-				t.Fatalf("createPresetFromPackage error = %v", err)
-			}
-			gotImported, err := presets.ByID(ctx, imported.ID)
-			if err != nil {
-				t.Fatalf("ByID(imported) error = %v", err)
-			}
-			if gotImported.EnableFuzz == nil || *gotImported.EnableFuzz {
-				t.Errorf("imported enable_fuzz = %v, want false", gotImported.EnableFuzz)
-			}
-			t.Logf("imported enable_fuzz stored as %v", *gotImported.EnableFuzz)
 		})
 	}
 }

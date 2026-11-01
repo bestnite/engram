@@ -1095,7 +1095,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   before this commit saw `constraint failed: UNIQUE constraint failed: notes.public_id (2067)` on SQLite,
   which is the false negative the entry reports.
 
-- [ ] **M19-26 Dead `.edeck` preset and limit code is kept alive by tests that exercise nothing in
+- [x] **M19-26 Dead `.edeck` preset and limit code is kept alive by tests that exercise nothing in
   production** — *nit.* `createPresetFromPackage`, `PackagePreset`, `PackageLimits` and
   `DefaultPackageLimits` belong to the removed `.edeck` path; they have no production caller and only
   `preset_fuzz_test` and `package_preset_validation_test` keep them compiling
@@ -1106,6 +1106,41 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   serve them, or move the still-valid boundary cases onto `createAnkiPreset`/the import path; do not keep
   a second set of business rules to keep a test alive. Confirm no compatibility promise exists before
   removing an exported symbol.
+  *Closed by this commit (`refactor(store): delete the dead .edeck preset and limit code`).*
+  `createPresetFromPackage` and the `PackagePreset` type are gone (`internal/store/package_import.go`,
+  `internal/store/package.go`), together with `PackageLimits`/`DefaultPackageLimits` (`:35-45`);
+  `package_preset_validation_test.go` is deleted and `preset_fuzz_test.go` keeps its nil/explicit-false
+  assertions on `PresetStore.Create` only. Callers before the change, from the whole tree:
+  ```
+  $ git grep -n 'createPresetFromPackage(\|PackagePreset{\|PackageLimits{' HEAD -- '*.go'
+  HEAD:internal/store/package_import.go:45:	return PackageLimits{MaxEntries: 2000, MaxFileBytes: 32 << 20, MaxTotalBytes: 128 << 20}
+  HEAD:internal/store/package_import.go:628:func createPresetFromPackage(ctx context.Context, tx *gorm.DB, owner uint64, pp *PackagePreset, deckName string, applyWeights bool, report *PackageImportReport) (Preset, error) {
+  HEAD:internal/store/package_preset_validation_test.go:28:					pp := &PackagePreset{LearningSteps: tc.learning, RelearningSteps: tc.relearning, MaximumIntervalDays: tc.max}
+  HEAD:internal/store/package_preset_validation_test.go:29:					p, err := createPresetFromPackage(context.Background(), db, owner, pp, tc.name, false, &PackageImportReport{})
+  HEAD:internal/store/preset_fuzz_test.go:67:			imported, err := createPresetFromPackage(ctx, db, owner, &PackagePreset{
+  ```
+  The `PackageLimits` declaration has no other reference; the only callers of the helper were the two
+  test files. `validPackageSteps` stays because the preset repair migration still uses it, and its
+  boundary cases are already covered there (`TestRepairPresetSchedulerLimits` has negative, NaN, `+Inf`,
+  over-cap, invalid and legal step rows), so no rule was left test-only. No compatibility promise exists
+  to check: all four symbols live in `internal/store`, which Go's `internal/` rule makes unimportable
+  from outside this module. `go build ./...` and `go vet ./internal/store/` are clean. Raw output of
+  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run
+  'TestRepairPresetSchedulerLimits|TestPresetEnableFuzzPointerSemantics' -count=1 -v`:
+  ```
+  === RUN   TestRepairPresetSchedulerLimits
+  === RUN   TestRepairPresetSchedulerLimits/postgres
+  === RUN   TestRepairPresetSchedulerLimits/sqlite
+  --- PASS: TestRepairPresetSchedulerLimits (0.37s)
+  === RUN   TestPresetEnableFuzzPointerSemantics
+  === RUN   TestPresetEnableFuzzPointerSemantics/sqlite
+  === RUN   TestPresetEnableFuzzPointerSemantics/postgres
+  --- PASS: TestPresetEnableFuzzPointerSemantics (0.26s)
+  PASS
+  ok  	git.nite07.com/nite/engram/internal/store	0.644s
+  ```
+  `TestAnkiImportPresetRefusals|TestAnkiImportPresetModes|TestCreateAnkiPreset|TestAnkiImportCaps*`
+  and `TestResolvePackageLimits` pass on both drivers in the same package.
 
 
 - [x] **M19-27 A step the preset form accepts silently replaces every scheduling parameter with the
