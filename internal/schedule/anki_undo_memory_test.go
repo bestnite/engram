@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"reflect"
 	"testing"
@@ -111,6 +112,87 @@ func TestAnkiImportedUndoMemoryReplay(t *testing.T) {
 					t.Fatal(err)
 				}
 			})
+		}
+	}
+}
+
+func TestAnkiImportedCramMemory(t *testing.T) {
+	for driver, db := range undoMemoryDatabases(t) {
+		for _, carried := range []bool{false, true} {
+			for _, tail := range []bool{false, true} {
+				name := fmt.Sprintf("%s/carried-%t/tail-%t", driver, carried, tail)
+				t.Run(name, func(t *testing.T) {
+					user := store.User{Username: name, Email: fmt.Sprintf("cram-%t-%t@example.com", carried, tail), DisplayName: "cram", Role: store.RoleUser, Status: store.StatusActive, Locale: "en", Timezone: "UTC"}
+					if err := db.Create(&user).Error; err != nil {
+						t.Fatal(err)
+					}
+					card := anki.WriteCard{ID: 50, NoteID: 40, DeckID: 20, Type: 2, Queue: 2, Ivl: 30, Factor: 2500}
+					if carried {
+						card.Stability, card.Difficulty = store.Ptr(5.0), store.Ptr(5.0)
+					}
+					rows := []anki.WriteReview{
+						{ID: 1600000000000, CardID: 50, Ease: 3, Type: 0, Ivl: 1, Factor: 2500},
+						{ID: 1600086400000, CardID: 50, Ease: 3, Type: 3, Ivl: 1, Factor: 0},
+						{ID: 1600259200000, CardID: 50, Ease: 3, Type: 1, Ivl: 30, Factor: 2500},
+					}
+					if tail {
+						rows = append(rows, anki.WriteReview{ID: 1600345600000, CardID: 50, Ease: 3, Type: 3, Ivl: 30}, anki.WriteReview{ID: 1600432000000, CardID: 50, Ease: 3, Type: 3, Ivl: 30})
+					}
+					pkg := anki.WritePackage{Collection: anki.WriteCollection{CreatedAt: 1600000000,
+						NoteTypes: []anki.WriteNoteType{{ID: 10, Name: "Basic", Fields: []anki.Field{{Name: "Front"}}, Templates: []anki.Template{{Name: "Card", QFormat: "{{Front}}", AFormat: "{{Front}}"}}}},
+						Decks:     []anki.WriteDeck{{ID: 20, Name: "Memory", ConfigID: 30}}, DeckConfigs: []anki.WriteDeckConfig{{ID: 30, Name: "Default", DesiredRetention: .9, LearningSteps: []float64{1, 10}, RelearningSteps: []float64{10}, MaximumIntervalDays: 36500}},
+						Notes: []anki.WriteNote{{ID: 40, GUID: "guid", NoteTypeID: 10, Fields: []string{"front"}}}, Cards: []anki.WriteCard{card}, Reviews: rows,
+					}}
+					var raw bytes.Buffer
+					if err := anki.WriteArchive(&raw, &pkg); err != nil {
+						t.Fatal(err)
+					}
+					report, err := store.NewDeckStore(db).ImportPackage(context.Background(), user.ID, &raw, store.PackageImportOptions{Target: store.PackageTargetNewDeck, IncludeProgress: true, MediaRoot: t.TempDir()})
+					if err != nil {
+						t.Fatal(err)
+					}
+					var state store.CardState
+					if err := db.Where("user_id = ?", user.ID).First(&state).Error; err != nil {
+						t.Fatal(err)
+					}
+					var reviews []store.Review
+					if err := db.Where("card_id = ? AND user_id = ?", state.CardID, user.ID).Order("id").Find(&reviews).Error; err != nil {
+						t.Fatal(err)
+					}
+					if len(reviews) != len(rows) {
+						t.Fatalf("reviews=%+v", reviews)
+					}
+					if reviews[0].Stability == nil || reviews[0].Difficulty == nil || reviews[1].Stability == nil || reviews[1].Difficulty == nil || *reviews[0].Stability != *reviews[1].Stability || *reviews[0].Difficulty != *reviews[1].Difficulty {
+						t.Fatalf("interior cram does not preserve preceding memory: %+v", reviews)
+					}
+					if state.Stability == nil || state.Difficulty == nil || reviews[2].Stability == nil || reviews[2].Difficulty == nil || *reviews[2].Stability != *state.Stability || *reviews[2].Difficulty != *state.Difficulty {
+						t.Fatalf("last selected does not preserve final memory: %+v", reviews[2])
+					}
+					for i := 3; i < len(reviews); i++ {
+						if reviews[i].Stability == nil || reviews[i].Difficulty == nil || *reviews[i].Stability != *reviews[i-1].Stability || *reviews[i].Difficulty != *reviews[i-1].Difficulty {
+							t.Fatalf("tail does not preserve preceding memory: %+v", reviews[i])
+						}
+					}
+					var deck store.Deck
+					if err := db.First(&deck, report.DeckID).Error; err != nil {
+						t.Fatal(err)
+					}
+					var preset store.Preset
+					if err := db.First(&preset, deck.PresetID).Error; err != nil {
+						t.Fatal(err)
+					}
+					s := mustScheduler(t, &preset)
+					now := time.Unix(1700000000, 0)
+					result := mustSubmit(t, db, SubmitInput{CardID: state.CardID, UserID: user.ID, Rating: Good, ExpectedVersion: state.Version, Scheduler: s, Now: now, Location: time.UTC})
+					restored, err := undoOnce(t, db, state.CardID, user.ID, result.State.Version, s, now.Add(time.Second))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if restored.Stability == nil || restored.Difficulty == nil || *restored.Stability != *state.Stability || *restored.Difficulty != *state.Difficulty || restored.State != state.State || restored.Reps != state.Reps || restored.Lapses != state.Lapses || restored.ScheduledDays != state.ScheduledDays || restored.DueAt == nil || state.DueAt == nil || !restored.DueAt.Equal(*state.DueAt) || restored.LastReviewAt == nil || state.LastReviewAt == nil || !restored.LastReviewAt.Equal(*state.LastReviewAt) {
+						t.Fatalf("restored=%+v imported=%+v", restored, state)
+					}
+				})
+			}
 		}
 	}
 }

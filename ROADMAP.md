@@ -12,16 +12,6 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 
 ### M18 — Anki replay review follow-ups
 
-- [ ] **M18-108 Preserve memory on imported unselected grades** — In
-  `internal/store/anki_import.go`, carry the preceding selected row's memory onto written
-  unselected grades within or after the selected window, including cram rows. Preserve the
-  carried final memory through the last written grade. Add regression coverage in
-  `internal/schedule/anki_import_undo_test.go`.
-  *Acceptance:* importing a cram-tail package, submitting a native grade and undoing it succeeds
-  and restores the imported scheduling state on SQLite and PostgreSQL; an interior cram row
-  preserves its preceding memory; missing-memory undo remains fail-safe.
-  *Evidence:* raw output of targeted store replay and schedule imported-undo tests on both
-  databases, plus scoped vet and the reviewed diff, recorded when closing this entry.
 - [ ] **M18-109 Measure unpinned replay rules with Anki** — Extend
   `tools/anki-oracle/generate.py` and regenerate oracle packages and goldens for incomplete
   history starting with an interval of at most -86400 seconds and FSRS-produced revlog factors
@@ -168,6 +158,7 @@ bluemonday-sanitised `internal/render` are gone.
 
 | Goal | What shipped | Breaking change |
 |---|---|---|
+| Undo after imported cram grades (M18-108) | Written unselected grades inherit the preceding selected memory; carried final memory stays on the last selected grade and propagates through consecutive cram tails. SQLite and PostgreSQL regression cases import, grade and undo with carried and replay-derived memory. Missing-memory undo still refuses before writes. | No — imported row memory changes; no schema or payload changes |
 | Anki-compatible content model (M17 phases 1–3) | Note types as data with eight registered answer controls; the `{note_type, fields}` REST/MCP note payload, the note type endpoints, the sandboxed card and edit frames, `/fm/` media tokens; migrations 0012–0014; `.edeck` format 2 and the regenerated bundled decks, both removed with the format by `M18-5`. Details above. | Yes — HTTP API, MCP, database schema, file format |
 | Media by file name and by any type (M17-22) | Media is classified (image, audio, video, font, script, style, other) instead of allowlisted; upload and import accept every class within the quota. `/fm/<token>/<name>` resolves a deck-scoped name through `media_names`, so CSS-only `_` assets are served. Every media response carries `Content-Security-Policy: sandbox` and everything not image/audio/video is an attachment. Note-type `_`-prefixed references are kept by garbage collection (migration 0015 backfills them) and travel with an export. An import whose name holds different bytes renames the new file as Anki does. A note write turns the editor's `/media/<sha256>` and `[sound:<sha256>]` into deck media names, so the frame, references, garbage collection and export resolve them. | Yes — the `media_allowed_mimes` configuration key and its environment variable are removed; every `/media/` and `/fm/` response gains a sandbox CSP and a download disposition for non-inline classes |
 | Note type styles and deck special fields in review (M17-33, M17-44) | Every card frame in the review page and the note preview now takes its HTML, body class and media base from the server's per-side face object, and its style is the engram face sheet followed by the note type's CSS, so a note type rule overrides the default typography. `{{Deck}}` renders the deck name joined with the card's subdeck path (`Lesson 1::Verbs`) and `{{Subdeck}}` its last component; a card outside a subdeck renders the deck name for both. | No — response shapes are unchanged |

@@ -1483,7 +1483,7 @@ func usableAnkiMemory(stability, difficulty *float64) bool {
 // so that an invalid non-new state cannot break previews and submissions.
 // A negative cards.ivl counts seconds and is converted to days for SM-2. The SM-2
 // retention of 0.9 assumes the retention the card's SM-2 intervals aimed at.
-func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *CardState, engine *fsrs.FSRS, selected []anki.Review, history fsrs.ReviewEntries, complete bool, keptIDs []int64, rowMemory map[int64]fsrs.MemoryState, approximated *int) bool {
+func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *CardState, engine *fsrs.FSRS, selected []anki.Review, history fsrs.ReviewEntries, complete bool, rowMemory map[int64]fsrs.MemoryState, approximated *int) bool {
 	state.Stability, state.Difficulty = stability, difficulty
 	if card.Type != 0 {
 		carried := usableAnkiMemory(state.Stability, state.Difficulty)
@@ -1539,9 +1539,6 @@ func deriveAnkiMemory(card anki.Card, stability, difficulty *float64, state *Car
 			}
 			state.Stability, state.Difficulty = &memory.Stability, &memory.Difficulty
 		}
-	}
-	if len(keptIDs) > 0 && state.Stability != nil && state.Difficulty != nil {
-		rowMemory[keptIDs[len(keptIDs)-1]] = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}
 	}
 	return true
 }
@@ -1700,9 +1697,31 @@ func importAnkiProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 				return fmt.Errorf("import Anki card %d data: %w", card.ID, err)
 			}
 		}
-		if !deriveAnkiMemory(card, data.Stability, data.Difficulty, &state, engine, selectedHistory[card.ID], histories[card.ID], completeHistory[card.ID], keptIDs[card.ID], rowMemory, &approximated) {
+		if !deriveAnkiMemory(card, data.Stability, data.Difficulty, &state, engine, selectedHistory[card.ID], histories[card.ID], completeHistory[card.ID], rowMemory, &approximated) {
 			report.StatesSkipped++
 			continue
+		}
+		if ids := keptIDs[card.ID]; len(ids) > 0 && state.Stability != nil && state.Difficulty != nil {
+			rowMemory[ids[len(ids)-1]] = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}
+		}
+		// Unselected grades do not change memory; copy only a known selected state.
+		var preceding fsrs.MemoryState
+		haveMemory := false
+		selectedIDs := make(map[int64]bool, len(selectedHistory[card.ID]))
+		for _, r := range selectedHistory[card.ID] {
+			selectedIDs[r.ID] = true
+		}
+		for _, r := range allHistory[card.ID] {
+			if isAnkiReset(r) {
+				haveMemory = false
+			} else if selectedIDs[r.ID] {
+				preceding, haveMemory = rowMemory[r.ID]
+			} else if haveMemory && r.Type >= 0 && r.Type <= 3 && r.Ease >= 1 && r.Ease <= 4 {
+				rowMemory[r.ID] = preceding
+			}
+		}
+		if id := lastUsable[card.ID]; id != 0 && state.Stability != nil && state.Difficulty != nil {
+			rowMemory[id] = fsrs.MemoryState{Stability: *state.Stability, Difficulty: *state.Difficulty}
 		}
 		// Prefer lrt because it records the card's last review even when the log is
 		// incomplete; otherwise use the last kept revlog row as direct evidence.
