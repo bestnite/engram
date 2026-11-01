@@ -3,7 +3,7 @@
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
   import { authStore } from '../auth';
-  import type { Deck, PackageImportReport } from '../api';
+  import type { Deck, DeckPackageImportOptions, PackageImportReport, PresetRecord } from '../api';
   import Select from '../components/ui/Select.svelte';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -17,18 +17,23 @@
   // Import source: a file or a public HTTPS direct link. File by default; both entries share the same set of options below.
   let source = $state<'file' | 'url'>('file');
   let decks = $state<Deck[]>([]);
+  let presets = $state<PresetRecord[]>([]);
   let file = $state<File | null>(null);
   let packageUrl = $state('');
   let target = $state('new_deck');
   let deckId = $state('');
+  let presetMode = $state<'new' | 'reuse' | 'copy'>('new');
+  let presetId = $state('');
   let dryRun = $state(true);
   let onConflict = $state<'skip' | 'update' | 'fail'>('update');
   let allowOthersProgress = $state(false);
+  let includeProgress = $state(false);
   let skipMissingMedia = $state(false);
   let applyWeights = $state(false);
   let submitting = $state(false);
   // Only holds local validation errors from before sending the request; request failures go through toast.
   let errorKey = $state('');
+  let presetErrorKey = $state('');
   let report = $state<PackageImportReport | null>(null);
   let reportSection = $state<HTMLElement | null>(null);
 
@@ -39,6 +44,7 @@
   onMount(() => {
     void (async () => {
       try { decks = (await apiClient.getDecks()).decks; } catch { /* Falls back to entering the deck id by hand when the list fetch fails. */ }
+      try { presets = (await apiClient.listPresets()).presets; } catch { /* Falls back to text input when the preset list fetch fails. */ }
     })();
     return () => { mounted = false; };
   });
@@ -52,10 +58,12 @@
    */
   $effect(() => {
     void source; void packageUrl; void file; void target; void deckId;
-    void dryRun; void onConflict; void allowOthersProgress; void skipMissingMedia; void applyWeights;
+    void dryRun; void onConflict; void allowOthersProgress; void includeProgress; void skipMissingMedia; void applyWeights;
+    void presetMode; void presetId;
     requestRevision++;
     report = null;
     errorKey = '';
+    presetErrorKey = '';
   });
 
   /**
@@ -117,23 +125,49 @@
       if (!raw) { errorKey = 'package.error.url_required'; return; }
       if (!isHttpsUrl(raw)) { errorKey = 'package.error.url_scheme'; return; }
     }
+    if (target !== 'new_deck' && presetId) {
+      presetErrorKey = 'package.error.preset_target_conflict';
+      errorKey = presetErrorKey;
+      return;
+    }
     if (target === 'into_deck' && !deckId) { errorKey = 'package.error.target_required'; return; }
+    if ((presetMode === 'reuse' || presetMode === 'copy') && applyWeights) {
+      presetErrorKey = 'package.error.preset_weights_conflict';
+      errorKey = presetErrorKey;
+      return;
+    }
+    if (presetMode === 'reuse' || presetMode === 'copy') {
+      if (!presetId) {
+        presetErrorKey = 'package.error.preset_required';
+        errorKey = presetErrorKey;
+        return;
+      }
+      if (presets.length > 0 && !presets.some((p) => p.id === presetId)) {
+        presetErrorKey = 'package.error.preset_foreign';
+        errorKey = presetErrorKey;
+        return;
+      }
+    }
     // Freeze this request's inputs: the payload is sent from this snapshot, and the result is only written back when the input version is unchanged.
     const revision = requestRevision;
     const requestSource = source;
     const requestFile = file;
     const requestUrl = packageUrl.trim();
-    const options = {
+    const options: DeckPackageImportOptions = {
       target: target === 'new_deck' ? 'new_deck' : `into_deck:${deckId}`,
       dryRun,
       onConflict,
       allowOthersProgress: $authStore.user?.role === 'admin' && allowOthersProgress,
       skipMissingMedia,
       // The in-package weight is only used for a newly created deck's preset; the server ignores it when merging into an existing deck, so no checkbox is sent from here either.
-      applyWeights: target === 'new_deck' && applyWeights,
+      applyWeights: target === 'new_deck' && presetMode === 'new' && applyWeights,
+      presetMode,
+      ...(presetMode === 'reuse' || presetMode === 'copy' ? { presetId } : {}),
+      ...(includeProgress ? { includeProgress: true } : {}),
     };
     submitting = true;
     errorKey = '';
+    presetErrorKey = '';
     report = null;
     try {
       const result = requestSource === 'file'
@@ -145,7 +179,12 @@
       notifyResult(result);
     } catch (err) {
       if (!mounted || revision !== requestRevision) return;
-      toast.error($t(importErrorKey(err)));
+      if (err instanceof ApiClientError && (err.code === 'invalid_request' || err.status === 400) && ((err.details as any)?.error?.message?.includes('preset') || err.message?.includes('preset'))) {
+        presetErrorKey = 'package.error.preset_invalid';
+        errorKey = presetErrorKey;
+      } else {
+        toast.error($t(importErrorKey(err)));
+      }
     } finally {
       // The request itself has finished: as long as it is still mounted, release the submit lock so the user can submit again with a new selection.
       if (mounted) submitting = false;
@@ -190,6 +229,11 @@
       ['package.report.media_new', value.media_new],
       ['package.report.media_missing', value.media_missing], ['package.report.progress_applied', value.progress_applied],
       ['package.report.progress_skipped', value.progress_skipped], ['package.report.progress_discarded', value.progress_discarded ? 1 : 0],
+      ['package.report.states_skipped', value.states_skipped ?? 0],
+      ['package.report.states_discarded', value.states_discarded ?? 0],
+      ['package.report.reviews_applied', value.reviews_applied ?? 0],
+      ['package.report.reviews_skipped', value.reviews_skipped ?? 0],
+      ['package.report.reviews_discarded', value.reviews_discarded ?? 0],
       ['package.report.weights_applied', value.weights_applied ? 1 : 0], ['package.report.weights_discarded', value.weights_discarded ? 1 : 0],
       ['package.report.weights_invalid', value.weights_invalid ? 1 : 0],
       ...(value.cards_skipped > 0 ? [['package.report.cards_skipped', value.cards_skipped] as [string, number]] : []),
@@ -249,6 +293,7 @@
           {#if decks.length}
             <Select
               class="mt-2"
+              testId="package-import-deck"
               bind:value={deckId}
               placeholder={$t('package.import.choose_deck')}
               options={decks.map((deck) => ({ value: String(deck.id), label: deck.name }))}
@@ -267,12 +312,53 @@
           options={[{ value: 'update', label: $t('package.import.update') }, { value: 'skip', label: $t('package.import.skip') }, { value: 'fail', label: $t('package.import.fail') }]}
         />
       </label>
+      <label class="block text-sm font-medium">{$t('package.import.preset_mode')}
+        <Select
+          class="mt-2"
+          testId="package-import-preset-mode"
+          value={presetMode}
+          onValueChange={(value) => (presetMode = value as typeof presetMode)}
+          options={[
+            { value: 'new', label: $t('package.import.preset_mode_new') },
+            { value: 'reuse', label: $t('package.import.preset_mode_reuse') },
+            { value: 'copy', label: $t('package.import.preset_mode_copy') },
+          ]}
+        />
+      </label>
+      {#if presetMode === 'reuse' || presetMode === 'copy'}
+        <label class="block text-sm font-medium">{$t('package.import.preset')}
+          {#if presets.length}
+            <Select
+              class="mt-2"
+              testId="package-import-preset"
+              bind:value={presetId}
+              placeholder={$t('package.import.choose_preset')}
+              options={presets.map((preset) => ({ value: String(preset.id), label: preset.name }))}
+            />
+          {:else}
+            <input
+              class="field-input text-sm mt-2 block w-full"
+              type="text"
+              data-testid="package-import-preset-input"
+              bind:value={presetId}
+            />
+          {/if}
+          {#if presetErrorKey}
+            <p role="alert" data-testid="package-import-preset-error" class="mt-1.5 text-sm text-destructive-foreground">{$t(presetErrorKey)}</p>
+          {/if}
+        </label>
+      {:else if presetErrorKey}
+        <div class="sm:col-span-2 lg:col-span-3">
+          <p role="alert" data-testid="package-import-preset-error" class="text-sm text-destructive-foreground">{$t(presetErrorKey)}</p>
+        </div>
+      {/if}
     </div>
     <div class="space-y-3 text-sm">
       <label class="flex items-center gap-2"><Checkbox bind:checked={dryRun} label={$t('package.import.dry_run')} />{$t('package.import.dry_run')}</label>
+      <label class="flex items-center gap-2"><Checkbox bind:checked={includeProgress} testId="package-import-include-progress" label={$t('package.import.include_progress')} />{$t('package.import.include_progress')}</label>
       {#if $authStore.user?.role === 'admin'}<label class="flex items-center gap-2"><Checkbox bind:checked={allowOthersProgress} label={$t('package.import.allow_progress')} />{$t('package.import.allow_progress')}</label>{/if}
       <label class="flex items-center gap-2"><Checkbox bind:checked={skipMissingMedia} label={$t('package.import.skip_media')} />{$t('package.import.skip_media')}</label>
-      {#if target === 'new_deck'}<label class="flex items-center gap-2"><Checkbox bind:checked={applyWeights} testId="package-import-apply-weights" label={$t('package.import.apply_weights')} />{$t('package.import.apply_weights')}</label>{/if}
+      {#if target === 'new_deck' && presetMode === 'new'}<label class="flex items-center gap-2"><Checkbox bind:checked={applyWeights} testId="package-import-apply-weights" label={$t('package.import.apply_weights')} />{$t('package.import.apply_weights')}</label>{/if}
     </div>
     <div class="flex flex-wrap items-center gap-3 border-t border-border pt-5">
       <Button type="submit" size="lg" testId="import-submit" loading={submitting}><Upload class="size-4" aria-hidden="true" /><span>{$t(dryRun ? 'package.import.submit_dry' : 'package.import.submit')}</span></Button>

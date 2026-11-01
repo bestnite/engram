@@ -619,6 +619,11 @@ export interface PackageImportReport {
   progress_applied: number;
   progress_skipped: number;
   progress_discarded: boolean;
+  states_skipped?: number;
+  states_discarded?: number;
+  reviews_applied?: number;
+  reviews_skipped?: number;
+  reviews_discarded?: number;
   weights_applied: boolean;
   weights_invalid: boolean;
   weights_discarded: boolean;
@@ -633,6 +638,19 @@ export interface PackageImportReport {
   /** Anki .apkg report: LaTeX images the package does not carry. */
   latex_missing_images?: string[];
   errors: Array<{ entry: string; reason: string }>;
+}
+
+/** Options for package import (file multipart and URL JSON route). */
+export interface DeckPackageImportOptions {
+  target: string;
+  dryRun?: boolean;
+  onConflict?: 'skip' | 'update' | 'fail';
+  allowOthersProgress?: boolean;
+  includeProgress?: boolean;
+  skipMissingMedia?: boolean;
+  applyWeights?: boolean;
+  presetMode?: 'new' | 'reuse' | 'copy';
+  presetId?: string;
 }
 
 /**

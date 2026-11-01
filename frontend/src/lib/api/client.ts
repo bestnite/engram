@@ -335,7 +335,7 @@ export class ApiClient {
   }
 
   /** Import a deck package through the same-origin session multipart route. */
-  async importDeckPackage(file: File, options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean; applyWeights?: boolean }): Promise<PackageImportReport> {
+  async importDeckPackage(file: File, options: import('./types').DeckPackageImportOptions): Promise<PackageImportReport> {
     if (!this.csrfToken) await this.getSession();
     const form = new FormData();
     form.append('file', file, file.name);
@@ -343,8 +343,17 @@ export class ApiClient {
     form.append('dry_run', options.dryRun ? '1' : '0');
     form.append('on_conflict', options.onConflict || 'update');
     form.append('allow_others_progress', options.allowOthersProgress ? '1' : '0');
+    if (options.includeProgress) {
+      form.append('include_progress', '1');
+    }
     form.append('skip_missing_media', options.skipMissingMedia ? '1' : '0');
     form.append('apply_weights', options.applyWeights ? '1' : '0');
+    if (options.presetMode) {
+      form.append('preset_mode', options.presetMode);
+    }
+    if (options.presetId) {
+      form.append('preset_id', options.presetId);
+    }
     return this.notifying('decks', this.request<PackageImportReport>('/api/v1/decks/import', { method: 'POST', body: form }));
   }
 
@@ -359,20 +368,30 @@ export class ApiClient {
    */
   async importDeckPackageURL(
     rawURL: string,
-    options: { target: string; dryRun?: boolean; onConflict?: 'skip' | 'update' | 'fail'; allowOthersProgress?: boolean; skipMissingMedia?: boolean; applyWeights?: boolean }
+    options: import('./types').DeckPackageImportOptions
   ): Promise<PackageImportReport> {
     if (!this.csrfToken) await this.getSession();
+    const body: Record<string, unknown> = {
+      url: rawURL,
+      target: options.target,
+      dry_run: options.dryRun === true,
+      on_conflict: options.onConflict || 'update',
+      allow_others_progress: options.allowOthersProgress === true,
+      skip_missing_media: options.skipMissingMedia === true,
+      apply_weights: options.applyWeights === true,
+    };
+    if (options.includeProgress) {
+      body.include_progress = true;
+    }
+    if (options.presetMode) {
+      body.preset_mode = options.presetMode;
+    }
+    if (options.presetId) {
+      body.preset_id = options.presetId;
+    }
     return this.notifying('decks', this.request<PackageImportReport>('/api/v1/decks/import-url', {
       method: 'POST',
-      body: JSON.stringify({
-        url: rawURL,
-        target: options.target,
-        dry_run: options.dryRun === true,
-        on_conflict: options.onConflict || 'update',
-        allow_others_progress: options.allowOthersProgress === true,
-        skip_missing_media: options.skipMissingMedia === true,
-        apply_weights: options.applyWeights === true,
-      }),
+      body: JSON.stringify(body),
     }));
   }
 

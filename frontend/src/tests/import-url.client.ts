@@ -45,6 +45,11 @@ function reportFixture(overrides: Partial<PackageImportReport> = {}): PackageImp
     progress_applied: 0,
     progress_skipped: 0,
     progress_discarded: false,
+    states_skipped: 0,
+    states_discarded: 0,
+    reviews_applied: 0,
+    reviews_skipped: 0,
+    reviews_discarded: 0,
     weights_applied: false,
     weights_invalid: false,
     weights_discarded: false,
@@ -282,6 +287,337 @@ describe('ImportView — package weights', () => {
   });
 });
 
+describe('ImportView — preset modes, progress and counters (M18-6)', () => {
+  const ownPresets = [
+    {
+      id: 'preset-1',
+      name: 'Default Preset',
+      is_default: true,
+      desired_retention: 0.9,
+      learning_steps: '1m 10m',
+      relearning_steps: '10m',
+      maximum_interval_days: 36500,
+      enable_fuzz: true,
+      weights_optimized: false,
+      weights_optimized_at: null,
+      weights_review_count: null,
+      weights_raw: null,
+      job: null,
+      gate: { threshold: 1000, current: 0, eligible: false },
+    },
+    {
+      id: 'preset-2',
+      name: 'Custom Preset',
+      is_default: false,
+      desired_retention: 0.85,
+      learning_steps: '1m 10m',
+      relearning_steps: '10m',
+      maximum_interval_days: 36500,
+      enable_fuzz: true,
+      weights_optimized: false,
+      weights_optimized_at: null,
+      weights_review_count: null,
+      weights_raw: null,
+      job: null,
+      gate: { threshold: 1000, current: 0, eligible: false },
+    },
+  ];
+
+  it('allows selecting the three preset modes: new, reuse, copy', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
+    mountView();
+    await flush();
+
+    const modeTrigger = () => target.querySelector('[data-testid="package-import-preset-mode"]') as HTMLElement;
+    expect(modeTrigger()).toBeTruthy();
+    expect(modeTrigger().textContent).toContain(formatMessage('zh-CN', 'package.import.preset_mode_new'));
+
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_reuse'));
+    expect(modeTrigger().textContent).toContain(formatMessage('zh-CN', 'package.import.preset_mode_reuse'));
+
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_copy'));
+    expect(modeTrigger().textContent).toContain(formatMessage('zh-CN', 'package.import.preset_mode_copy'));
+
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_new'));
+    expect(modeTrigger().textContent).toContain(formatMessage('zh-CN', 'package.import.preset_mode_new'));
+  });
+
+  it('reuse and copy reveal the picker and hide the weight checkbox; new shows weights and hides picker', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
+    mountView();
+    await flush();
+
+    const picker = () => target.querySelector('[data-testid="package-import-preset"]');
+    const weights = () => target.querySelector('[data-testid="package-import-apply-weights"]');
+
+    // Default is new: weight checkbox visible, picker hidden
+    expect(weights()).toBeTruthy();
+    expect(picker()).toBeNull();
+
+    // Mode reuse: picker revealed, weights hidden
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_reuse'));
+    expect(picker()).toBeTruthy();
+    expect(weights()).toBeNull();
+
+    // Mode copy: picker revealed, weights hidden
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_copy'));
+    expect(picker()).toBeTruthy();
+    expect(weights()).toBeNull();
+
+    // Back to new: picker hidden, weights revealed
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_new'));
+    expect(weights()).toBeTruthy();
+    expect(picker()).toBeNull();
+  });
+
+  it('sends preset_id when reusing or copying an owned preset', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
+    const importFile = vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(reportFixture());
+
+    mountView();
+    await flush();
+
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_reuse'));
+    await selectOption('package-import-preset', 'Custom Preset');
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+
+    expect(importFile).toHaveBeenCalledTimes(1);
+    expect(importFile.mock.calls[0]![1]).toMatchObject({
+      target: 'new_deck',
+      presetMode: 'reuse',
+      presetId: 'preset-2',
+    });
+  });
+
+  it('refuses combination: reuse or copy without choosing an owned preset (missing/foreign)', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
+    const importFile = vi.spyOn(apiClient, 'importDeckPackage');
+
+    mountView();
+    await flush();
+
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_reuse'));
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+
+    // Not called, server write count stays 0
+    expect(importFile).not.toHaveBeenCalled();
+    const alert = target.querySelector('[data-testid="package-import-preset-error"]');
+    expect(alert).toBeTruthy();
+    expect(alert?.textContent).toBe(formatMessage('zh-CN', 'package.error.preset_required'));
+  });
+
+  it('refuses combination: weights with reuse or copy, showing localized error and write count stays 0', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
+    const importFile = vi.spyOn(apiClient, 'importDeckPackage');
+
+    mountView();
+    await flush();
+
+    // Check apply weights in mode new
+    target.querySelector('[data-testid="package-import-apply-weights"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    // Switch to reuse
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_reuse'));
+    await selectOption('package-import-preset', 'Default Preset');
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+
+    expect(importFile).not.toHaveBeenCalled();
+    const alert = target.querySelector('[data-testid="package-import-preset-error"]');
+    expect(alert).toBeTruthy();
+    expect(alert?.textContent).toBe(formatMessage('zh-CN', 'package.error.preset_weights_conflict'));
+  });
+
+  it('refuses combination: preset_id with an existing-deck target, showing localized error and write count stays 0', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({
+      decks: [{ id: 'deck-42', name: 'Existing Deck', description: '', new_per_day: 20, reviews_per_day: 100, preset_id: 'preset-1', created_at: '', updated_at: '' }],
+    });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
+    const importFile = vi.spyOn(apiClient, 'importDeckPackage');
+
+    mountView();
+    await flush();
+
+    // Pick reuse mode and select a preset
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_reuse'));
+    await selectOption('package-import-preset', 'Default Preset');
+
+    // Switch target to existing deck
+    await selectOption('package-import-target', formatMessage('zh-CN', 'package.import.into_deck'));
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+
+    expect(importFile).not.toHaveBeenCalled();
+    const alert = target.querySelector('[data-testid="package-import-preset-error"]');
+    expect(alert).toBeTruthy();
+    expect(alert?.textContent).toBe(formatMessage('zh-CN', 'package.error.preset_target_conflict'));
+  });
+
+  it('shows localised error next to control when backend refuses invalid preset selection', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: [] });
+    // Empty presets fallback to input, simulate entering a preset that backend rejects
+    const importFile = vi.spyOn(apiClient, 'importDeckPackage').mockRejectedValue(
+      new ApiClientError('HTTP 400: invalid_request', {
+        status: 400,
+        code: 'invalid_request',
+        details: { error: { code: 'invalid_request', message: 'invalid preset selection' } },
+      })
+    );
+
+    mountView();
+    await flush();
+
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_reuse'));
+    setInput('package-import-preset-input', 'foreign-id');
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+
+    expect(importFile).toHaveBeenCalledTimes(1);
+    const alert = target.querySelector('[data-testid="package-import-preset-error"]');
+    expect(alert).toBeTruthy();
+    expect(alert?.textContent).toBe(formatMessage('zh-CN', 'package.error.preset_invalid'));
+  });
+
+  it('sends include_progress only when ticked (off by default)', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
+    const importFile = vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(reportFixture());
+
+    mountView();
+    await flush();
+
+    const progressBox = target.querySelector('[data-testid="package-import-include-progress"]') as HTMLElement;
+    expect(progressBox).toBeTruthy();
+    expect(progressBox.getAttribute('aria-checked')).toBe('false');
+
+    // 1. Unticked: includeProgress is not sent
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+
+    expect(importFile).toHaveBeenCalledTimes(1);
+    expect(importFile.mock.calls[0]![1].includeProgress).toBeUndefined();
+
+    // 2. Ticked: includeProgress is sent
+    progressBox.click();
+    await flush();
+    expect(progressBox.getAttribute('aria-checked')).toBe('true');
+
+    submitForm();
+    await flush();
+
+    expect(importFile).toHaveBeenCalledTimes(2);
+    expect(importFile.mock.calls[1]![1].includeProgress).toBe(true);
+  });
+
+  it('renders the five progress counters in the report', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
+    vi.spyOn(apiClient, 'importDeckPackage').mockResolvedValue(
+      reportFixture({
+        states_skipped: 11,
+        states_discarded: 7,
+        reviews_applied: 42,
+        reviews_skipped: 9,
+        reviews_discarded: 3,
+      })
+    );
+
+    mountView();
+    await flush();
+    setFile('import-file', new File(['x'], 'deck.apkg'));
+    await flush();
+    submitForm();
+    await flush();
+
+    const report = reportSection();
+    expect(report).toBeTruthy();
+
+    const checkCounter = (key: string, expectedVal: string) => {
+      const dt = Array.from(report!.querySelectorAll('dt')).find((el) => el.textContent === formatMessage('zh-CN', key));
+      expect(dt).toBeTruthy();
+      expect(dt?.nextElementSibling?.textContent?.trim()).toBe(expectedVal);
+    };
+
+    checkCounter('package.report.states_skipped', '11');
+    checkCounter('package.report.states_discarded', '7');
+    checkCounter('package.report.reviews_applied', '42');
+    checkCounter('package.report.reviews_skipped', '9');
+    checkCounter('package.report.reviews_discarded', '3');
+  });
+
+  it('captures a state of each preset mode', async () => {
+    vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
+    vi.spyOn(apiClient, 'listPresets').mockResolvedValue({ presets: ownPresets });
+    mountView();
+    await flush();
+
+    // State 1: Mode 'new'
+    const stateNew = {
+      mode: 'new',
+      modeLabel: target.querySelector('[data-testid="package-import-preset-mode"]')?.textContent?.trim(),
+      pickerPresent: !!target.querySelector('[data-testid="package-import-preset"]'),
+      weightsPresent: !!target.querySelector('[data-testid="package-import-apply-weights"]'),
+    };
+    expect(stateNew).toEqual({
+      mode: 'new',
+      modeLabel: formatMessage('zh-CN', 'package.import.preset_mode_new'),
+      pickerPresent: false,
+      weightsPresent: true,
+    });
+
+    // State 2: Mode 'reuse'
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_reuse'));
+    const stateReuse = {
+      mode: 'reuse',
+      modeLabel: target.querySelector('[data-testid="package-import-preset-mode"]')?.textContent?.trim(),
+      pickerPresent: !!target.querySelector('[data-testid="package-import-preset"]'),
+      weightsPresent: !!target.querySelector('[data-testid="package-import-apply-weights"]'),
+    };
+    expect(stateReuse).toEqual({
+      mode: 'reuse',
+      modeLabel: formatMessage('zh-CN', 'package.import.preset_mode_reuse'),
+      pickerPresent: true,
+      weightsPresent: false,
+    });
+
+    // State 3: Mode 'copy'
+    await selectOption('package-import-preset-mode', formatMessage('zh-CN', 'package.import.preset_mode_copy'));
+    const stateCopy = {
+      mode: 'copy',
+      modeLabel: target.querySelector('[data-testid="package-import-preset-mode"]')?.textContent?.trim(),
+      pickerPresent: !!target.querySelector('[data-testid="package-import-preset"]'),
+      weightsPresent: !!target.querySelector('[data-testid="package-import-apply-weights"]'),
+    };
+    expect(stateCopy).toEqual({
+      mode: 'copy',
+      modeLabel: formatMessage('zh-CN', 'package.import.preset_mode_copy'),
+      pickerPresent: true,
+      weightsPresent: false,
+    });
+  });
+});
+
 describe('ImportView — URL source', () => {
   it('defaults to file mode and keeps the file path submitting through the multipart endpoint', async () => {
     vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] });
@@ -328,6 +664,7 @@ describe('ImportView — URL source', () => {
       allowOthersProgress: false,
       skipMissingMedia: false,
       applyWeights: false,
+      presetMode: 'new',
     });
     expect(importFile).not.toHaveBeenCalled();
     expect(reportSection()).toBeTruthy();
