@@ -350,21 +350,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   component test output, the output of `npm --prefix frontend run build`, the grep output and the raw
   scoped `go vet` output.
 
-- [ ] **M18-96 Each condition of `deck_config_skipped` is tested** — `resolveAnkiTargetDeck` in
-  `internal/store/anki_import.go` sets `deck_config_skipped` only when four conditions hold: the target is
-  `new_deck`, `preset_mode` is `new`, `DeckConfigsSkipped` is true, and `ankiTopConfig` returned nil.
-  `TestAnkiImportSkippedDeckConfigs` in `internal/store/anki_skipped_config_test.go` always uses an empty
-  preset mode, and none of its cases has `ankiTopConfig` return nil without a skipped configuration.
-  Removing `opts.PresetMode == PackagePresetNew &&` or `pkg.DeckConfigsSkipped &&` from the condition
-  therefore fails no test. The behaviour is correct on `main`; a temporary test on both drivers reported
-  `true` for mode `new`, also as a dry run, and `false` for `reuse`, `copy` and `into_deck`. The fix adds
-  cases to that test. The `top invalid` package imported with `reuse` and with `copy` reports false; the
-  same package imported `into_deck` reports false; and a package with two valid configurations, neither
-  of which the top deck names, reports false. This entry changes tests only. *Acceptance:* the new cases
-  pass on both drivers; with either of the two clauses above removed for one run, at least one case
-  fails. Evidence is the raw scoped `go test` and `go vet` output of both runs, the PostgreSQL run with
-  `TEST_PG_DSN` set.
-
 - [ ] **M18-98 The preset-limit tests measure their own layer, and the comments state the rules** — four
   defects in the code `M18-59`, `M18-60` and `M18-81` landed. First,
   `TestPresetWriteRejectsExcessiveMaximumInterval` in `internal/web/presets_api_test.go` passes with the
