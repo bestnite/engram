@@ -481,26 +481,6 @@ time. `M18-93` and `M18-99` wait for a maintainer decision.
   Evidence is the raw scoped `go test` and `go vet` output of `internal/web`, `internal/schedule` and
   `internal/store` for both runs, the PostgreSQL run with `TEST_PG_DSN` set, and the diff.
 
-- [ ] **M18-99 Decide whether stored presets with other refused values are repaired** — migration `0020`
-  repairs a `maximum_interval_days` above 36 500 and refused step lists only. go-fsrs v4.0.0
-  `Parameters.Validate` also refuses a `MaximumInterval` of 0 or less and a `RequestRetention` of 0 or less
-  or above 1, and `NewFSRS` then replaces every parameter with `fsrs.DefaultParam()`. Measured on `main`
-  with a temporary test through `go test -overlay`: a preset with `maximum_interval_days` -5 keeps -5
-  after `0020` runs (`rows_changed=0`), and the scheduler built from it holds `MaximumInterval` 36500 and
-  `W[0]` 0.212 instead of the preset's 0.5. No write path stores such a value today: the REST and web
-  writes refuse it, and the `.apkg` import copies only a positive interval. Only a row written by hand
-  reaches this case. Two rules are possible. (a) A new versioned migration, numbered after the last entry
-  of `BuiltinMigrations` when the task starts, sets a `maximum_interval_days` of 0 or less to 36 500 and a
-  `desired_retention` of 0 or less or above 1 to `DefaultDesiredRetention`. It is idempotent, changes no other column,
-  and its comment states the rewrites and the reason. (b) No migration; the doc comment of
-  `repairPresetSchedulerLimits` states that these values are not repaired, and why. *Acceptance:* under
-  (a), a migration test in `internal/store` on both drivers seeds presets with an interval of -5 and 0,
-  retentions of 0 and 1.5, and one valid preset; afterwards the first four hold the repaired values, the
-  valid preset is unchanged, and a second run changes nothing. A test in `internal/schedule` shows that
-  the scheduler built from each repaired preset keeps the preset's first weight. Under (b), the diff of
-  the comment. Evidence is the raw scoped `go test` and `go vet` output, the PostgreSQL run with
-  `TEST_PG_DSN` set, or the diff under (b). *Do not start until the maintainer chooses (a) or (b).*
-
 - [ ] **M18-100 The schema-18 weights fixture is generated, documented and checked like every oracle
   fixture** — `M18-20` added `internal/schedule/testdata/weights.anki21b.apkg` and
   `tools/anki-oracle/weights_fixture.py`. The script writes only to that path; it has no output-directory
