@@ -220,7 +220,7 @@ func TestReadOnlyKeySeesNoWriteTools(t *testing.T) {
 	cs := connect(t, ts.URL, key)
 
 	got := toolNames(t, cs)
-	want := []string{"create_export_download", "get_note", "get_note_type", "get_stats", "list_deck_tags", "list_decks", "list_note_types", "search_notes"}
+	want := []string{"create_export_download", "get_note", "get_note_type", "get_stats", "list_answer_controls", "list_deck_tags", "list_decks", "list_empty_cards", "list_note_type_stocks", "list_note_types", "search_notes"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("read-only tools/list = %v, want %v", got, want)
 	}
@@ -240,7 +240,7 @@ func TestWriteAndReviewKeysSeeOwnTools(t *testing.T) {
 	u := seedUser(t, db, "writer")
 
 	w := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeWrite}))
-	wantW := []string{"bulk_decks", "bulk_notes", "create_deck", "create_import_upload", "create_notes", "delete_deck", "delete_note", "import_deck", "update_deck", "update_note"}
+	wantW := []string{"bulk_decks", "bulk_notes", "change_note_type", "cleanup_empty_cards", "create_deck", "create_import_upload", "create_note_type", "create_notes", "delete_deck", "delete_note", "delete_note_type", "import_deck", "update_deck", "update_note", "update_note_type"}
 	if got := toolNames(t, w); !reflect.DeepEqual(got, wantW) {
 		t.Fatalf("write tools/list = %v, want %v", got, wantW)
 	}
@@ -260,7 +260,12 @@ func TestAdminScopeSeesAllTools(t *testing.T) {
 	_, db, keys, ts := newEnv(t)
 	u := seedUser(t, db, "admin")
 	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeAdmin}))
-	if got, want := len(toolNames(t, cs)), len(toolScopes); got != want {
-		t.Fatalf("admin sees %d tools, want all %d registered", got, want)
+	want := make([]string, 0, len(toolScopes))
+	for name := range toolScopes {
+		want = append(want, name)
+	}
+	sort.Strings(want)
+	if got := toolNames(t, cs); !reflect.DeepEqual(got, want) {
+		t.Fatalf("admin sees %v, want %v", got, want)
 	}
 }

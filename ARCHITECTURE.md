@@ -189,7 +189,8 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
   parses and translation label keys of both, so a client builds a localised answer spec without a
   second hard-coded list.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on
-  every request. `list_note_types` and `get_note_type` expose a deck's note types; `create_notes`
+  every request. Note type tools list stocks and answer controls, list and read a deck's types,
+  create, update, delete and change types, and list or clean up empty cards. `create_notes`
   and `update_note` take `note_type` and send field values as an HTML map.
 - **One business layer.** A REST handler and the MCP tool for the same operation call the same
   `internal/api` service method, so validation and results cannot drift between transports.
