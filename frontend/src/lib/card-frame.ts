@@ -15,14 +15,24 @@
 // a field and a template are HTML, so the newlines and indentation between their tags are not content.
 const FACE_BASE = 'overflow-wrap:break-word;';
 
-/** The review page's front face: `text-xl sm:text-2xl`, relaxed leading. */
-export const REVIEW_FRONT_CSS = `:where(body){${FACE_BASE}font-size:1.25rem;line-height:1.625}@media (min-width:640px){:where(body){font-size:1.5rem}}`;
+/**
+ * The review page's default type scale: the front's `text-xl sm:text-2xl` with relaxed leading.
+ *
+ * The question, the revealed answer and a graded result's answer all use this scale, so a learner who reveals or grades a
+ * card sees its text keep the same size. The front and the answer must not drift apart: a smaller answer face makes the
+ * card jump when it is revealed.
+ */
+const REVIEW_TYPE_SCALE = `${FACE_BASE}font-size:1.25rem;line-height:1.625`;
+const REVIEW_WIDE_TYPE_SCALE = '@media (min-width:640px){:where(body){font-size:1.5rem}}';
 
-/** The review page's revealed answer and the heading above it: `text-lg`, relaxed leading. */
-export const REVIEW_BACK_CSS = `:where(body){${FACE_BASE}font-size:1.125rem;line-height:1.625}`;
+/** The review page's front face: the shared review type scale. */
+export const REVIEW_FRONT_CSS = `:where(body){${REVIEW_TYPE_SCALE}}${REVIEW_WIDE_TYPE_SCALE}`;
 
-/** A graded answer face: `text-lg`, medium weight, as the result panel showed it. */
-export const REVIEW_ANSWER_CSS = `:where(body){${FACE_BASE}font-size:1.125rem;line-height:1.625;font-weight:500}`;
+/** The review page's revealed answer: the shared review type scale, so revealing does not resize the card. */
+export const REVIEW_BACK_CSS = `:where(body){${REVIEW_TYPE_SCALE}}${REVIEW_WIDE_TYPE_SCALE}`;
+
+/** A graded answer face: the shared review type scale with the result panel's medium weight. */
+export const REVIEW_ANSWER_CSS = `:where(body){${REVIEW_TYPE_SCALE};font-weight:500}${REVIEW_WIDE_TYPE_SCALE}`;
 
 /** The note editor preview: the face keeps the page's default type scale. */
 export const NOTE_PREVIEW_CSS = `:where(body){${FACE_BASE}}`;

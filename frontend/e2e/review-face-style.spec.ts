@@ -7,6 +7,9 @@ import { api, signIn } from './session';
  * The frame loads the application stylesheet, and the review page adds its own type scale. Only a real browser computes
  * the cascade, so this suite checks that the note type's CSS outranks the engram defaults, that the newlines between a
  * template's tags take no space, and that card content keeps the browser defaults Tailwind's preflight would remove.
+ *
+ * The review type scale is also measured across the reveal: a face must keep its default size when the answer appears,
+ * at both sides of the `640px` breakpoint, and only a browser computes that result.
  */
 
 const baseURL = process.env.ENGRAM_E2E_BASE_URL;
@@ -111,4 +114,26 @@ test('without a note type size the engram default applies, and a note type may s
   // The review front's default at this width is 1.5rem.
   expect(style.qaFontSize).toBe('24px');
   expect(style.imageDisplay).toBe('block');
+});
+
+test('the front and the revealed back keep one default size at both widths', async ({ page }) => {
+  await signIn(page);
+  // 1.25rem below the front's `640px` breakpoint and 1.5rem above it: the revealed answer must use the same size as the
+  // question it followed, so the text does not shrink or grow when the card is turned over.
+  for (const { width, expected } of [
+    { width: 480, expected: '20px' },
+    { width: 1280, expected: '24px' },
+  ]) {
+    await page.setViewportSize({ width, height: 900 });
+    await reviewWithCSS(page, `Face size ${width}`, '');
+
+    const front = page.frameLocator('iframe[data-side="question"]').locator('#qa');
+    await expect(front).toBeAttached();
+    expect(await front.evaluate((node) => getComputedStyle(node).fontSize), `front at ${width}px`).toBe(expected);
+
+    await page.getByTestId('review-reveal').click();
+    const back = page.frameLocator('iframe[data-side="answer"]').locator('#qa');
+    await expect(back).toContainText('back');
+    expect(await back.evaluate((node) => getComputedStyle(node).fontSize), `back at ${width}px`).toBe(expected);
+  }
 });
