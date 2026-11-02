@@ -88,7 +88,7 @@ func TestRenderGolden(t *testing.T) {
 
 func assertStockConfigsMatchGolden(t *testing.T, configs map[string]Config) {
 	t.Helper()
-	for _, config := range StockConfigs() {
+	for _, config := range stockConfigs {
 		if config.OriginalStockKind == nil {
 			t.Fatal("stock note type has no original stock kind")
 		}

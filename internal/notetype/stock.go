@@ -3,11 +3,16 @@ package notetype
 // The stockConfigs value below is generated from testdata/anki/stock.golden.json,
 // which records what Anki 26.09.3 returns for its six stock note types. Every
 // field option, template option, CSS and LaTeX string is produced from that file
-// rather than retyped, and stock_test.go compares the whole value with it again.
+// rather than retyped, and stockConfigs is what the golden comparison reads, so the
+// reference values stay checkable while the style a deck is created with moves on
+// its own.
 
-// stockConfigs holds Anki's six stock note types. Field ids are f<index> and
-// template ids are t<index> in declaration order; these values are the ids a note
-// type is created with, and a later rename or reorder does not change them.
+// stockConfigs holds Anki's six stock note types exactly as the reference release
+// returns them, Anki's own CSS included. It is the record the golden comparison
+// reads; StockConfigs is the value a deck is created from, which carries DefaultCSS
+// instead. Field ids are f<index> and template ids are t<index> in declaration order;
+// these values are the ids a note type is created with, and a later rename or reorder
+// does not change them.
 var stockConfigs = []Config{
 	{
 		Kind: KindNormal,
@@ -415,12 +420,15 @@ func StockName(kind OriginalStockKind) string {
 	}
 }
 
-// StockConfigs returns Anki's six stock note types. Each call returns fresh
-// values, so a caller may edit the result without changing the next call.
+// StockConfigs returns the six stock note types a deck is created from: the fields, templates, sort
+// field and LaTeX wrapper of the reference release, with DefaultCSS in place of Anki's own style so
+// the card face follows the frame's type scale. Each call returns fresh values, so a caller may edit
+// the result without changing the next call.
 func StockConfigs() []Config {
 	configs := make([]Config, len(stockConfigs))
 	for i, config := range stockConfigs {
 		configs[i] = config.clone()
+		configs[i].CSS = DefaultCSS
 	}
 	return configs
 }

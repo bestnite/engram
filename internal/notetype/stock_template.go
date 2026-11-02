@@ -23,23 +23,21 @@ type TemplateStock struct {
 	Config Config
 }
 
-// templateBaseCSS is Anki's Basic style, the starting point every common template adds its own classes to, so a card
-// built from one looks like the stock types next to it. The added classes dim secondary lines with opacity rather than
-// a grey colour, so they stay readable when the frame shows the card in night mode.
-const templateBaseCSS = ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n"
-
 // templateField builds one field with the display defaults of Anki's stock types.
 func templateField(index int, name, description string) Field {
 	return Field{ID: "f" + strconv.Itoa(index), Name: name, Font: "Arial", FontSize: 20, Description: description}
 }
 
-// templateConfig assembles a normal note type with one card template.
+// templateConfig assembles a normal note type with one card template. Every common template starts
+// from DefaultCSS and adds classes of its own, so the face follows the card frame's type scale and a
+// deck can still restyle any of it. The added classes dim secondary lines with opacity rather than a
+// grey colour, so they stay readable when the frame shows the card in night mode.
 func templateConfig(fields []Field, qfmt, afmt, css string) Config {
 	return Config{
 		Kind:        KindNormal,
 		Fields:      fields,
 		Templates:   []Template{{ID: "t0", Name: "Card 1", QFormat: qfmt, AFormat: afmt}},
-		CSS:         templateBaseCSS + css,
+		CSS:         DefaultCSS + css,
 		SortFieldID: fields[0].ID,
 		LaTeXPre:    engramLaTeXPre,
 		LaTeXPost:   engramLaTeXPost,

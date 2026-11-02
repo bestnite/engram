@@ -28,15 +28,6 @@ type EngramStock struct {
 	Config Config
 }
 
-// engramCSS is the one style shared by all ten stock note types.
-//
-// It is Anki's Basic style: a centred, readable card on a white background.
-// Sharing one style keeps the migration output predictable and gives every kind
-// the same baseline before the deck editor starts customising. The frame applies
-// the user's dark theme separately, so the background is not forced with
-// !important.
-const engramCSS = ".card {\n    font-family: arial;\n    font-size: 20px;\n    line-height: 1.5;\n    text-align: center;\n    color: black;\n    background-color: white;\n}\n"
-
 // engramLaTeXPre and engramLaTeXPost are Anki's default LaTeX document
 // wrapper. They are carried because the note type model exposes them to the
 // renderer; today's browser-side MathJax path never used them, so their only
@@ -73,14 +64,16 @@ func engramAnswer(control string, roles ...string) *AnswerSpec {
 	return &AnswerSpec{Control: control, Bindings: bindings}
 }
 
-// engramConfig assembles a stock config. Every stock type shares the CSS, the
-// LaTeX wrapper and the first field as the sort field.
+// engramConfig assembles a stock config. Every stock type shares DefaultCSS, the
+// LaTeX wrapper and the first field as the sort field, so the migration output is
+// predictable and every kind starts from the same baseline before the deck editor
+// customises it.
 func engramConfig(kind Kind, fields []Field, templates []Template) Config {
 	return Config{
 		Kind:        kind,
 		Fields:      fields,
 		Templates:   templates,
-		CSS:         engramCSS,
+		CSS:         DefaultCSS,
 		SortFieldID: fields[0].ID,
 		LaTeXPre:    engramLaTeXPre,
 		LaTeXPost:   engramLaTeXPost,

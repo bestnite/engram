@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -216,6 +217,44 @@ func TestStockConfigsAreIndependent(t *testing.T) {
 	}
 }
 
+// TestStockCSSLeavesTheTypeScaleToTheFrame guards the style a deck is created from. The card frame
+// sets a responsive type scale on the card body at zero specificity, and a note type rule outranks
+// it, so a `font-size` or `line-height` in the shipped CSS would pin every deck to that number and
+// the frame's scale would never apply. Anki's own values stay recorded in stockConfigs, which the
+// golden test reads back.
+func TestStockCSSLeavesTheTypeScaleToTheFrame(t *testing.T) {
+	for _, declaration := range []string{"font-size", "line-height"} {
+		if strings.Contains(DefaultCSS, declaration+":") {
+			t.Errorf("DefaultCSS sets %s; the card frame's type scale would never apply", declaration)
+		}
+	}
+
+	for _, config := range StockConfigs() {
+		if config.CSS != DefaultCSS {
+			t.Errorf("stock %v: CSS = %q, want DefaultCSS", *config.OriginalStockKind, config.CSS)
+		}
+	}
+	for _, stock := range EngramStockConfigs() {
+		if stock.Config.CSS != DefaultCSS {
+			t.Errorf("engram stock %q: CSS = %q, want DefaultCSS", stock.Kind, stock.Config.CSS)
+		}
+	}
+	for _, stock := range TemplateStockConfigs() {
+		rest, prefixed := strings.CutPrefix(stock.Config.CSS, DefaultCSS)
+		if !prefixed {
+			t.Errorf("common template %q: CSS does not start with DefaultCSS", stock.Kind)
+			continue
+		}
+		if strings.Contains(rest, ".card") {
+			t.Errorf("common template %q: CSS adds a .card rule after DefaultCSS, which would outrank the frame", stock.Kind)
+		}
+	}
+
+	if !strings.Contains(stockConfigs[0].CSS, "font-size: 20px") {
+		t.Errorf("stockConfigs[0].CSS = %q, want the reference release's own font size", stockConfigs[0].CSS)
+	}
+}
+
 func TestStockConfigsMatchGolden(t *testing.T) {
 	encoded, err := os.ReadFile("testdata/anki/stock.golden.json")
 	if err != nil {
@@ -231,7 +270,7 @@ func TestStockConfigsMatchGolden(t *testing.T) {
 		noteTypes[noteType.Name] = noteType
 	}
 
-	for _, config := range StockConfigs() {
+	for _, config := range stockConfigs {
 		if config.OriginalStockKind == nil {
 			t.Fatal("stock note type has no original stock kind")
 		}
