@@ -3928,6 +3928,61 @@ each entry states the behaviour and how it lands without changing Anki's view of
   keeps the wordings; a note with no such field behaves exactly as today; the `{{c1::…}}` template
   text is unchanged.
 
+- [ ] **M20-2 MCP tools for the note type write surface** — the MCP server at `/mcp` exposes
+  `list_note_types` and `get_note_type` but no way to create, change or remove a note type, and no
+  way to list the stock definitions or answer controls a new type is built from. Every operation
+  this task adds already exists on the REST surface and in the service layer
+  (`internal/api/note_types.go`, `internal/api/note_type_change.go`,
+  `internal/api/note_type_stocks.go`), so the task is argument shaping only: it adds no business
+  rule and no validation. Eight tools join the 23 in `internal/mcp/mcp.go`; each is registered in
+  `build` and in `toolScopes`, each handler is shaped in `internal/mcp/tools.go`, and each calls the
+  same service method REST calls:
+  - `list_note_type_stocks` (read scope, no deck role) → `NoteTypeStocks`.
+  - `list_answer_controls` (read scope, no deck role) → `AnswerControls`, so a caller knows the
+    control names and role names an answer spec may carry.
+  - `create_note_type` (write scope, editor role) → `CreateNoteType`; `stock_id` is preferred and
+    `config` is accepted as a complete `notetype.Config`.
+  - `update_note_type` (write scope, editor role) → `UpdateNoteType`; `version` is required and the
+    config is replaced whole, so the caller reads the type first.
+  - `delete_note_type` (write scope, editor role) → `DeleteNoteType`; `confirm_purge` allows the
+    hard delete of notes that only soft-deleted notes still reference.
+  - `change_note_type` (write scope, editor role) → `ChangeNoteType`; it carries the field and
+    template mappings, `dry_run` and `confirm_card_removal`.
+  - `list_empty_cards` (read scope, editor role) → `ListEmptyCards`.
+  - `cleanup_empty_cards` (write scope, editor role) → `CleanupEmptyCards`; it carries `dry_run`
+    and `confirm_card_removal`.
+  `api.ErrorText` renders an MCP tool failure as `code: message` and has no response body, so the
+  impact counts that `card_removal_unconfirmed` and `note_type_purge_unconfirmed` report through the
+  REST body are lost. Those two handlers append the counts the service already returned to the error
+  detail; the refusal decision itself stays in the service layer. Tool descriptions stay English, as
+  every existing MCP description is, and no translation catalog entry is added: a tool description
+  addresses the model, not a person.
+  *Acceptance:*
+  - a read-scope key lists exactly the eight tools it listed before plus `list_note_type_stocks`
+    and `list_answer_controls`; a write-scope key lists exactly its previous ten plus
+    `create_note_type`, `update_note_type`, `delete_note_type`, `change_note_type` and
+    `cleanup_empty_cards`; an admin key lists every entry of `toolScopes`; calling
+    `create_note_type` by name with a read-scope key returns `scope_required`.
+  - `create_note_type` with `stock_id` `anki:basic` and an empty name returns a type whose config
+    equals the `anki:basic` stock config and whose name is that stock's name; an unknown `stock_id`
+    returns `invalid_request`.
+  - `update_note_type` with a stale `version` returns `version_conflict` and leaves the row
+    unchanged; a template removal without `confirm_card_removal` returns
+    `card_removal_unconfirmed` with `cards_removed` and `reviews_on_removed_cards` in the error text;
+    the same call with `dry_run` returns the counts, writes no row and writes no audit row.
+  - `delete_note_type` on a type with a live note returns `note_type_in_use`; after that note is
+    soft-deleted the same call returns `note_type_purge_unconfirmed` with `deleted_notes`, `cards`
+    and `reviews` in the error text; the same call with `confirm_purge` deletes the type.
+  - `change_note_type` between two types of one deck moves the notes and reports the five counts;
+    its `dry_run` returns the same counts and writes nothing.
+  - `list_empty_cards` and `cleanup_empty_cards` with a read-scope key return `scope_required`;
+    with a key whose owner is a reader on that deck they return `insufficient_role`.
+  - a note type id that belongs to another deck returns `not_found` from `update_note_type`,
+    `delete_note_type` and `change_note_type`.
+  - `go vet ./internal/mcp/...` and `go test ./internal/mcp/... -count=1` pass, as does
+    `go test ./internal/api/... -count=1`; `ARCHITECTURE.md`'s MCP paragraph names the added surface
+    in the same commit.
+
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
