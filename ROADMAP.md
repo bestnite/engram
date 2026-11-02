@@ -3877,46 +3877,164 @@ wanted in the near term; each entry states the behaviour and how it lands withou
 view of a card.
 
 - [ ] **M20-1 Multiple accepted wordings for one cloze blank** — a cloze blank can accept more than
-  one wording (for example `is` / `are` for the same blank), and `cloze_blanks` grades it correct when
-  any accepted wording matches. Today `internal/answer/cloze_blanks.go` states explicitly that there
-  is no alternative-answer rule, so each deletion has exactly one expected wording; the `text`
-  control already has an `accept` role (`internal/answer/text.go:21`) whose matching can be reused.
-  The Anki template syntax cannot carry the alternatives: `{{c1::is|are}}` would make Anki render
-  "is|are" as the answer text, so the `{{c1::…}}` template text must stay exactly as it is.
-  The accepted wordings travel in **one** note field that no template references, named `engram_meta`,
-  holding a JSON object of capability → data:
+  one wording. `cloze_blanks` grades each submitted blank against its canonical wording and its
+  additional accepted wordings, using the existing cloze comparison rules in
+  `internal/answer/grade.go`. This adds literal alternatives, not regular-expression matching or new
+  case/whitespace settings. The `{{c1::…}}` content and the card templates remain unchanged;
+  `{{c1::is|are}}` is not an alternative-answer syntax.
+
+  **Carrier and association.** Store all capability data in one ordinary note field named exactly
+  `engram_meta`, whose value is a JSON object. Additional capabilities use other top-level keys in
+  this object, not additional fields or the note-type-level `engram` extension key:
 
   ```json
-  {"cloze_accept": {"1": ["is", "are"], "3": ["Canberra"]}}
+  {"cloze_accept":{"1":{"is":["was"],"are":["were"]},"7":{"Canberra":["canberra city"]}}}
   ```
 
-  - `cloze_accept` maps a **cloze ordinal, as a string, to an array of additional accepted wordings**.
-    The canonical wording stays in `{{c1::…}}` and is not repeated here, so the two cannot drift.
-  - A map, not an array: cloze numbers are sparse (`c1`, `c7` on one card is normal), and an array
-    cannot express "blank 7 only" without padding every gap with empty entries.
-  - JSON, not a `|`-separated string: a legitimate wording may itself contain `|` (regex, `a|b`,
-    code), so any separator scheme needs an escaping rule that authors will get wrong. JSON quoting
-    already covers it, and the shape matches what the repository already uses (`notes.fields_json`
-    and the `engram` key).
-  - One namespaced field rather than one field per capability: every added field is another
-    structural change and another column in Anki's editor, so a second capability later must not
-    mean a second `engram_*` field.
-  - Anki keeps fields through import and export and never renders a field the templates do not
-    mention; the granularity is per note, not per note type. A note-type-level map in the `engram` key
-    was rejected (per-note-type granularity, and it rides an extension key engram must decode per
-    package layout — the failure mode that dropped these specs before the reader fix), and a
-    note-level `notes.data` value was measured not to survive Anki's import.
+  The outer keys are one-based cloze numbers written as strings; they are not card ordinals or
+  occurrence positions. The inner keys are exact canonical answer texts extracted for that number
+  by the existing cloze answer path (`clozeExpected` and `ExtractClozeBlanks`), excluding hints and
+  cloze delimiters. Key lookup does not fold case or whitespace; answer comparison still uses the
+  existing grading rules. Arrays contain only additional wordings, not the canonical wording.
+  JSON quoting preserves literal pipes, quotes and other punctuation without a separator syntax.
+  Sparse cloze numbers require no padding.
 
-  Reading it must be forgiving: a missing field, empty value, malformed JSON, an unknown capability
-  key, or an ordinal the card does not have all mean "no alternatives" — the card grades exactly as
-  today and the import does not fail. Enabling it is an explicit step on the note type, not something
-  the first answer silently adds.
+  Two occurrences with the same cloze number and the same canonical text share one alternative
+  list. The editor must explicitly identify the shared list; for two occurrences the zh-CN message
+  is "这两处正文答案相同，共用同一组备选答案。", with its English equivalent in the catalog.
+  Independent configuration of identical texts under one number is deliberately unsupported in
+  v1: positional keys can silently apply alternatives to the wrong blank after an insertion.
+  Separate lists require different canonical texts. If independent occurrence configuration is
+  introduced later, its only permitted representation is an array corresponding one-to-one to
+  the blanks, with exactly the same length; a length mismatch invalidates the entire group. That
+  representation is not part of v1. Insertion and reordering do not change v1 associations.
+  Changing a canonical text leaves its old key unlinked
+  when no occurrence of that number still has that text. Unlinked entries do not affect grading;
+  the editor preserves them, warns, and offers explicit reassociation or removal. It never shifts
+  entries by position, rewrites keys automatically, or introduces occurrence IDs, snapshots or
+  fingerprints. If another occurrence still matches the old key, that entry continues to apply to
+  that occurrence. The editor uses the existing cloze parsing semantics, including repeated
+  numbers, hints, nesting and multi-number deletions, rather than a simplified regular expression.
 
-  *Acceptance:* a cloze note whose blank carries two accepted wordings grades as correct for either
-  and wrong for a third; a package round trip through Anki (import and export with `anki==26.9.3`)
-  keeps the wordings; a note with no such field, or with malformed JSON in it, behaves exactly as
-  today; the `{{c1::…}}` template text is unchanged; adding the field leaves the card set unchanged
-  (`NoteTypeCardImpact` reports 0 added and 0 removed).
+  **Explicit note-type enablement.** In `frontend/src/lib/views/NoteTypesView.svelte`, show the
+  note-type-level action "Enable cloze alternatives" only when a template uses `cloze_blanks`.
+  The zh-CN explanation is "将为本笔记类型添加共享字段 `engram_meta`，供填空判分读取。";
+  provide its English equivalent through the catalog. Append that field once,
+  or reuse an existing field of exactly that name without replacing its ID or values; set
+  `exclude_from_search`. Save through the existing versioned note-type update and dry run in
+  `internal/store/notetype.go`. Pure enablement must report `NoteTypeCardImpact` 0 added / 0 removed;
+  it does not require a new confirmation dialog. A combined template change retains the existing
+  impact-preview rules and is not subject to the pure-enablement 0/0 assertion.
+  After enablement, show "Configured", not a symmetric off switch. Removing the field is a separate
+  field-management operation that warns that subsequent note saves discard its values and exports
+  no longer carry them. No template-level enable flag or new answer binding role is introduced.
+  Do not add the field on first alternative entry, to all stock types, or to existing types in bulk.
+  Existing notes need no backfill or database migration: a missing field value remains empty.
+  Manually adding `engram_meta` through field management has exactly the same enablement semantics
+  as the action: field presence alone enables reading, regardless of how the field was created.
+  Apply the same metadata validation and search exclusion to a manually added field; do not store
+  or require a record that the enablement action was used.
+
+  **Name reservation without prefix-wide runtime semantics.** In v1, only the exact,
+  case-sensitive field name `engram_meta` has metadata runtime semantics. Reserve the
+  case-sensitive `engram_` prefix at engram's field creation and renaming entry points: reject new
+  names with that prefix, except `engram_meta`, with a localized explanation. The exact name must
+  remain available both to the enablement action and to manual field management. Do not reject,
+  rename or reinterpret pre-existing fields merely because they use the prefix. Import fields
+  such as `engram_notes` unchanged as ordinary content, and add a localized import-report notice:
+  "字段名落在保留前缀内，已按普通字段导入" (with an English equivalent). Such fields retain ordinary
+  card-generation, media and search behavior. The prefix itself causes no runtime exclusion.
+
+  **Five invariants.** Record each rule and its reason in self-contained English code comments and
+  cover each with a regression test:
+  1. No front or back template may reference `engram_meta`, including filtered references and
+     conditional sections. Note-type save validation rejects such references with a localized
+     explanation; a field being unreferenced is what keeps its JSON off Anki card faces.
+  2. The field named exactly `engram_meta` does not participate in card generation. Exclude it by
+     name, not field ID or prefix, from card-generation inputs even when its content is malformed.
+     Other `engram_*` fields remain ordinary content. This exact-name exclusion is an explicit
+     exception to the existing all-fields cloze scan in
+     `internal/notetype/cardgen.go`.
+  3. The field named exactly `engram_meta` does not participate in media-reference processing.
+     Exclude only that exact name before media normalization, permission checks and collection in
+     `internal/store/media_mapping.go` and its callers. Neither valid nor malformed metadata may
+     register media, authorize a media read, or cause a media-permission refusal. Other `engram_*`
+     fields retain ordinary media processing. Writing escaped JSON may add defense in depth but
+     is not the isolation boundary.
+  4. The field named exactly `engram_meta` does not participate in note search. Set its
+     `exclude_from_search` flag and exclude only that exact name in
+     `internal/store/note_search.go` even when an imported field lacks the flag. Neither JSON
+     syntax nor its values contribute to `search_text`. Other `engram_*` fields remain searchable
+     under the ordinary field search rules.
+  5. The structured editor reads and writes only `cloze_accept`. It preserves every unknown
+     top-level capability key and its complete JSON value when saving; it must not rebuild the
+     object from recognized keys alone. Preservation is of JSON values, not byte-for-byte
+     whitespace or object-key order.
+
+  **Forgiving reads, guarded edits.** Missing fields, empty values, malformed JSON and non-object
+  metadata disable alternatives without failing import or grading. Unknown capability keys have
+  no grading effect and do not disable valid `cloze_accept` data. Missing or invalid capability,
+  number or wording entries disable alternatives only within the invalid subtree; valid sibling
+  entries remain usable. A cloze number with no entry, or a canonical text with no exact matching
+  key under that number, has no alternatives. Fallback preserves today's cloze grading and does
+  not rewrite the stored metadata.
+  The shared render/grading call chain resolves `engram_meta` by field name through the note-type
+  field IDs and supplies it to the answer control (`internal/answer/context.go`,
+  `internal/api/service.go`, `internal/web/review.go`); `AnswerSpec` remains unchanged.
+
+  In `frontend/src/lib/views/NoteEditView.svelte` and a dedicated structured editor, show canonical
+  text and occurrence context, and edit additional wordings without exposing JSON as the normal
+  workflow. Do not split wordings on commas, pipes or slashes. Provide an explicit add action;
+  Enter must not add while an IME composition is active. Invalid metadata shows a warning and is
+  preserved unchanged when other note content is saved; alternative editing cannot silently
+  replace it with an empty object. Replacing invalid content requires an explicit repair or reset.
+  Keep stored HTML confined to the existing sandboxed frames; parent-page labels are text.
+  All new UI and API/MCP messages use both translation catalogs. Before answer submission, reveal
+  no alternatives; afterward show correctness and accepted wordings without changing the card's
+  canonical cloze content.
+
+  **Acceptance tests and verification.** Add tests beside the affected packages and in
+  `frontend/src/tests/`; use real SQLite for store/API tests:
+  1. Canonical and additional wordings grade correct and an unrelated wording grades wrong;
+     unchanged cloze case, whitespace, empty-answer and inline-formula rules apply to alternatives.
+  2. Two different texts under `c1` use separate lists; duplicate texts under `c1` share a list;
+     the editor explicitly tells the author that duplicate occurrences share their alternatives.
+     The same text under `c7` is independent. Insertion/reordering preserves associations, while
+     a changed unmatched text produces an unlinked entry, not a positional reassignment.
+     Include hint, nested and multi-number deletion fixtures using the existing extraction rules.
+  3. Missing/empty fields on new notes, imported notes and existing databases retain old behavior.
+     Malformed/non-object metadata, invalid subtrees, unknown keys and unmatched numbers/texts
+     do not fail import or grading; valid siblings still work. Invalid editor input survives an
+     unrelated note save unchanged and cannot be silently reset.
+  4. Enabling adds one field, re-enabling reuses its ID/data, no background path creates it, and
+     pure enablement reports 0/0 without changing templates. Manually adding `engram_meta` enables
+     the same reading, validation and exclusions without an action-history flag. Field deletion
+     warns about later save/export loss. Test version conflicts and non-editor refusals through
+     the existing update.
+  5. Template saves reject direct, filtered and conditional references to `engram_meta` on either
+     side. Adding/removing an unreferenced metadata field alone leaves the generated card set
+     unchanged; the unchanged-cloze-content assertion covers note edits and package round trips.
+  6. Put `{{c9::x}}` and `[sound:a.mp3]` inside valid and malformed `engram_meta`: card counts do
+     not change, metadata contributes no media references
+     or permissions, and metadata-only values are not searchable even without the search flag.
+     Exercise note save, note-type regeneration and package import; retain ordinary-field controls.
+     Add three counterexample tests using an existing or imported ordinary `engram_notes` field:
+     its cloze marker still generates the corresponding card; its sound tag still registers a
+     reference to an available medium; its text remains searchable when search is enabled.
+  7. Edit alternatives in metadata containing `future_key` with a nested value; save and reload
+     without changing that value. Cover punctuation, explicit removal/reassociation and IME input.
+  8. Round-trip through Anki import and both export layouts with `anki==26.9.3`, using
+     `tools/anki-oracle`: preserve the field name, per-note alternatives, unknown capability values
+     and canonical cloze content; alternatives still grade correctly after re-import. Do not use
+     `notes.data` or move per-note values into the note-type-level `engram` key.
+  9. Creation and renaming reject reserved-prefix names other than `engram_meta` with localized
+     explanations. Existing `engram_notes` fields survive unrelated edits. Import preserves such
+     fields as ordinary content and reports the reserved-prefix notice; it does not rename them,
+     reject them, or apply metadata exclusions. Verify the exact-name manual-add exception.
+  Run the frontend tests and build before scoped Go tests/vet for `internal/answer`,
+  `internal/notetype`, `internal/store`, `internal/api` and `internal/web`. Capture command output
+  and oracle results. The parent runs the repository-wide merge gate once at integration; this
+  task does not pass merely because its examples parse as JSON.
 
 ## 2. Release ledger
 
