@@ -36,7 +36,7 @@ function noteType(overrides: Partial<NoteType> = {}): NoteType {
 }
 
 const stocks: NoteTypeStock[] = [
-  { id: 'anki:basic', source: 'anki', name: 'Basic', label_key: 'notetype.stock.anki.basic' },
+  { id: 'engram:basic', source: 'engram', name: 'Basic', label_key: 'notetype.stock.engram.basic' },
   { id: 'engram:numeric', source: 'engram', name: 'Numeric answer', label_key: 'notetype.stock.engram.numeric' },
 ];
 

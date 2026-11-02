@@ -21,7 +21,7 @@ func TestNoteTypeToolsStockAndConfigRoundTrip(t *testing.T) {
 			t.Fatalf("%s: %v %s", name, out, text)
 		}
 	}
-	args := map[string]any{"deck_id": d.PublicID, "stock_id": "anki:basic"}
+	args := map[string]any{"deck_id": d.PublicID, "stock_id": "engram:basic"}
 	created, bad, text := callTool(t, cs, "create_note_type", args)
 	if bad {
 		t.Fatalf("create: %s", text)

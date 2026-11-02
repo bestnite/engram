@@ -184,8 +184,11 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
   names the version it read and a stale version is `409`, and a delete is refused while a note still
   uses the type. A reader may list and read note types but only an editor may change them. A create
   may send `stock_id` instead of a config; `GET /note-type-stocks` lists the source-prefixed ids of
-  Anki's six and engram's ten stock definitions, and the server builds the config from the chosen
-  definition. `GET /answer-controls` lists the registered controls and their roles with the names,
+  engram's ten stock definitions, the four common templates and the two Anki definitions engram has
+  no equivalent for (an optional-reverse basic and image occlusion), and the server builds the config
+  from the chosen definition. Anki's other four definitions are not listed, because engram's own
+  basic, both-directions, typed and cloze definitions cover the same study shapes; they stay in
+  `notetype`, where a package import still names them. `GET /answer-controls` lists the registered controls and their roles with the names,
   parses and translation label keys of both, so a client builds a localised answer spec without a
   second hard-coded list.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on

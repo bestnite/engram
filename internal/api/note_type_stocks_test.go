@@ -10,8 +10,10 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// TestNoteTypeStocksList covers the static stock definition list: Anki's six definitions, the four
-// common templates, then engram's ten, each with an unambiguous source-prefixed id and a catalog key.
+// TestNoteTypeStocksList covers the static stock definition list: engram's ten definitions, the four
+// common templates, then the two Anki definitions engram has no equivalent for, each with an
+// unambiguous source-prefixed id and a catalog key. A shape engram defines itself is not offered
+// twice, so the picker never shows two entries with the same label.
 func TestNoteTypeStocksList(t *testing.T) {
 	env := newTestEnv(t, 1000, 1000)
 	router := env.router()
@@ -26,19 +28,20 @@ func TestNoteTypeStocksList(t *testing.T) {
 	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("stock list is not JSON: %v (%s)", err, raw)
 	}
-	if len(body.Stocks) != 20 {
-		t.Fatalf("stock count = %d, want 20 (Anki six, four templates, engram ten)", len(body.Stocks))
+	if len(body.Stocks) != 16 {
+		t.Fatalf("stock count = %d, want 16 (engram ten, four templates, two Anki-only)", len(body.Stocks))
 	}
-	if body.Stocks[0].ID != "anki:basic" || body.Stocks[0].Source != stockSourceAnki || body.Stocks[0].LabelKey != "notetype.stock.anki.basic" {
-		t.Fatalf("first stock = %+v, want Anki basic", body.Stocks[0])
+	if body.Stocks[0].ID != "engram:basic" || body.Stocks[0].Source != stockSourceEngram || body.Stocks[0].LabelKey != "notetype.stock.engram.basic" {
+		t.Fatalf("first stock = %+v, want engram basic", body.Stocks[0])
 	}
-	if body.Stocks[6].ID != "template:vocabulary" || body.Stocks[6].Source != stockSourceTemplate || body.Stocks[6].LabelKey != "notetype.stock.template.vocabulary" {
-		t.Fatalf("seventh stock = %+v, want the vocabulary template", body.Stocks[6])
+	if body.Stocks[10].ID != "template:vocabulary" || body.Stocks[10].Source != stockSourceTemplate || body.Stocks[10].LabelKey != "notetype.stock.template.vocabulary" {
+		t.Fatalf("eleventh stock = %+v, want the vocabulary template", body.Stocks[10])
 	}
-	if body.Stocks[10].ID != "engram:basic" || body.Stocks[10].Source != stockSourceEngram || body.Stocks[10].LabelKey != "notetype.stock.engram.basic" {
-		t.Fatalf("eleventh stock = %+v, want engram basic", body.Stocks[10])
+	if body.Stocks[14].ID != "anki:basic_optional_reversed" || body.Stocks[15].ID != "anki:image_occlusion" {
+		t.Fatalf("last two stocks = %+v, %+v, want the two Anki-only definitions", body.Stocks[14], body.Stocks[15])
 	}
 	ids := map[string]bool{}
+	names := map[string]string{}
 	for _, stock := range body.Stocks {
 		if stock.Name == "" {
 			t.Errorf("stock %q has no name", stock.ID)
@@ -47,6 +50,17 @@ func TestNoteTypeStocksList(t *testing.T) {
 			t.Errorf("duplicate stock id %q", stock.ID)
 		}
 		ids[stock.ID] = true
+		if other, exists := names[stock.Name]; exists {
+			t.Errorf("stocks %q and %q both display the name %q", other, stock.ID, stock.Name)
+		}
+		names[stock.Name] = stock.ID
+	}
+	// The shapes engram defines itself are covered by its own definitions; the Anki ids are not
+	// offered and no longer resolve.
+	for _, kind := range []string{"basic", "basic_and_reversed", "basic_typing", "cloze"} {
+		if ids["anki:"+kind] {
+			t.Errorf("stock %q is listed although an engram definition covers the same shape", "anki:"+kind)
+		}
 	}
 }
 
@@ -91,6 +105,26 @@ func TestCreateNoteTypeFromStock(t *testing.T) {
 	}
 	if listening.Name != "Listening (TTS)" || len(listening.Config.Fields) != 2 || listening.Config.Templates[0].QFormat != "{{tts zh_CN:Text}}" {
 		t.Fatalf("created template note type = %+v, want the listening template", listening)
+	}
+
+	// An Anki id whose shape engram defines itself is no longer offered, so it does not resolve.
+	code, raw = doJSON(t, router, http.MethodPost, base, key, `{"stock_id":"anki:basic"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("POST replaced stock type = %d, want 400 (body %s)", code, raw)
+	}
+	assertErrorCode(t, raw, CodeInvalidRequest)
+
+	// The Anki definitions engram does not replace still create, styled like engram's own.
+	code, raw = doJSON(t, router, http.MethodPost, base, key, `{"stock_id":"anki:image_occlusion"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("POST Anki-only stock type = %d, want 201 (body %s)", code, raw)
+	}
+	var occlusion NoteTypeJSON
+	if err := json.Unmarshal(raw, &occlusion); err != nil {
+		t.Fatalf("created Anki-only note type is not JSON: %v (%s)", err, raw)
+	}
+	if occlusion.Name != "Image Occlusion" || occlusion.Config.CSS != notetype.DefaultCSS {
+		t.Fatalf("created Anki-only note type = %+v, want image occlusion with DefaultCSS", occlusion)
 	}
 
 	code, raw = doJSON(t, router, http.MethodPost, base, key, `{"stock_id":"anki:does_not_exist"}`)

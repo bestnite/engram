@@ -150,18 +150,17 @@ func TestM20MetadataAndCreate(t *testing.T) {
 	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeRead, store.ScopeWrite}))
 	equalJSON(t, mustTool(t, cs, "list_note_type_stocks", map[string]any{}), a.NoteTypeStocks())
 	equalJSON(t, mustTool(t, cs, "list_answer_controls", map[string]any{}), a.AnswerControls())
-	created := mustTool(t, cs, "create_note_type", map[string]any{"deck_id": d.PublicID, "stock_id": "anki:basic"})
-	var basic notetype.Config
-	for _, cfg := range notetype.StockConfigs() {
-		if cfg.OriginalStockKind != nil && string(*cfg.OriginalStockKind) == "basic" {
-			basic = cfg
-		}
+	created := mustTool(t, cs, "create_note_type", map[string]any{"deck_id": d.PublicID, "stock_id": "engram:basic"})
+	stock, ok := notetype.EngramStockByKind("basic")
+	if !ok {
+		t.Fatal("engram stock basic is missing")
 	}
+	basic := stock.Config
 	if created["name"] != "Basic" {
 		t.Fatalf("name: %v", created)
 	}
 	equalJSON(t, created["config"], basic)
-	preferred := mustTool(t, cs, "create_note_type", map[string]any{"deck_id": d.PublicID, "stock_id": "anki:basic", "config": writeConfig("ignored-")})
+	preferred := mustTool(t, cs, "create_note_type", map[string]any{"deck_id": d.PublicID, "stock_id": "engram:basic", "config": writeConfig("ignored-")})
 	equalJSON(t, preferred["config"], basic)
 	cfg := writeConfig("custom-")
 	custom := mustTool(t, cs, "create_note_type", map[string]any{"deck_id": d.PublicID, "name": "Custom", "config": cfg})
@@ -365,7 +364,7 @@ func TestM20ScopesRolesAndForeignTypes(t *testing.T) {
 	inputs := map[string]map[string]any{
 		"list_note_type_stocks": {}, "list_answer_controls": {},
 		"list_empty_cards":    {"deck_id": d.PublicID},
-		"create_note_type":    {"deck_id": d.PublicID, "stock_id": "anki:basic"},
+		"create_note_type":    {"deck_id": d.PublicID, "stock_id": "engram:basic"},
 		"update_note_type":    {"deck_id": d.PublicID, "note_type_id": local["id"], "name": "Local", "config": cfg, "version": local["version"]},
 		"delete_note_type":    {"deck_id": d.PublicID, "note_type_id": local["id"]},
 		"change_note_type":    {"deck_id": d.PublicID, "note_type_id": local["id"], "target_note_type": local["id"]},

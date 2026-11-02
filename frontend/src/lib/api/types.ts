@@ -330,7 +330,8 @@ export interface NoteTypePreviewResponse {
 
 /**
  * One stock definition a note type can be created from (GET /api/v1/note-type-stocks).
- * The id is "source:kind" because Anki's and engram's stock sets share kind values;
+ * The id is "source:kind" because a source names its own set of kinds; an Anki id is
+ * only listed where engram has no definition for the same shape.
  * label_key is the translation catalog entry for the display name.
  */
 export interface NoteTypeStock {
@@ -340,7 +341,7 @@ export interface NoteTypeStock {
   label_key: string;
 }
 
-/** GET /api/v1/note-type-stocks response: Anki's six definitions, the four common templates, then engram's ten. */
+/** GET /api/v1/note-type-stocks response: engram's ten definitions, the four common templates, then the two Anki-only definitions. */
 export interface NoteTypeStocksResponse {
   stocks: NoteTypeStock[];
 }

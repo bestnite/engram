@@ -10,10 +10,11 @@ import (
 	"git.nite07.com/nite/engram/internal/notetype"
 )
 
-// The source names a stock definition id starts with. A stock id is "source:kind", because
-// Anki's six stock types and engram's ten share kind values (both have "basic" and "cloze")
-// while their configs differ. A bare kind would therefore be ambiguous. The template source
-// holds the common templates of notetype.TemplateStockConfigs.
+// The source names a stock definition id starts with. A stock id is "source:kind", because the three
+// definition lists name their kinds independently; a bare kind would be ambiguous the moment two
+// sources name the same one. The template source holds the common templates of
+// notetype.TemplateStockConfigs, and an anki id is listed only where engram has no definition for the
+// same study shape.
 const (
 	stockSourceAnki     = "anki"
 	stockSourceTemplate = "template"
@@ -43,26 +44,36 @@ type stockNoteTypeDefinition struct {
 	Config notetype.Config
 }
 
-// stockNoteTypeDefinitions returns Anki's six stock definitions, then the common templates,
-// then engram's ten question types, each group in its fixed declaration order, so the picker
-// shows the same list on every call. The common templates follow Anki's because they are the
-// same kind of general-purpose layout; the question types with their answer controls come last.
+// ankiStocksEngramReplaces lists the Anki stock kinds the picker does not offer, because engram's own
+// definition covers the same study shape and listing both would show two rows with the same label and
+// no way to choose between them. The same shapes are: Anki's basic and engram's basic, "and reversed"
+// and "both directions", "type in the answer" and "typed answer", and the two cloze definitions.
+// engram's definition is the one offered because it carries the answer controls and the metadata
+// field; Anki's definition stays in notetype, where an imported package still names it.
+var ankiStocksEngramReplaces = map[notetype.OriginalStockKind]struct{}{
+	notetype.StockBasic:            {},
+	notetype.StockBasicAndReversed: {},
+	notetype.StockBasicTyping:      {},
+	notetype.StockCloze:            {},
+}
+
+// stockNoteTypeDefinitions returns the definitions a deck can be created from: engram's ten question
+// types, then the common templates, then the two Anki definitions engram has no equivalent for, each
+// group in its fixed declaration order so the picker shows the same list on every call. engram's
+// definitions come first because the client preselects the first entry, and they are what a new deck
+// should start from.
 func stockNoteTypeDefinitions() []stockNoteTypeDefinition {
 	templates := notetype.TemplateStockConfigs()
-	out := make([]stockNoteTypeDefinition, 0, 16+len(templates))
-	for _, cfg := range notetype.StockConfigs() {
-		if cfg.OriginalStockKind == nil {
-			continue
-		}
-		kind := *cfg.OriginalStockKind
+	out := make([]stockNoteTypeDefinition, 0, 10+len(templates)+2)
+	for _, stock := range notetype.EngramStockConfigs() {
 		out = append(out, stockNoteTypeDefinition{
 			JSON: NoteTypeStockJSON{
-				ID:       stockSourceAnki + ":" + string(kind),
-				Source:   stockSourceAnki,
-				Name:     notetype.StockName(kind),
-				LabelKey: "notetype.stock.anki." + string(kind),
+				ID:       stockSourceEngram + ":" + stock.Kind,
+				Source:   stockSourceEngram,
+				Name:     stock.Name,
+				LabelKey: "notetype.stock.engram." + stock.Kind,
 			},
-			Config: cfg,
+			Config: stock.Config,
 		})
 	}
 	for _, stock := range templates {
@@ -76,15 +87,22 @@ func stockNoteTypeDefinitions() []stockNoteTypeDefinition {
 			Config: stock.Config,
 		})
 	}
-	for _, stock := range notetype.EngramStockConfigs() {
+	for _, cfg := range notetype.StockConfigs() {
+		if cfg.OriginalStockKind == nil {
+			continue
+		}
+		kind := *cfg.OriginalStockKind
+		if _, replaced := ankiStocksEngramReplaces[kind]; replaced {
+			continue
+		}
 		out = append(out, stockNoteTypeDefinition{
 			JSON: NoteTypeStockJSON{
-				ID:       stockSourceEngram + ":" + stock.Kind,
-				Source:   stockSourceEngram,
-				Name:     stock.Name,
-				LabelKey: "notetype.stock.engram." + stock.Kind,
+				ID:       stockSourceAnki + ":" + string(kind),
+				Source:   stockSourceAnki,
+				Name:     notetype.StockName(kind),
+				LabelKey: "notetype.stock.anki." + string(kind),
 			},
-			Config: stock.Config,
+			Config: cfg,
 		})
 	}
 	return out

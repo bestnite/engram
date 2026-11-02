@@ -252,7 +252,7 @@ describe('NoteTypesView stock picker', () => {
         initialNoteTypes: [],
         initialStocks: [
           { id: 'template:vocabulary', source: 'template', name: 'Vocabulary', label_key: 'notetype.stock.template.vocabulary' },
-          { id: 'anki:basic', source: 'anki', name: 'Basic', label_key: 'notetype.stock.anki.basic' },
+          { id: 'engram:basic', source: 'engram', name: 'Basic', label_key: 'notetype.stock.engram.basic' },
         ],
         initialControls: [],
       },
@@ -298,7 +298,7 @@ describe('NoteTypesView opened from the note editor', () => {
       props: {
         initialLoading: false,
         initialNoteTypes: types,
-        initialStocks: [{ id: 'anki:basic', source: 'anki', name: 'Basic', label_key: 'notetype.stock.anki.basic' }],
+        initialStocks: [{ id: 'engram:basic', source: 'engram', name: 'Basic', label_key: 'notetype.stock.engram.basic' }],
         initialControls: [],
       },
     });
@@ -331,7 +331,7 @@ describe('NoteTypesView opened from the note editor', () => {
     );
     await flush();
 
-    expect(create).toHaveBeenCalledWith('d1', { name: 'Basic 2', stock_id: 'anki:basic' });
+    expect(create).toHaveBeenCalledWith('d1', { name: 'Basic 2', stock_id: 'engram:basic' });
     const href = backLink().getAttribute('href') ?? '';
     const params = new URLSearchParams(href.split('?')[1]);
     expect(href.startsWith('/decks/d1/notes/new?')).toBe(true);
