@@ -3950,6 +3950,33 @@ view of a card.
     `go test ./internal/api/... -count=1`; `ARCHITECTURE.md`'s MCP paragraph names the added surface
     in the same commit.
 
+- [ ] **M20-3 Register MCP session ownership before publishing the handshake** —
+  `internal/mcp/mcp.go` records a new session owner after the SDK handler returns. The SDK can
+  flush its initialize response before returning, allowing the client's initialized notification
+  to reach the owner check before the record exists. Register ownership before publishing a
+  successful response with a session header, including an implicit 200 response. Keep unknown
+  sessions refused with 404 and another owner's session refused with 403. Do not change tool
+  registration or business services. Add a deterministic response-writer barrier regression test
+  in `internal/mcp/` that issues the follow-up request before initialize returns.
+  *Acceptance:* the regression test fails before the fix and passes after it without sleeps or
+  probabilistic load; non-successful initialization and responses without a session header do not
+  register an owner; DELETE cleanup, capacity eviction, scope checks and account isolation remain
+  covered and pass; `go vet ./internal/mcp/...` and `go test ./internal/mcp/... -count=1` pass.
+
+- [ ] **M20-4 Follow rotated credentials in web security-flow tests** — password changes revoke
+  the old session and return a replacement cookie. The tests in `internal/web/password_test.go`,
+  `internal/web/password_initial_test.go` and `internal/web/security_mail_test.go` still send the
+  old cookie after a successful change. Capture the replacement session cookie from the password
+  response. Before a subsequent write, obtain its CSRF token through `GET /api/v1/auth/session`.
+  Change these tests only; do not change production authentication or weaken existing assertions.
+  *Acceptance:* `TestPasswordChangeSecurityFlow`, `TestInitialPasswordForPasswordlessAccount`,
+  `TestSecurityMailFiveClassATypesDeliveredAtTriggers` and
+  `TestSecurityMailClassAHasNoUnsubscribeHeader` pass; the old cookie returns 401 on the profile
+  endpoint and the replacement cookie returns 200; a write using the replacement cookie with the
+  old CSRF token returns `csrf_failed`; `TestSelfPasswordChangeRotatesSession` remains passing;
+  `go vet ./internal/web/...` and `go test ./internal/web/... -count=1` pass. Build the worktree's
+  frontend assets first because the web package embeds them.
+
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
