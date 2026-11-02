@@ -3870,13 +3870,17 @@ contract violations instead of intrusion steps. Every entry says whether it was 
 
 ---
 
-### M20 — Requested capabilities
+## 2. Release ledger
 
-Capabilities asked for while auditing the repository. Unlike the M99 future-work entry, these are
-wanted in the near term; each entry states the behaviour and how it lands without changing Anki's
-view of a card.
+### 2.1 Completed since v0.2.0 (2026-10-26)
 
-- [ ] **M20-1 Multiple accepted wordings for one cloze blank** — a cloze blank can accept more than
+#### Multiple accepted wordings for one cloze blank (M20-1)
+
+**Completed 2026-11-02.** Batch A: `b52b4e123aaf172ec4ff5865de0a824de9ed7a72`.
+Batch B: `cd8ead15c69d1cd8d3f9b42050606a73b9160c7e`. The completed specification below
+is retained as the capability contract; it is no longer an open backlog checkbox.
+
+**Contract.** A cloze blank can accept more than
   one wording. `cloze_blanks` grades each submitted blank against its canonical wording and its
   additional accepted wordings, using the existing cloze comparison rules in
   `internal/answer/grade.go`. This adds literal alternatives, not regular-expression matching or new
@@ -4036,9 +4040,132 @@ view of a card.
   and oracle results. The parent runs the repository-wide merge gate once at integration; this
   task does not pass merely because its examples parse as JSON.
 
-## 2. Release ledger
+**Verification and boundaries (2026-11-02).** Batch B changes no backend code and adds no
+dependency. It reuses Svelte, the existing controls, the Go cloze extraction semantics, and
+Vitest with happy-dom. Client tests establish shared lists, independent number/text associations,
+insertion/reordering, unlinked removal/reassociation, punctuation, IME guards, explicit repair,
+unknown nested-value save/reload, unchanged malformed data on an unrelated save, manual field
+enablement, impact preview, stale/forbidden saves, import notice, post-submit feedback and equal
+English/Chinese key sets. The actual pure-enablement 0/0 assertion is in
+`internal/api/note_type_metadata_test.go`; the UI's mocked impact response does not prove it.
+The uncached command
+`go test ./internal/api -run '^TestMetadataEnableDisableImpactAndPermissions$' -count=1 -v`
+also passed in this continuation:
 
-### 2.1 Completed since v0.2.0 (2026-10-26)
+```text
+=== RUN   TestMetadataEnableDisableImpactAndPermissions
+--- PASS: TestMetadataEnableDisableImpactAndPermissions (0.02s)
+PASS
+ok  	git.nite07.com/nite/engram/internal/api	0.030s
+```
+
+All four frontend commands below and both scoped Go commands exited 0. The first three frontend
+commands were rerun after the final catalog edit. Raw output excerpts follow; warnings have not
+been represented as failures or silently described as absent.
+
+`npm --prefix frontend run check`:
+
+```text
+npm notice run engram-frontend@0.1.0 check
+npm notice run svelte-check --tsconfig ./tsconfig.json
+Loading svelte-check in workspace: /home/nite/dev/engram/.worktrees/m20-1/frontend
+Getting Svelte diagnostics...
+
+svelte-check found 0 errors and 0 warnings
+```
+
+`npm --prefix frontend run test:client` (raw result excerpt):
+
+```text
+ Test Files  70 passed (70)
+      Tests  574 passed (574)
+   Start at  18:04:29
+   Duration  66.38s (transform 106.87s, setup 0ms, import 598.03s, tests 44.36s, environment 37.39s)
+```
+
+The full client run also emits Node localStorage experimental warnings, happy-dom iframe
+AbortError/NetworkError teardown diagnostics, and mocked-endpoint 404 messages. No dev server,
+browser, screenshot script or Playwright/e2e command was used for this continuation.
+
+`npm --prefix frontend run build` (raw result excerpts):
+
+```text
+npm notice run engram-frontend@0.1.0 build
+npm notice run vite build
+vite v7.3.7 building client environment for production...
+transforming...
+✓ 4976 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/main-Cc0jmHPy.js                    1,117.68 kB │ gzip: 317.11 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+✓ built in 8.11s
+```
+
+`npm --prefix frontend test -- --run src/tests/cloze-alternatives.test.ts src/tests/html-sink-allowlist.test.ts`
+(raw result excerpt):
+
+```text
+ Test Files  2 passed (2)
+      Tests  17 passed (17)
+```
+
+`go test ./internal/answer ./internal/notetype ./internal/store ./internal/api ./internal/web`:
+
+```text
+ok  	git.nite07.com/nite/engram/internal/answer	(cached)
+ok  	git.nite07.com/nite/engram/internal/notetype	(cached)
+ok  	git.nite07.com/nite/engram/internal/store	15.865s
+ok  	git.nite07.com/nite/engram/internal/api	(cached)
+ok  	git.nite07.com/nite/engram/internal/web	17.896s
+```
+
+`go vet ./internal/answer ./internal/notetype ./internal/store ./internal/api ./internal/web`
+exited 0 with empty stdout/stderr. This continuation used SQLite and did not rerun PostgreSQL
+or the Anki oracle. Batch A's unchanged backend retains the previously captured PostgreSQL run:
+
+```text
+ok  	git.nite07.com/nite/engram/internal/answer	0.009s
+ok  	git.nite07.com/nite/engram/internal/notetype	0.044s
+ok  	git.nite07.com/nite/engram/internal/store	106.394s
+ok  	git.nite07.com/nite/engram/internal/api	7.151s
+ok  	git.nite07.com/nite/engram/internal/web	15.288s
+ok  	git.nite07.com/nite/engram/internal/i18n	0.023s
+```
+
+The retained batch A oracle output establishes real Anki 26.9.3 import and both export layouts
+on SQLite and PostgreSQL, not a JSON-only simulation (raw excerpt):
+
+```text
+=== RUN   TestAnkiMetadataActualRoundTrip
+=== RUN   TestAnkiMetadataActualRoundTrip/sqlite
+    anki_metadata_roundtrip_test.go:49: oracle: anki=26.9.3 imported=1 exported=legacy,modern
+=== RUN   TestAnkiMetadataActualRoundTrip/sqlite/legacy.apkg
+=== RUN   TestAnkiMetadataActualRoundTrip/sqlite/modern.apkg
+=== RUN   TestAnkiMetadataActualRoundTrip/postgres
+    anki_metadata_roundtrip_test.go:49: oracle: anki=26.9.3 imported=1 exported=legacy,modern
+=== RUN   TestAnkiMetadataActualRoundTrip/postgres/legacy.apkg
+=== RUN   TestAnkiMetadataActualRoundTrip/postgres/modern.apkg
+--- PASS: TestAnkiMetadataActualRoundTrip (0.73s)
+    --- PASS: TestAnkiMetadataActualRoundTrip/sqlite (0.20s)
+        --- PASS: TestAnkiMetadataActualRoundTrip/sqlite/legacy.apkg (0.00s)
+        --- PASS: TestAnkiMetadataActualRoundTrip/sqlite/modern.apkg (0.00s)
+    --- PASS: TestAnkiMetadataActualRoundTrip/postgres (0.20s)
+        --- PASS: TestAnkiMetadataActualRoundTrip/postgres/legacy.apkg (0.01s)
+        --- PASS: TestAnkiMetadataActualRoundTrip/postgres/modern.apkg (0.01s)
+PASS
+ok  	git.nite07.com/nite/engram/internal/store	0.739s
+```
+
+No specified task acceptance item remains open. Real-browser native IME behavior and visual
+layout were not inspected; client event cancellation is the evidence for the IME requirement.
+The repository-wide integration gate is not established by this task and remains the parent's
+merge responsibility. Nothing was merged or pushed.
+
+**Compatibility.** HTTP review feedback and import-report fields are additive. MCP methods,
+database schema and configuration are unchanged. The optional metadata note field travels in
+the existing `.apkg` format without changing canonical cloze content or the note-type answer spec.
 
 #### MCP note type management and merge-check repairs (M20-2, M20-3, M20-4)
 
