@@ -3388,29 +3388,36 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   exceptions (release image, live demo, community link) are written into `AGENTS.md` §2.2 and `CONTRIBUTING.md`,
   naming exactly those cases, or the values are replaced with placeholders and the demo credentials are no longer
   committed.
-  *Closed by this commit (`docs: remove the live demo and name the two publication exceptions`).*
-  `README.md` and `README.zh.md` no longer carry the live demo URL, the `test` / `testdemo` credentials or the
-  community link, and their section structure and the English/Chinese pair remain in step. The container image
-  name stays, because `.goreleaser.yaml`, `.github/workflows/release.yml` and `docker-compose.yaml` publish it.
-  `AGENTS.md` §2.2 and `CONTRIBUTING.md` now name exactly two exceptions — the Go module path and the published
-  container image name — and state that no host name or demo credential is exempt. The one remaining
-  non-exception hit, a navigation-link fixture in `internal/web/stats_test.go`, now uses `example.com`.
-  Raw output of the repository-wide search for the registry account and the community host, with the module-path
-  exception filtered out; every hit below is the container image name:
+  *Closed by this commit (`docs: keep the live demo and name all three publication exceptions`).*
+  The earlier closing commit `c1109f1` removed the live demo, its `test` / `testdemo` credentials and the
+  community link. That was the wrong branch: those are publication surfaces the project advertises, not
+  private infrastructure. This commit restores the lines in `README.md` and `README.zh.md` byte-identically
+  to their state before `c1109f1`, and keeps the container image name and the release configuration
+  unchanged. `AGENTS.md` §2.2 and `CONTRIBUTING.md` now name exactly three publication exceptions — the Go
+  module path, the published container image name, and the published live demo (its host name and the
+  shared demo account documented with it, together with the community link) — and state that no internal
+  host name, personal credential, private IP address or other private value is exempt.
+  Raw output of the repository-wide search, with the module-path hits filtered out; every hit below is
+  either the published container image name or the published live demo and community link:
   ```
   .github/workflows/release.yml:10:#   DOCKERHUB_USERNAME / DOCKERHUB_TOKEN — used to push nite07/engram to Docker Hub.
   .goreleaser.yaml:89:      - nite07/engram
   README.md:5:[![Docker Image](https://img.shields.io/badge/Docker-nite07%2Fengram-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/nite07/engram)
-  README.md:96:  docker.io/nite07/engram:latest
-  README.md:125:    image: nite07/engram:latest
+  README.md:12:Live demo: <https://engram.nite07.com/> (registration is open; test account: `test` / `testdemo`)
+  README.md:98:  docker.io/nite07/engram:latest
+  README.md:127:    image: nite07/engram:latest
+  README.md:203:Friend link: [LINUX DO](https://linux.do) — A vibrant tech community.
   README.zh.md:5:[![Docker Image](https://img.shields.io/badge/Docker-nite07%2Fengram-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/nite07/engram)
-  README.zh.md:96:  docker.io/nite07/engram:latest
-  README.zh.md:125:    image: nite07/engram:latest
+  README.zh.md:12:线上 Demo：<https://engram.nite07.com/>（开放注册，亦可使用体验账号 `test` / `testdemo` 登录体验）
+  README.zh.md:98:  docker.io/nite07/engram:latest
+  README.zh.md:127:    image: nite07/engram:latest
+  README.zh.md:203:友情链接：[LINUX DO](https://linux.do) —— 真诚、友善、团结、专业的技术社区。
   docker-compose.yaml:20:    image: nite07/engram:latest
   ```
-  The unfiltered search returns the same lines plus the module path in `go.mod`, the Go imports, `ARCHITECTURE.md`,
-  `CONTRIBUTING.md` and the code samples in this file. It returns no hit for the removed community host, and no
-  hit for the removed demo host other than the image-name lines above.
+  The unfiltered search returns those lines plus the Go module path (`git.nite07.com/nite/engram`) in
+  `go.mod`, the Go imports, `ARCHITECTURE.md`, `CONTRIBUTING.md` and this file's code samples, and this
+  record's own quotation of the lines above. Every hit is therefore one of the three named exceptions;
+  no hit names any other host, credential, private IP address or private value.
 
 - [x] **M19-85 CONTRIBUTING states the review log is append-only and omits the one deletion the code performs** —
   *should-fix.* `CONTRIBUTING.md:167-168` restates the invariant as "**`reviews` is append-only.** Every column is

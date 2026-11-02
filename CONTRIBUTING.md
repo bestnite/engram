@@ -126,10 +126,14 @@ repository check scripts were removed on 2026-10-06):
 
 - **Placeholders only.** No real domain names, host names, private or link-local IP
   addresses, personal email addresses, credentials, or key material in any committed file —
-  use `example.com`, `localhost`, `CHANGE_ME`. Two values are deliberate exceptions, and
-  nothing else is exempt: the Go module path, which is the project's publication address,
-  and the container image name that the release workflow publishes, which is a registry
-  account rather than a host. No host name or demo credential is exempt.
+  use `example.com`, `localhost`, `CHANGE_ME`. Three publication surfaces are deliberate
+  exceptions, and nothing else is exempt: the Go module path, which is the project's
+  publication address; the container image name that the release workflow publishes, which is
+  a registry account rather than a host; and the published live demo, meaning its host name
+  and the shared demo account documented with it, together with the community link. Those
+  three are advertised by the project rather than private infrastructure. Everything else
+  stays out: no internal host name, personal credential, private IP address or other private
+  value is exempt.
 - **No hardcoded user-facing text.** Every visible string must come from a translation
   catalogue: the Svelte components use `frontend/src/lib/i18n/locales/*.ts`, server-side
   messages use `internal/i18n/locales/*.yaml`. The server-side pair is kept identical by

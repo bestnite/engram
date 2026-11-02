@@ -9,6 +9,8 @@
 
 Engram 是一个开源、自托管的渐进式间隔重复闪卡（Flashcard）服务。基于现代化 Svelte 5 SPA 前端与 Go 后端打造，将新一代自适应间隔排程算法 **FSRS v6** 与原生 **Model Context Protocol (MCP)** 服务结合，提供开箱即用的 AI 辅助制卡与自动化学习流。
 
+线上 Demo：<https://engram.nite07.com/>（开放注册，亦可使用体验账号 `test` / `testdemo` 登录体验）
+
 ---
 
 ## 界面预览
@@ -197,3 +199,5 @@ Engram 站在以下优秀开源项目与社区的肩膀上：
 - [MathJax](https://www.mathjax.org/) —— 优质的数学公式渲染库。
 - [goldmark](https://github.com/yuin/goldmark) —— 高效的 Markdown 解析引擎。
 - [zitadel/oidc](https://github.com/zitadel/oidc) 与 [go-i18n](https://github.com/nicksnyder/go-i18n) —— OIDC 单点登录与国际化多语言支持。
+
+友情链接：[LINUX DO](https://linux.do) —— 真诚、友善、团结、专业的技术社区。

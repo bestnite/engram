@@ -44,14 +44,18 @@ Decision rule: code, comments, logs and commit messages → English; end user �
   passwords, or descriptions of private infrastructure in **any** committed file —
   including examples, fixtures, comments, and documentation.
 - Use placeholders: `example.com`, `localhost`, `CHANGE_ME`.
-- Two deliberate exceptions, and nothing else, are exempt from this rule. The Go module path
+- Three deliberate exceptions, and nothing else, are exempt from this rule. The Go module path
   is the project's publication address rather than private infrastructure, so it carries the
   real code-host domain in `go.mod`, in imports, and in any documented `go get` command. The
   published container image name is the release workflow's publication target, so
   `.goreleaser.yaml`, `.github/workflows/release.yml` and `docker-compose.yaml` carry the real
-  registry account. Apart from those two names, no host name, demo credential or other value
-  is exempt: every other real domain stays out of the repository (see `.gitignore`). Run
-  `git status` before every commit and check nothing unintended is staged.
+  registry account. The published live demo is a publication surface rather than private
+  infrastructure: its host name and the shared demo account documented with it, together with
+  the community link, stay in `README.md` and `README.zh.md` because the project advertises
+  them. Apart from those three, everything else stays out: no internal host name, personal
+  credential, private IP address or other private value is exempt, and every other real domain
+  stays out of the repository (see `.gitignore`). Run `git status` before every commit and
+  check nothing unintended is staged.
 - **This rule has no automated check any more** (the check scripts were removed on
   2026-10-06, and the source-text test guards on 2026-10-08): review it by eye on every
   commit and re-read the staged diff before merging. A subagent's "the checks pass" is not
