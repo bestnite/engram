@@ -10,23 +10,12 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 
 ## 1. Task backlog
 
-### M10 — Future work (not part of the current release)
+### M99 — Future work (not part of the current release)
 
-These tasks are recorded so the design keeps room for them. They are not part of the current
-release; a task moves into a release milestone when it is scheduled.
+This task is recorded so the design keeps room for it. It is not part of the current release; it
+moves into a release milestone when it is scheduled.
 
-- [ ] **M10-1 LLM provider settings** — OpenAI-compatible base URL, model, encrypted key,
-  system-wide or per-user (BYOK) credentials, global off switch, monthly call cap.
-- [ ] **M10-2 Asynchronous grading path** — a `pending` grading state, queue, retry, and
-  page polling, so an LLM call never blocks review submission.
-- [ ] **M10-3 `short_answer` grading** — prompt assembly from the card, the user's answer,
-  the reference answer, and retrieved snippets; structured result mapped to a 1–4 rating;
-  `grade_source = 'llm'` with detail stored.
-- [ ] **M10-4 Knowledge base binding** — `reference_refs` on notes, deck-level defaults,
-  keyword retrieval first, optional `pgvector` later.
-- [ ] **M10-5 Feedback review UI** — grading history per card, self-rating versus LLM
-  rating comparison.
-- [ ] **M10-6 Replace the Rust optimiser adapter with the library's pure-Go optimiser** — `go-fsrs`
+- [ ] **M99 Replace the Rust optimiser adapter with the library's pure-Go optimiser** — `go-fsrs`
   is gaining a pure-Go FSRS v6 parameter optimiser: upstream PR #34 (`ComputeParameters()`, all 21
   parameters, no CGO, Adam with cosine annealing), verified 2026-10-02 as an **open draft, not
   merged**. When a **released** `go-fsrs` version carries it, delete `tools/optimizer`, the Rust
@@ -38,29 +27,6 @@ release; a task moves into a release milestone when it is scheduled.
   using a tolerance written into the test. The adapter, its build step, and `OPTIMIZER_PATH` are
   gone.
   *Do not start until a released `go-fsrs` version contains the optimiser.*
-- [ ] **M10-7 Multiple OIDC providers** — configure more than one provider (say a company IdP
-  next to a personal one) and list them all on the login page. The schema is already ready:
-  `identities` is keyed `(provider, subject)` and the provider is recorded on every binding.
-  What blocks it is the singular configuration: the settings keys are `oidc.issuer` /
-  `oidc.client_id` / …, `auth.LoadOIDCConfig` returns one config, the admin page is a single
-  form, and the callback path is fixed at `/auth/oidc/callback`. Deciding the callback shape
-  comes first: either per-provider paths (`/auth/oidc/<slug>/callback`) or one callback that
-  resolves the provider from the `state` row.
-  *Acceptance:* two providers configured in the admin panel; the login page offers both; an
-  identity bound through one is stored with that provider and does not affect the other;
-  unlinking one leaves the other intact; a single-provider setup keeps working, its existing
-  settings read as the first row.
-  *Do not start until the callback shape is decided.*
-- [ ] **M10-8 Note type entry from the note editor** — the note editor builds its form from the deck's
-  note types, but the only way to the note type page (`/decks/:id/note-types`) is the "Manage note
-  types" button on the deck's Settings tab, so a writer who needs another field or card layout has to
-  leave the editor and find it there. The editor (`frontend/src/lib/views/NoteEditView.svelte`) may
-  offer a link to that page next to the note type selector, or wherever the selector is hidden
-  because the deck has a single type.
-  *Acceptance:* from the note editor, one click reaches the deck's note type page, and returning
-  lands back on the editor with the draft intact or after an explicit warning that it is discarded.
-  *Do not start until the maintainer decides how custom note types are meant to be used, which
-  decides whether the entry belongs in the editor at all.*
 
 ---
 
@@ -1414,7 +1380,7 @@ contract violations instead of intrusion steps. Every entry says whether it was 
 - [x] **M19-33 `IsMachineGraded` special-cases a control name in core code** — *nit.*
   `internal/answer/answer.go:136-147` returns false when `spec.Control == "short_answer"`, while the package
   doc and AGENTS §2.3.7 say adding a control means adding one file and registering it with no core change.
-  A second self-assessed control (the essay or draw-and-explain kind M10-3 will need) must edit this
+  A second self-assessed control (the essay or draw-and-explain kind) must edit this
   function; if the author forgets, the API demands a 1–4 self-rating for a card that records a written
   answer. Verified by reading it and its callers (`internal/api/service.go:1465-1500`); no test asserts the
   rule for any control but `short_answer`. *Acceptance:* an optional interface implemented by the control
@@ -3906,8 +3872,9 @@ contract violations instead of intrusion steps. Every entry says whether it was 
 
 ### M20 — Requested capabilities
 
-Capabilities asked for while auditing the repository. Unlike M10, these are wanted in the near term;
-each entry states the behaviour and how it lands without changing Anki's view of a card.
+Capabilities asked for while auditing the repository. Unlike the M99 future-work entry, these are
+wanted in the near term; each entry states the behaviour and how it lands without changing Anki's
+view of a card.
 
 - [ ] **M20-1 Multiple accepted wordings for one cloze blank** — a cloze blank can accept more than
   one wording (for example `is` / `are` for the same blank), and `cloze_blanks` grades it correct when
