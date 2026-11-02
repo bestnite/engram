@@ -389,6 +389,18 @@
         <h3 class="mt-5 text-sm font-semibold">{$t('import.apkg.latex_missing_images')}</h3>
         <ul class="mt-2 list-disc pl-5 text-sm">{#each report.latex_missing_images as item}<li>{item}</li>{/each}</ul>
       {/if}
+      {#if report.reserved_prefix_fields?.length}
+        <div class="mt-5 rounded-md border border-amber-500/20 bg-amber-500/10 p-4 text-sm" data-testid="package-report-reserved-prefix">
+          <p class="font-medium text-amber-900 dark:text-amber-200">
+            {report.reserved_prefix_notice || $t('package.report.reserved_prefix_notice')}
+          </p>
+          <ul class="mt-2 list-disc pl-5 text-sm text-amber-800 dark:text-amber-300">
+            {#each report.reserved_prefix_fields as fieldName}
+              <li>{fieldName}</li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
       {#if report.dry_run}<p class="mt-4 text-sm text-warning">{$t('package.report.preview_notice')}</p>{/if}
     </section>
   {/if}

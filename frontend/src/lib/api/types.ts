@@ -639,6 +639,10 @@ export interface PackageImportReport {
   external_assets?: string[];
   /** Anki .apkg report: LaTeX images the package does not carry. */
   latex_missing_images?: string[];
+  /** Ordinary fields imported whose names match the reserved engram_ prefix. */
+  reserved_prefix_fields?: string[];
+  /** Server-localized notice explaining that reserved-prefix fields were imported as ordinary fields. */
+  reserved_prefix_notice?: string;
   errors: Array<{ entry: string; reason: string }>;
 }
 
@@ -884,8 +888,8 @@ export interface GradedFeedback {
   back?: CardFace;
   given: string;
   parsed?: string;
-  /** Per-item result for templates graded item by item (list cards): each item's rendered answer HTML plus correctness, in item order. */
-  breakdown?: { answer_html: string; correct: boolean }[];
+  /** Per-item result for templates graded item by item (list, cloze): each item's rendered answer HTML plus correctness, in item order. Cloze also carries canonical and alternatives. */
+  breakdown?: { answer_html: string; correct: boolean; canonical?: string; alternatives?: string[] }[];
 }
 
 /**

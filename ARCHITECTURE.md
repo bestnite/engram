@@ -356,9 +356,13 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
   the typed text), and Enter in a single-line answer input. The parent accepts a message only when
   `event.source` is its own iframe's `contentWindow`, and validates every field before it acts. It
   opens a `link` target only when it is an `http` or `https` URL, in a new tab with `noopener`.
-  `frontend/src/lib/components/RichTextField.svelte` is the only way a note field is edited: it owns
+  `frontend/src/lib/components/RichTextField.svelte` is the way ordinary HTML note fields are edited: it owns
   the editing iframe and the toolbar, sends `load` and `command`, and writes the frame's `change`
   back into the form. Card-face and field HTML therefore never enter the parent DOM.
+  The exact-name `engram_meta` field is instead owned by `ClozeAlternativesEditor.svelte`, which
+  edits only its `cloze_accept` capability as JSON values and preserves unknown capabilities.
+  `cloze-alternatives.ts` mirrors the existing cloze extraction semantics for number-and-text
+  associations; the editor shows canonical text and occurrence context as text, not stored HTML.
   `frontend/src/lib/components/MailPreviewFrame.svelte` is the admin mail-template preview: it puts
   the complete server-rendered mail document into a sandboxed iframe with no script permission, so
   administrator-written HTML and CSS are only ever rendered inside a sandbox. The SPA's remaining

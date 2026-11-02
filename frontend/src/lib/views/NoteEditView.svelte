@@ -8,6 +8,7 @@
   import type { Note, NotePreviewCard, NoteType, NoteTypeField } from '../api';
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import ImageOcclusionEditor from '../components/ImageOcclusionEditor.svelte';
+  import ClozeAlternativesEditor from '../components/ClozeAlternativesEditor.svelte';
   import { firstImageSource } from '../image-occlusion/markup';
   import Select from '../components/ui/Select.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -164,19 +165,45 @@
 
   // Every note-type field is an HTML value, so the form uses one text control per field and every field gets the
   // rich-text editor. A field whose option says plain_text still renders as plain text inside that editor.
-  // The occlusion field is left out while the mask editor owns it, so one value is not edited by two controls.
+  // The occlusion field is left out while the mask editor owns it, and engram_meta is excluded because the
+  // cloze alternatives editor manages it as raw JSON.
   const specs = $derived<FieldSpec[]>(
     fieldDefs
-      .filter((field) => field.name !== occlusionField)
+      .filter((field) => field.name !== occlusionField && field.name !== 'engram_meta')
       .map((field) => ({ key: field.name, control: 'textarea', required: false }))
   );
   const fieldLabels = $derived(
-    Object.fromEntries(fieldDefs.map((field) => [field.name, field.name]))
+    Object.fromEntries(
+      fieldDefs
+        .filter((field) => field.name !== 'engram_meta')
+        .map((field) => [field.name, field.name])
+    )
   );
   const fieldOptions = $derived(
-    Object.fromEntries(fieldDefs.map((field) => [field.name, optionsFor(field)]))
+    Object.fromEntries(
+      fieldDefs
+        .filter((field) => field.name !== 'engram_meta')
+        .map((field) => [field.name, optionsFor(field)])
+    )
   );
-  const faceFields = $derived(fieldDefs.map((field) => field.name));
+  const faceFields = $derived(
+    fieldDefs
+      .filter((field) => field.name !== 'engram_meta')
+      .map((field) => field.name)
+  );
+
+  const hasMetaField = $derived(fieldDefs.some((f) => f.name === 'engram_meta'));
+  const clozeTemplate = $derived(
+    selectedType?.config.templates.find((t) => t.answer?.control === 'cloze_blanks')
+  );
+  const clozeTextFieldName = $derived.by(() => {
+    if (!clozeTemplate?.answer?.bindings) return '';
+    const boundFieldID = clozeTemplate.answer.bindings['text'];
+    if (!boundFieldID) return '';
+    const field = fieldDefs.find((f) => f.id === boundFieldID || f.name === boundFieldID);
+    return field?.name ?? '';
+  });
+  const showClozeAlternatives = $derived(hasMetaField && Boolean(clozeTextFieldName));
 
   // Note type dropdown: the list and its order come from the server, empty while the metadata is not ready.
   const typeOptions = $derived(noteTypes.map((entry) => ({ value: entry.id, label: entry.name })));
@@ -709,6 +736,16 @@
                 imageSrc={occlusionImageSrc}
                 onchange={(next) => {
                   fields[occlusionField] = next;
+                }}
+              />
+            {/if}
+
+            {#if showClozeAlternatives && clozeTextFieldName}
+              <ClozeAlternativesEditor
+                textFieldValue={typeof fields[clozeTextFieldName] === 'string' ? (fields[clozeTextFieldName] as string) : ''}
+                metaValue={typeof fields['engram_meta'] === 'string' ? (fields['engram_meta'] as string) : ''}
+                onchange={(next) => {
+                  fields['engram_meta'] = next;
                 }}
               />
             {/if}

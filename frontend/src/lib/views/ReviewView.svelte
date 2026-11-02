@@ -1265,7 +1265,19 @@
                           {:else}
                             <X class="mt-1.5 size-4 shrink-0 text-rose-600 dark:text-rose-400" strokeWidth={3} aria-label={$t('review.graded.incorrect')} />
                           {/if}
-                          <div class="min-w-0 break-words font-medium [&_p]:m-0">{@html item.answer_html}</div>
+                          <div class="min-w-0 break-words font-medium [&_p]:m-0">
+                            {#if item.canonical !== undefined}
+                              <span class="text-xs text-muted-foreground mr-1.5" data-testid="review-graded-canonical-label">{$t('review.graded.canonical_label')}:</span>
+                              <span>{item.canonical}</span>
+                              {#if item.alternatives && item.alternatives.length > 0}
+                                <span class="ml-2 text-sm font-normal text-muted-foreground" data-testid="review-graded-alternatives">
+                                  ({$t('review.graded.also_accepted')}: {item.alternatives.join(' / ')})
+                                </span>
+                              {/if}
+                            {:else}
+                              {@html item.answer_html}
+                            {/if}
+                          </div>
                         </li>
                       {/each}
                     </ul>

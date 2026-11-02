@@ -21,6 +21,7 @@
     NoteTypeTemplate,
   } from '../api';
   import Button from '../components/ui/Button.svelte';
+  import Badge from '../components/ui/Badge.svelte';
   import Dialog from '../components/ui/Dialog.svelte';
   import Select from '../components/ui/Select.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
@@ -191,6 +192,12 @@
   const changeTemplateRows = $derived(
     draft?.config.kind === 'normal' ? (draft?.config.templates ?? []) : [],
   );
+
+  const hasMetaField = $derived(draft ? draft.config.fields.some((f) => f.name === 'engram_meta') : false);
+  const metaMissingExclude = $derived(draft ? draft.config.fields.some((f) => f.name === 'engram_meta' && !f.exclude_from_search) : false);
+  const hasClozeBlanksTemplate = $derived(draft ? draft.config.templates.some((t) => answerControlValue(t) === 'cloze_blanks') : false);
+  let metaDeleteConfirmOpen = $state(false);
+  let metaDeleteIndex = $state(-1);
 
   // The preview is rendered by the server: the request carries the whole unsaved config and the selected template id,
   // so the frames show the same faces a stored note type produces instead of a second renderer in this page. Every field
@@ -367,10 +374,67 @@
     if (!draft) return;
     const field = draft.config.fields[index];
     if (!field || field.prevent_deletion || draft.config.fields.length <= 1) return;
+    if (field.name === 'engram_meta') {
+      requestDeleteMetaField(index);
+      return;
+    }
     draft.config.fields.splice(index, 1);
     if (draft.config.sort_field_id === field.id) {
       draft.config.sort_field_id = draft.config.fields[0]?.id ?? '';
     }
+  }
+
+  function enableClozeAlternatives(): void {
+    if (!draft) return;
+    const existing = draft.config.fields.find((f) => f.name === 'engram_meta');
+    if (existing) {
+      existing.exclude_from_search = true;
+      existing.plain_text = true;
+      return;
+    }
+    const field: NoteTypeField = {
+      id: nextID(draft.config.fields, 'f'),
+      name: 'engram_meta',
+      sticky: false,
+      rtl: false,
+      font: '',
+      font_size: 0,
+      description: '',
+      plain_text: true,
+      collapsed: true,
+      exclude_from_search: true,
+      tag: null,
+      prevent_deletion: false,
+    };
+    draft.config.fields.push(field);
+  }
+
+  function normalizeMetaFlag(): void {
+    if (!draft) return;
+    const existing = draft.config.fields.find((f) => f.name === 'engram_meta');
+    if (existing) {
+      existing.exclude_from_search = true;
+      existing.plain_text = true;
+    }
+  }
+
+  function requestDeleteMetaField(index: number): void {
+    metaDeleteIndex = index;
+    metaDeleteConfirmOpen = true;
+  }
+
+  function confirmDeleteMeta(): void {
+    if (metaDeleteIndex >= 0 && draft) {
+      const field = draft.config.fields[metaDeleteIndex];
+      if (field) {
+        draft.config.fields.splice(metaDeleteIndex, 1);
+        if (draft.config.sort_field_id === field.id) {
+          draft.config.sort_field_id = draft.config.fields[0]?.id ?? '';
+        }
+      }
+    }
+    metaDeleteConfirmOpen = false;
+    metaDeleteIndex = -1;
   }
 
   function addTemplate(): void {
@@ -490,7 +554,10 @@
     if (err instanceof ApiClientError) {
       if (err.code === 'version_conflict') return 'notetype.error.version';
       if (err.isForbidden) return 'notetype.error.forbidden';
-      if (err.code === 'invalid_request') return 'notetype.error.invalid';
+      if (err.code === 'invalid_request') {
+        if (err.message) return err.message;
+        return 'notetype.error.invalid';
+      }
     }
     return 'notetype.error.failed';
   }
@@ -505,6 +572,8 @@
       saveError = 'notetype.error.name';
       return;
     }
+    // The exact metadata field is excluded regardless of how it was added.
+    normalizeMetaFlag();
     saving = true;
     saveError = '';
     try {
@@ -1406,6 +1475,46 @@
             {/if}
           </section>
 
+          <!-- Cloze alternatives: note-type level, enabled when any template declares cloze_blanks -->
+          {#if hasClozeBlanksTemplate}
+            <section class="rounded-lg border border-border p-4" data-testid="notetype-cloze-alternatives">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <h2 class="text-sm font-semibold text-foreground">{$t('notetype.cloze_alternatives.title')}</h2>
+                  <p class="mt-0.5 text-xs text-muted-foreground">{$t('notetype.cloze_alternatives.hint')}</p>
+                </div>
+                {#if hasMetaField}
+                  <div class="flex items-center gap-2">
+                    <Badge variant="neutral" testId="notetype-cloze-alternatives-status">
+                      {$t('notetype.cloze_alternatives.configured')}
+                    </Badge>
+                    {#if metaMissingExclude}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-6 text-xs text-amber-700 dark:text-amber-300"
+                        testId="notetype-cloze-alternatives-fix-flag"
+                        onclick={normalizeMetaFlag}
+                      >
+                        {$t('notetype.cloze_alternatives.fix_search_flag')}
+                      </Button>
+                    {/if}
+                  </div>
+                {:else}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="text-xs"
+                    testId="notetype-cloze-alternatives-enable"
+                    onclick={enableClozeAlternatives}
+                  >
+                    {$t('notetype.cloze_alternatives.enable')}
+                  </Button>
+                {/if}
+              </div>
+            </section>
+          {/if}
+
           <!-- Styling -->
           <section class="rounded-lg border border-border p-4" data-testid="notetype-css">
             <h2 class="text-sm font-semibold text-foreground">{$t('notetype.css.title')}</h2>
@@ -1803,6 +1912,24 @@
       </Button>
       <Button variant="danger" onclick={() => void confirmDelete()} loading={deleting} testId="notetype-delete-confirm">
         <span>{deletePurgeImpact ? $t('notetype.purge.confirm') : $t('notetype.type.delete')}</span>
+      </Button>
+    </div>
+  </Dialog>
+
+  <!-- Delete engram_meta confirmation dialog -->
+  <Dialog
+    open={metaDeleteConfirmOpen}
+    onOpenChange={(open) => { if (!open) metaDeleteConfirmOpen = false; }}
+    title={$t('notetype.meta.delete_title')}
+    description={$t('notetype.meta.delete_warning')}
+    testId="notetype-meta-delete-dialog"
+  >
+    <div class="mt-4 flex justify-end gap-2">
+      <Button variant="outline" onclick={() => (metaDeleteConfirmOpen = false)} testId="notetype-meta-delete-cancel">
+        <span>{$t('notetype.meta.delete_cancel')}</span>
+      </Button>
+      <Button variant="danger" onclick={confirmDeleteMeta} testId="notetype-meta-delete-confirm">
+        <span>{$t('notetype.meta.delete_confirm')}</span>
       </Button>
     </div>
   </Dialog>
