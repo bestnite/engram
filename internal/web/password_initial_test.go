@@ -54,9 +54,7 @@ func TestInitialPasswordForPasswordlessAccount(t *testing.T) {
 	if _, err := srv.accounts.Authenticate(ctx, "oidc-user", "N3wStrongPassword!"); err != nil {
 		t.Fatalf("new password rejected: %v", err)
 	}
-	if rec := getWithCookies(t, srv, "/api/v1/profile", cookies); rec.Code != http.StatusOK {
-		t.Fatalf("current session was revoked: %d", rec.Code)
-	}
+	cookies, csrf = rotatedPasswordSession(t, srv, rec, cookies, csrf)
 	if rec := getWithCookies(t, srv, "/api/v1/profile", otherCookies); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("other session still valid: %d", rec.Code)
 	}

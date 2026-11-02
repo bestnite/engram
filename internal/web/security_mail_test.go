@@ -273,6 +273,7 @@ func TestSecurityMailFiveClassATypesDeliveredAtTriggers(t *testing.T) {
 	if change.Code != http.StatusNoContent {
 		t.Fatalf("PATCH /api/v1/settings/password status = %d, want 204 (body %s)", change.Code, snippet(change.Body.String()))
 	}
+	ts.cookies, ts.csrf = rotatedPasswordSession(t, ts.srv, change, ts.cookies, ts.csrf)
 	credRows := outboxByType(t, ts.db, mail.TypeCredentialChanged)
 	if len(credRows) != 1 {
 		t.Errorf("credential_changed rows after a password change = %d, want 1", len(credRows))
@@ -382,8 +383,12 @@ func TestSecurityMailClassAHasNoUnsubscribeHeader(t *testing.T) {
 	// Triggers all five types.
 	_, _ = issueResetToken(t, ts)
 	resendVerificationJSON(t, ts)
-	jsonRequest(t, ts.srv, http.MethodPatch, "/api/v1/settings/password",
+	change := jsonRequest(t, ts.srv, http.MethodPatch, "/api/v1/settings/password",
 		`{"old_password":"Sup3rSecret!","new_password":"N3wSup3rSecret!"}`, ts.cookies, ts.csrf)
+	if change.Code != http.StatusNoContent {
+		t.Fatalf("password change = %d %s, want 204", change.Code, snippet(change.Body.String()))
+	}
+	ts.cookies, ts.csrf = rotatedPasswordSession(t, ts.srv, change, ts.cookies, ts.csrf)
 	targetID := createTargetUser(t, ts)
 	jsonRequest(t, ts.srv, http.MethodPost, "/api/v1/admin/users/"+userPublicID(t, ts.db, targetID)+"/status",
 		`{"action":"disable"}`, ts.cookies, ts.csrf)
