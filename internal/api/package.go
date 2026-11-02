@@ -22,13 +22,13 @@ import (
 //   POST /api/v1/decks/import       import (write)
 // All the logic is in the store layer; this only shapes parameters, decides permissions and maps errors.
 
-// ExportAnkiPackage applies permission checks and server settings for Anki archives.
-func (a *API) ExportAnkiPackage(ctx context.Context, userID, deckID uint64, opts store.PackageOptions) ([]byte, error) {
+// ExportDeckPackage applies permission checks and server settings for Anki archives.
+func (a *API) ExportDeckPackage(ctx context.Context, userID, deckID uint64, opts store.PackageOptions) ([]byte, error) {
 	if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
 		return nil, err
 	}
 	opts.MediaRoot, opts.Now = a.mediaRoot, a.now
-	data, err := a.decks.ExportAnkiPackage(ctx, userID, deckID, opts)
+	data, err := a.decks.ExportDeckPackage(ctx, userID, deckID, opts)
 	if err != nil {
 		return nil, mapPackageError(err)
 	}
@@ -206,7 +206,7 @@ func (a *API) handleExportPackage(c *gin.Context) {
 		abortError(c, http.StatusBadRequest, CodeInvalidRequest, "")
 		return
 	}
-	data, err := a.ExportAnkiPackage(ctx, u.ID, d.ID, PackageQueryOptions(c))
+	data, err := a.ExportDeckPackage(ctx, u.ID, d.ID, PackageQueryOptions(c))
 	if err != nil {
 		writeServiceError(c, err)
 		return

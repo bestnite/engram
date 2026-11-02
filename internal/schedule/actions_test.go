@@ -30,7 +30,7 @@ func TestUndoImportedReviewMemory(t *testing.T) {
 	if err := db.Create(&store.Review{CardID: cardID, UserID: 1, Rating: 3, GradeSource: "self", ReviewedAt: reviewed, ReviewDay: "2026-10-01", StateBefore: 2, IntervalDays: store.Ptr(5.0)}).Error; err != nil {
 		t.Fatal(err)
 	}
-	raw, err := store.NewDeckStore(db).ExportAnkiPackage(ctx, 1, deckID, store.PackageOptions{IncludeProgress: true, IncludeReviews: true})
+	raw, err := store.NewDeckStore(db).ExportDeckPackage(ctx, 1, deckID, store.PackageOptions{IncludeProgress: true, IncludeReviews: true})
 	if err != nil {
 		t.Fatal(err)
 	}

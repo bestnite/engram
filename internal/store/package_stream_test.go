@@ -18,7 +18,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"git.nite07.com/nite/engram/internal/anki"
+	"git.nite07.com/nite/engram/internal/apkg"
 )
 
 // ankiFixtureWithMedia rebuilds a legacy fixture archive whose media index and numbered
@@ -316,17 +316,17 @@ func TestResolvePackageLimits(t *testing.T) {
 func TestHashAnkiMediaEnforcesStreamedCaps(t *testing.T) {
 	payload := bytes.Repeat([]byte("x"), 1024)
 	entry := testMediaEntry("a.txt", payload)
-	pkg := &anki.Package{UnpackedBytes: 100, Media: []anki.MediaEntry{entry}}
+	pkg := &apkg.Package{UnpackedBytes: 100, Media: []apkg.MediaEntry{entry}}
 
-	limits := anki.DefaultLimits()
+	limits := apkg.DefaultLimits()
 	limits.MaxTotalBytes = 500
-	if _, err := hashAnkiMedia(pkg, limits); !errors.Is(err, anki.ErrTooLarge) {
+	if _, err := hashDeckMedia(pkg, limits); !errors.Is(err, apkg.ErrTooLarge) {
 		t.Fatalf("total cap err = %v, want ErrTooLarge", err)
 	}
 
-	limits = anki.DefaultLimits()
+	limits = apkg.DefaultLimits()
 	limits.MaxFileBytes = 16
-	if _, err := hashAnkiMedia(pkg, limits); !errors.Is(err, anki.ErrTooLarge) {
+	if _, err := hashDeckMedia(pkg, limits); !errors.Is(err, apkg.ErrTooLarge) {
 		t.Fatalf("per-entry cap err = %v, want ErrTooLarge", err)
 	}
 }
@@ -337,12 +337,12 @@ func TestAnkiHashRejectsAdvertisedSha1Mismatch(t *testing.T) {
 	data, names := tinyAnkiMedia()
 	raw := ankiFixtureWithMedia(t, "stock.anki2.apkg", data, names)
 	// Rebuild the modern fixture so the declared sha1 can disagree with the payload.
-	pkg, err := anki.Read(bytes.NewReader(raw), int64(len(raw)))
+	pkg, err := apkg.Read(bytes.NewReader(raw), int64(len(raw)))
 	if err != nil {
 		t.Fatalf("read package: %v", err)
 	}
 	pkg.Media[0].SHA1 = make([]byte, 20)
-	if _, err := hashAnkiMedia(pkg, anki.DefaultLimits()); !errors.Is(err, anki.ErrCorruptMedia) {
-		t.Fatalf("hashAnkiMedia err = %v, want ErrCorruptMedia", err)
+	if _, err := hashDeckMedia(pkg, apkg.DefaultLimits()); !errors.Is(err, apkg.ErrCorruptMedia) {
+		t.Fatalf("hashDeckMedia err = %v, want ErrCorruptMedia", err)
 	}
 }

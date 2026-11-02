@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.nite07.com/nite/engram/internal/anki"
+	"git.nite07.com/nite/engram/internal/apkg"
 	"git.nite07.com/nite/engram/internal/notetype"
 )
 
@@ -87,11 +87,11 @@ func TestMetadataIsolationNoteSave(t *testing.T) {
 }
 
 func TestMetadataImportScansAndRewrite(t *testing.T) {
-	pkg := &anki.Package{NoteTypes: []anki.NoteType{{ID: 1, Fields: []anki.Field{{Name: "engram_meta"}, {Name: "engram_notes"}}}}, Notes: []anki.Note{{NoteTypeID: 1, Fields: []string{`{"x":"[sound:hidden.mp3]"}`, "[sound:ordinary.mp3]"}}}}
+	pkg := &apkg.Package{NoteTypes: []apkg.NoteType{{ID: 1, Fields: []apkg.Field{{Name: "engram_meta"}, {Name: "engram_notes"}}}}, Notes: []apkg.Note{{NoteTypeID: 1, Fields: []string{`{"x":"[sound:hidden.mp3]"}`, "[sound:ordinary.mp3]"}}}}
 	if got := ankiMediaRefs(pkg); !reflect.DeepEqual(got, []string{"ordinary.mp3"}) {
 		t.Fatal(got)
 	}
-	forEachAnkiContentField(pkg, func(value *string) {
+	forEachContentField(pkg, func(value *string) {
 		*value = rewriteMediaRefs(*value, map[string]string{"hidden.mp3": "changed.mp3", "ordinary.mp3": "new.mp3"})
 	})
 	if !strings.Contains(pkg.Notes[0].Fields[0], "hidden.mp3") || pkg.Notes[0].Fields[1] != "[sound:new.mp3]" {

@@ -103,7 +103,7 @@ func (a *API) handleExportDownload(c *gin.Context) {
 	}
 	name := DeckPackageFilename(d.Name, d.PublicID)
 	opts := store.PackageOptions{IncludeProgress: ticket.IncludeProgress, IncludeReviews: ticket.IncludeReviews, IncludeDeckConfigs: ticket.IncludeDeckConfigs, IncludeEngramMeta: ticket.IncludeEngramMeta, IncludeMedia: ticket.IncludeMedia, IncludeWeights: ticket.IncludeWeights}
-	data, err := a.ExportAnkiPackage(ctx, ticket.UserID, d.ID, opts)
+	data, err := a.ExportDeckPackage(ctx, ticket.UserID, d.ID, opts)
 	if err != nil {
 		writeServiceError(c, err)
 		return

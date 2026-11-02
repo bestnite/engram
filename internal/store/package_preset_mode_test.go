@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"git.nite07.com/nite/engram/internal/anki"
+	"git.nite07.com/nite/engram/internal/apkg"
 )
 
 func TestAnkiImportPresetRefusals(t *testing.T) {
@@ -83,11 +83,11 @@ func TestAnkiImportPresetModes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pkg, err := anki.ReadWithLimits(bytes.NewReader(raw), int64(len(raw)), DefaultPackageImportLimits().ankiLimits())
+	pkg, err := apkg.ReadWithLimits(bytes.NewReader(raw), int64(len(raw)), DefaultPackageImportLimits().packageLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan := planAnkiDecks(pkg)
+	plan := planImportDecks(pkg)
 	cfg := ankiTopConfig(pkg, plan.TopName)
 	if cfg == nil {
 		t.Fatal("fixture has no deck configuration")

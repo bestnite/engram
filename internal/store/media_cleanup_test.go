@@ -31,7 +31,7 @@ func TestCancelledImportKeepsMediaCommittedByAnother(t *testing.T) {
 
 			// A writes the bytes outside its transaction; no metadata row exists yet.
 			store := NewDeckStore(db)
-			placement, err := store.prepareAnkiImport(WithActor(context.Background(), ownerA), ownerA,
+			placement, err := store.prepareDeckImport(WithActor(context.Background(), ownerA), ownerA,
 				bytes.NewReader(raw), int64(len(raw)), limits,
 				PackageImportOptions{Target: PackageTargetNewDeck, PresetMode: PackagePresetNew, MediaRoot: root},
 				PackageTargetNewDeck, 0)
@@ -62,7 +62,7 @@ func TestCancelledImportKeepsMediaCommittedByAnother(t *testing.T) {
 			// A is cancelled: its transaction fails and its cleanup runs with the cancelled context.
 			cancelled, cancel := context.WithCancel(WithActor(context.Background(), ownerA))
 			cancel()
-			if _, err := store.importAnkiPlacement(cancelled, placement); err == nil {
+			if _, err := store.importPlacement(cancelled, placement); err == nil {
 				t.Fatal("import A with a cancelled context succeeded")
 			}
 			// Prove the cleanup's lookup really fails on this context; otherwise the case would pass for the wrong reason.

@@ -44,13 +44,13 @@ type stockNoteTypeDefinition struct {
 	Config notetype.Config
 }
 
-// ankiStocksEngramReplaces lists the Anki stock kinds the picker does not offer, because engram's own
+// stocksEngramReplaces lists the Anki stock kinds the picker does not offer, because engram's own
 // definition covers the same study shape and listing both would show two rows with the same label and
 // no way to choose between them. The same shapes are: Anki's basic and engram's basic, "and reversed"
 // and "both directions", "type in the answer" and "typed answer", and the two cloze definitions.
 // engram's definition is the one offered because it carries the answer controls and the metadata
 // field; Anki's definition stays in notetype, where an imported package still names it.
-var ankiStocksEngramReplaces = map[notetype.OriginalStockKind]struct{}{
+var stocksEngramReplaces = map[notetype.OriginalStockKind]struct{}{
 	notetype.StockBasic:            {},
 	notetype.StockBasicAndReversed: {},
 	notetype.StockBasicTyping:      {},
@@ -92,7 +92,7 @@ func stockNoteTypeDefinitions() []stockNoteTypeDefinition {
 			continue
 		}
 		kind := *cfg.OriginalStockKind
-		if _, replaced := ankiStocksEngramReplaces[kind]; replaced {
+		if _, replaced := stocksEngramReplaces[kind]; replaced {
 			continue
 		}
 		out = append(out, stockNoteTypeDefinition{

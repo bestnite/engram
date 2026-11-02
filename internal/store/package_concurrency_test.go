@@ -201,7 +201,7 @@ func TestAnkiImportKeepsFilesThatExistedBefore(t *testing.T) {
 // media placement and the import transaction cannot delete a stored row the import is about to
 // reuse, even when that row's grace period has already passed.
 //
-// placeAnkiMedia skips a sha that already has a row, and the transaction later reuses that row. A
+// placeDeckMedia skips a sha that already has a row, and the transaction later reuses that row. A
 // row orphaned longer than the collection grace would be deleted, together with its file, by a
 // collection run that starts meanwhile, and the transaction would then fail on media it never wrote.
 func TestAnkiImportClearsOrphanMarkBeforeTheTransaction(t *testing.T) {
@@ -250,7 +250,7 @@ func TestAnkiImportClearsOrphanMarkBeforeTheTransaction(t *testing.T) {
 			// transaction. The reused row and its file must survive and the import must succeed.
 			actorCtx := WithActor(ctx, owner)
 			store := NewDeckStore(db)
-			placement, err := store.prepareAnkiImport(actorCtx, owner, bytes.NewReader(raw), int64(len(raw)), limits,
+			placement, err := store.prepareDeckImport(actorCtx, owner, bytes.NewReader(raw), int64(len(raw)), limits,
 				PackageImportOptions{Target: PackageTargetNewDeck, PresetMode: PackagePresetNew, MediaRoot: root, Now: func() time.Time { return time.Now().UTC() }}, PackageTargetNewDeck, 0)
 			if err != nil {
 				t.Fatalf("prepare import: %v", err)
@@ -262,7 +262,7 @@ func TestAnkiImportClearsOrphanMarkBeforeTheTransaction(t *testing.T) {
 			if len(collected) != 0 {
 				t.Fatalf("collection selected %d row(s) a pending import was about to reuse", len(collected))
 			}
-			if _, err := store.importAnkiPlacement(actorCtx, placement); err != nil {
+			if _, err := store.importPlacement(actorCtx, placement); err != nil {
 				t.Fatalf("import transaction: %v", err)
 			}
 			row, err := mstore.BySha256(ctx, sha)

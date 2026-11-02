@@ -97,7 +97,7 @@ func TestMetadataFieldOnCreateCopyAndImport(t *testing.T) {
 			if _, err := NewNoteStore(db).Create(ctx, &note, map[string]any{"text": "A {{c1::canonical}}.", "engram_meta": `{"cloze_accept":{"1":{"canonical":["alternate"]}}}`}); err != nil {
 				t.Fatalf("create note: %v", err)
 			}
-			raw, err := NewDeckStore(db).ExportAnkiPackage(ctx, owner, deck, PackageOptions{IncludeEngramMeta: Ptr(false)})
+			raw, err := NewDeckStore(db).ExportDeckPackage(ctx, owner, deck, PackageOptions{IncludeEngramMeta: Ptr(false)})
 			if err != nil {
 				t.Fatalf("export without metadata: %v", err)
 			}
@@ -311,7 +311,7 @@ func TestExportAnkiPackageEngramMetaDefaultAndOff(t *testing.T) {
 				return model, strings.Split(flds, "\x1f")
 			}
 
-			withMeta, err := NewDeckStore(db).ExportAnkiPackage(ctx, owner, deck, PackageOptions{})
+			withMeta, err := NewDeckStore(db).ExportDeckPackage(ctx, owner, deck, PackageOptions{})
 			if err != nil {
 				t.Fatalf("default export: %v", err)
 			}
@@ -352,7 +352,7 @@ func TestExportAnkiPackageEngramMetaDefaultAndOff(t *testing.T) {
 				t.Errorf("round-tripped metadata = %q, want %q", got, meta)
 			}
 
-			withoutMeta, err := NewDeckStore(db).ExportAnkiPackage(ctx, owner, deck, PackageOptions{IncludeEngramMeta: Ptr(false)})
+			withoutMeta, err := NewDeckStore(db).ExportDeckPackage(ctx, owner, deck, PackageOptions{IncludeEngramMeta: Ptr(false)})
 			if err != nil {
 				t.Fatalf("export without metadata: %v", err)
 			}

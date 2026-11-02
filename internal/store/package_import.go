@@ -451,7 +451,7 @@ func (s *DeckStore) ImportPackage(ctx context.Context, actorUserID uint64, r io.
 		defer cleanup()
 	}
 
-	return s.importAnkiPackage(ctx, actorUserID, source, size, importLimits, opts, targetKind, targetDeckID)
+	return s.importDeckPackage(ctx, actorUserID, source, size, importLimits, opts, targetKind, targetDeckID)
 }
 
 // ValidateImportPreset validates the selection before import or ticket issuance.
@@ -620,7 +620,7 @@ func validPackageSteps(steps string) bool {
 		if part == "" {
 			continue
 		}
-		minutes, ok := ankiStepMinutes(part)
+		minutes, ok := presetStepMinutes(part)
 		if !ok || minutes < 0 || math.IsNaN(minutes) || math.IsInf(minutes, 0) ||
 			minutes > float64(DefaultMaximumIntervalDays*24*60) {
 			return false

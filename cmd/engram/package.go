@@ -168,7 +168,7 @@ func runExport(args []string) error {
 		IncludeDeckConfigs: includeDeckConfigs,
 		IncludeEngramMeta:  includeEngramMeta,
 	}
-	data, err := apiSrv.ExportAnkiPackage(ctx, actor.ID, *deckID, opts)
+	data, err := apiSrv.ExportDeckPackage(ctx, actor.ID, *deckID, opts)
 	if err != nil {
 		return err
 	}

@@ -49,7 +49,7 @@ func (s *Server) deckPackageExport(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	data, err := s.api.ExportAnkiPackage(c.Request.Context(), user.ID, deckID, api.PackageQueryOptions(c))
+	data, err := s.api.ExportDeckPackage(c.Request.Context(), user.ID, deckID, api.PackageQueryOptions(c))
 	if err != nil {
 		s.logger.Error("deck package export failed", "error", err)
 		c.AbortWithStatus(http.StatusInternalServerError)
@@ -126,7 +126,7 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 	used := make(map[string]bool, len(decks))
 	for _, deck := range decks {
 		// As with the single export, this goes through the api service, which fills in the media root and clock uniformly.
-		pkg, err := s.api.ExportAnkiPackage(ctx, user.ID, deck.ID, store.PackageOptions{
+		pkg, err := s.api.ExportDeckPackage(ctx, user.ID, deck.ID, store.PackageOptions{
 			IncludeMedia:      includeMedia,
 			IncludeEngramMeta: req.IncludeEngramMeta,
 			IncludeProgress:   req.IncludeProgress,

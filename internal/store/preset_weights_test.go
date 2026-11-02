@@ -126,7 +126,7 @@ func TestExportAnkiEmptyPresetWeights(t *testing.T) {
 				t.Fatal("PresetWeights accepted empty array")
 			}
 			for _, include := range []bool{true, false} {
-				pkg, err := NewDeckStore(db).ExportAnkiPackage(context.Background(), owner, fixture.deckID, PackageOptions{IncludeDeckConfigs: Ptr(true), IncludeWeights: include})
+				pkg, err := NewDeckStore(db).ExportDeckPackage(context.Background(), owner, fixture.deckID, PackageOptions{IncludeDeckConfigs: Ptr(true), IncludeWeights: include})
 				if include {
 					if err == nil || len(pkg) != 0 {
 						t.Fatalf("export with weights = %d bytes, %v; want error and no package", len(pkg), err)

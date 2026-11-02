@@ -3,7 +3,7 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"git.nite07.com/nite/engram/internal/anki"
+	"git.nite07.com/nite/engram/internal/apkg"
 	"io"
 	"net/http"
 	"strings"
@@ -31,16 +31,16 @@ func (f *stubPackageFetcher) Fetch(_ context.Context, rawURL string, _ int64) (i
 
 func mcpMinimalPackageZip(t *testing.T) []byte {
 	t.Helper()
-	pkg := anki.WritePackage{Collection: anki.WriteCollection{
+	pkg := apkg.WritePackage{Collection: apkg.WriteCollection{
 		CreatedAt:   1700000000,
-		Decks:       []anki.WriteDeck{{ID: 2, Name: "imported", ConfigID: 2}},
-		DeckConfigs: []anki.WriteDeckConfig{{ID: 2, Name: "Imported", DesiredRetention: 0.9, LearningSteps: []float64{1}, RelearningSteps: []float64{10}, MaximumIntervalDays: 100}},
-		NoteTypes:   []anki.WriteNoteType{{ID: 2, Name: "Basic", Fields: []anki.Field{{Name: "Front"}, {Ord: 1, Name: "Back"}}, Templates: []anki.Template{{Name: "Card 1", QFormat: "{{Front}}", AFormat: "{{FrontSide}}<hr>{{Back}}"}}}},
-		Notes:       []anki.WriteNote{{ID: 2, GUID: "fixture-guid", NoteTypeID: 2, Fields: []string{"q", "a"}}},
-		Cards:       []anki.WriteCard{{ID: 2, NoteID: 2, DeckID: 2}},
+		Decks:       []apkg.WriteDeck{{ID: 2, Name: "imported", ConfigID: 2}},
+		DeckConfigs: []apkg.WriteDeckConfig{{ID: 2, Name: "Imported", DesiredRetention: 0.9, LearningSteps: []float64{1}, RelearningSteps: []float64{10}, MaximumIntervalDays: 100}},
+		NoteTypes:   []apkg.WriteNoteType{{ID: 2, Name: "Basic", Fields: []apkg.Field{{Name: "Front"}, {Ord: 1, Name: "Back"}}, Templates: []apkg.Template{{Name: "Card 1", QFormat: "{{Front}}", AFormat: "{{FrontSide}}<hr>{{Back}}"}}}},
+		Notes:       []apkg.WriteNote{{ID: 2, GUID: "fixture-guid", NoteTypeID: 2, Fields: []string{"q", "a"}}},
+		Cards:       []apkg.WriteCard{{ID: 2, NoteID: 2, DeckID: 2}},
 	}}
 	var buf bytes.Buffer
-	if err := anki.WriteArchive(&buf, &pkg); err != nil {
+	if err := apkg.WriteArchive(&buf, &pkg); err != nil {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
