@@ -148,6 +148,7 @@ type exportDeckIn struct {
 	DeckID             string `json:"deck_id" jsonschema:"the public id of the deck to export as a package"`
 	Format             string `json:"format,omitempty" jsonschema:"package format: apkg"`
 	IncludeDeckConfigs *bool  `json:"include_deck_configs,omitempty" jsonschema:"include deck configuration; default true"`
+	IncludeEngramMeta  *bool  `json:"include_engram_meta,omitempty" jsonschema:"include the shared engram_meta field and its values; default true"`
 	IncludeProgress    bool   `json:"include_progress,omitempty" jsonschema:"include the caller's own review progress"`
 	// IncludeMedia defaults to true (media is inlined by default).
 	IncludeMedia   *bool `json:"include_media,omitempty" jsonschema:"inline media bytes; default true"`
@@ -504,7 +505,8 @@ func (s *Server) createExportDownload(ctx context.Context, id Identity, in expor
 	media := in.IncludeMedia == nil || *in.IncludeMedia
 	return s.api.CreateExportDownload(ctx, id.User.ID, d.ID, in.Format, store.PackageOptions{
 		IncludeProgress: in.IncludeProgress, IncludeReviews: in.IncludeReviews,
-		IncludeDeckConfigs: in.IncludeDeckConfigs, IncludeMedia: media, IncludeWeights: in.IncludeWeights,
+		IncludeDeckConfigs: in.IncludeDeckConfigs, IncludeEngramMeta: in.IncludeEngramMeta,
+		IncludeMedia: media, IncludeWeights: in.IncludeWeights,
 	})
 }
 

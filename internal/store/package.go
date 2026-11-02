@@ -63,6 +63,12 @@ type PackageOptions struct {
 	// It is a pointer because its default is on while the zero value of a bool is off;
 	// nil selects the default.
 	IncludeDeckConfigs *bool
+	// IncludeEngramMeta defaults to on: nil means the package carries the engram_meta field and
+	// its values. An explicit false removes the field definition and every note value, which is
+	// what a package meant for an unmodified Anki client needs: Anki keeps the unknown field
+	// otherwise. The engram answer-spec key is unaffected, so a re-import into engram restores
+	// the field through the note-type write rule.
+	IncludeEngramMeta *bool
 	// IncludeWeights defaults to off: FSRS weights are fitted from the exporter's own review log and describe that person's
 	// memory curve, which is not part of the deck content. When off, the weights, weights_optimized_at and
 	// weights_review_count fields of preset.json are all written as null; otherwise the import side keeps a preset claiming "optimized from N reviews" whose
@@ -79,6 +85,11 @@ type PackageOptions struct {
 // DeckConfigsEnabled reports the effective IncludeDeckConfigs switch: nil means on.
 func (o PackageOptions) DeckConfigsEnabled() bool {
 	return o.IncludeDeckConfigs == nil || *o.IncludeDeckConfigs
+}
+
+// EngramMetaEnabled reports the effective IncludeEngramMeta switch: nil means on.
+func (o PackageOptions) EngramMetaEnabled() bool {
+	return o.IncludeEngramMeta == nil || *o.IncludeEngramMeta
 }
 
 var (

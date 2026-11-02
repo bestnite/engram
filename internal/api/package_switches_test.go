@@ -71,13 +71,13 @@ func TestExportAnkiRESTSwitches(t *testing.T) {
 	if r := get("format=apkg"); r.Header().Get("Content-Type") != "application/zip" {
 		t.Fatalf("apkg content type: %s", r.Header().Get("Content-Type"))
 	}
-	for _, off := range []string{"", "include_progress", "include_reviews", "include_deck_configs", "include_media", "include_weights"} {
+	for _, off := range []string{"", "include_progress", "include_reviews", "include_deck_configs", "include_engram_meta", "include_media", "include_weights"} {
 		name := off
 		if name == "" {
 			name = "all_on"
 		}
 		t.Run(name, func(t *testing.T) {
-			q := url.Values{"format": {"apkg"}, "include_progress": {"1"}, "include_reviews": {"1"}, "include_deck_configs": {"1"}, "include_media": {"1"}, "include_weights": {"1"}}
+			q := url.Values{"format": {"apkg"}, "include_progress": {"1"}, "include_reviews": {"1"}, "include_deck_configs": {"1"}, "include_engram_meta": {"1"}, "include_media": {"1"}, "include_weights": {"1"}}
 			if off != "" {
 				q.Set(off, "0")
 			}

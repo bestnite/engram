@@ -246,3 +246,5 @@
   translation: "以 engram_ 开头的字段名已保留，engram_meta 除外。"
 - id: m20.reserved_prefix_import
   translation: "字段名落在保留前缀内，已按普通字段导入。"
+- id: m20.metadata_field_locked
+  translation: "engram_meta 字段为内置字段，不能重命名或删除。"

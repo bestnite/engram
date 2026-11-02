@@ -169,6 +169,15 @@ var BuiltinMigrations = []Migration{
 		Name: "0021_backfill_review_scheduled_days",
 		Up:   backfillReviewScheduledDays,
 	},
+	{
+		// Every note type whose template grades cloze blanks now carries the shared metadata field, which the
+		// cloze control reads its accepted alternative wordings from. A type stored before that rule was built
+		// in lacks the field while its templates already use cloze_blanks, so this applies the same helper the
+		// write path applies. A row whose field is already present keeps its id and values; a second run writes
+		// nothing.
+		Name: "0022_ensure_cloze_metadata_field",
+		Up:   ensureClozeMetadataField,
+	},
 }
 
 // backfillNoteSearchText computes notes.search_text for every existing note with the same rule the write path uses (noteSearchText).

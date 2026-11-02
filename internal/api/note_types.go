@@ -281,6 +281,31 @@ func validateReservedFields(ctx context.Context, cfg, current notetype.Config) e
 	for _, field := range current.Fields {
 		previous[field.ID] = field.Name
 	}
+	currentMetadataID := ""
+	for _, field := range current.Fields {
+		if field.Name == notetype.MetadataFieldName {
+			currentMetadataID = field.ID
+			break
+		}
+	}
+	keepsMetadata := currentMetadataID == ""
+	for _, field := range cfg.Fields {
+		if field.ID == currentMetadataID && field.Name == notetype.MetadataFieldName {
+			keepsMetadata = true
+			break
+		}
+	}
+	if !keepsMetadata {
+		loc := i18n.FromContext(ctx)
+		if loc == nil {
+			translator, err := i18n.New()
+			if err != nil {
+				return fmt.Errorf("load translations: %w", err)
+			}
+			loc = translator.Localizer(language.English)
+		}
+		return newServiceError(http.StatusBadRequest, CodeInvalidRequest, loc.T("m20.metadata_field_locked"))
+	}
 	for _, field := range cfg.Fields {
 		if strings.HasPrefix(field.Name, "engram_") && field.Name != notetype.MetadataFieldName && previous[field.ID] != field.Name {
 			loc := i18n.FromContext(ctx)

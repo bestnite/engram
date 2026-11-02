@@ -720,6 +720,11 @@ func resolveAnkiNoteTypes(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *
 		if err != nil {
 			return nil, err
 		}
+		// The helper runs on the local config before the structural comparison: a package exported
+		// with include_engram_meta off carries no field, and adding it here makes the re-import
+		// match the stored row instead of creating a second note type.
+		notetype.EnsureMetadataField(&cfg)
+		fieldIDs, templateIDs = fieldIDsFrom(cfg), templateIDsFrom(cfg)
 		target := &ankiTypeTarget{Name: nt.Name, Config: cfg, FieldIDs: fieldIDs, TemplateIDs: templateIDs}
 		row, matched := byOrigin[nt.OriginalID]
 		if matched && !usedRow[row.ID] {

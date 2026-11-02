@@ -80,16 +80,17 @@ func testSubmitReviewClozeMetadata(t *testing.T, env *testEnv) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Fields = append(cfg.Fields, notetype.Field{ID: "metadata-id", Name: "engram_meta"})
-	rawCfg, err := json.Marshal(cfg)
-	if err != nil {
-		t.Fatal(err)
+	metadataID := ""
+	for _, field := range cfg.Fields {
+		if field.Name == notetype.MetadataFieldName {
+			metadataID = field.ID
+		}
 	}
-	if err := env.db.Model(&nt).Update("config_json", string(rawCfg)).Error; err != nil {
-		t.Fatal(err)
+	if metadataID == "" {
+		t.Fatal("the stock cloze note type has no built-in engram_meta field")
 	}
 	values := store.NoteFieldValues(note.FieldsJSON)
-	values["metadata-id"] = `{"cloze_accept":{"1":{"canonical":["alternate"]}}}`
+	values[metadataID] = `{"cloze_accept":{"1":{"canonical":["alternate"]}}}`
 	rawFields, err := json.Marshal(values)
 	if err != nil {
 		t.Fatal(err)

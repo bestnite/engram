@@ -60,7 +60,12 @@ type NoteTypeCardImpact struct {
 // names the template and the role it rejected. Every note type write path (API create/update, package import, stock
 // type creation and migration) funnels through this method, so the answer-spec rule has one implementation point.
 func (nt *NoteType) SetConfig(name string, cfg notetype.Config) error {
-	// Field presence enables metadata regardless of whether an action or manual edit added it.
+	// The shared metadata field is part of any config that grades cloze blanks. The helper runs
+	// on the local copy, so a caller that keeps its own copy must call it before this method.
+	notetype.EnsureMetadataField(&cfg)
+	// Search exclusion is a runtime isolation rule for the field by name, independent of the
+	// cloze_blanks rule: a type may carry the field without using that control (an imported or
+	// manually added type), and its values must stay out of note search either way.
 	for i := range cfg.Fields {
 		if cfg.Fields[i].Name == notetype.MetadataFieldName {
 			cfg.Fields[i].ExcludeFromSearch = true
@@ -90,12 +95,21 @@ func (nt *NoteType) SetConfig(name string, cfg notetype.Config) error {
 // template it belongs to and a rejection must let the caller find the offending template.
 func validateAnswerSpecs(cfg notetype.Config) error {
 	fieldIDs := make([]string, 0, len(cfg.Fields))
+	fieldNameByID := make(map[string]string, len(cfg.Fields))
 	for _, field := range cfg.Fields {
 		fieldIDs = append(fieldIDs, field.ID)
+		fieldNameByID[field.ID] = field.Name
 	}
 	for _, template := range cfg.Templates {
 		if template.Answer == nil {
 			continue
+		}
+		for role, id := range template.Answer.Bindings {
+			if fieldNameByID[id] == notetype.MetadataFieldName {
+				// The metadata field carries capability data, not card content: a control that
+				// read it would grade against a value the field is excluded from rendering.
+				return &notetype.ValidationError{Rule: notetype.RuleAnswerSpec, Detail: fmt.Sprintf("template %q: role %q is bound to the reserved metadata field %q", template.Name, role, notetype.MetadataFieldName)}
+			}
 		}
 		if err := answer.ValidateSpec(*template.Answer, fieldIDs); err != nil {
 			// A typed ValidationError keeps this a client error at every transport: without it the API could not
@@ -132,6 +146,9 @@ func (s *NoteTypeStore) Create(ctx context.Context, nt *NoteType, cfg notetype.C
 	if nt.DeckID == 0 {
 		return errors.New("create note type: deck is required")
 	}
+	// SetConfig receives cfg by value, so the caller's copy needs the helper too: the same local
+	// value is used for the media reference set below.
+	notetype.EnsureMetadataField(&cfg)
 	if err := nt.SetConfig(nt.Name, cfg); err != nil {
 		return err
 	}
@@ -210,6 +227,9 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 	if nt == nil || nt.ID == 0 {
 		return NoteTypeCardImpact{}, errors.New("update note type: id is required")
 	}
+	// SetConfig receives cfg by value; this local copy also drives media references and card
+	// regeneration, so it must match the config that will be stored.
+	notetype.EnsureMetadataField(&cfg)
 	if err := nt.SetConfig(nt.Name, cfg); err != nil {
 		return NoteTypeCardImpact{}, err
 	}

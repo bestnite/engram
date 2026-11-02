@@ -38,7 +38,8 @@ func (a *API) ExportAnkiPackage(ctx context.Context, userID, deckID uint64, opts
 // PackageQueryOptions applies the transport defaults to export switches.
 func PackageQueryOptions(c *gin.Context) store.PackageOptions {
 	configs := c.DefaultQuery("include_deck_configs", "1") != "0"
-	return store.PackageOptions{IncludeProgress: c.Query("include_progress") == "1", IncludeReviews: c.Query("include_reviews") == "1", IncludeMedia: c.DefaultQuery("include_media", "1") != "0", IncludeWeights: c.Query("include_weights") == "1", IncludeDeckConfigs: &configs}
+	engramMeta := c.DefaultQuery("include_engram_meta", "1") != "0"
+	return store.PackageOptions{IncludeProgress: c.Query("include_progress") == "1", IncludeReviews: c.Query("include_reviews") == "1", IncludeMedia: c.DefaultQuery("include_media", "1") != "0", IncludeWeights: c.Query("include_weights") == "1", IncludeDeckConfigs: &configs, IncludeEngramMeta: &engramMeta}
 }
 
 // ImportDeckPackage parses and imports one deck package; target picks one of three destinations.

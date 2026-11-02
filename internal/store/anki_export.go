@@ -35,6 +35,7 @@ import (
 // The caller is responsible for the deck-level permission check, as with ExportPackage.
 // opts.IncludeProgress selects card states, opts.IncludeReviews the review log,
 // opts.IncludeMedia media bytes and opts.IncludeDeckConfigs the deck configuration
+// (nil means on). opts.IncludeEngramMeta carries the shared metadata field and its values
 // (nil means on). Both progress and reviews default to off.
 //
 // Parameters the legacy dconf cannot express are left out deliberately: daily new and
@@ -91,6 +92,11 @@ func (s *DeckStore) ExportAnkiPackage(ctx context.Context, actorUserID, deckID u
 	}
 	if err := cfg.assignModelIDs(); err != nil {
 		return nil, err
+	}
+	if !opts.EngramMetaEnabled() {
+		// Filtering the decoded config removes the field definition from the model and its value
+		// from every note row, because both writers build their field arrays from cfg.Fields.
+		cfg.stripEngramMeta()
 	}
 	cfg.assignNoteAndCardIDs()
 
@@ -197,6 +203,45 @@ func (c *ankiWriteConfig) assignModelIDs() error {
 		c.modelIDs[nt.ID] = id
 	}
 	return nil
+}
+
+// stripEngramMeta removes the shared metadata field from every decoded note-type config.
+//
+// writeNoteTypes and writeNotes both build their field arrays from cfg.Fields, so filtering the
+// config removes the field definition and its value while keeping the remaining ordinals and
+// values aligned. The sort field falls back to the first remaining field when the stripped field
+// was the sort field, because Anki addresses the sort field by ordinal.
+func (c *ankiWriteConfig) stripEngramMeta() {
+	for id, cfg := range c.cfgs {
+		fields := make([]notetype.Field, 0, len(cfg.Fields))
+		removed := false
+		for _, field := range cfg.Fields {
+			if field.Name == notetype.MetadataFieldName {
+				removed = true
+				continue
+			}
+			fields = append(fields, field)
+		}
+		if !removed {
+			continue
+		}
+		cfg.Fields = fields
+		sortFound := false
+		for _, field := range fields {
+			if field.ID == cfg.SortFieldID {
+				sortFound = true
+				break
+			}
+		}
+		if !sortFound {
+			if len(fields) > 0 {
+				cfg.SortFieldID = fields[0].ID
+			} else {
+				cfg.SortFieldID = ""
+			}
+		}
+		c.cfgs[id] = cfg
+	}
 }
 
 // assignNoteAndCardIDs maps engram's autoincrement ids onto small sequential Anki ids.

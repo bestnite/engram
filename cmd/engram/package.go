@@ -138,6 +138,7 @@ func runExport(args []string) error {
 	includeWeights := fs.Bool("include-weights", false, "include the caller's FSRS weights in preset.json")
 	format := fs.String("format", "apkg", "package format: apkg")
 	includeDeckConfigs := fs.Bool("include-deck-configs", true, "include deck configuration")
+	includeEngramMeta := fs.Bool("include-engram-meta", true, "include the shared engram_meta field and its values")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -165,6 +166,7 @@ func runExport(args []string) error {
 		IncludeReviews:     *includeReviews,
 		IncludeWeights:     *includeWeights,
 		IncludeDeckConfigs: includeDeckConfigs,
+		IncludeEngramMeta:  includeEngramMeta,
 	}
 	data, err := apiSrv.ExportAnkiPackage(ctx, actor.ID, *deckID, opts)
 	if err != nil {

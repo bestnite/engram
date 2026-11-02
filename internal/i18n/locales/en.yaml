@@ -246,3 +246,5 @@ It renders with sample variables; real recipients see their own data."
   translation: "Field names beginning with engram_ are reserved, except engram_meta."
 - id: m20.reserved_prefix_import
   translation: "Field names in the reserved prefix were imported as ordinary fields."
+- id: m20.metadata_field_locked
+  translation: "The engram_meta field is built in and cannot be renamed or removed."

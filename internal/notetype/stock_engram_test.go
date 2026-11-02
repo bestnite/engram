@@ -41,7 +41,7 @@ func TestEngramStockConfigs(t *testing.T) {
 			front:     "{{cloze:text}}{{type:cloze:text}}",
 			control:   "cloze_blanks",
 			bindings:  map[string]string{"text": "text"},
-			fields:    []string{"text"},
+			fields:    []string{"text", "engram_meta"},
 		},
 		"typed": {
 			templates: []string{"forward"},

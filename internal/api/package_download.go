@@ -29,6 +29,7 @@ type exportDownloadTicket struct {
 	IncludeProgress    bool   `json:"include_progress"`
 	IncludeReviews     bool   `json:"include_reviews"`
 	IncludeDeckConfigs *bool  `json:"include_deck_configs"`
+	IncludeEngramMeta  *bool  `json:"include_engram_meta"`
 	IncludeMedia       bool   `json:"include_media"`
 	IncludeWeights     bool   `json:"include_weights"`
 }
@@ -43,7 +44,17 @@ func (a *API) CreateExportDownload(ctx context.Context, userID, deckID uint64, f
 	if _, err := a.RequireDeckRole(ctx, userID, deckID, store.RoleReader); err != nil {
 		return nil, err
 	}
-	payload, err := json.Marshal(exportDownloadTicket{userID, deckID, format, opts.IncludeProgress, opts.IncludeReviews, opts.IncludeDeckConfigs, opts.IncludeMedia, opts.IncludeWeights})
+	payload, err := json.Marshal(exportDownloadTicket{
+		UserID:             userID,
+		DeckID:             deckID,
+		Format:             format,
+		IncludeProgress:    opts.IncludeProgress,
+		IncludeReviews:     opts.IncludeReviews,
+		IncludeDeckConfigs: opts.IncludeDeckConfigs,
+		IncludeEngramMeta:  opts.IncludeEngramMeta,
+		IncludeMedia:       opts.IncludeMedia,
+		IncludeWeights:     opts.IncludeWeights,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("encode export ticket: %w", err)
 	}
@@ -91,7 +102,7 @@ func (a *API) handleExportDownload(c *gin.Context) {
 		return
 	}
 	name := DeckPackageFilename(d.Name, d.PublicID)
-	opts := store.PackageOptions{IncludeProgress: ticket.IncludeProgress, IncludeReviews: ticket.IncludeReviews, IncludeDeckConfigs: ticket.IncludeDeckConfigs, IncludeMedia: ticket.IncludeMedia, IncludeWeights: ticket.IncludeWeights}
+	opts := store.PackageOptions{IncludeProgress: ticket.IncludeProgress, IncludeReviews: ticket.IncludeReviews, IncludeDeckConfigs: ticket.IncludeDeckConfigs, IncludeEngramMeta: ticket.IncludeEngramMeta, IncludeMedia: ticket.IncludeMedia, IncludeWeights: ticket.IncludeWeights}
 	data, err := a.ExportAnkiPackage(ctx, ticket.UserID, d.ID, opts)
 	if err != nil {
 		writeServiceError(c, err)

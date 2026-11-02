@@ -31,7 +31,7 @@ func TestMetadataTemplateErrorLocalized(t *testing.T) {
 	}
 }
 
-func TestMetadataEnableDisableImpactAndPermissions(t *testing.T) {
+func TestMetadataFieldIsLockedOnUpdate(t *testing.T) {
 	env := newTestEnv(t, 60, 60)
 	ctx := context.Background()
 	owner := seedUser(t, env.db, "metadata-owner", store.RoleUser)
@@ -53,7 +53,15 @@ func TestMetadataEnableDisableImpactAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Fields = append(cfg.Fields, notetype.Field{ID: "meta-id", Name: "engram_meta"})
+	metadataID := ""
+	for _, field := range cfg.Fields {
+		if field.Name == notetype.MetadataFieldName {
+			metadataID = field.ID
+		}
+	}
+	if metadataID == "" {
+		t.Fatal("the stock cloze note type has no built-in engram_meta field")
+	}
 	version := 0
 	in := UpdateNoteTypeInput{Name: nt.Name, Config: cfg, Version: &version, DryRun: true}
 	if _, err := env.api.UpdateNoteType(ctx, reader.ID, deck.ID, nt.PublicID, nil, in); err == nil {
@@ -63,20 +71,45 @@ func TestMetadataEnableDisableImpactAndPermissions(t *testing.T) {
 	if err != nil || impact.CardsAdded != 0 || impact.CardsRemoved != 0 {
 		t.Fatalf("dry run: %+v %v", impact, err)
 	}
-	in.DryRun = false
-	impact, err = env.api.UpdateNoteType(ctx, owner.ID, deck.ID, nt.PublicID, nil, in)
-	if err != nil || impact.CardsAdded != 0 || impact.CardsRemoved != 0 {
-		t.Fatalf("enable: %+v %v", impact, err)
+
+	// Removal and rename are both refused before any write, so the stored config keeps the field.
+	removed := cfg
+	removed.Fields = nil
+	for _, field := range cfg.Fields {
+		if field.ID != metadataID {
+			removed.Fields = append(removed.Fields, field)
+		}
 	}
-	if _, err := env.api.UpdateNoteType(ctx, owner.ID, deck.ID, nt.PublicID, nil, in); err == nil {
-		t.Fatal("stale update accepted")
+	renamed := cfg
+	for i := range renamed.Fields {
+		if renamed.Fields[i].ID == metadataID {
+			renamed.Fields[i].Name = "engram_meta_renamed"
+		}
 	}
-	version = 1
-	cfg.Fields = cfg.Fields[:len(cfg.Fields)-1]
-	in.Config = cfg
-	impact, err = env.api.UpdateNoteType(ctx, owner.ID, deck.ID, nt.PublicID, nil, in)
-	if err != nil || impact.CardsAdded != 0 || impact.CardsRemoved != 0 {
-		t.Fatalf("remove: %+v %v", impact, err)
+	for name, candidate := range map[string]notetype.Config{"remove": removed, "rename": renamed} {
+		in.Config = candidate
+		_, err := env.api.UpdateNoteType(ctx, owner.ID, deck.ID, nt.PublicID, nil, in)
+		var service *ServiceError
+		if !errors.As(err, &service) || service.Code != CodeInvalidRequest || !strings.Contains(service.Message, "built in") {
+			t.Errorf("%s: %v, want the catalog-backed locked-field refusal", name, err)
+		}
+	}
+	var stored store.NoteType
+	if err := env.db.First(&stored, nt.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	storedCfg, err := stored.Config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, field := range storedCfg.Fields {
+		if field.ID == metadataID && field.Name == notetype.MetadataFieldName {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("refused updates changed the stored metadata field")
 	}
 }
 

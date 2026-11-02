@@ -60,11 +60,12 @@ func (s *Server) deckPackageExport(c *gin.Context) {
 }
 
 type batchExportDeckRequest struct {
-	DeckIDs         []string `json:"deck_ids"`
-	IncludeMedia    *bool    `json:"include_media"`
-	IncludeProgress bool     `json:"include_progress"`
-	IncludeReviews  bool     `json:"include_reviews"`
-	IncludeWeights  bool     `json:"include_weights"`
+	DeckIDs           []string `json:"deck_ids"`
+	IncludeMedia      *bool    `json:"include_media"`
+	IncludeEngramMeta *bool    `json:"include_engram_meta"`
+	IncludeProgress   bool     `json:"include_progress"`
+	IncludeReviews    bool     `json:"include_reviews"`
+	IncludeWeights    bool     `json:"include_weights"`
 }
 
 // A batch export is a convenience for a handful of decks, not a bulk transfer. Past these limits the
@@ -126,10 +127,11 @@ func (s *Server) deckBatchExportZip(c *gin.Context) {
 	for _, deck := range decks {
 		// As with the single export, this goes through the api service, which fills in the media root and clock uniformly.
 		pkg, err := s.api.ExportAnkiPackage(ctx, user.ID, deck.ID, store.PackageOptions{
-			IncludeMedia:    includeMedia,
-			IncludeProgress: req.IncludeProgress,
-			IncludeReviews:  req.IncludeReviews,
-			IncludeWeights:  req.IncludeWeights,
+			IncludeMedia:      includeMedia,
+			IncludeEngramMeta: req.IncludeEngramMeta,
+			IncludeProgress:   req.IncludeProgress,
+			IncludeReviews:    req.IncludeReviews,
+			IncludeWeights:    req.IncludeWeights,
 		})
 		if err != nil {
 			s.logger.Error("export deck package in batch failed", "deck_id", deck.ID, "error", err)

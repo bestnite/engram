@@ -250,7 +250,9 @@ func engramClozeStock() EngramStock {
 		Kind: "cloze",
 		Name: "Cloze",
 		Config: engramConfig(KindCloze,
-			[]Field{engramField("text")},
+			// The cloze control reads the accepted alternative wordings from the shared
+			// metadata field, so the stock definition carries it like any created type does.
+			[]Field{engramField("text"), newMetadataField(MetadataFieldName)},
 			[]Template{{
 				ID:      "cloze",
 				Name:    "Cloze",
