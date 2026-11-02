@@ -218,6 +218,10 @@ func (s *NoteTypeStore) ListByDeck(ctx context.Context, deckID uint64) ([]NoteTy
 //
 // The version bump, the media reference set and the card regeneration of every note of the type commit
 // in one transaction, so a note type never holds a card set that its stored config does not generate.
+// The derived data is rebuilt only when the new config invalidates it: a save that changes only CSS,
+// the name, LaTeX settings or the sort field writes the row and the note-type media reference set and
+// leaves every note alone (see noteTypeDerivedPlan). When card regeneration is needed, the stored
+// cards of all notes are read in bounded batches rather than one SELECT per note.
 //
 // Both safety outcomes finish by rolling the transaction back, which is what makes "writes nothing"
 // literal: a dry run reports the impact and returns nil, and an unconfirmed card removal reports the
@@ -227,10 +231,15 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 	if nt == nil || nt.ID == 0 {
 		return NoteTypeCardImpact{}, errors.New("update note type: id is required")
 	}
-	// SetConfig receives cfg by value; this local copy also drives media references and card
-	// regeneration, so it must match the config that will be stored.
+	// SetConfig receives cfg by value. The config it stores is the authority below: the plan
+	// compares the stored shape against it, and the media reference set and card regeneration
+	// render from it, so all three see exactly what the row will hold.
 	notetype.EnsureMetadataField(&cfg)
 	if err := nt.SetConfig(nt.Name, cfg); err != nil {
+		return NoteTypeCardImpact{}, err
+	}
+	storedCfg, err := nt.Config()
+	if err != nil {
 		return NoteTypeCardImpact{}, err
 	}
 	now := time.Now().UTC()
@@ -238,7 +247,7 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 	// rollbackUpdate ends the transaction without committing. It is a sentinel rather than a real
 	// failure: the caller converts it into the dry-run result or the confirmation error.
 	rollbackUpdate := errors.New("rollback note type update")
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := lockNoteTypeRow(ctx, tx, nt.ID, "UPDATE"); err != nil {
 			return err
 		}
@@ -253,32 +262,41 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 		if err != nil {
 			return err
 		}
+		// The plan names the derived data the new config invalidates. A save that only touches
+		// presentation data marks nothing, so the notes of the type are never loaded.
+		plan := planNoteTypeDerived(oldCfg, storedCfg)
 		var notes []Note
-		if err := tx.Where("note_type_id = ?", nt.ID).Find(&notes).Error; err != nil {
-			return fmt.Errorf("load note type media: %w", err)
+		if plan.loadsNotes() {
+			if err := tx.Where("note_type_id = ?", nt.ID).Order("id ASC").Find(&notes).Error; err != nil {
+				return fmt.Errorf("load notes of note type %d: %w", nt.ID, err)
+			}
 		}
 		// Validate all notes before rebuilding any mapping, or an earlier note
-		// could grant access to a reference that a later note introduces.
-		for _, note := range notes {
-			values := NoteFieldValues(note.FieldsJSON)
-			oldValues, newValues := mediaFieldValues(oldCfg, values), mediaFieldValues(cfg, values)
-			actor := actorFromContext(ctx)
-			if actor == 0 {
-				before, err := mediaRefsIn(ctx, tx, note.DeckID, oldValues)
-				if err != nil {
-					return err
-				}
-				after, err := mediaRefsIn(ctx, tx, note.DeckID, newValues)
-				if err != nil {
-					return err
-				}
-				for sha := range after {
-					if !before[sha] {
-						return &MediaWriteError{Code: CodeMediaNotReadable, Entries: []string{"media/" + sha}}
+		// could grant access to a reference that a later note introduces. Only a
+		// metadata-field change can alter which values the mapping keeps, so it is
+		// the only change that can introduce a reference.
+		if plan.MediaNotes {
+			for _, note := range notes {
+				values := NoteFieldValues(note.FieldsJSON)
+				oldValues, newValues := mediaFieldValues(oldCfg, values), mediaFieldValues(storedCfg, values)
+				actor := actorFromContext(ctx)
+				if actor == 0 {
+					before, err := mediaRefsIn(ctx, tx, note.DeckID, oldValues)
+					if err != nil {
+						return err
 					}
+					after, err := mediaRefsIn(ctx, tx, note.DeckID, newValues)
+					if err != nil {
+						return err
+					}
+					for sha := range after {
+						if !before[sha] {
+							return &MediaWriteError{Code: CodeMediaNotReadable, Entries: []string{"media/" + sha}}
+						}
+					}
+				} else if err := checkNewMediaRefs(ctx, tx, actor, note.DeckID, oldValues, newValues); err != nil {
+					return err
 				}
-			} else if err := checkNewMediaRefs(ctx, tx, actor, note.DeckID, oldValues, newValues); err != nil {
-				return err
 			}
 		}
 		res := tx.Model(&NoteType{}).
@@ -303,10 +321,10 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 			return fmt.Errorf("%w: note type %d is not at version %d", ErrVersionConflict, nt.ID, opts.ExpectedVersion)
 		}
 		// The new config replaces the reference set in the same transaction: a rejected version writes neither.
-		if err := NewMediaNoteTypeStore(tx).Replace(ctx, nt.ID, noteTypeMediaNames(cfg)); err != nil {
+		if err := NewMediaNoteTypeStore(tx).Replace(ctx, nt.ID, noteTypeMediaNames(storedCfg)); err != nil {
 			return fmt.Errorf("update note type media %d: %w", nt.ID, err)
 		}
-		regenerated, err := regenerateNoteTypeCards(tx, nt.ID, nt.Name, cfg, now)
+		regenerated, err := regenerateNoteTypeCards(ctx, tx, notes, nt.Name, storedCfg, plan, now)
 		if err != nil {
 			return err
 		}

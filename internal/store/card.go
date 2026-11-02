@@ -101,6 +101,13 @@ func syncCardsWithChangeKeeping(tx *gorm.DB, noteID uint64, wanted []notetype.Ge
 	if err := tx.Unscoped().Where("note_id = ?", noteID).Find(&existing).Error; err != nil {
 		return nil, cardSyncChange{}, fmt.Errorf("load cards for note %d: %w", noteID, err)
 	}
+	return syncCardsWithChangeKeepingExisting(tx, noteID, wanted, keep, existing, now)
+}
+
+// syncCardsWithChangeKeepingExisting is syncCardsWithChangeKeeping over an already loaded card
+// set, so a note type update can read the cards of every note in bounded batches instead of one
+// SELECT per note. The caller must load every row of noteID, soft-deleted rows included.
+func syncCardsWithChangeKeepingExisting(tx *gorm.DB, noteID uint64, wanted []notetype.GeneratedCard, keep func(template string) bool, existing []Card, now time.Time) ([]Card, cardSyncChange, error) {
 	var change cardSyncChange
 	byTemplate := make(map[string]*Card, len(existing))
 	for i := range existing {
@@ -166,8 +173,8 @@ func syncCardsWithChangeKeeping(tx *gorm.DB, noteID uint64, wanted []notetype.Ge
 	return out, change, nil
 }
 
-// regenerateNoteTypeCards aligns the cards of every live note of a note type with the cards the
-// given config generates, and reports what changed.
+// regenerateNoteTypeCards applies the per-note derived data that plan marks stale to the given
+// notes of a note type, and reports the card impact.
 //
 // Removal follows the config's declaration, not its card output: a normal note type soft-deletes
 // exactly the cards whose template id the new config no longer declares, and a cloze note type
@@ -177,45 +184,68 @@ func syncCardsWithChangeKeeping(tx *gorm.DB, noteID uint64, wanted []notetype.Ge
 // card notetype.GenerateCards produces for the note is inserted when it is missing and restored when
 // its row is soft-deleted.
 //
-// A note that is soft-deleted is skipped: its cards are already invisible, and touching them would
-// count changes the caller cannot see.
+// The plan decides which derived table is rebuilt. A save that changes neither the search inputs,
+// the metadata field ids nor the card inputs passes a plan that marks nothing, and this function
+// writes nothing. When the card set must be resynced, every note's stored cards are read in bounded
+// batches up front, because the per-note sync would otherwise run one SELECT per note.
+//
+// A note that is soft-deleted is never passed in: its cards are already invisible, and touching them
+// would count changes the caller cannot see.
 //
 // A removed card's card_states and reviews rows stay. ReviewsOnRemovedCards counts the review log
 // rows attached to the cards this call removed, because the caller must warn the user before
 // silently taking reviewed cards out of circulation.
-func regenerateNoteTypeCards(tx *gorm.DB, noteTypeID uint64, typeName string, cfg notetype.Config, now time.Time) (NoteTypeCardImpact, error) {
-	var notes []Note
-	if err := tx.Where("note_type_id = ?", noteTypeID).Order("id ASC").Find(&notes).Error; err != nil {
-		return NoteTypeCardImpact{}, fmt.Errorf("load notes of note type %d: %w", noteTypeID, err)
+func regenerateNoteTypeCards(ctx context.Context, tx *gorm.DB, notes []Note, typeName string, cfg notetype.Config, plan noteTypeDerivedPlan, now time.Time) (NoteTypeCardImpact, error) {
+	if !plan.loadsNotes() {
+		return NoteTypeCardImpact{}, nil
+	}
+	var cardsByNote map[uint64][]Card
+	if plan.Cards {
+		noteIDs := make([]uint64, len(notes))
+		for i := range notes {
+			noteIDs[i] = notes[i].ID
+		}
+		var err error
+		cardsByNote, err = loadCardsForNotes(tx, noteIDs)
+		if err != nil {
+			return NoteTypeCardImpact{}, err
+		}
 	}
 	keep := noteTypeCardKeepRule(cfg)
 	var impact NoteTypeCardImpact
 	var removedIDs []uint64
 	for i := range notes {
-		values := NoteFieldValues(notes[i].FieldsJSON)
-		data := notetype.RenderData{
-			Fields:   values,
-			Tags:     TagsOrEmpty(notes[i].TagsJSON),
-			TypeName: typeName,
-		}
-		wanted, err := notetype.GenerateCards(cfg, data)
-		if err != nil {
-			return NoteTypeCardImpact{}, fmt.Errorf("note %d: generate cards: %w", notes[i].ID, err)
-		}
+		note := &notes[i]
+		values := NoteFieldValues(note.FieldsJSON)
 		// search_text is derived from the config's field set and its search flags, so the same
 		// transaction that stores the new config must recompute it; otherwise a field keeps its
 		// old text searchable, or stays unsearchable after it is re-included.
-		if text := noteSearchText(cfg, values); text != notes[i].SearchText {
-			if err := tx.Model(&Note{}).Where("id = ?", notes[i].ID).UpdateColumn("search_text", text).Error; err != nil {
-				return NoteTypeCardImpact{}, fmt.Errorf("update note %d search text: %w", notes[i].ID, err)
+		if plan.SearchText {
+			if text := noteSearchText(cfg, values); text != note.SearchText {
+				if err := tx.Model(&Note{}).Where("id = ?", note.ID).UpdateColumn("search_text", text).Error; err != nil {
+					return NoteTypeCardImpact{}, fmt.Errorf("update note %d search text: %w", note.ID, err)
+				}
 			}
 		}
 		// A field rename can turn content into metadata or vice versa, so the
 		// derived authorization mapping must follow the new field names too.
-		if err := rebuildMediaNotes(tx.Statement.Context, tx, notes[i].ID, notes[i].DeckID, mediaFieldValues(cfg, values)); err != nil {
-			return NoteTypeCardImpact{}, err
+		if plan.MediaNotes {
+			if err := rebuildMediaNotes(ctx, tx, note.ID, note.DeckID, mediaFieldValues(cfg, values)); err != nil {
+				return NoteTypeCardImpact{}, err
+			}
 		}
-		_, change, err := syncCardsWithChangeKeeping(tx, notes[i].ID, wanted, keep, now)
+		if !plan.Cards {
+			continue
+		}
+		wanted, err := notetype.GenerateCards(cfg, notetype.RenderData{
+			Fields:   values,
+			Tags:     TagsOrEmpty(note.TagsJSON),
+			TypeName: typeName,
+		})
+		if err != nil {
+			return NoteTypeCardImpact{}, fmt.Errorf("note %d: generate cards: %w", note.ID, err)
+		}
+		_, change, err := syncCardsWithChangeKeepingExisting(tx, note.ID, wanted, keep, cardsByNote[note.ID], now)
 		if err != nil {
 			return NoteTypeCardImpact{}, err
 		}
@@ -227,6 +257,29 @@ func regenerateNoteTypeCards(tx *gorm.DB, noteTypeID uint64, typeName string, cf
 		return NoteTypeCardImpact{}, err
 	}
 	return impact, nil
+}
+
+// loadCardsForNotes loads every stored card, soft-deleted rows included, of the given notes and
+// groups them by note id. The ids are read in bounded batches because SQLite rejects one statement
+// with more bound parameters than its compiled limit, and a note type can back more notes than
+// that limit.
+func loadCardsForNotes(tx *gorm.DB, noteIDs []uint64) (map[uint64][]Card, error) {
+	out := make(map[uint64][]Card, len(noteIDs))
+	const batch = 500
+	for start := 0; start < len(noteIDs); start += batch {
+		end := start + batch
+		if end > len(noteIDs) {
+			end = len(noteIDs)
+		}
+		var cards []Card
+		if err := tx.Unscoped().Where("note_id IN ?", noteIDs[start:end]).Find(&cards).Error; err != nil {
+			return nil, fmt.Errorf("load cards of notes: %w", err)
+		}
+		for i := range cards {
+			out[cards[i].NoteID] = append(out[cards[i].NoteID], cards[i])
+		}
+	}
+	return out, nil
 }
 
 // noteTypeCardKeepRule returns the rule a note type update uses to protect stored cards from removal
