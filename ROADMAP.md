@@ -3895,91 +3895,32 @@ view of a card.
   keeps the wordings; a note with no such field behaves exactly as today; the `{{c1::…}}` template
   text is unchanged.
 
-- [ ] **M20-2 MCP tools for the note type write surface** — the MCP server at `/mcp` exposes
-  `list_note_types` and `get_note_type` but no way to create, change or remove a note type, and no
-  way to list the stock definitions or answer controls a new type is built from. Every operation
-  this task adds already exists on the REST surface and in the service layer
-  (`internal/api/note_types.go`, `internal/api/note_type_change.go`,
-  `internal/api/note_type_stocks.go`), so the task is argument shaping only: it adds no business
-  rule and no validation. Eight tools join the 23 in `internal/mcp/mcp.go`; each is registered in
-  `build` and in `toolScopes`, each handler is shaped in `internal/mcp/tools.go`, and each calls the
-  same service method REST calls:
-  - `list_note_type_stocks` (read scope, no deck role) → `NoteTypeStocks`.
-  - `list_answer_controls` (read scope, no deck role) → `AnswerControls`, so a caller knows the
-    control names and role names an answer spec may carry.
-  - `create_note_type` (write scope, editor role) → `CreateNoteType`; `stock_id` is preferred and
-    `config` is accepted as a complete `notetype.Config`.
-  - `update_note_type` (write scope, editor role) → `UpdateNoteType`; `version` is required and the
-    config is replaced whole, so the caller reads the type first.
-  - `delete_note_type` (write scope, editor role) → `DeleteNoteType`; `confirm_purge` allows the
-    hard delete of notes that only soft-deleted notes still reference.
-  - `change_note_type` (write scope, editor role) → `ChangeNoteType`; it carries the field and
-    template mappings, `dry_run` and `confirm_card_removal`.
-  - `list_empty_cards` (read scope, editor role) → `ListEmptyCards`.
-  - `cleanup_empty_cards` (write scope, editor role) → `CleanupEmptyCards`; it carries `dry_run`
-    and `confirm_card_removal`.
-  `api.ErrorText` renders an MCP tool failure as `code: message` and has no response body, so the
-  impact counts that `card_removal_unconfirmed` and `note_type_purge_unconfirmed` report through the
-  REST body are lost. Those two handlers append the counts the service already returned to the error
-  detail; the refusal decision itself stays in the service layer. Tool descriptions stay English, as
-  every existing MCP description is, and no translation catalog entry is added: a tool description
-  addresses the model, not a person.
-  *Acceptance:*
-  - a read-scope key lists exactly the eight tools it listed before plus `list_note_type_stocks`
-    and `list_answer_controls`; a write-scope key lists exactly its previous ten plus
-    `create_note_type`, `update_note_type`, `delete_note_type`, `change_note_type` and
-    `cleanup_empty_cards`; an admin key lists every entry of `toolScopes`; calling
-    `create_note_type` by name with a read-scope key returns `scope_required`.
-  - `create_note_type` with `stock_id` `anki:basic` and an empty name returns a type whose config
-    equals the `anki:basic` stock config and whose name is that stock's name; an unknown `stock_id`
-    returns `invalid_request`.
-  - `update_note_type` with a stale `version` returns `version_conflict` and leaves the row
-    unchanged; a template removal without `confirm_card_removal` returns
-    `card_removal_unconfirmed` with `cards_removed` and `reviews_on_removed_cards` in the error text;
-    the same call with `dry_run` returns the counts, writes no row and writes no audit row.
-  - `delete_note_type` on a type with a live note returns `note_type_in_use`; after that note is
-    soft-deleted the same call returns `note_type_purge_unconfirmed` with `deleted_notes`, `cards`
-    and `reviews` in the error text; the same call with `confirm_purge` deletes the type.
-  - `change_note_type` between two types of one deck moves the notes and reports the five counts;
-    its `dry_run` returns the same counts and writes nothing.
-  - `list_empty_cards` and `cleanup_empty_cards` with a read-scope key return `scope_required`;
-    with a key whose owner is a reader on that deck they return `insufficient_role`.
-  - a note type id that belongs to another deck returns `not_found` from `update_note_type`,
-    `delete_note_type` and `change_note_type`.
-  - `go vet ./internal/mcp/...` and `go test ./internal/mcp/... -count=1` pass, as does
-    `go test ./internal/api/... -count=1`; `ARCHITECTURE.md`'s MCP paragraph names the added surface
-    in the same commit.
-
-- [ ] **M20-3 Register MCP session ownership before publishing the handshake** —
-  `internal/mcp/mcp.go` records a new session owner after the SDK handler returns. The SDK can
-  flush its initialize response before returning, allowing the client's initialized notification
-  to reach the owner check before the record exists. Register ownership before publishing a
-  successful response with a session header, including an implicit 200 response. Keep unknown
-  sessions refused with 404 and another owner's session refused with 403. Do not change tool
-  registration or business services. Add a deterministic response-writer barrier regression test
-  in `internal/mcp/` that issues the follow-up request before initialize returns.
-  *Acceptance:* the regression test fails before the fix and passes after it without sleeps or
-  probabilistic load; non-successful initialization and responses without a session header do not
-  register an owner; DELETE cleanup, capacity eviction, scope checks and account isolation remain
-  covered and pass; `go vet ./internal/mcp/...` and `go test ./internal/mcp/... -count=1` pass.
-
-- [ ] **M20-4 Follow rotated credentials in web security-flow tests** — password changes revoke
-  the old session and return a replacement cookie. The tests in `internal/web/password_test.go`,
-  `internal/web/password_initial_test.go` and `internal/web/security_mail_test.go` still send the
-  old cookie after a successful change. Capture the replacement session cookie from the password
-  response. Before a subsequent write, obtain its CSRF token through `GET /api/v1/auth/session`.
-  Change these tests only; do not change production authentication or weaken existing assertions.
-  *Acceptance:* `TestPasswordChangeSecurityFlow`, `TestInitialPasswordForPasswordlessAccount`,
-  `TestSecurityMailFiveClassATypesDeliveredAtTriggers` and
-  `TestSecurityMailClassAHasNoUnsubscribeHeader` pass; the old cookie returns 401 on the profile
-  endpoint and the replacement cookie returns 200; a write using the replacement cookie with the
-  old CSRF token returns `csrf_failed`; `TestSelfPasswordChangeRotatesSession` remains passing;
-  `go vet ./internal/web/...` and `go test ./internal/web/... -count=1` pass. Build the worktree's
-  frontend assets first because the web package embeds them.
-
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
+
+#### MCP note type management and merge-check repairs (M20-2, M20-3, M20-4)
+
+- **MCP, additive (M20-2).** Eight tools reuse the REST service methods: `list_note_type_stocks`,
+  `list_answer_controls`, `create_note_type`, `update_note_type`, `delete_note_type`,
+  `change_note_type`, `list_empty_cards` and `cleanup_empty_cards`. Read scope exposes 11 tools,
+  write scope exposes 15, and review scope still exposes five. `list_empty_cards` requires read
+  scope and an editor role; cleanup requires write scope and an editor role. This resolves the
+  original task's contradictory read-scope acceptance statements in favour of its declared scope.
+  Card-removal and purge refusals retain their error codes and append impact counts. The REST API,
+  database schema, configuration and package formats are unchanged.
+- **MCP, corrective (M20-3).** Session ownership is recorded before the successful handshake
+  response becomes visible. Unknown sessions remain 404 and another user's sessions remain 403.
+  A response-writer barrier test reproduces the old failure deterministically and passes after
+  the fix. No HTTP API, database, configuration or file-format contract changed.
+- **Tests only (M20-4).** Password and security-mail tests follow replacement session cookies
+  and refresh CSRF tokens after password changes. Old cookies and stale CSRF tokens remain
+  rejected. Production authentication and all public contracts are unchanged.
+- **Verification.** Frontend installation and build, `go build ./...`, `go vet ./...`, tracked-file
+  `gofmt -l` and `go test ./...` passed on the combined code. MCP transport tests cover scope and
+  role denials, cross-deck IDs, stale versions, refusal counts, dry-run snapshots, confirmations
+  and audit-key attribution. The handshake regression also passed with the race detector.
+  Tests used SQLite; PostgreSQL-specific cases were not run.
 
 **The M17 content-model merge is a breaking release of the HTTP API, the MCP tools, the database
 schema and the `.edeck` file format, which `M18-5` removed when it replaced the format with Anki's
