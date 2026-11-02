@@ -188,7 +188,9 @@ this file, and commit messages.
 - **Export format.** engram writes an `.apkg` the reference release imports: the collection is legacy
   schema 11 in `collection.anki21`; note types, notes, cards, media and one deck configuration travel;
   the caller's own card states, review log and FSRS weights travel only when requested; and answer
-  controls ride in one note type key (`engram`). Measured with `anki==26.9.3`: Anki's importer keeps an
+  controls ride in one note type key (`engram`). The exact-name `engram_meta` field and its values
+  travel unless `include_engram_meta` is off; with it off the exported note type and notes carry
+  neither, and re-importing that package into engram adds the field back empty. Measured with `anki==26.9.3`: Anki's importer keeps an
   unknown top-level model key, and both of its export layouts keep it. The legacy layout writes it in
   the model JSON, and the default modern layout stores note types as protobuf and keeps unknown model
   keys in `Notetype.Config.other` as a JSON object. engram's reader reads the key back from either

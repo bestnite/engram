@@ -3870,53 +3870,6 @@ contract violations instead of intrusion steps. Every entry says whether it was 
 
 ---
 
-### M20 — Cloze alternatives follow-up
-
-- [ ] **M20-5 Make the cloze-alternatives metadata field built in, locked, and optional on export**
-  — Every note type whose template declares the `cloze_blanks` answer control carries the
-  exact-name `engram_meta` field without the note-type settings action. One helper,
-  `notetype.EnsureMetadataField`, appends it when the config uses `cloze_blanks` and normalises
-  its flags (`plain_text`, `collapsed`, `exclude_from_search`, `prevent_deletion`) when it is
-  already present; `store.NoteType.SetConfig` calls it so create, update, copy and package import
-  share one rule; `engramClozeStock` includes it so the stock preview matches the created type;
-  and migration `0022_ensure_cloze_metadata_field` adds it to stored rows, preserving an existing
-  metadata field's id and values and bumping the note-type version. The field cannot be renamed
-  or removed through the note-type API (`validateReservedFields` compares by stable field id), and
-  no answer spec may bind a role to it. `.apkg` export gains `include_engram_meta` (default on)
-  on every transport: `PackageOptions`, `ExportAnkiPackage`, the REST query and download ticket,
-  the web single and batch export, the MCP input, and the CLI flag. When off, the exported note
-  type and notes carry neither the field definition nor its values; the `engram` answer-spec key
-  is unchanged, so re-importing into engram re-adds an empty field.
-  *Acceptance:* a created, copied and imported `cloze_blanks` type carries the field with the
-  flags, and a non-`cloze_blanks` type does not; a stored `cloze_blanks` type gains the field
-  through the migration on SQLite and PostgreSQL without losing an existing metadata field's id
-  or values, and a second run writes nothing; rename and removal are refused with the
-  catalog-backed message, and a binding to the field is refused as a validation error; an export
-  with the switch off has no `engram_meta` field or value while the remaining field ordinals and
-  values line up, and the default export still round-trips alternatives. Evidence is raw scoped
-  `go test` and `go vet` output for `internal/notetype`, `internal/store`, `internal/api`,
-  `internal/web`, `internal/mcp` and `cmd/engram`, with `TEST_PG_DSN` set for the migration case.
-  Do not edit `ROADMAP.md` or `AGENTS.md`.
-
-- [ ] **M20-6 Remove the cloze-alternatives enable action and expose the export switch in the UI**
-  — In `frontend/src/lib/views/NoteTypesView.svelte`, remove the cloze-alternatives section, the
-  enable/fix controls, the metadata delete dialog and their state; render the exact-name
-  `engram_meta` row read-only, with its name, order, delete button and field options locked;
-  exclude it from the answer-binding selector and from both the target rows and the source options
-  of the change-note-type field selector while keeping the same-name auto-mapping that carries its
-  value. Add `include_engram_meta` to `PackageExportOptions.svelte`, checked by default, and wire
-  it through `DeckDetailView.svelte`, `DecksView.svelte`, `frontend/src/lib/api/client.ts` and
-  `types.ts` for the single and batch exports. Add the new keys at the end of both
-  `frontend/src/lib/i18n/locales/{zh-CN,en}.ts` files with identical key sets, and remove the
-  now-unused `notetype.cloze_alternatives.*` and `notetype.meta.delete_*` keys.
-  *Acceptance:* the settings page never shows an enable button; the metadata row cannot be
-  renamed, moved, deleted or reconfigured; the binding and change selectors omit it; the export
-  checkbox is present and checked by default and sends `include_engram_meta=1`/`0` in the
-  single-export query and `include_engram_meta` in the batch body; the note editor still shows
-  the alternatives editor for a `cloze_blanks` type. Evidence is raw output of
-  `npm --prefix frontend run check`, `npm --prefix frontend run test:client` and
-  `npm --prefix frontend run build`. Do not edit `ROADMAP.md` or `AGENTS.md`.
-
 ---
 
 ## 2. Release ledger
@@ -3928,6 +3881,12 @@ contract violations instead of intrusion steps. Every entry says whether it was 
 **Completed 2026-11-02.** Batch A: `b52b4e123aaf172ec4ff5865de0a824de9ed7a72`.
 Batch B: `cd8ead15c69d1cd8d3f9b42050606a73b9160c7e`. The completed specification below
 is retained as the capability contract; it is no longer an open backlog checkbox.
+
+> **Superseded 2026-11-02 by M20-5 and M20-6.** The explicit note-type enablement action, the
+> rule against adding the field to existing types, and the field-removal operation described in
+> this section are no longer current. The field is built in for every `cloze_blanks` type, locked
+> against rename, removal and answer binding, and optional on package export. `ARCHITECTURE.md`
+> records the current contract; the ledger entry below records the change.
 
 **Contract.** A cloze blank can accept more than
   one wording. `cloze_blanks` grades each submitted blank against its canonical wording and its
@@ -3969,30 +3928,21 @@ is retained as the capability contract; it is no longer an open backlog checkbox
   that occurrence. The editor uses the existing cloze parsing semantics, including repeated
   numbers, hints, nesting and multi-number deletions, rather than a simplified regular expression.
 
-  **Explicit note-type enablement.** In `frontend/src/lib/views/NoteTypesView.svelte`, show the
-  note-type-level action "Enable cloze alternatives" only when a template uses `cloze_blanks`.
-  The zh-CN explanation is "将为本笔记类型添加共享字段 `engram_meta`，供填空判分读取。";
-  provide its English equivalent through the catalog. Append that field once,
-  or reuse an existing field of exactly that name without replacing its ID or values; set
-  `exclude_from_search`. Save through the existing versioned note-type update and dry run in
-  `internal/store/notetype.go`. Pure enablement must report `NoteTypeCardImpact` 0 added / 0 removed;
-  it does not require a new confirmation dialog. A combined template change retains the existing
-  impact-preview rules and is not subject to the pure-enablement 0/0 assertion.
-  After enablement, show "Configured", not a symmetric off switch. Removing the field is a separate
-  field-management operation that warns that subsequent note saves discard its values and exports
-  no longer carry them. No template-level enable flag or new answer binding role is introduced.
-  Do not add the field on first alternative entry, to all stock types, or to existing types in bulk.
-  Existing notes need no backfill or database migration: a missing field value remains empty.
-  Manually adding `engram_meta` through field management has exactly the same enablement semantics
-  as the action: field presence alone enables reading, regardless of how the field was created.
-  Apply the same metadata validation and search exclusion to a manually added field; do not store
-  or require a record that the enablement action was used.
+  **Built-in note-type enablement (current since 2026-11-02).** Every note type whose template
+  uses `cloze_blanks` carries the exact-name `engram_meta` field. `notetype.EnsureMetadataField`
+  adds it on create, update, copy and package import, and migration `0022` adds it to stored
+  types; the field is plain text, collapsed, excluded from search and protected from deletion.
+  The note-type API refuses a rename or removal of the field, and an answer spec cannot bind a
+  role to it. The settings page shows the field read-only and offers no enable or delete action.
+  Existing notes need no backfill: a missing field value remains empty. A package exports the
+  field and its values by default; `include_engram_meta` off removes both, and re-importing that
+  package into engram adds the field back empty.
 
   **Name reservation without prefix-wide runtime semantics.** In v1, only the exact,
   case-sensitive field name `engram_meta` has metadata runtime semantics. Reserve the
   case-sensitive `engram_` prefix at engram's field creation and renaming entry points: reject new
   names with that prefix, except `engram_meta`, with a localized explanation. The exact name must
-  remain available both to the enablement action and to manual field management. Do not reject,
+  remain available to manual field management. Do not reject,
   rename or reinterpret pre-existing fields merely because they use the prefix. Import fields
   such as `engram_notes` unchanged as ordinary content, and add a localized import-report notice:
   "字段名落在保留前缀内，已按普通字段导入" (with an English equivalent). Such fields retain ordinary
@@ -4215,6 +4165,36 @@ merge responsibility. Nothing was merged or pushed.
 **Compatibility.** HTTP review feedback and import-report fields are additive. MCP methods,
 database schema and configuration are unchanged. The optional metadata note field travels in
 the existing `.apkg` format without changing canonical cloze content or the note-type answer spec.
+
+#### Built-in cloze alternatives metadata (M20-5, M20-6)
+
+**Completed 2026-11-02.** The explicit note-type enablement action was replaced by a built-in
+field, and package export gained a switch for it.
+
+- **M20-5, API and data.** Every note type whose template uses `cloze_blanks` carries the
+  exact-name `engram_meta` field: `EnsureMetadataField` adds it on create, update, copy and
+  package import, and migration `0022` adds it to stored types. The field is `plain_text`,
+  `collapsed`, `exclude_from_search` and `prevent_deletion`; the note-type API refuses a rename
+  or removal, and an answer spec cannot bind a role to it. `.apkg` export accepts
+  `include_engram_meta` (default on); off removes the field definition and every note value while
+  leaving the `engram` answer-spec key intact.
+  Verified with `go build ./... && go vet ./... && git ls-files '*.go' | xargs gofmt -l && go test ./...`
+  on the integration branch, and the migration, create/copy/import and export cases on PostgreSQL
+  with `TEST_PG_DSN` set.
+- **M20-6, web UI.** The settings page no longer shows an enable or delete action for
+  `engram_meta`; the field is a visible read-only row, and the answer-binding and
+  change-note-type selectors omit it while the same-name mapping still carries its value. The
+  export dialog shows `include_engram_meta`, checked by default, on the single and batch exports.
+  Verified with `npm --prefix frontend run check`, `npm --prefix frontend run test:client`
+  (70 files, 574 tests) and `npm --prefix frontend run build`.
+
+**Compatibility.** HTTP API: breaking for note-type updates that rename or remove `engram_meta`
+(now `400 invalid_request`), additive for the export switch. MCP: additive on the export input;
+note-type updates share the same refusal. Database: additive, migration `0022` backfills the
+field without a new column or table. Configuration: none. File format: the default `.apkg` export
+is unchanged; `include_engram_meta` off is a new opt-in that omits the field and its values, and
+re-importing that package adds the field back empty. The current behavior is recorded in
+`ARCHITECTURE.md`; the superseded M20-1 enablement paragraph now points here.
 
 #### MCP note type management and merge-check repairs (M20-2, M20-3, M20-4)
 
