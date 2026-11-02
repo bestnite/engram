@@ -88,7 +88,7 @@ func TestAnkiImportPresetModes(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan := planImportDecks(pkg)
-	cfg := ankiTopConfig(pkg, plan.TopName)
+	cfg := topDeckConfig(pkg, plan.TopName)
 	if cfg == nil {
 		t.Fatal("fixture has no deck configuration")
 	}
@@ -137,7 +137,7 @@ func TestAnkiImportPresetModes(t *testing.T) {
 					}
 					switch mode {
 					case "new":
-						if p.ID == source.ID || p.LearningSteps != ankiSteps(cfg.LearnSteps) || p.RelearningSteps != ankiSteps(cfg.RelearnSteps) || (cfg.MaximumReviewInterval > 0 && p.MaximumIntervalDays != cfg.MaximumReviewInterval) {
+						if p.ID == source.ID || p.LearningSteps != stepsValue(cfg.LearnSteps) || p.RelearningSteps != stepsValue(cfg.RelearnSteps) || (cfg.MaximumReviewInterval > 0 && p.MaximumIntervalDays != cfg.MaximumReviewInterval) {
 							t.Fatalf("package preset: %+v", p)
 						}
 					case "reuse":

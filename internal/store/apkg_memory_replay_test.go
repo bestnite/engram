@@ -65,7 +65,7 @@ func TestAnkiReplayControls(t *testing.T) {
 					}
 					now := time.Unix(tc.Now, 0)
 					_, offset := now.In(loc).Zone()
-					if offset != tc.Offset || ankiReplayNextDay(now, loc, tc.Rollover) != tc.NextDay {
+					if offset != tc.Offset || replayNextDay(now, loc, tc.Rollover) != tc.NextDay {
 						t.Fatalf("oracle timing mismatch: %+v offset=%d", tc, offset)
 					}
 					pkg, err := apkg.ReadFile(ankiFixturePath(tc.Package))

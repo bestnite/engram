@@ -82,10 +82,10 @@ func TestAnkiWeights(t *testing.T) {
 		{"invalid JSON", "not json", 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := ankiWeights(tc.raw)
+			got, err := weightsValue(tc.raw)
 			if tc.invalid {
 				if err == nil || got != nil {
-					t.Fatalf("ankiWeights = %v, %v; want nil and error", got, err)
+					t.Fatalf("weightsValue = %v, %v; want nil and error", got, err)
 				}
 				return
 			}

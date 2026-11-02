@@ -595,23 +595,23 @@ func TestAnkiReportItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hash media: %v", err)
 	}
-	missing := ankiMissingMedia(pkg, files)
+	missing := missingMedia(pkg, files)
 	wantMissing := []string{"gone.mp3", "missing.png"}
 	if strings.Join(missing, ",") != strings.Join(wantMissing, ",") {
 		t.Fatalf("missing media = %v, want %v", missing, wantMissing)
 	}
-	video := ankiUnplayableVideo(files)
+	video := unplayableVideo(files)
 	if len(video) != 1 || video[0] != "movie.avi" {
 		t.Fatalf("unplayable video = %v, want only movie.avi", video)
 	}
-	assets := ankiExternalAssets(pkg)
+	assets := externalAssets(pkg)
 	sort.Strings(assets)
 	wantAssets := []string{"https://example.com/note.js", "https://example.com/script.js", "https://example.com/style.css"}
 	if strings.Join(assets, ",") != strings.Join(wantAssets, ",") {
 		t.Fatalf("external assets = %v, want %v", assets, wantAssets)
 	}
 	types := map[int64]apkg.NoteType{1: pkg.NoteTypes[0]}
-	latex := ankiMissingLatexImages(pkg, files, types)
+	latex := missingLatexImages(pkg, files, types)
 	if len(latex) != 1 || !strings.HasPrefix(latex[0], "latex-") {
 		t.Fatalf("missing LaTeX images = %v, want one latex-… name", latex)
 	}

@@ -250,7 +250,7 @@ var schema11DDL = []string{
 
 // buildCollection renders the SQLite payload into a temporary file and returns its bytes.
 func buildCollection(c *WriteCollection) ([]byte, error) {
-	file, err := os.CreateTemp("", "engram-anki-export-*.sqlite")
+	file, err := os.CreateTemp("", "engram-package-export-*.sqlite")
 	if err != nil {
 		return nil, fmt.Errorf("deck package: create collection file: %w", err)
 	}
@@ -303,7 +303,7 @@ VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, 0, '')`)
 	defer noteStmt.Close()
 	for i := range c.Notes {
 		n := &c.Notes[i]
-		if _, err := noteStmt.Exec(n.ID, n.GUID, n.NoteTypeID, n.Modified, ankiTags(n.Tags),
+		if _, err := noteStmt.Exec(n.ID, n.GUID, n.NoteTypeID, n.Modified, tagString(n.Tags),
 			strings.Join(n.Fields, "\x1f"), n.SortField, fieldChecksum(n.SortField)); err != nil {
 			return nil, fmt.Errorf("deck package: write note %d: %w", n.ID, err)
 		}
@@ -591,9 +591,9 @@ func configIndex(configs []WriteDeckConfig) map[string]legacyDconfOut {
 	return out
 }
 
-// ankiTags renders tags the way schema 11 stores them: a space-separated list with a
+// tagString renders tags the way schema 11 stores them: a space-separated list with a
 // leading and a trailing space. An empty list is the empty string.
-func ankiTags(tags []string) string {
+func tagString(tags []string) string {
 	if len(tags) == 0 {
 		return ""
 	}

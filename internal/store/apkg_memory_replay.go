@@ -16,7 +16,7 @@ import (
 // DayCutoffHour at now, with a default cutoff of 4; reviewday.Location resolves
 // invalid timezone names to UTC. These existing user settings supply the target
 // collection context. The fixed offset avoids applying historical DST to old reviews.
-func ankiReplayNextDay(now time.Time, loc *time.Location, cutoff int) int64 {
+func replayNextDay(now time.Time, loc *time.Location, cutoff int) int64 {
 	_, offset := now.In(loc).Zone()
 	fixed := time.FixedZone("", offset)
 	local := now.In(fixed)

@@ -88,7 +88,7 @@ func TestMetadataIsolationNoteSave(t *testing.T) {
 
 func TestMetadataImportScansAndRewrite(t *testing.T) {
 	pkg := &apkg.Package{NoteTypes: []apkg.NoteType{{ID: 1, Fields: []apkg.Field{{Name: "engram_meta"}, {Name: "engram_notes"}}}}, Notes: []apkg.Note{{NoteTypeID: 1, Fields: []string{`{"x":"[sound:hidden.mp3]"}`, "[sound:ordinary.mp3]"}}}}
-	if got := ankiMediaRefs(pkg); !reflect.DeepEqual(got, []string{"ordinary.mp3"}) {
+	if got := mediaRefs(pkg); !reflect.DeepEqual(got, []string{"ordinary.mp3"}) {
 		t.Fatal(got)
 	}
 	forEachContentField(pkg, func(value *string) {
@@ -136,7 +136,7 @@ func TestMetadataExportDoesNotCheckMedia(t *testing.T) {
 				t.Fatal(err)
 			}
 			note := Note{ID: 456, NoteTypeID: Ptr(nt.ID), FieldsJSON: string(raw)}
-			_, err = NewDeckStore(db).ankiMediaFiles(ctx, users[1], deck, []NoteType{nt}, []Note{note}, t.TempDir())
+			_, err = NewDeckStore(db).deckMediaFiles(ctx, users[1], deck, []NoteType{nt}, []Note{note}, t.TempDir())
 			if err != nil {
 				t.Fatalf("metadata triggered export media scan: %v", err)
 			}
@@ -145,7 +145,7 @@ func TestMetadataExportDoesNotCheckMedia(t *testing.T) {
 				t.Fatal(err)
 			}
 			note.FieldsJSON = string(raw)
-			_, err = NewDeckStore(db).ankiMediaFiles(ctx, users[1], deck, []NoteType{nt}, []Note{note}, t.TempDir())
+			_, err = NewDeckStore(db).deckMediaFiles(ctx, users[1], deck, []NoteType{nt}, []Note{note}, t.TempDir())
 			var denied *PackageError
 			if !errors.As(err, &denied) || denied.Code != CodePackageMediaForbidden {
 				t.Fatalf("ordinary field should enforce export permissions: %v", err)

@@ -21,7 +21,7 @@ import (
 
 // Anki package (.apkg) export.
 //
-// The writer in internal/anki builds the archive; this file maps the deck's rows onto
+// The writer in internal/apkg builds the archive; this file maps the deck's rows onto
 // that writer's model. Two boundaries decide what a package carries:
 //
 //   - progress and reviews are the caller's own rows only, so exporting a deck someone
@@ -117,7 +117,7 @@ func (s *DeckStore) ExportDeckPackage(ctx context.Context, actorUserID, deckID u
 		if err != nil {
 			return nil, fmt.Errorf("export deck package: load preset: %w", err)
 		}
-		config, err := ankiDeckConfig(preset, opts.IncludeWeights)
+		config, err := deckConfigValue(preset, opts.IncludeWeights)
 		if err != nil {
 			return nil, fmt.Errorf("export deck package: deck config: %w", err)
 		}
@@ -151,7 +151,7 @@ func (s *DeckStore) ExportDeckPackage(ctx context.Context, actorUserID, deckID u
 
 	var media []apkg.WriteMedia
 	if opts.IncludeMedia {
-		media, err = s.ankiMediaFiles(ctx, actorUserID, deckID, types, notes, opts.MediaRoot)
+		media, err = s.deckMediaFiles(ctx, actorUserID, deckID, types, notes, opts.MediaRoot)
 		if err != nil {
 			return nil, err
 		}
@@ -320,21 +320,21 @@ func (c *packageWriteConfig) writeNoteTypes() []apkg.WriteNoteType {
 			modified = cfg.AnkiOrigin.MTime
 		}
 		out = append(out, apkg.WriteNoteType{
-			ID: c.modelIDs[nt.ID], Name: nt.Name, Kind: ankiKind(cfg.Kind),
+			ID: c.modelIDs[nt.ID], Name: nt.Name, Kind: kindValue(cfg.Kind),
 			Modified: modified, SortFieldIndex: sortIndex, Fields: fields,
 			Templates: templates, CSS: cfg.CSS, LaTeXPre: cfg.LaTeXPre,
 			LaTeXPost: cfg.LaTeXPost, LaTeXSVG: cfg.LaTeXSVG,
-			OriginalStockKind: ankiStockKindValue(cfg.OriginalStockKind),
-			AnswerSpecs:       ankiAnswerSpecs(cfg),
+			OriginalStockKind: stockKindValue(cfg.OriginalStockKind),
+			AnswerSpecs:       answerSpecsMap(cfg),
 		})
 	}
 	return out
 }
 
-// ankiAnswerSpecs converts a config's answer specs into the exported shape. Binding
+// answerSpecsMap converts a config's answer specs into the exported shape. Binding
 // values become field names: a re-import assigns its own field ids, and names are the one
 // identifier it preserves.
-func ankiAnswerSpecs(cfg notetype.Config) map[string]apkg.AnswerSpec {
+func answerSpecsMap(cfg notetype.Config) map[string]apkg.AnswerSpec {
 	var out map[string]apkg.AnswerSpec
 	fieldNameByID := make(map[string]string, len(cfg.Fields))
 	for _, field := range cfg.Fields {
@@ -362,16 +362,16 @@ func ankiAnswerSpecs(cfg notetype.Config) map[string]apkg.AnswerSpec {
 	return out
 }
 
-func ankiKind(kind notetype.Kind) int {
+func kindValue(kind notetype.Kind) int {
 	if kind == notetype.KindCloze {
 		return apkg.KindCloze
 	}
 	return apkg.KindNormal
 }
 
-// ankiStockKindValue maps the note type model's stock-kind name back to Anki's numeric
+// stockKindValue maps the note type model's stock-kind name back to Anki's numeric
 // enum. Zero means the type was not created from a stock type.
-func ankiStockKindValue(kind *notetype.OriginalStockKind) int {
+func stockKindValue(kind *notetype.OriginalStockKind) int {
 	if kind == nil {
 		return 0
 	}
@@ -475,7 +475,7 @@ func (c *packageWriteConfig) writeNotes() []apkg.WriteNote {
 		}
 		tags, _ := ParseTags(n.TagsJSON)
 		out = append(out, apkg.WriteNote{
-			ID: c.noteIDs[n.ID], GUID: ankiGUID(n), NoteTypeID: modelID,
+			ID: c.noteIDs[n.ID], GUID: noteGUID(n), NoteTypeID: modelID,
 			Modified: n.UpdatedAt.UTC().Unix(), Tags: tags, Fields: fields,
 			SortField: sortText,
 		})
@@ -488,9 +488,9 @@ func (c *packageWriteConfig) typeConfigs() map[uint64]notetype.Config {
 	return c.cfgs
 }
 
-// ankiGUID uses the guid Anki gave the note when the note came from an Anki import, and
+// noteGUID uses the guid Anki gave the note when the note came from an Anki import, and
 // otherwise derives a stable guid from the note's public id.
-func ankiGUID(n *Note) string {
+func noteGUID(n *Note) string {
 	if n.ExternalRef != nil {
 		if guid, ok := strings.CutPrefix(*n.ExternalRef, "anki:"); ok && guid != "" {
 			return guid
@@ -514,34 +514,34 @@ func (c *packageWriteConfig) writeCards(states map[uint64]CardState) []apkg.Writ
 			Ordinal: card.Ordinal, Modified: modified, Due: int64(i) + 1,
 		}
 		if state, ok := states[card.ID]; ok {
-			row = ankiCardWithState(row, state, c.deck.CreatedAt.UTC().Unix())
+			row = cardWithState(row, state, c.deck.CreatedAt.UTC().Unix())
 		}
 		out = append(out, row)
 	}
 	return out
 }
 
-// ankiCardWithState overlays one card_states row onto the new-card defaults.
+// cardWithState overlays one card_states row onto the new-card defaults.
 //
 // Anki measures a review due date in days from collection creation and a learning due
 // date in seconds; the two columns share one field, so the type decides the meaning.
-func ankiCardWithState(row apkg.WriteCard, state CardState, createdAt int64) apkg.WriteCard {
+func cardWithState(row apkg.WriteCard, state CardState, createdAt int64) apkg.WriteCard {
 	row.Stability, row.Difficulty = state.Stability, state.Difficulty
 	switch state.State {
 	case "new":
 		row.Type, row.Queue = 0, 0
 	case "learning":
 		row.Type, row.Queue = 1, 1
-		row.Due = ankiLearningDue(state.DueAt, row.Due)
+		row.Due = learningDue(state.DueAt, row.Due)
 		row.Left = state.StepIndex
 	case "review":
 		row.Type, row.Queue = 2, 2
-		row.Due = ankiReviewDue(state.DueAt, createdAt)
+		row.Due = reviewDue(state.DueAt, createdAt)
 		row.Ivl = state.ScheduledDays
 		row.Factor = 2500
 	case "relearning":
 		row.Type, row.Queue = 3, 1
-		row.Due = ankiLearningDue(state.DueAt, row.Due)
+		row.Due = learningDue(state.DueAt, row.Due)
 		row.Ivl = state.ScheduledDays
 		row.Factor = 2500
 		row.Left = state.StepIndex
@@ -558,14 +558,14 @@ func ankiCardWithState(row apkg.WriteCard, state CardState, createdAt int64) apk
 	return row
 }
 
-func ankiLearningDue(due *time.Time, fallback int64) int64 {
+func learningDue(due *time.Time, fallback int64) int64 {
 	if due == nil {
 		return fallback
 	}
 	return due.UTC().Unix()
 }
 
-func ankiReviewDue(due *time.Time, createdAt int64) int64 {
+func reviewDue(due *time.Time, createdAt int64) int64 {
 	if due == nil {
 		return 0
 	}
@@ -593,7 +593,7 @@ func (c *packageWriteConfig) writeReviews(reviews []Review) []apkg.WriteReview {
 			id++
 		}
 		usedIDs[id] = true
-		interval := ankiRevlogInterval(rv.IntervalDays)
+		interval := revlogInterval(rv.IntervalDays)
 		elapsed := 0
 		if rv.ElapsedMS != nil {
 			elapsed = *rv.ElapsedMS
@@ -601,18 +601,18 @@ func (c *packageWriteConfig) writeReviews(reviews []Review) []apkg.WriteReview {
 		out = append(out, apkg.WriteReview{
 			ID: id, CardID: cardID, Ease: rv.Rating, Ivl: interval,
 			LastIvl: previousInterval[rv.CardID], Factor: 2500, Time: elapsed,
-			Type: ankiReviewType(rv.StateBefore),
+			Type: reviewTypeValue(rv.StateBefore),
 		})
 		previousInterval[rv.CardID] = interval
 	}
 	return out
 }
 
-// ankiRevlogInterval encodes a scheduled interval the way the revlog stores it: an
+// revlogInterval encodes a scheduled interval the way the revlog stores it: an
 // interval shorter than a day as negative seconds, and a whole-day interval as days.
 // Anki writes the same encoding to both ivl and lastIvl, so a 10-minute learning step
 // is -600 rather than the zero a day-based round would produce.
-func ankiRevlogInterval(days *float64) int {
+func revlogInterval(days *float64) int {
 	if days == nil {
 		return 0
 	}
@@ -622,9 +622,9 @@ func ankiRevlogInterval(days *float64) int {
 	return int(math.Round(*days))
 }
 
-// ankiReviewType maps engram's state_before onto Anki's revlog type values: learn,
+// reviewTypeValue maps engram's state_before onto Anki's revlog type values: learn,
 // review, relearn. A brand-new card was in the learn phase before its first rating.
-func ankiReviewType(stateBefore int) int {
+func reviewTypeValue(stateBefore int) int {
 	switch stateBefore {
 	case 2:
 		return 1
@@ -635,13 +635,13 @@ func ankiReviewType(stateBefore int) int {
 	}
 }
 
-// ankiDeckConfig builds the one legacy dconf entry from the caller's effective preset.
+// deckConfigValue builds the one legacy dconf entry from the caller's effective preset.
 //
 // The ID must not be 1: Anki merges a config with id 1 into the target collection's stock
 // "Default" and loses its values. Preset ids start at 1, so the exported id is the preset
 // id plus one. fsrsWeights and fsrsParams5 are left empty because Anki reads the former as
 // the 17-value fsrs_params_4; the 21 FSRS-6 parameters go in fsrsParams6.
-func ankiDeckConfig(preset *Preset, includeWeights bool) (apkg.WriteDeckConfig, error) {
+func deckConfigValue(preset *Preset, includeWeights bool) (apkg.WriteDeckConfig, error) {
 	id := int64(preset.ID) + 1
 	if id <= 1 {
 		id = 2
@@ -657,7 +657,7 @@ func ankiDeckConfig(preset *Preset, includeWeights bool) (apkg.WriteDeckConfig, 
 	if !includeWeights || preset.WeightsJSON == nil {
 		return out, nil
 	}
-	weights, err := ankiWeights(*preset.WeightsJSON)
+	weights, err := weightsValue(*preset.WeightsJSON)
 	if err != nil {
 		return apkg.WriteDeckConfig{}, err
 	}
@@ -665,10 +665,10 @@ func ankiDeckConfig(preset *Preset, includeWeights bool) (apkg.WriteDeckConfig, 
 	return out, nil
 }
 
-// ankiWeights accepts exactly the values accepted by the scheduler. An empty string or
+// weightsValue accepts exactly the values accepted by the scheduler. An empty string or
 // null, after trimming, writes no weights; the caller also omits weights for NULL.
 // Invalid weights fail export rather than hiding a preset the scheduler cannot use.
-func ankiWeights(raw string) ([]float64, error) {
+func weightsValue(raw string) ([]float64, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "null" {
 		return nil, nil
@@ -729,7 +729,7 @@ func presetStepMinutes(part string) (float64, bool) {
 	}
 }
 
-// ankiMediaFiles collects the media a package carries: every file name the notes and note
+// deckMediaFiles collects the media a package carries: every file name the notes and note
 // types reference, sorted by name, with its bytes read from the content-addressed store.
 // A reference that does not resolve is a missing file, not an empty one, and fails the
 // export so the package never silently drops an asset.
@@ -737,7 +737,7 @@ func presetStepMinutes(part string) (float64, bool) {
 // A name whose bytes the exporting user cannot read is refused: note fields are validated when
 // they are written, but a note type template can name a medium that belongs to a co-editor of
 // the deck, and shipping it would hand the exporter bytes no read request would serve them.
-func (s *DeckStore) ankiMediaFiles(ctx context.Context, actorUserID, deckID uint64, types []NoteType, notes []Note, mediaRoot string) ([]apkg.WriteMedia, error) {
+func (s *DeckStore) deckMediaFiles(ctx context.Context, actorUserID, deckID uint64, types []NoteType, notes []Note, mediaRoot string) ([]apkg.WriteMedia, error) {
 	if mediaRoot == "" {
 		return nil, fmt.Errorf("%w: media root is empty", ErrPackageMediaMissing)
 	}

@@ -221,7 +221,7 @@ func extractCollection(format Format, name string, entries map[string]*zip.File,
 	}
 	defer rc.Close()
 
-	file, err := os.CreateTemp("", "engram-anki-*.sqlite")
+	file, err := os.CreateTemp("", "engram-package-*.sqlite")
 	if err != nil {
 		return "", fmt.Errorf("%w: create temporary file: %v", ErrCorruptCollection, err)
 	}

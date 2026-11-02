@@ -35,12 +35,12 @@ import (
 
 // Anki package (.apkg) import.
 //
-// The reader in internal/anki stays a leaf: it knows the three archive layouts and returns one
+// The reader in internal/apkg stays a leaf: it knows the three archive layouts and returns one
 // model whose note types, decks, notes and cards are in memory while each media entry is an
 // opener over its decompressed stream. This file maps that model onto the data model; it hashes
 // the media once and streams each write, so memory does not grow with the package's media. It
-// lives in internal/store, not internal/anki, because the writes need the store's unexported
-// transaction, media, quota and note-type helpers; importing internal/store from internal/anki
+// lives in internal/store, not internal/apkg, because the writes need the store's unexported
+// transaction, media, quota and note-type helpers; importing internal/store from internal/apkg
 // would create a cycle and force those helpers to become public API.
 
 // packageLimits turns the deployment caps into the reader's limits. The per-entry allocation guard
@@ -95,8 +95,8 @@ func packageDeckParts(name string) []string {
 	return strings.Split(name, "::")
 }
 
-// ankiSharedDeckPrefix returns the leading components two component lists share.
-func ankiSharedDeckPrefix(a, b []string) []string {
+// sharedDeckPrefix returns the leading components two component lists share.
+func sharedDeckPrefix(a, b []string) []string {
 	n := 0
 	for n < len(a) && n < len(b) && a[n] == b[n] {
 		n++
@@ -104,7 +104,7 @@ func ankiSharedDeckPrefix(a, b []string) []string {
 	return a[:n]
 }
 
-func ankiCardDeckID(card apkg.Card) int64 {
+func cardDeckID(card apkg.Card) int64 {
 	if card.OriginalDeckID != 0 {
 		return card.OriginalDeckID
 	}
@@ -134,7 +134,7 @@ func planImportDecks(pkg *apkg.Package) deckImportPlan {
 	}
 	cardCount := make(map[int64]int, len(names))
 	for _, card := range pkg.Cards {
-		id := ankiCardDeckID(card)
+		id := cardDeckID(card)
 		if names[id] == "" {
 			continue
 		}
@@ -154,7 +154,7 @@ func planImportDecks(pkg *apkg.Package) deckImportPlan {
 			prefixSet = true
 			continue
 		}
-		prefix = ankiSharedDeckPrefix(prefix, parts)
+		prefix = sharedDeckPrefix(prefix, parts)
 	}
 
 	switch {
@@ -327,9 +327,9 @@ func forEachContentField(pkg *apkg.Package, visit func(*string)) {
 	}
 }
 
-// ankiMediaRefs returns every media name referenced by note fields, note-type templates, CSS and
+// mediaRefs returns every media name referenced by note fields, note-type templates, CSS and
 // LaTeX bodies, de-duplicated and sorted.
-func ankiMediaRefs(pkg *apkg.Package) []string {
+func mediaRefs(pkg *apkg.Package) []string {
 	seen := map[string]struct{}{}
 	add := func(value string) {
 		for _, name := range mediaNamesInHTML(value) {
@@ -358,17 +358,17 @@ func ankiMediaRefs(pkg *apkg.Package) []string {
 	return names
 }
 
-// ankiMissingMedia lists every referenced name that the package has no bytes for. A reference
+// missingMedia lists every referenced name that the package has no bytes for. A reference
 // that already carries a sha256 needs the package to carry that exact content; any other name is
 // matched against the package's own media names.
-func ankiMissingMedia(pkg *apkg.Package, files []packageMediaFile) []string {
+func missingMedia(pkg *apkg.Package, files []packageMediaFile) []string {
 	names := mediaNameIndex(files)
 	shas := map[string]bool{}
 	for i := range files {
 		shas[files[i].sha256hex] = true
 	}
 	var missing []string
-	for _, ref := range ankiMediaRefs(pkg) {
+	for _, ref := range mediaRefs(pkg) {
 		if match := mediaShaNameRE.FindStringSubmatch(ref); match != nil {
 			if !shas[match[1]] {
 				missing = append(missing, ref)
@@ -389,8 +389,8 @@ var videoExtensions = map[string]bool{
 	"mkv": true, "wmv": true, "flv": true, "mpeg": true, "mpg": true, "3gp": true,
 }
 
-// ankiUnplayableVideo lists video files a browser cannot play: everything except mp4 and webm.
-func ankiUnplayableVideo(files []packageMediaFile) []string {
+// unplayableVideo lists video files a browser cannot play: everything except mp4 and webm.
+func unplayableVideo(files []packageMediaFile) []string {
 	var out []string
 	for i := range files {
 		entry := files[i].entry
@@ -412,10 +412,10 @@ func ankiUnplayableVideo(files []packageMediaFile) []string {
 }
 
 var (
-	// ankiHTMLTagRE matches one opening script or link tag, so its attributes can be inspected.
-	ankiHTMLTagRE = regexp.MustCompile(`(?is)<(script|link)\b[^>]*>`)
-	// ankiHTMLAttrRE matches one attribute in any of the three quoting forms.
-	ankiHTMLAttrRE = regexp.MustCompile(`(?is)([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))`)
+	// htmlTagRE matches one opening script or link tag, so its attributes can be inspected.
+	htmlTagRE = regexp.MustCompile(`(?is)<(script|link)\b[^>]*>`)
+	// htmlAttrRE matches one attribute in any of the three quoting forms.
+	htmlAttrRE = regexp.MustCompile(`(?is)([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))`)
 )
 
 // isAbsoluteURL reports whether a reference points outside the package.
@@ -424,16 +424,16 @@ func isAbsoluteURL(raw string) bool {
 	return strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") || strings.HasPrefix(raw, "//")
 }
 
-// ankiExternalAssets lists every absolute script src and stylesheet link href in the package's
+// externalAssets lists every absolute script src and stylesheet link href in the package's
 // note fields, templates and CSS. A relative reference points at package media and is not an
 // external asset.
-func ankiExternalAssets(pkg *apkg.Package) []string {
+func externalAssets(pkg *apkg.Package) []string {
 	seen := map[string]struct{}{}
 	add := func(value string) {
-		for _, tag := range ankiHTMLTagRE.FindAllString(value, -1) {
+		for _, tag := range htmlTagRE.FindAllString(value, -1) {
 			name := strings.ToLower(strings.TrimSpace(tag[1 : 1+strings.IndexAny(tag, " \t\r\n>")]))
 			attrs := map[string]string{}
-			for _, match := range ankiHTMLAttrRE.FindAllStringSubmatch(tag, -1) {
+			for _, match := range htmlAttrRE.FindAllStringSubmatch(tag, -1) {
 				attrs[strings.ToLower(match[1])] = match[2] + match[3] + match[4]
 			}
 			switch name {
@@ -469,10 +469,10 @@ func ankiExternalAssets(pkg *apkg.Package) []string {
 	return out
 }
 
-// ankiMissingLatexImages lists the LaTeX image names a note needs but the package does not carry.
+// missingLatexImages lists the LaTeX image names a note needs but the package does not carry.
 // Anki rewrites [latex]…[/latex], [$]…[/$] and [$$]…[/$$] to latex-<sha1>.<ext>; the renderer
 // computes the same name, so the expected file can be named without rendering.
-func ankiMissingLatexImages(pkg *apkg.Package, files []packageMediaFile, types map[int64]apkg.NoteType) []string {
+func missingLatexImages(pkg *apkg.Package, files []packageMediaFile, types map[int64]apkg.NoteType) []string {
 	names := mediaNameIndex(files)
 	seen := map[string]struct{}{}
 	for i := range pkg.Notes {
@@ -504,9 +504,9 @@ func ankiMissingLatexImages(pkg *apkg.Package, files []packageMediaFile, types m
 	return out
 }
 
-// ankiStockKind maps Anki's numeric original-stock-kind enum onto the note type model's names.
+// stockKindFromValue maps Anki's numeric original-stock-kind enum onto the note type model's names.
 // Zero means the note type was not copied from a stock type.
-func ankiStockKind(value int) *notetype.OriginalStockKind {
+func stockKindFromValue(value int) *notetype.OriginalStockKind {
 	var kind notetype.OriginalStockKind
 	switch value {
 	case 1:
@@ -527,10 +527,10 @@ func ankiStockKind(value int) *notetype.OriginalStockKind {
 	return &kind
 }
 
-// ankiConfigFor maps one package note type onto the note type model. Fields become f0, f1, … and
+// configForNoteType maps one package note type onto the note type model. Fields become f0, f1, … and
 // templates t0, t1, … in package order; the imported answer spec stays nil, because Anki's
 // templates carry no engram answer control.
-func ankiConfigFor(nt *apkg.NoteType) (notetype.Config, []string, []string, error) {
+func configForNoteType(nt *apkg.NoteType) (notetype.Config, []string, []string, error) {
 	var kind notetype.Kind
 	switch nt.Kind {
 	case apkg.KindNormal:
@@ -634,7 +634,7 @@ func ankiConfigFor(nt *apkg.NoteType) (notetype.Config, []string, []string, erro
 		LaTeXPre:          nt.LaTeXPre,
 		LaTeXPost:         nt.LaTeXPost,
 		LaTeXSVG:          nt.LaTeXSVG,
-		OriginalStockKind: ankiStockKind(nt.OriginalStockKind),
+		OriginalStockKind: stockKindFromValue(nt.OriginalStockKind),
 		// The Anki notetype id is the stable identity a re-import matches on; it is not the
 		// engram row id. The reader exposes no note type mtime, so MTime stays 0.
 		AnkiOrigin: &notetype.AnkiOrigin{NoteTypeID: nt.OriginalID},
@@ -716,7 +716,7 @@ func resolvePackageNoteTypes(ctx context.Context, tx *gorm.DB, deckID uint64, pk
 	usedRow := map[uint64]bool{}
 	for i := range pkg.NoteTypes {
 		nt := &pkg.NoteTypes[i]
-		cfg, fieldIDs, templateIDs, err := ankiConfigFor(nt)
+		cfg, fieldIDs, templateIDs, err := configForNoteType(nt)
 		if err != nil {
 			return nil, err
 		}
@@ -802,12 +802,12 @@ func templateIDsFrom(cfg notetype.Config) []string {
 	return ids
 }
 
-// ankiCardTemplate returns the stored cards.template value for one package card ordinal.
+// cardTemplate returns the stored cards.template value for one package card ordinal.
 //
 // A normal card's template is the imported template id at that ordinal. A cloze card's identity
 // is "cloze:<number>", which is the convention the note write path uses and therefore what every
 // reader (queue, editor, renderer) expects from an imported cloze card.
-func ankiCardTemplate(target *typeTarget, ordinal int) (string, error) {
+func cardTemplate(target *typeTarget, ordinal int) (string, error) {
 	if target.Config.Kind == notetype.KindCloze {
 		if len(target.Config.Templates) == 0 {
 			return "", errors.New("cloze note type has no template")
@@ -820,10 +820,10 @@ func ankiCardTemplate(target *typeTarget, ordinal int) (string, error) {
 	return target.TemplateIDs[ordinal], nil
 }
 
-// ankiValues maps a package note's field values (in package field order) onto the target note
+// noteValues maps a package note's field values (in package field order) onto the target note
 // type's field ids. A short row is padded with empty values; a long row's extra values are
 // ignored, because the note type defines the stored shape.
-func ankiValues(note *apkg.Note, target *typeTarget) map[string]string {
+func noteValues(note *apkg.Note, target *typeTarget) map[string]string {
 	values := make(map[string]string, len(target.FieldIDs))
 	for i, id := range target.FieldIDs {
 		if i < len(note.Fields) {
@@ -1025,11 +1025,11 @@ func dropUnusedNoteTypes(pkg *apkg.Package) {
 	pkg.NoteTypes = kept
 }
 
-// ankiAnswerSpecsMissing counts the imported note types that carry no usable engram
+// missingAnswerSpecs counts the imported note types that carry no usable engram
 // answer-spec key. Zero means every imported note type carried one; a positive count means
 // those note types supplied no answer control with the package, so their machine grading
 // cannot be imported.
-func ankiAnswerSpecsMissing(pkg *apkg.Package) int {
+func missingAnswerSpecs(pkg *apkg.Package) int {
 	missing := 0
 	for i := range pkg.NoteTypes {
 		if !pkg.NoteTypes[i].AnswerSpecsKey {
@@ -1044,7 +1044,7 @@ func (s *DeckStore) importPackageInTx(ctx context.Context, tx *gorm.DB, actorUse
 	// The unused note types leave no trace in the target: they are not created, they contribute no
 	// media references to the report, and no stored row points at them.
 	dropUnusedNoteTypes(pkg)
-	report.AnswerSpecsMissing = ankiAnswerSpecsMissing(pkg)
+	report.AnswerSpecsMissing = missingAnswerSpecs(pkg)
 	reserved := map[string]bool{}
 	for _, nt := range pkg.NoteTypes {
 		for _, field := range nt.Fields {
@@ -1098,11 +1098,11 @@ func (s *DeckStore) importPackageInTx(ctx context.Context, tx *gorm.DB, actorUse
 	for i := range pkg.NoteTypes {
 		types[pkg.NoteTypes[i].ID] = pkg.NoteTypes[i]
 	}
-	report.MissingMedia = ankiMissingMedia(pkg, files)
+	report.MissingMedia = missingMedia(pkg, files)
 	report.MediaMissing = len(report.MissingMedia)
-	report.UnplayableVideo = ankiUnplayableVideo(files)
-	report.ExternalAssets = ankiExternalAssets(pkg)
-	report.LatexMissingImages = ankiMissingLatexImages(pkg, files, types)
+	report.UnplayableVideo = unplayableVideo(files)
+	report.ExternalAssets = externalAssets(pkg)
+	report.LatexMissingImages = missingLatexImages(pkg, files, types)
 
 	targets, err := resolvePackageNoteTypes(ctx, tx, deckID, pkg)
 	if err != nil {
@@ -1255,7 +1255,7 @@ func (s *DeckStore) importPackageInTx(ctx context.Context, tx *gorm.DB, actorUse
 			})
 			continue
 		}
-		template, err := ankiCardTemplate(noteTarget, card.Ordinal)
+		template, err := cardTemplate(noteTarget, card.Ordinal)
 		if err != nil {
 			report.Errors = append(report.Errors, PackageImportError{
 				Entry:  fmt.Sprintf("cards[%d]", card.ID),
@@ -1263,7 +1263,7 @@ func (s *DeckStore) importPackageInTx(ctx context.Context, tx *gorm.DB, actorUse
 			})
 			continue
 		}
-		deckPath := plan.Paths[ankiCardDeckID(card)]
+		deckPath := plan.Paths[cardDeckID(card)]
 		var pathPtr *string
 		if deckPath != "" {
 			p := deckPath
@@ -1413,7 +1413,7 @@ func removeStaleCardsForNoteType(ctx context.Context, tx *gorm.DB, noteID uint64
 // writeDeckNote creates or updates one note and returns its id. The package's fields are the whole
 // content: an update replaces them, so a re-import reproduces the package exactly.
 func writeDeckNote(ctx context.Context, tx *gorm.DB, actorUserID, deckID uint64, note *apkg.Note, target *typeTarget, old *Note, now time.Time) (uint64, bool, error) {
-	values := ankiValues(note, target)
+	values := noteValues(note, target)
 	mediaValues := mediaFieldValues(target.Config, values)
 	if err := normaliseNoteMediaNames(ctx, tx, deckID, mediaValues); err != nil {
 		return 0, false, fmt.Errorf("normalise note media names: %w", err)
@@ -1489,7 +1489,7 @@ func writeDeckNote(ctx context.Context, tx *gorm.DB, actorUserID, deckID uint64,
 	return old.ID, false, nil
 }
 
-func ankiTopConfig(pkg *apkg.Package, top string) *apkg.DeckConfig {
+func topDeckConfig(pkg *apkg.Package, top string) *apkg.DeckConfig {
 	for _, deck := range pkg.Decks {
 		if packageDeckName(deck.Name) == top {
 			for i := range pkg.DeckConfigs {
@@ -1505,7 +1505,7 @@ func ankiTopConfig(pkg *apkg.Package, top string) *apkg.DeckConfig {
 	return nil
 }
 
-func ankiSteps(steps []float64) string {
+func stepsValue(steps []float64) string {
 	parts := make([]string, len(steps))
 	for i, step := range steps {
 		parts[i] = strconv.FormatFloat(step, 'f', -1, 64) + "m"
@@ -1702,7 +1702,7 @@ func importDeckProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			previous[r.CardID], last[r.CardID] = last[r.CardID], r.ID
 		}
 	}
-	nextDay := ankiReplayNextDay(now, loc, cutoff)
+	nextDay := replayNextDay(now, loc, cutoff)
 	for cid, rows := range allHistory {
 		selected, history, complete := selectReplay(rows, nextDay)
 		selectedHistory[cid], histories[cid], completeHistory[cid] = selected, history, complete
@@ -1938,7 +1938,7 @@ func importDeckProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 
 // resolveTargetDeck resolves the target and creates a preset for a new deck.
 func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUserID uint64, pkg *apkg.Package, plan *deckImportPlan, targetKind string, targetDeckID uint64, opts PackageImportOptions, report *PackageImportReport) (uint64, error) {
-	cfg := ankiTopConfig(pkg, plan.TopName)
+	cfg := topDeckConfig(pkg, plan.TopName)
 	if cfg != nil && len(cfg.Weights) > 0 {
 		report.WeightsDiscarded = true
 	}
@@ -2003,10 +2003,10 @@ func createPreset(ctx context.Context, tx *gorm.DB, owner uint64, deckName strin
 			preset.DesiredRetention = cfg.DesiredRetention
 		}
 		if validSteps(cfg.LearnSteps) {
-			preset.LearningSteps = ankiSteps(cfg.LearnSteps)
+			preset.LearningSteps = stepsValue(cfg.LearnSteps)
 		}
 		if validSteps(cfg.RelearnSteps) {
-			preset.RelearningSteps = ankiSteps(cfg.RelearnSteps)
+			preset.RelearningSteps = stepsValue(cfg.RelearnSteps)
 		}
 		if cfg.MaximumReviewInterval > 0 {
 			preset.MaximumIntervalDays = min(cfg.MaximumReviewInterval, DefaultMaximumIntervalDays)
