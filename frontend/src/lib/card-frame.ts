@@ -2,8 +2,8 @@
  * Card-face CSS sent with the frame's `show` message.
  *
  * The frame document loads the application stylesheet, so design tokens and the utility classes the audio and speech
- * controls carry already exist there. These strings only restate the typography each view used to apply to the wrapper element
- * around the face, because that wrapper stays in the parent and its classes no longer reach the content.
+ * controls carry already exist there. These strings carry the typography a view applies to the face, because the wrapper
+ * element around the face stays in the parent and its classes no longer reach the content.
  *
  * The note type's CSS follows these strings and outranks them; see FACE_BASE.
  */
@@ -16,23 +16,23 @@
 const FACE_BASE = 'overflow-wrap:break-word;';
 
 /**
- * The review page's default type scale: the front's `text-xl sm:text-2xl` with relaxed leading.
+ * The review page's default type scale: 1.2rem with relaxed leading, at every width.
  *
  * The question, the revealed answer and a graded result's answer all use this scale, so a learner who reveals or grades a
  * card sees its text keep the same size. The front and the answer must not drift apart: a smaller answer face makes the
- * card jump when it is revealed.
+ * card jump when it is revealed. The one size holds at every width, so resizing the window does not resize the card
+ * either, and the scale never has to be ordered across a breakpoint.
  */
-const REVIEW_TYPE_SCALE = `${FACE_BASE}font-size:1.25rem;line-height:1.625`;
-const REVIEW_WIDE_TYPE_SCALE = '@media (min-width:640px){:where(body){font-size:1.5rem}}';
+const REVIEW_TYPE_SCALE = `${FACE_BASE}font-size:1.2rem;line-height:1.625`;
 
 /** The review page's front face: the shared review type scale. */
-export const REVIEW_FRONT_CSS = `:where(body){${REVIEW_TYPE_SCALE}}${REVIEW_WIDE_TYPE_SCALE}`;
+export const REVIEW_FRONT_CSS = `:where(body){${REVIEW_TYPE_SCALE}}`;
 
 /** The review page's revealed answer: the shared review type scale, so revealing does not resize the card. */
-export const REVIEW_BACK_CSS = `:where(body){${REVIEW_TYPE_SCALE}}${REVIEW_WIDE_TYPE_SCALE}`;
+export const REVIEW_BACK_CSS = `:where(body){${REVIEW_TYPE_SCALE}}`;
 
 /** A graded answer face: the shared review type scale with the result panel's medium weight. */
-export const REVIEW_ANSWER_CSS = `:where(body){${REVIEW_TYPE_SCALE};font-weight:500}${REVIEW_WIDE_TYPE_SCALE}`;
+export const REVIEW_ANSWER_CSS = `:where(body){${REVIEW_TYPE_SCALE};font-weight:500}`;
 
 /** The note editor preview: the face keeps the page's default type scale. */
 export const NOTE_PREVIEW_CSS = `:where(body){${FACE_BASE}}`;

@@ -1109,7 +1109,9 @@
                 />
               </div>
             {:else}
-              <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">
+              <!-- The same 1.2rem the face uses, so a failed render is no larger than a working one; see REVIEW_TYPE_SCALE in
+                   lib/card-frame.ts. -->
+              <div class="text-[1.2rem] whitespace-pre-wrap break-words leading-relaxed">
                 {#each frontFallback as value, index (index)}<div>{value}</div>{/each}
               </div>
             {/if}
@@ -1238,7 +1240,9 @@
                   />
                 </div>
               {:else}
-                <div class="text-xl sm:text-2xl whitespace-pre-wrap break-words leading-relaxed">
+                <!-- The same 1.2rem the face uses, so a failed render is no larger than a working one; see REVIEW_TYPE_SCALE in
+                     lib/card-frame.ts. -->
+                <div class="text-[1.2rem] whitespace-pre-wrap break-words leading-relaxed">
                   {#each frontFallback as value, index (index)}<div>{value}</div>{/each}
                 </div>
               {/if}

@@ -10,8 +10,9 @@ import { REVIEW_ANSWER_CSS, REVIEW_BACK_CSS, REVIEW_FRONT_CSS, faceStyle } from 
  *
  * happy-dom resolves the cascade, media queries and specificity for these rules, so the cases read the computed values a
  * frame would use rather than the shape of the CSS string. It is not a browser engine; the real-browser counterpart of this
- * contract lives in frontend/e2e/review-face-style.spec.ts. The width cases are the two sides of the front's `640px`
- * breakpoint: the `min-width:640px` query must raise all three faces together, and below it all three keep one size.
+ * contract lives in frontend/e2e/review-face-style.spec.ts. The face has one size at every width and no breakpoint step, so
+ * the width cases cover a phone, both sides of the `640px` line an earlier step used, and a wide screen: all three faces
+ * must report that one size at each, and the step must not come back.
  */
 
 const FACES = [
@@ -20,9 +21,8 @@ const FACES = [
   { name: 'graded answer', css: REVIEW_ANSWER_CSS },
 ];
 
-// The front's established scale, in the units a computed style reports.
-const NARROW_FONT_SIZE = '20px'; // 1.25rem
-const WIDE_FONT_SIZE = '24px'; // 1.5rem
+// The review face's established scale, in the units a computed style reports: 1.2rem of a 16px root.
+const FONT_SIZE = '19.2px';
 const LINE_HEIGHT = '1.625';
 
 interface ComputedFace {
@@ -67,15 +67,14 @@ afterEach(() => {
 });
 
 describe('review face typography', () => {
-  it('gives the front, the revealed back and a graded answer one default size on both sides of the breakpoint', () => {
-    for (const width of [480, 1024]) {
+  it('gives the front, the revealed back and a graded answer one default size at every width', () => {
+    for (const width of [480, 639, 640, 1024]) {
       setWidth(width);
-      const expected = width < 640 ? NARROW_FONT_SIZE : WIDE_FONT_SIZE;
       for (const face of FACES) {
         const computed = renderFace(face.css);
         // Soft assertions so one face that drifts does not hide the others in the same run.
-        expect.soft(computed.bodyFontSize, `${face.name} body at ${width}px`).toBe(expected);
-        expect.soft(computed.qaFontSize, `${face.name} content at ${width}px`).toBe(expected);
+        expect.soft(computed.bodyFontSize, `${face.name} body at ${width}px`).toBe(FONT_SIZE);
+        expect.soft(computed.qaFontSize, `${face.name} content at ${width}px`).toBe(FONT_SIZE);
         expect.soft(computed.bodyLineHeight, `${face.name} leading at ${width}px`).toBe(LINE_HEIGHT);
       }
     }
