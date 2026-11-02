@@ -7,7 +7,7 @@ import { setLocale } from '../lib/i18n';
 
 /**
  * Batch export from the deck list: clicking "Export" first opens the same options
- * dialog as single-deck export, and the user's media / progress / review log / weights
+ * dialog as single-deck export, and the user's media / progress / review log / weights / cloze metadata
  * choices are passed unchanged to the batch export endpoint.
  */
 describe('DecksView batch export', () => {
@@ -76,6 +76,7 @@ describe('DecksView batch export', () => {
     expect(document.body.querySelector('[data-testid="export-include-media"]')).not.toBeNull();
     expect(document.body.querySelector('[data-testid="export-include-progress"]')).not.toBeNull();
     expect(document.body.querySelector('[data-testid="export-include-weights"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="export-include-engram-meta"]')).not.toBeNull();
     expect(exportZip).not.toHaveBeenCalled();
   });
 
@@ -88,6 +89,7 @@ describe('DecksView batch export', () => {
       includeProgress: false,
       includeReviews: false,
       includeWeights: false,
+      includeEngramMeta: true,
     });
     // The node is still present during the exit animation; closing shows up as data-state turning closed.
     expect(document.body.querySelector('[data-testid="decks-batch-export-dialog"]')?.getAttribute('data-state')).not.toBe('open');
@@ -100,12 +102,14 @@ describe('DecksView batch export', () => {
     await click('[data-testid="export-include-progress"]');
     await click('[data-testid="export-include-reviews"]');
     await click('[data-testid="export-include-weights"]');
+    await click('[data-testid="export-include-engram-meta"]');
     await click('[data-testid="decks-batch-export-submit"]');
     expect(exportZip).toHaveBeenCalledWith(['d1', 'd2'], {
       includeMedia: false,
       includeProgress: true,
       includeReviews: true,
       includeWeights: true,
+      includeEngramMeta: false,
     });
   });
 

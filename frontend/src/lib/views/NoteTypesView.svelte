@@ -21,7 +21,6 @@
     NoteTypeTemplate,
   } from '../api';
   import Button from '../components/ui/Button.svelte';
-  import Badge from '../components/ui/Badge.svelte';
   import Dialog from '../components/ui/Dialog.svelte';
   import Select from '../components/ui/Select.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
@@ -193,11 +192,14 @@
     draft?.config.kind === 'normal' ? (draft?.config.templates ?? []) : [],
   );
 
-  const hasMetaField = $derived(draft ? draft.config.fields.some((f) => f.name === 'engram_meta') : false);
-  const metaMissingExclude = $derived(draft ? draft.config.fields.some((f) => f.name === 'engram_meta' && !f.exclude_from_search) : false);
-  const hasClozeBlanksTemplate = $derived(draft ? draft.config.templates.some((t) => answerControlValue(t) === 'cloze_blanks') : false);
-  let metaDeleteConfirmOpen = $state(false);
-  let metaDeleteIndex = $state(-1);
+  // The metadata field is built in and managed by the server, so the field list shows it read-only
+  // and neither the answer-role bindings nor the change dialog offer it as an ordinary field.
+  function isMetaField(field: NoteTypeField): boolean {
+    return field.name === 'engram_meta';
+  }
+
+  const answerBindingFields = $derived((draft?.config.fields ?? []).filter((field) => !isMetaField(field)));
+  const changeTargetRows = $derived(changeTargetFields.filter((field) => !isMetaField(field)));
 
   // The preview is rendered by the server: the request carries the whole unsaved config and the selected template id,
   // so the frames show the same faces a stored note type produces instead of a second renderer in this page. Every field
@@ -343,11 +345,15 @@
   function moveField(index: number, delta: number): void {
     if (!draft) return;
     const fields = draft.config.fields;
+    const field = fields[index];
+    // The built-in metadata field cannot be reordered through its own buttons, so a move that starts
+    // on it is refused here as well as disabled in the markup.
+    if (!field || isMetaField(field)) return;
     const target = index + delta;
     if (target < 0 || target >= fields.length) return;
-    const [field] = fields.splice(index, 1);
-    if (!field) return;
-    fields.splice(target, 0, field);
+    const [moved] = fields.splice(index, 1);
+    if (!moved) return;
+    fields.splice(target, 0, moved);
   }
 
   /**
@@ -358,6 +364,9 @@
     if (!draft) return;
     const field = draft.config.fields[index];
     if (!field) return;
+    // The built-in metadata field has a fixed name; the server refuses a rename and its templates
+    // always reference it by that name, so the editor must not be able to build one.
+    if (isMetaField(field)) return;
     const name = rawName.trim();
     if (name === '' || name === field.name) return;
     const oldName = field.name;
@@ -374,67 +383,11 @@
     if (!draft) return;
     const field = draft.config.fields[index];
     if (!field || field.prevent_deletion || draft.config.fields.length <= 1) return;
-    if (field.name === 'engram_meta') {
-      requestDeleteMetaField(index);
-      return;
-    }
+    if (isMetaField(field)) return;
     draft.config.fields.splice(index, 1);
     if (draft.config.sort_field_id === field.id) {
       draft.config.sort_field_id = draft.config.fields[0]?.id ?? '';
     }
-  }
-
-  function enableClozeAlternatives(): void {
-    if (!draft) return;
-    const existing = draft.config.fields.find((f) => f.name === 'engram_meta');
-    if (existing) {
-      existing.exclude_from_search = true;
-      existing.plain_text = true;
-      return;
-    }
-    const field: NoteTypeField = {
-      id: nextID(draft.config.fields, 'f'),
-      name: 'engram_meta',
-      sticky: false,
-      rtl: false,
-      font: '',
-      font_size: 0,
-      description: '',
-      plain_text: true,
-      collapsed: true,
-      exclude_from_search: true,
-      tag: null,
-      prevent_deletion: false,
-    };
-    draft.config.fields.push(field);
-  }
-
-  function normalizeMetaFlag(): void {
-    if (!draft) return;
-    const existing = draft.config.fields.find((f) => f.name === 'engram_meta');
-    if (existing) {
-      existing.exclude_from_search = true;
-      existing.plain_text = true;
-    }
-  }
-
-  function requestDeleteMetaField(index: number): void {
-    metaDeleteIndex = index;
-    metaDeleteConfirmOpen = true;
-  }
-
-  function confirmDeleteMeta(): void {
-    if (metaDeleteIndex >= 0 && draft) {
-      const field = draft.config.fields[metaDeleteIndex];
-      if (field) {
-        draft.config.fields.splice(metaDeleteIndex, 1);
-        if (draft.config.sort_field_id === field.id) {
-          draft.config.sort_field_id = draft.config.fields[0]?.id ?? '';
-        }
-      }
-    }
-    metaDeleteConfirmOpen = false;
-    metaDeleteIndex = -1;
   }
 
   function addTemplate(): void {
@@ -572,8 +525,6 @@
       saveError = 'notetype.error.name';
       return;
     }
-    // The exact metadata field is excluded regardless of how it was added.
-    normalizeMetaFlag();
     saving = true;
     saveError = '';
     try {
@@ -851,7 +802,9 @@
     return [
       { value: '', label: $t('notetype.change.no_source') },
       ...(draft?.config.fields ?? [])
-        .filter((field) => !used.has(field.id))
+        // The metadata field maps only onto the target's own built-in field; offering it as a source
+        // for an ordinary field would copy its JSON into a content field.
+        .filter((field) => !used.has(field.id) && !isMetaField(field))
         .map((field) => ({ value: field.id, label: field.name })),
     ];
   }
@@ -1207,70 +1160,77 @@
                     <input
                       type="text"
                       value={field.name}
+                      readonly={isMetaField(field)}
                       onchange={(event) => renameField(index, event.currentTarget.value)}
                       aria-label={`${$t('notetype.fields.name')} ${index + 1}`}
                       data-testid={`notetype-field-name-${field.id}`}
-                      class="field-input min-w-40 flex-1 text-sm"
+                      class="field-input min-w-40 flex-1 text-sm {isMetaField(field) ? 'text-muted-foreground' : ''}"
                     />
                     <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{field.id}</code>
-                    <Button variant="ghost" size="icon" label={$t('notetype.fields.up')} disabled={index === 0} onclick={() => moveField(index, -1)} testId={`notetype-field-up-${field.id}`}>
+                    <Button variant="ghost" size="icon" label={$t('notetype.fields.up')} disabled={index === 0 || isMetaField(field)} onclick={() => moveField(index, -1)} testId={`notetype-field-up-${field.id}`}>
                       <ArrowUp class="size-4" aria-hidden="true" />
                     </Button>
-                    <Button variant="ghost" size="icon" label={$t('notetype.fields.down')} disabled={index === draft!.config.fields.length - 1} onclick={() => moveField(index, 1)} testId={`notetype-field-down-${field.id}`}>
+                    <Button variant="ghost" size="icon" label={$t('notetype.fields.down')} disabled={index === draft!.config.fields.length - 1 || isMetaField(field)} onclick={() => moveField(index, 1)} testId={`notetype-field-down-${field.id}`}>
                       <ArrowDown class="size-4" aria-hidden="true" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       label={$t('notetype.fields.delete')}
-                      disabled={field.prevent_deletion || draft!.config.fields.length <= 1}
+                      disabled={field.prevent_deletion || draft!.config.fields.length <= 1 || isMetaField(field)}
                       onclick={() => deleteField(index)}
                       testId={`notetype-field-delete-${field.id}`}
                     >
                       <Trash2 class="size-4" aria-hidden="true" />
                     </Button>
                   </div>
-                  <details class="mt-2">
-                    <summary class="cursor-pointer text-xs text-muted-foreground">{$t('notetype.fields.options')}</summary>
-                    <div class="mt-2 grid gap-3 sm:grid-cols-2">
-                      <label class="flex items-center gap-2 text-xs text-foreground">
-                        <input type="checkbox" checked={field.sticky} onchange={(event) => (field.sticky = event.currentTarget.checked)} />
-                        {$t('notetype.fields.sticky')}
-                      </label>
-                      <label class="flex items-center gap-2 text-xs text-foreground">
-                        <input type="checkbox" checked={field.rtl} onchange={(event) => (field.rtl = event.currentTarget.checked)} />
-                        {$t('notetype.fields.rtl')}
-                      </label>
-                      <label class="flex items-center gap-2 text-xs text-foreground">
-                        <input type="checkbox" checked={field.plain_text} onchange={(event) => (field.plain_text = event.currentTarget.checked)} />
-                        {$t('notetype.fields.plain_text')}
-                      </label>
-                      <label class="flex items-center gap-2 text-xs text-foreground">
-                        <input type="checkbox" checked={field.collapsed} onchange={(event) => (field.collapsed = event.currentTarget.checked)} />
-                        {$t('notetype.fields.collapsed')}
-                      </label>
-                      <label class="flex items-center gap-2 text-xs text-foreground">
-                        <input type="checkbox" checked={field.exclude_from_search ?? false} onchange={(event) => (field.exclude_from_search = event.currentTarget.checked)} />
-                        {$t('notetype.fields.exclude_from_search')}
-                      </label>
-                      <label class="flex items-center gap-2 text-xs text-foreground">
-                        <input type="checkbox" checked={field.prevent_deletion ?? false} onchange={(event) => (field.prevent_deletion = event.currentTarget.checked)} />
-                        {$t('notetype.fields.prevent_deletion')}
-                      </label>
-                      <label class="block text-xs text-foreground">
-                        <span class="text-muted-foreground">{$t('notetype.fields.font')}</span>
-                        <input type="text" value={field.font} oninput={(event) => (field.font = event.currentTarget.value)} class="field-input mt-1 block w-full text-xs" />
-                      </label>
-                      <label class="block text-xs text-foreground">
-                        <span class="text-muted-foreground">{$t('notetype.fields.font_size')}</span>
-                        <input type="number" min="0" value={field.font_size} oninput={(event) => (field.font_size = Number(event.currentTarget.value) || 0)} class="field-input mt-1 block w-full text-xs" />
-                      </label>
-                      <label class="block text-xs text-foreground sm:col-span-2">
-                        <span class="text-muted-foreground">{$t('notetype.fields.description')}</span>
-                        <input type="text" value={field.description} oninput={(event) => (field.description = event.currentTarget.value)} class="field-input mt-1 block w-full text-xs" />
-                      </label>
-                    </div>
-                  </details>
+                  {#if isMetaField(field)}
+                    <p class="mt-2 text-xs text-muted-foreground" data-testid={`notetype-field-meta-note-${field.id}`}>
+                      {$t('notetype.fields.meta_locked')}
+                    </p>
+                  {:else}
+                    <details class="mt-2">
+                      <summary class="cursor-pointer text-xs text-muted-foreground">{$t('notetype.fields.options')}</summary>
+                      <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                        <label class="flex items-center gap-2 text-xs text-foreground">
+                          <input type="checkbox" checked={field.sticky} onchange={(event) => (field.sticky = event.currentTarget.checked)} />
+                          {$t('notetype.fields.sticky')}
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-foreground">
+                          <input type="checkbox" checked={field.rtl} onchange={(event) => (field.rtl = event.currentTarget.checked)} />
+                          {$t('notetype.fields.rtl')}
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-foreground">
+                          <input type="checkbox" checked={field.plain_text} onchange={(event) => (field.plain_text = event.currentTarget.checked)} />
+                          {$t('notetype.fields.plain_text')}
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-foreground">
+                          <input type="checkbox" checked={field.collapsed} onchange={(event) => (field.collapsed = event.currentTarget.checked)} />
+                          {$t('notetype.fields.collapsed')}
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-foreground">
+                          <input type="checkbox" checked={field.exclude_from_search ?? false} onchange={(event) => (field.exclude_from_search = event.currentTarget.checked)} />
+                          {$t('notetype.fields.exclude_from_search')}
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-foreground">
+                          <input type="checkbox" checked={field.prevent_deletion ?? false} onchange={(event) => (field.prevent_deletion = event.currentTarget.checked)} />
+                          {$t('notetype.fields.prevent_deletion')}
+                        </label>
+                        <label class="block text-xs text-foreground">
+                          <span class="text-muted-foreground">{$t('notetype.fields.font')}</span>
+                          <input type="text" value={field.font} oninput={(event) => (field.font = event.currentTarget.value)} class="field-input mt-1 block w-full text-xs" />
+                        </label>
+                        <label class="block text-xs text-foreground">
+                          <span class="text-muted-foreground">{$t('notetype.fields.font_size')}</span>
+                          <input type="number" min="0" value={field.font_size} oninput={(event) => (field.font_size = Number(event.currentTarget.value) || 0)} class="field-input mt-1 block w-full text-xs" />
+                        </label>
+                        <label class="block text-xs text-foreground sm:col-span-2">
+                          <span class="text-muted-foreground">{$t('notetype.fields.description')}</span>
+                          <input type="text" value={field.description} oninput={(event) => (field.description = event.currentTarget.value)} class="field-input mt-1 block w-full text-xs" />
+                        </label>
+                      </div>
+                    </details>
+                  {/if}
                 </li>
               {/each}
             </ul>
@@ -1462,7 +1422,7 @@
                               const template = draft!.config.templates.find((entry) => entry.id === selectedTemplateId);
                               if (template) setBinding(template, role.name, value);
                             }}
-                            options={draft.config.fields.map((field) => ({ value: field.id, label: field.name }))}
+                            options={answerBindingFields.map((field) => ({ value: field.id, label: field.name }))}
                             placeholder={$t('notetype.answer.unbound')}
                             ariaLabel={$t('notetype.answer.role', { role: roleLabel(role) })}
                           />
@@ -1474,46 +1434,6 @@
               </div>
             {/if}
           </section>
-
-          <!-- Cloze alternatives: note-type level, enabled when any template declares cloze_blanks -->
-          {#if hasClozeBlanksTemplate}
-            <section class="rounded-lg border border-border p-4" data-testid="notetype-cloze-alternatives">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <h2 class="text-sm font-semibold text-foreground">{$t('notetype.cloze_alternatives.title')}</h2>
-                  <p class="mt-0.5 text-xs text-muted-foreground">{$t('notetype.cloze_alternatives.hint')}</p>
-                </div>
-                {#if hasMetaField}
-                  <div class="flex items-center gap-2">
-                    <Badge variant="neutral" testId="notetype-cloze-alternatives-status">
-                      {$t('notetype.cloze_alternatives.configured')}
-                    </Badge>
-                    {#if metaMissingExclude}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        class="h-6 text-xs text-amber-700 dark:text-amber-300"
-                        testId="notetype-cloze-alternatives-fix-flag"
-                        onclick={normalizeMetaFlag}
-                      >
-                        {$t('notetype.cloze_alternatives.fix_search_flag')}
-                      </Button>
-                    {/if}
-                  </div>
-                {:else}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    class="text-xs"
-                    testId="notetype-cloze-alternatives-enable"
-                    onclick={enableClozeAlternatives}
-                  >
-                    {$t('notetype.cloze_alternatives.enable')}
-                  </Button>
-                {/if}
-              </div>
-            </section>
-          {/if}
 
           <!-- Styling -->
           <section class="rounded-lg border border-border p-4" data-testid="notetype-css">
@@ -1670,7 +1590,7 @@
           <h3 class="text-sm font-semibold text-foreground">{$t('notetype.change.fields')}</h3>
           <p class="mt-0.5 text-xs text-muted-foreground">{$t('notetype.change.field_hint')}</p>
           <div class="mt-2 space-y-2">
-            {#each changeTargetFields as field (field.id)}
+            {#each changeTargetRows as field (field.id)}
               <div class="grid items-center gap-2 sm:grid-cols-[10rem_minmax(0,1fr)]">
                 <span class="text-sm text-foreground">{field.name}</span>
                 <Select
@@ -1912,24 +1832,6 @@
       </Button>
       <Button variant="danger" onclick={() => void confirmDelete()} loading={deleting} testId="notetype-delete-confirm">
         <span>{deletePurgeImpact ? $t('notetype.purge.confirm') : $t('notetype.type.delete')}</span>
-      </Button>
-    </div>
-  </Dialog>
-
-  <!-- Delete engram_meta confirmation dialog -->
-  <Dialog
-    open={metaDeleteConfirmOpen}
-    onOpenChange={(open) => { if (!open) metaDeleteConfirmOpen = false; }}
-    title={$t('notetype.meta.delete_title')}
-    description={$t('notetype.meta.delete_warning')}
-    testId="notetype-meta-delete-dialog"
-  >
-    <div class="mt-4 flex justify-end gap-2">
-      <Button variant="outline" onclick={() => (metaDeleteConfirmOpen = false)} testId="notetype-meta-delete-cancel">
-        <span>{$t('notetype.meta.delete_cancel')}</span>
-      </Button>
-      <Button variant="danger" onclick={confirmDeleteMeta} testId="notetype-meta-delete-confirm">
-        <span>{$t('notetype.meta.delete_confirm')}</span>
       </Button>
     </div>
   </Dialog>

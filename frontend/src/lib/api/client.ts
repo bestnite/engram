@@ -54,6 +54,8 @@ import {
   type SetupRequest,
   type SetupResponse,
   type PackageImportReport,
+  type DeckPackageExportOptions,
+  type DecksZipExportRequest,
   type TOTPStatus,
   type TOTPBeginResponse,
   type TOTPConfirmResponse,
@@ -301,7 +303,7 @@ export class ApiClient {
   }
 
   /** Download an existing deck package attachment using the same-origin session. */
-  async downloadDeckPackage(deckId: string, options: { includeProgress?: boolean; includeMedia?: boolean; includeReviews?: boolean; includeWeights?: boolean } = {}): Promise<{ blob: Blob; filename: string }> {
+  async downloadDeckPackage(deckId: string, options: DeckPackageExportOptions = {}): Promise<{ blob: Blob; filename: string }> {
     if (options.includeReviews && !options.includeProgress) {
       throw new ApiClientError('Review history requires progress export', { status: 400, code: 'invalid_request' });
     }
@@ -312,6 +314,7 @@ export class ApiClient {
     if (options.includeReviews) params.set('include_reviews', '1');
     if (options.includeWeights) params.set('include_weights', '1');
     if (!params.has('include_media')) params.set('include_media', '1');
+    params.set('include_engram_meta', options.includeEngramMeta === false ? '0' : '1');
     const query = params.toString();
     const path = `/api/v1/decks/${encodeURIComponent(String(deckId))}/package${query ? `?${query}` : ''}`;
     const headers = new Headers({ Accept: 'application/octet-stream, application/zip' });
@@ -658,7 +661,7 @@ export class ApiClient {
   /** Export the selected deck packages as a single zip archive (POST /api/v1/decks/export-zip). */
   async exportDecksZip(
     deckIds: string[],
-    options: { includeMedia?: boolean; includeProgress?: boolean; includeReviews?: boolean; includeWeights?: boolean } = {}
+    options: DeckPackageExportOptions = {}
   ): Promise<{ blob: Blob; filename: string }> {
     if (!this.csrfToken) {
       await this.getSession();
@@ -670,17 +673,19 @@ export class ApiClient {
     if (this.csrfToken) {
       headers.set('X-CSRF-Token', this.csrfToken);
     }
+    const body: DecksZipExportRequest = {
+      deck_ids: deckIds,
+      include_media: options.includeMedia ?? true,
+      include_progress: options.includeProgress ?? false,
+      include_reviews: options.includeReviews ?? false,
+      include_weights: options.includeWeights ?? false,
+      include_engram_meta: options.includeEngramMeta ?? true,
+    };
     const res = await this.fetchFn(this.baseUrl ? `${this.baseUrl}/api/v1/decks/export-zip` : '/api/v1/decks/export-zip', {
       method: 'POST',
       headers,
       credentials: 'same-origin',
-      body: JSON.stringify({
-        deck_ids: deckIds,
-        include_media: options.includeMedia ?? true,
-        include_progress: options.includeProgress ?? false,
-        include_reviews: options.includeReviews ?? false,
-        include_weights: options.includeWeights ?? false,
-      }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       let envelope: any = null;

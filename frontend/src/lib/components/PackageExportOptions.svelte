@@ -13,6 +13,7 @@
     includeProgress?: boolean;
     includeReviews?: boolean;
     includeWeights?: boolean;
+    includeEngramMeta?: boolean;
   }
 
   let {
@@ -20,6 +21,7 @@
     includeProgress = $bindable(false),
     includeReviews = $bindable(false),
     includeWeights = $bindable(false),
+    includeEngramMeta = $bindable(true),
   }: Props = $props();
 </script>
 
@@ -47,4 +49,15 @@
     <Checkbox bind:checked={includeWeights} label={$t('package.export.include_weights')} testId="export-include-weights" />
     <span>{$t('package.export.include_weights')}</span>
   </label>
+  <div class="space-y-1">
+    <label class="flex items-center gap-2 cursor-pointer">
+      <Checkbox
+        bind:checked={includeEngramMeta}
+        label={$t('package.export.include_engram_meta')}
+        testId="export-include-engram-meta"
+      />
+      <span>{$t('package.export.include_engram_meta')}</span>
+    </label>
+    <p class="pl-6 text-xs text-muted-foreground">{$t('package.export.include_engram_meta_hint')}</p>
+  </div>
 </div>

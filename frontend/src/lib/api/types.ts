@@ -659,6 +659,29 @@ export interface DeckPackageImportOptions {
   presetId?: string;
 }
 
+/** Switches for the single-deck .apkg download (GET /api/v1/decks/:id/package). */
+export interface DeckPackageExportOptions {
+  includeMedia?: boolean;
+  includeProgress?: boolean;
+  includeReviews?: boolean;
+  includeWeights?: boolean;
+  /**
+   * Whether the package carries the built-in `engram_meta` field and its values. On by default; off means
+   * a package re-imported into engram gets an empty field, so the cloze alternative wordings are lost.
+   */
+  includeEngramMeta?: boolean;
+}
+
+/** POST /api/v1/decks/export-zip request body (Go: internal/api/package_download.go). */
+export interface DecksZipExportRequest {
+  deck_ids: string[];
+  include_media: boolean;
+  include_progress: boolean;
+  include_reviews: boolean;
+  include_weights: boolean;
+  include_engram_meta: boolean;
+}
+
 /**
  * Study stats summary (aligned with the Go backend's internal/api/service.go:StatsSummary)
  */

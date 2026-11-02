@@ -45,9 +45,55 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(result.filename).toBe('deck-8.apkg');
       expect(await result.blob.text()).toBe('package-bytes');
       const [url, init] = mockFetch.mock.calls[0]!;
-      expect(url).toBe('/api/v1/decks/8%20%2F/package?format=apkg&include_progress=1&include_media=0&include_reviews=1&include_weights=1');
+      expect(url).toBe('/api/v1/decks/8%20%2F/package?format=apkg&include_progress=1&include_media=0&include_reviews=1&include_weights=1&include_engram_meta=1');
       expect(init?.credentials).toBe('same-origin');
       expect(new Headers(init?.headers).get('Accept')).toBe('application/octet-stream, application/zip');
+    });
+
+    it('sends the cloze metadata switch on by default and off when asked', async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response(new Blob(['on']), { status: 200 }))
+        .mockResolvedValueOnce(new Response(new Blob(['off']), { status: 200 }));
+
+      await client.downloadDeckPackage('5');
+      await client.downloadDeckPackage('6', { includeEngramMeta: false });
+
+      expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/decks/5/package?format=apkg&include_media=1&include_engram_meta=1');
+      expect(mockFetch.mock.calls[1]?.[0]).toBe('/api/v1/decks/6/package?format=apkg&include_media=1&include_engram_meta=0');
+    });
+
+    it('posts the cloze metadata switch in the batch export body', async () => {
+      client.setCsrfToken('batch-csrf');
+      mockFetch
+        .mockResolvedValueOnce(new Response(new Blob(['zip']), { status: 200 }))
+        .mockResolvedValueOnce(new Response(new Blob(['zip']), { status: 200 }));
+
+      await client.exportDecksZip(['d1', 'd2']);
+      await client.exportDecksZip(['d3'], {
+        includeMedia: false,
+        includeProgress: true,
+        includeReviews: true,
+        includeWeights: true,
+        includeEngramMeta: false,
+      });
+
+      expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/decks/export-zip');
+      expect(JSON.parse(String(mockFetch.mock.calls[0]?.[1]?.body))).toEqual({
+        deck_ids: ['d1', 'd2'],
+        include_media: true,
+        include_progress: false,
+        include_reviews: false,
+        include_weights: false,
+        include_engram_meta: true,
+      });
+      expect(JSON.parse(String(mockFetch.mock.calls[1]?.[1]?.body))).toEqual({
+        deck_ids: ['d3'],
+        include_media: false,
+        include_progress: true,
+        include_reviews: true,
+        include_weights: true,
+        include_engram_meta: false,
+      });
     });
 
     it('decodes a non-ASCII deck title from filename* (the exact header the server sends)', async () => {

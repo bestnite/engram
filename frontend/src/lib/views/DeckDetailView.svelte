@@ -123,6 +123,7 @@
   let includeProgress = $state(false);
   let includeReviews = $state(false);
   let includeWeights = $state(false);
+  let includeEngramMeta = $state(true);
 
   const perPage = 50;
 
@@ -478,7 +479,7 @@
     exporting = true;
     exportError = false;
     try {
-      const { blob, filename } = await apiClient.downloadDeckPackage(deckId, { includeMedia, includeProgress, includeReviews, includeWeights });
+      const { blob, filename } = await apiClient.downloadDeckPackage(deckId, { includeMedia, includeProgress, includeReviews, includeWeights, includeEngramMeta });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -1061,7 +1062,7 @@
   title={$t('package.export.heading')}
   testId="deck-export-dialog"
 >
-  <PackageExportOptions bind:includeMedia bind:includeProgress bind:includeReviews bind:includeWeights />
+  <PackageExportOptions bind:includeMedia bind:includeProgress bind:includeReviews bind:includeWeights bind:includeEngramMeta />
 
   {#if exportError}
     <p role="alert" class="mt-3 text-sm text-destructive-foreground">{$t('package.export.failed')}</p>

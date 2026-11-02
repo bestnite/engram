@@ -52,6 +52,7 @@
   let includeProgress = $state(false);
   let includeReviews = $state(false);
   let includeWeights = $state(false);
+  let includeEngramMeta = $state(true);
 
   // Bulk delete state. The ids are captured when the dialog opens, so the confirmation text and the request
   // always describe the same set even if the selection were to change behind the dialog.
@@ -251,7 +252,7 @@
     batchExporting = true;
     batchExportError = null;
     try {
-      const { blob, filename } = await apiClient.exportDecksZip(selectedDeckIds, { includeMedia, includeProgress, includeReviews, includeWeights });
+      const { blob, filename } = await apiClient.exportDecksZip(selectedDeckIds, { includeMedia, includeProgress, includeReviews, includeWeights, includeEngramMeta });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -623,7 +624,7 @@
   title={$t('package.export.heading')}
   testId="decks-batch-export-dialog"
 >
-  <PackageExportOptions bind:includeMedia bind:includeProgress bind:includeReviews bind:includeWeights />
+  <PackageExportOptions bind:includeMedia bind:includeProgress bind:includeReviews bind:includeWeights bind:includeEngramMeta />
 
   {#if batchExportError}
     <p role="alert" class="mt-3 text-sm text-destructive-foreground">{$t(batchExportError)}</p>

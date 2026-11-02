@@ -9,7 +9,7 @@ import type { SupportedLocale } from '../lib/i18n/types';
 
 /**
  * Deck export dialog in DeckDetailView (package export options):
- * Offers the .apkg package format with four switches (media, progress, review history, weights)
+ * Offers the .apkg package format with five switches (media, progress, review history, weights, cloze metadata)
  * and no legacy format choice.
  */
 describe('DeckDetailView export dialog (package export options)', () => {
@@ -78,7 +78,7 @@ describe('DeckDetailView export dialog (package export options)', () => {
     await flush();
   }
 
-  it('opens the export dialog offering .apkg format and four switches, with no legacy format choice', async () => {
+  it('opens the export dialog offering .apkg format and five switches, with no legacy format choice', async () => {
     await setup('zh-CN');
     await openExportDialog();
 
@@ -95,6 +95,7 @@ describe('DeckDetailView export dialog (package export options)', () => {
     const progressCheck = document.body.querySelector('[data-testid="export-include-progress"]') as HTMLInputElement;
     const reviewsCheck = document.body.querySelector('[data-testid="export-include-reviews"]') as HTMLInputElement | null;
     const weightsCheck = document.body.querySelector('[data-testid="export-include-weights"]') as HTMLInputElement;
+    const engramMetaCheck = document.body.querySelector('[data-testid="export-include-engram-meta"]') as HTMLInputElement;
 
     const isChecked = (el: HTMLElement | null) => el !== null && el.getAttribute('data-state') === 'checked';
 
@@ -102,6 +103,7 @@ describe('DeckDetailView export dialog (package export options)', () => {
     expect(progressCheck).not.toBeNull();
     expect(reviewsCheck).toBeNull(); // Nested under progress, hidden until progress is checked
     expect(weightsCheck).not.toBeNull();
+    expect(engramMetaCheck).not.toBeNull();
 
     // Capture and log exported dialog state
     const capturedState = {
@@ -112,6 +114,7 @@ describe('DeckDetailView export dialog (package export options)', () => {
         includeProgress: { present: true, checked: isChecked(progressCheck) },
         includeReviews: { present: reviewsCheck !== null, checked: isChecked(reviewsCheck) },
         includeWeights: { present: true, checked: isChecked(weightsCheck) },
+        includeEngramMeta: { present: true, checked: isChecked(engramMetaCheck) },
       },
       legacyFormatOffered: false,
     };
@@ -123,6 +126,7 @@ describe('DeckDetailView export dialog (package export options)', () => {
     expect(capturedState.switches.includeProgress.checked).toBe(false);
     expect(capturedState.switches.includeReviews.present).toBe(false);
     expect(capturedState.switches.includeWeights.checked).toBe(false);
+    expect(capturedState.switches.includeEngramMeta.checked).toBe(true);
     expect(capturedState.legacyFormatOffered).toBe(false);
   });
 
@@ -154,6 +158,7 @@ describe('DeckDetailView export dialog (package export options)', () => {
       includeProgress: false,
       includeReviews: false,
       includeWeights: false,
+      includeEngramMeta: true,
     });
   });
 
@@ -161,11 +166,12 @@ describe('DeckDetailView export dialog (package export options)', () => {
     const download = await setup('zh-CN');
     await openExportDialog();
 
-    // Toggle options: media off, progress on, reviews on, weights on
+    // Toggle options: media off, progress on, reviews on, weights on, cloze metadata off
     await click('[data-testid="export-include-media"]');
     await click('[data-testid="export-include-progress"]');
     await click('[data-testid="export-include-reviews"]');
     await click('[data-testid="export-include-weights"]');
+    await click('[data-testid="export-include-engram-meta"]');
 
     const capturedConfiguredState = {
       format: '.apkg',
@@ -174,6 +180,7 @@ describe('DeckDetailView export dialog (package export options)', () => {
         includeProgress: true,
         includeReviews: true,
         includeWeights: true,
+        includeEngramMeta: false,
       },
       legacyFormatOffered: false,
     };
@@ -186,6 +193,7 @@ describe('DeckDetailView export dialog (package export options)', () => {
       includeProgress: true,
       includeReviews: true,
       includeWeights: true,
+      includeEngramMeta: false,
     });
   });
 

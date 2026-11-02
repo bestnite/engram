@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import NoteTypesView from '../lib/views/NoteTypesView.svelte';
-import { ApiClientError, type NoteType } from '../lib/api';
+import NoteEditView from '../lib/views/NoteEditView.svelte';
+import { ApiClientError, type NoteType, type NoteTypeField } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 import { routeStore, matchRoute } from '../lib/router';
 import { apiClient } from '../lib/api';
 
-describe('NoteTypesView cloze alternatives & engram_meta management', () => {
+/**
+ * The engram_meta field is built in for a note type whose template uses the cloze_blanks answer control.
+ * The note-type editor must present it as a locked row: no enable/repair action, no rename, no move, no
+ * delete, no field options, no answer-role binding and no row in the change-note-type field selector.
+ */
+describe('NoteTypesView built-in cloze metadata field', () => {
   let instance: ReturnType<typeof mount> | null = null;
   let target: HTMLElement;
   let restoreIframeStub: (() => void) | null = null;
@@ -56,6 +62,38 @@ describe('NoteTypesView cloze alternatives & engram_meta management', () => {
     flushSync();
   }
 
+  function field(overrides: Partial<NoteTypeField> & { id: string; name: string }): NoteTypeField {
+    return {
+      sticky: false,
+      rtl: false,
+      font: '',
+      font_size: 0,
+      description: '',
+      plain_text: false,
+      collapsed: false,
+      exclude_from_search: false,
+      tag: null,
+      prevent_deletion: false,
+      ...overrides,
+    };
+  }
+
+  function textField(id = 'f_text'): NoteTypeField {
+    return field({ id, name: 'Text' });
+  }
+
+  function metaField(id = 'f_meta'): NoteTypeField {
+    return field({
+      id,
+      name: 'engram_meta',
+      plain_text: true,
+      collapsed: true,
+      exclude_from_search: true,
+      // A value the editor must not touch while the row is locked.
+      description: 'managed by the server',
+    });
+  }
+
   function clozeNoteType(): NoteType {
     return {
       id: 'nt1',
@@ -64,22 +102,7 @@ describe('NoteTypesView cloze alternatives & engram_meta management', () => {
       version: 1,
       config: {
         kind: 'cloze',
-        fields: [
-          {
-            id: 'f1',
-            name: 'Text',
-            sticky: false,
-            rtl: false,
-            font: '',
-            font_size: 0,
-            description: '',
-            plain_text: false,
-            collapsed: false,
-            exclude_from_search: false,
-            tag: null,
-            prevent_deletion: false,
-          },
-        ],
+        fields: [textField(), metaField()],
         templates: [
           {
             id: 't1',
@@ -88,7 +111,7 @@ describe('NoteTypesView cloze alternatives & engram_meta management', () => {
             afmt: '{{cloze:Text}}',
             answer: {
               control: 'cloze_blanks',
-              bindings: { text: 'f1' },
+              bindings: { text: 'f_text' },
             },
           },
         ],
@@ -99,7 +122,36 @@ describe('NoteTypesView cloze alternatives & engram_meta management', () => {
     };
   }
 
-  async function setup(initialType = clozeNoteType()) {
+  /** A second cloze type the change dialog can target, carrying its own built-in metadata field. */
+  function otherClozeType(): NoteType {
+    return {
+      id: 'nt2',
+      deck_id: 'd1',
+      name: 'Other Cloze Type',
+      version: 1,
+      config: {
+        kind: 'cloze',
+        fields: [textField('tg_text'), metaField('tg_meta')],
+        templates: [
+          {
+            id: 'tg_t1',
+            name: 'Cloze',
+            qfmt: '{{cloze:Text}}',
+            afmt: '{{cloze:Text}}',
+            answer: {
+              control: 'cloze_blanks',
+              bindings: { text: 'tg_text' },
+            },
+          },
+        ],
+        css: '',
+      },
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+  }
+
+  async function setup(types: NoteType[] = [clozeNoteType()]) {
     setLocale('zh-CN');
     routeStore.set(matchRoute('/decks/d1/note-types'));
     target = document.createElement('div');
@@ -108,7 +160,7 @@ describe('NoteTypesView cloze alternatives & engram_meta management', () => {
       target,
       props: {
         initialLoading: false,
-        initialNoteTypes: [initialType],
+        initialNoteTypes: types,
         initialStocks: [],
         initialControls: [
           {
@@ -123,243 +175,149 @@ describe('NoteTypesView cloze alternatives & engram_meta management', () => {
     return { target };
   }
 
-  it('shows enablement only for a cloze_blanks answer control', async () => {
-    const type = clozeNoteType();
-    type.config.templates[0]!.answer = undefined;
-    await setup(type);
+  it('offers no enable or repair action for a cloze_blanks note type', async () => {
+    await setup();
     expect(target.querySelector('[data-testid="notetype-cloze-alternatives"]')).toBeNull();
-  });
-
-  it('treats a manually added engram_meta field as enabled and excludes it from search on save', async () => {
-    await setup();
-    (target.querySelector('[data-testid="notetype-field-add"]') as HTMLButtonElement).click();
-    await flush();
-    const inputs = target.querySelectorAll<HTMLInputElement>('input[data-testid^="notetype-field-name-"]');
-    const added = inputs[inputs.length - 1]!;
-    added.value = 'engram_meta';
-    added.dispatchEvent(new Event('change', { bubbles: true }));
-    await flush();
-    expect(target.querySelector('[data-testid="notetype-cloze-alternatives-status"]')).not.toBeNull();
     expect(target.querySelector('[data-testid="notetype-cloze-alternatives-enable"]')).toBeNull();
-    const update = vi.spyOn(apiClient, 'updateNoteType');
-    update.mockResolvedValueOnce({ ...clozeNoteType(), cards_added: 0, cards_removed: 0, reviews_on_removed_cards: 0 } as any);
-    update.mockResolvedValueOnce({ ...clozeNoteType(), version: 2 } as any);
-    (target.querySelector('[data-testid="notetype-save"]') as HTMLButtonElement).click();
-    await flush();
-    const fields = update.mock.calls[0]![2].config.fields.filter(f => f.name === 'engram_meta');
-    expect(fields).toHaveLength(1);
-    expect(fields[0]!.exclude_from_search).toBe(true);
+    expect(target.querySelector('[data-testid="notetype-cloze-alternatives-fix-flag"]')).toBeNull();
+    expect(target.querySelector('[data-testid="notetype-cloze-alternatives-status"]')).toBeNull();
   });
 
-  it('uses the existing impact confirmation for enablement combined with template changes', async () => {
+  it('shows the built-in metadata field as a visible, locked row', async () => {
     await setup();
-    (target.querySelector('[data-testid="notetype-cloze-alternatives-enable"]') as HTMLButtonElement).click();
-    const qfmt = target.querySelector('[data-testid="notetype-template-qfmt"]') as HTMLTextAreaElement;
-    qfmt.value = '{{cloze:Text}} changed';
-    qfmt.dispatchEvent(new Event('input', { bubbles: true }));
-    await flush();
-    const update = vi.spyOn(apiClient, 'updateNoteType');
-    update.mockResolvedValueOnce({ ...clozeNoteType(), cards_added: 2, cards_removed: 1, reviews_on_removed_cards: 3 } as any);
-    update.mockResolvedValueOnce({ ...clozeNoteType(), version: 2 } as any);
-    (target.querySelector('[data-testid="notetype-save"]') as HTMLButtonElement).click();
-    await flush();
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(update.mock.calls[0]![2].config.templates[0]!.qfmt).toBe('{{cloze:Text}} changed');
-    expect(document.body.querySelector('[data-testid="notetype-impact-added"]')?.textContent).toBe('2');
-    expect(document.body.querySelector('[data-testid="notetype-impact-removed"]')?.textContent).toBe('1');
-    (document.body.querySelector('[data-testid="notetype-impact-confirm"]') as HTMLButtonElement).click();
-    await flush();
-    expect(update).toHaveBeenCalledTimes(2);
-    expect(update.mock.calls[1]![2]).toMatchObject({ dry_run: false, confirm_card_removal: true });
+
+    const row = target.querySelector('[data-testid="notetype-field-f_meta"]');
+    expect(row).not.toBeNull();
+
+    const name = target.querySelector('[data-testid="notetype-field-name-f_meta"]') as HTMLInputElement;
+    expect(name).not.toBeNull();
+    expect(name.value).toBe('engram_meta');
+    expect(name.readOnly).toBe(true);
+
+    expect((target.querySelector('[data-testid="notetype-field-up-f_meta"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((target.querySelector('[data-testid="notetype-field-down-f_meta"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((target.querySelector('[data-testid="notetype-field-delete-f_meta"]') as HTMLButtonElement).disabled).toBe(true);
+
+    // The ordinary field options stay closed for this row; a read-only explanation takes their place.
+    expect(row!.querySelector('details')).toBeNull();
+    expect(target.querySelector('[data-testid="notetype-field-meta-note-f_meta"]')).not.toBeNull();
+
+    // The ordinary field above it keeps its editable name and its options.
+    const text = target.querySelector('[data-testid="notetype-field-name-f_text"]') as HTMLInputElement;
+    expect(text.readOnly).toBe(false);
+    expect(target.querySelector('[data-testid="notetype-field-f_text"] details')).not.toBeNull();
   });
 
-  it('enables cloze alternatives by adding engram_meta, saves with dry_run 0/0 and no new impact dialog, setting exclude_from_search flag', async () => {
-    const { target } = await setup();
+  it('saves the locked row unchanged instead of dropping or rewriting it', async () => {
+    await setup();
 
-    const altSection = target.querySelector('[data-testid="notetype-cloze-alternatives"]');
-    expect(altSection).not.toBeNull();
-
-    const enableBtn = target.querySelector('[data-testid="notetype-cloze-alternatives-enable"]') as HTMLButtonElement;
-    expect(enableBtn).not.toBeNull();
-    enableBtn.click();
+    // Even a programmatic rename event and a move click cannot rewrite the built-in field.
+    const name = target.querySelector('[data-testid="notetype-field-name-f_meta"]') as HTMLInputElement;
+    name.value = 'renamed_meta';
+    name.dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+    (target.querySelector('[data-testid="notetype-field-up-f_meta"]') as HTMLButtonElement).click();
     await flush();
 
-    // Status badge is now shown as "已配置"
-    const status = target.querySelector('[data-testid="notetype-cloze-alternatives-status"]');
-    expect(status).not.toBeNull();
-    expect(status!.textContent).toContain('已配置');
-
-    // Field list now contains engram_meta
-    const fieldNames = Array.from(target.querySelectorAll('input[data-testid^="notetype-field-name-"]')).map(
-      (el) => (el as HTMLInputElement).value
-    );
-    expect(fieldNames).toContain('engram_meta');
-
-    // Mock updateNoteType for dry_run and real save
     const updateSpy = vi.spyOn(apiClient, 'updateNoteType');
-    // First call is dry run with 0 added / 0 removed
     updateSpy.mockResolvedValueOnce({
       ...clozeNoteType(),
       dry_run: true,
       cards_added: 0,
       cards_removed: 0,
       reviews_on_removed_cards: 0,
-    } as any);
-    // Second call is real save
-    updateSpy.mockResolvedValueOnce({
-      ...clozeNoteType(),
-      dry_run: false,
-      version: 2,
-    } as any);
+    } as never);
+    updateSpy.mockResolvedValueOnce({ ...clozeNoteType(), dry_run: false, version: 2 } as never);
 
-    const saveBtn = target.querySelector('[data-testid="notetype-save"]') as HTMLButtonElement;
-    expect(saveBtn).not.toBeNull();
-    saveBtn.click();
+    (target.querySelector('[data-testid="notetype-save"]') as HTMLButtonElement).click();
     await flush();
 
-    // Assert update was called twice (dry run then commit)
     expect(updateSpy).toHaveBeenCalledTimes(2);
-    expect(updateSpy.mock.calls[0]?.[2]).toMatchObject({ dry_run: true });
-    expect(updateSpy.mock.calls[1]?.[2]).toMatchObject({ dry_run: false, confirm_card_removal: false });
-
-    // Assert no new impact dialog was opened
-    expect(document.body.querySelector('[data-testid="notetype-impact"]')).toBeNull();
-
-    // Assert the saved config has the engram_meta field with exclude_from_search set to true (exclude flag)
     const savedFields = updateSpy.mock.calls[1]![2].config.fields;
-    const metaField = savedFields.find((f: any) => f.name === 'engram_meta');
-    expect(metaField).toBeDefined();
-    expect(metaField!.exclude_from_search).toBe(true);
-    expect(metaField!.plain_text).toBe(true);
+    const metaFields = savedFields.filter((f) => f.name === 'engram_meta');
+    expect(metaFields).toHaveLength(1);
+    expect(metaFields[0]!.id).toBe('f_meta');
+    expect(metaFields[0]!.description).toBe('managed by the server');
+    expect(savedFields.findIndex((f) => f.name === 'engram_meta')).toBe(1);
+    expect(document.body.querySelector('[data-testid="notetype-meta-delete-dialog"]')).toBeNull();
   });
 
-  it('reuses existing field without replacing its ID or values when engram_meta already exists (reuseID)', async () => {
-    const existingType = clozeNoteType();
-    existingType.config.fields.push({
-      id: 'f_legacy_meta',
-      name: 'engram_meta',
-      sticky: false,
-      rtl: false,
-      font: '',
-      font_size: 0,
-      description: 'legacy description to keep',
-      plain_text: false,
-      collapsed: true,
-      exclude_from_search: false, // not yet excluded
-      tag: null,
-      prevent_deletion: false,
-    });
+  it('omits the metadata field from the answer-role binding choices', async () => {
+    await setup();
 
-    const { target } = await setup(existingType);
-
-    // Field presence enables reading; fixing its search flag must retain its ID.
-    expect(target.querySelector('[data-testid="notetype-cloze-alternatives-enable"]')).toBeNull();
-    const fixFlagBtn = target.querySelector('[data-testid="notetype-cloze-alternatives-fix-flag"]') as HTMLButtonElement;
-    expect(fixFlagBtn).not.toBeNull();
-    fixFlagBtn.click();
+    const trigger = target.querySelector('[data-testid="notetype-answer-binding-text"]') as HTMLElement;
+    expect(trigger).not.toBeNull();
+    trigger.click();
     await flush();
 
-    // Status is now "已配置"
-    const status = target.querySelector('[data-testid="notetype-cloze-alternatives-status"]');
-    expect(status).not.toBeNull();
-    expect(status!.textContent).toContain('已配置');
+    const labels = Array.from(document.body.querySelectorAll('[role="option"]')).map(
+      (el) => el.textContent?.trim() ?? '',
+    );
+    expect(labels).toContain('Text');
+    expect(labels).not.toContain('engram_meta');
+  });
 
-    // Mock updateNoteType for save
-    const updateSpy = vi.spyOn(apiClient, 'updateNoteType');
-    updateSpy.mockResolvedValueOnce({
-      ...existingType,
+  it('omits the metadata field from the change dialog rows but still maps it by name', async () => {
+    await setup([clozeNoteType(), otherClozeType()]);
+
+    (target.querySelector('[data-testid="notetype-change-open"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(document.body.querySelector('[data-testid="notetype-change-field-tg_text"]')).not.toBeNull();
+    expect(document.body.querySelector('[data-testid="notetype-change-field-tg_meta"]')).toBeNull();
+
+    // The source dropdown of the ordinary target field must not offer the metadata field, because
+    // choosing it would copy the metadata JSON into a content field.
+    const sourceTrigger = document.body.querySelector('[data-testid="notetype-change-field-tg_text"]') as HTMLElement;
+    sourceTrigger.click();
+    await flush();
+    const sourceLabels = Array.from(document.body.querySelectorAll('[role="option"]')).map(
+      (el) => el.textContent?.trim() ?? '',
+    );
+    expect(sourceLabels).toContain('Text');
+    expect(sourceLabels).not.toContain('engram_meta');
+    sourceTrigger.click();
+    await flush();
+
+    const changeSpy = vi.spyOn(apiClient, 'changeNoteType').mockResolvedValueOnce({
       dry_run: true,
+      notes_moved: 0,
+      cards_moved: 0,
       cards_added: 0,
       cards_removed: 0,
       reviews_on_removed_cards: 0,
-    } as any);
-    updateSpy.mockResolvedValueOnce({
-      ...existingType,
-      dry_run: false,
-      version: 2,
-    } as any);
-
-    const saveBtn = target.querySelector('[data-testid="notetype-save"]') as HTMLButtonElement;
-    expect(saveBtn).not.toBeNull();
-    saveBtn.click();
+    } as never);
+    (document.body.querySelector('[data-testid="notetype-change-preview"]') as HTMLButtonElement).click();
     await flush();
 
-    // Assert save without impact dialog
-    expect(document.body.querySelector('[data-testid="notetype-impact"]')).toBeNull();
-
-    // Assert saved fields list: exactly one engram_meta field, reusing existing ID and preserving description
-    const savedFields = updateSpy.mock.calls[1]![2].config.fields;
-    const metaFields = savedFields.filter((f: any) => f.name === 'engram_meta');
-    expect(metaFields).toHaveLength(1);
-    expect(metaFields[0]!.id).toBe('f_legacy_meta'); // Reused ID!
-    expect(metaFields[0]!.description).toBe('legacy description to keep'); // Preserved values!
-    expect(metaFields[0]!.exclude_from_search).toBe(true); // Exclude flag updated!
+    expect(changeSpy).toHaveBeenCalledTimes(1);
+    expect(changeSpy.mock.calls[0]![2].target_note_type).toBe('nt2');
+    // The same-name automatic mapping still carries the metadata field to the target type.
+    expect(changeSpy.mock.calls[0]![2].field_mapping).toEqual({
+      f_text: 'tg_text',
+      f_meta: 'tg_meta',
+    });
   });
 
-  it('shows warning dialog when attempting to delete engram_meta from field list, cancels safely or confirms deletion', async () => {
-    const typeWithMeta = clozeNoteType();
-    typeWithMeta.config.fields.push({
-      id: 'f_meta',
-      name: 'engram_meta',
-      sticky: false,
-      rtl: false,
-      font: '',
-      font_size: 0,
-      description: '',
-      plain_text: true,
-      collapsed: true,
-      exclude_from_search: true,
-      tag: null,
-      prevent_deletion: false,
-    });
+  it('keeps the note editor alternatives editor for a cloze_blanks note type', async () => {
+    setLocale('zh-CN');
+    routeStore.set(matchRoute('/decks/d1/notes/new'));
+    vi.spyOn(apiClient, 'listNoteTypes').mockResolvedValue({ note_types: [clozeNoteType()] } as never);
+    vi.spyOn(apiClient, 'frameMediaBase').mockResolvedValue('');
+    vi.spyOn(apiClient, 'previewNoteDraft').mockResolvedValue({ cards: [] } as never);
 
-    const { target } = await setup(typeWithMeta);
-
-    // Status badge shows configured
-    const status = target.querySelector('[data-testid="notetype-cloze-alternatives-status"]');
-    expect(status).not.toBeNull();
-    expect(status!.textContent).toContain('已配置');
-
-    // Click delete trash button on the engram_meta field item in fields list
-    const fieldDeleteBtn = target.querySelector('[data-testid="notetype-field-delete-f_meta"]') as HTMLButtonElement;
-    expect(fieldDeleteBtn).not.toBeNull();
-    fieldDeleteBtn.click();
+    target = document.createElement('div');
+    document.body.appendChild(target);
+    instance = mount(NoteEditView, { target });
     await flush();
 
-    // Dialog is open
-    const dialog = document.body.querySelector('[data-testid="notetype-meta-delete-dialog"]');
-    expect(dialog).not.toBeNull();
-    expect(dialog!.textContent).toContain('后续保存该类型下的笔记会丢弃所有元数据值，导出不再携带');
-
-    // 1. Cancel deletion
-    const cancelBtn = document.body.querySelector('[data-testid="notetype-meta-delete-cancel"]') as HTMLButtonElement;
-    expect(cancelBtn).not.toBeNull();
-    cancelBtn.click();
-    await flush();
-
-    // Field is still present
-    let fieldNames = Array.from(target.querySelectorAll('input[data-testid^="notetype-field-name-"]')).map(
-      (el) => (el as HTMLInputElement).value
-    );
-    expect(fieldNames).toContain('engram_meta');
-
-    // 2. Click delete again and confirm
-    fieldDeleteBtn.click();
-    await flush();
-    const confirmBtn = document.body.querySelector('[data-testid="notetype-meta-delete-confirm"]') as HTMLButtonElement;
-    expect(confirmBtn).not.toBeNull();
-    confirmBtn.click();
-    await flush();
-
-    // Field is now deleted
-    fieldNames = Array.from(target.querySelectorAll('input[data-testid^="notetype-field-name-"]')).map(
-      (el) => (el as HTMLInputElement).value
-    );
-    expect(fieldNames).not.toContain('engram_meta');
+    expect(target.querySelector('[data-testid="cloze-alternatives-editor"]')).not.toBeNull();
+    // The metadata value is still edited as raw JSON, never as an ordinary rich-text field.
+    expect(target.querySelector('[data-testid="note-field-engram_meta"]')).toBeNull();
   });
 
   it('displays localized error message when server rejects reserved prefix on save', async () => {
-    const { target } = await setup();
+    await setup();
     const updateSpy = vi.spyOn(apiClient, 'updateNoteType').mockRejectedValueOnce(
       new ApiClientError('以 engram_ 开头的字段名已保留，engram_meta 除外。', {
         status: 400,
