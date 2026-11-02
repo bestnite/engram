@@ -252,7 +252,7 @@ var schema11DDL = []string{
 func buildCollection(c *WriteCollection) ([]byte, error) {
 	file, err := os.CreateTemp("", "engram-anki-export-*.sqlite")
 	if err != nil {
-		return nil, fmt.Errorf("anki package: create collection file: %w", err)
+		return nil, fmt.Errorf("deck package: create collection file: %w", err)
 	}
 	path := file.Name()
 	file.Close()
@@ -260,59 +260,59 @@ func buildCollection(c *WriteCollection) ([]byte, error) {
 
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		return nil, fmt.Errorf("anki package: open collection: %w", err)
+		return nil, fmt.Errorf("deck package: open collection: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	defer db.Close()
 
 	tx, err := db.Begin()
 	if err != nil {
-		return nil, fmt.Errorf("anki package: begin collection: %w", err)
+		return nil, fmt.Errorf("deck package: begin collection: %w", err)
 	}
 	defer tx.Rollback()
 
 	for _, statement := range schema11DDL {
 		if _, err := tx.Exec(statement); err != nil {
-			return nil, fmt.Errorf("anki package: create collection schema: %w", err)
+			return nil, fmt.Errorf("deck package: create collection schema: %w", err)
 		}
 	}
 
 	models, err := json.Marshal(modelIndex(c.NoteTypes))
 	if err != nil {
-		return nil, fmt.Errorf("anki package: encode note types: %w", err)
+		return nil, fmt.Errorf("deck package: encode note types: %w", err)
 	}
 	decks, err := json.Marshal(deckIndex(c.Decks))
 	if err != nil {
-		return nil, fmt.Errorf("anki package: encode decks: %w", err)
+		return nil, fmt.Errorf("deck package: encode decks: %w", err)
 	}
 	dconf, err := json.Marshal(configIndex(c.DeckConfigs))
 	if err != nil {
-		return nil, fmt.Errorf("anki package: encode deck configs: %w", err)
+		return nil, fmt.Errorf("deck package: encode deck configs: %w", err)
 	}
 	if _, err := tx.Exec(`INSERT INTO col (id, crt, mod, scm, ver, dty, usn, ls, conf, models, decks, dconf, tags)
 VALUES (1, ?, ?, ?, ?, 0, 0, 0, '{}', ?, ?, ?, '{}')`,
 		c.CreatedAt, c.ModifiedMS, c.SchemaModifiedMS, apiVersion, string(models), string(decks), string(dconf)); err != nil {
-		return nil, fmt.Errorf("anki package: write col row: %w", err)
+		return nil, fmt.Errorf("deck package: write col row: %w", err)
 	}
 
 	noteStmt, err := tx.Prepare(`INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data)
 VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, 0, '')`)
 	if err != nil {
-		return nil, fmt.Errorf("anki package: prepare notes: %w", err)
+		return nil, fmt.Errorf("deck package: prepare notes: %w", err)
 	}
 	defer noteStmt.Close()
 	for i := range c.Notes {
 		n := &c.Notes[i]
 		if _, err := noteStmt.Exec(n.ID, n.GUID, n.NoteTypeID, n.Modified, ankiTags(n.Tags),
 			strings.Join(n.Fields, "\x1f"), n.SortField, fieldChecksum(n.SortField)); err != nil {
-			return nil, fmt.Errorf("anki package: write note %d: %w", n.ID, err)
+			return nil, fmt.Errorf("deck package: write note %d: %w", n.ID, err)
 		}
 	}
 
 	cardStmt, err := tx.Prepare(`INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
 VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)`)
 	if err != nil {
-		return nil, fmt.Errorf("anki package: prepare cards: %w", err)
+		return nil, fmt.Errorf("deck package: prepare cards: %w", err)
 	}
 	defer cardStmt.Close()
 	for i := range c.Cards {
@@ -328,37 +328,37 @@ VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)`)
 		}
 		encoded, err := json.Marshal(fields)
 		if err != nil {
-			return nil, fmt.Errorf("anki package: encode card %d data: %w", card.ID, err)
+			return nil, fmt.Errorf("deck package: encode card %d data: %w", card.ID, err)
 		}
 		data := string(encoded)
 		if _, err := cardStmt.Exec(card.ID, card.NoteID, card.DeckID, card.Ordinal, card.Modified,
 			card.Type, card.Queue, card.Due, card.Ivl, card.Factor, card.Reps, card.Lapses, card.Left, data); err != nil {
-			return nil, fmt.Errorf("anki package: write card %d: %w", card.ID, err)
+			return nil, fmt.Errorf("deck package: write card %d: %w", card.ID, err)
 		}
 	}
 
 	reviewStmt, err := tx.Prepare(`INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type)
 VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		return nil, fmt.Errorf("anki package: prepare revlog: %w", err)
+		return nil, fmt.Errorf("deck package: prepare revlog: %w", err)
 	}
 	defer reviewStmt.Close()
 	for i := range c.Reviews {
 		r := &c.Reviews[i]
 		if _, err := reviewStmt.Exec(r.ID, r.CardID, r.Ease, r.Ivl, r.LastIvl, r.Factor, r.Time, r.Type); err != nil {
-			return nil, fmt.Errorf("anki package: write review %d: %w", r.ID, err)
+			return nil, fmt.Errorf("deck package: write review %d: %w", r.ID, err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("anki package: commit collection: %w", err)
+		return nil, fmt.Errorf("deck package: commit collection: %w", err)
 	}
 	if err := db.Close(); err != nil {
-		return nil, fmt.Errorf("anki package: close collection: %w", err)
+		return nil, fmt.Errorf("deck package: close collection: %w", err)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("anki package: read collection: %w", err)
+		return nil, fmt.Errorf("deck package: read collection: %w", err)
 	}
 	return raw, nil
 }
@@ -619,10 +619,10 @@ func writeZip(w io.Writer, collection []byte, media []WriteMedia) error {
 	write := func(name string, data []byte) error {
 		f, err := zw.Create(name)
 		if err != nil {
-			return fmt.Errorf("anki package: create entry %q: %w", name, err)
+			return fmt.Errorf("deck package: create entry %q: %w", name, err)
 		}
 		if _, err := f.Write(data); err != nil {
-			return fmt.Errorf("anki package: write entry %q: %w", name, err)
+			return fmt.Errorf("deck package: write entry %q: %w", name, err)
 		}
 		return nil
 	}
@@ -638,7 +638,7 @@ func writeZip(w io.Writer, collection []byte, media []WriteMedia) error {
 	}
 	raw, err := json.Marshal(index)
 	if err != nil {
-		return fmt.Errorf("anki package: encode media index: %w", err)
+		return fmt.Errorf("deck package: encode media index: %w", err)
 	}
 	if err := write("media", raw); err != nil {
 		return err

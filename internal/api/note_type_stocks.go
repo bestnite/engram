@@ -71,7 +71,7 @@ func stockNoteTypeDefinitions() []stockNoteTypeDefinition {
 				ID:       stockSourceEngram + ":" + stock.Kind,
 				Source:   stockSourceEngram,
 				Name:     stock.Name,
-				LabelKey: "notetype.stock.engram." + stock.Kind,
+				LabelKey: "notetype.stock." + stock.Kind,
 			},
 			Config: stock.Config,
 		})
@@ -82,7 +82,7 @@ func stockNoteTypeDefinitions() []stockNoteTypeDefinition {
 				ID:       stockSourceTemplate + ":" + stock.Kind,
 				Source:   stockSourceTemplate,
 				Name:     stock.Name,
-				LabelKey: "notetype.stock.template." + stock.Kind,
+				LabelKey: "notetype.stock." + stock.Kind,
 			},
 			Config: stock.Config,
 		})
@@ -100,7 +100,7 @@ func stockNoteTypeDefinitions() []stockNoteTypeDefinition {
 				ID:       stockSourceAnki + ":" + string(kind),
 				Source:   stockSourceAnki,
 				Name:     notetype.StockName(kind),
-				LabelKey: "notetype.stock.anki." + string(kind),
+				LabelKey: "notetype.stock." + string(kind),
 			},
 			Config: cfg,
 		})

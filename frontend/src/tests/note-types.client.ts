@@ -251,8 +251,8 @@ describe('NoteTypesView stock picker', () => {
         initialLoading: false,
         initialNoteTypes: [],
         initialStocks: [
-          { id: 'template:vocabulary', source: 'template', name: 'Vocabulary', label_key: 'notetype.stock.template.vocabulary' },
-          { id: 'engram:basic', source: 'engram', name: 'Basic', label_key: 'notetype.stock.engram.basic' },
+          { id: 'template:vocabulary', source: 'template', name: 'Vocabulary', label_key: 'notetype.stock.vocabulary' },
+          { id: 'engram:basic', source: 'engram', name: 'Basic', label_key: 'notetype.stock.basic' },
         ],
         initialControls: [],
       },
@@ -298,7 +298,7 @@ describe('NoteTypesView opened from the note editor', () => {
       props: {
         initialLoading: false,
         initialNoteTypes: types,
-        initialStocks: [{ id: 'engram:basic', source: 'engram', name: 'Basic', label_key: 'notetype.stock.engram.basic' }],
+        initialStocks: [{ id: 'engram:basic', source: 'engram', name: 'Basic', label_key: 'notetype.stock.basic' }],
         initialControls: [],
       },
     });

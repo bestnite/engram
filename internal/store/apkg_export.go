@@ -47,18 +47,18 @@ func (s *DeckStore) ExportDeckPackage(ctx context.Context, actorUserID, deckID u
 	}
 	deck, err := s.ByID(ctx, deckID)
 	if err != nil {
-		return nil, fmt.Errorf("export anki package: load deck: %w", err)
+		return nil, fmt.Errorf("export deck package: load deck: %w", err)
 	}
 
 	var types []NoteType
 	types, err = NewNoteTypeStore(s.db).ListByDeck(ctx, deckID)
 	if err != nil {
-		return nil, fmt.Errorf("export anki package: list note types: %w", err)
+		return nil, fmt.Errorf("export deck package: list note types: %w", err)
 	}
 
 	var notes []Note
 	if err := s.db.WithContext(ctx).Where("deck_id = ?", deckID).Order("id ASC").Find(&notes).Error; err != nil {
-		return nil, fmt.Errorf("export anki package: list notes: %w", err)
+		return nil, fmt.Errorf("export deck package: list notes: %w", err)
 	}
 	// The deck's note ids stay inside the database: a list long enough to name a very large deck
 	// exceeds SQLite's bind-parameter cap, so the cards and progress queries use a subquery instead.
@@ -69,7 +69,7 @@ func (s *DeckStore) ExportDeckPackage(ctx context.Context, actorUserID, deckID u
 	if len(notes) > 0 {
 		if err := s.db.WithContext(ctx).Where("note_id IN (?)", notesOfDeck()).
 			Order("note_id ASC, ordinal ASC, id ASC").Find(&cards).Error; err != nil {
-			return nil, fmt.Errorf("export anki package: list cards: %w", err)
+			return nil, fmt.Errorf("export deck package: list cards: %w", err)
 		}
 	}
 	cardIDs := make([]uint64, len(cards))
@@ -111,15 +111,15 @@ func (s *DeckStore) ExportDeckPackage(ctx context.Context, actorUserID, deckID u
 	if opts.DeckConfigsEnabled() {
 		settings, err := s.StudySettings(ctx, actorUserID, deck)
 		if err != nil {
-			return nil, fmt.Errorf("export anki package: load study settings: %w", err)
+			return nil, fmt.Errorf("export deck package: load study settings: %w", err)
 		}
 		preset, err := NewPresetStore(s.db).ByID(ctx, settings.PresetID)
 		if err != nil {
-			return nil, fmt.Errorf("export anki package: load preset: %w", err)
+			return nil, fmt.Errorf("export deck package: load preset: %w", err)
 		}
 		config, err := ankiDeckConfig(preset, opts.IncludeWeights)
 		if err != nil {
-			return nil, fmt.Errorf("export anki package: deck config: %w", err)
+			return nil, fmt.Errorf("export deck package: deck config: %w", err)
 		}
 		collection.DeckConfigs = []apkg.WriteDeckConfig{config}
 		for i := range collection.Decks {
@@ -131,7 +131,7 @@ func (s *DeckStore) ExportDeckPackage(ctx context.Context, actorUserID, deckID u
 		var states []CardState
 		if err := s.db.WithContext(ctx).Where("user_id = ? AND card_id IN (?)", actorUserID, cardsOfDeck()).
 			Order("card_id ASC").Find(&states).Error; err != nil {
-			return nil, fmt.Errorf("export anki package: list progress: %w", err)
+			return nil, fmt.Errorf("export deck package: list progress: %w", err)
 		}
 		stateByCard := make(map[uint64]CardState, len(states))
 		for _, state := range states {
@@ -144,7 +144,7 @@ func (s *DeckStore) ExportDeckPackage(ctx context.Context, actorUserID, deckID u
 		var reviews []Review
 		if err := s.db.WithContext(ctx).Where("user_id = ? AND card_id IN (?)", actorUserID, cardsOfDeck()).
 			Order("id ASC").Find(&reviews).Error; err != nil {
-			return nil, fmt.Errorf("export anki package: list reviews: %w", err)
+			return nil, fmt.Errorf("export deck package: list reviews: %w", err)
 		}
 		collection.Reviews = cfg.writeReviews(reviews)
 	}
@@ -187,7 +187,7 @@ func (c *packageWriteConfig) assignModelIDs() error {
 		nt := &c.types[i]
 		cfg, err := nt.Config()
 		if err != nil {
-			return fmt.Errorf("export anki package: note type %d: %w", nt.ID, err)
+			return fmt.Errorf("export deck package: note type %d: %w", nt.ID, err)
 		}
 		c.cfgs[nt.ID] = cfg
 		id := int64(nt.ID)
@@ -746,7 +746,7 @@ func (s *DeckStore) ankiMediaFiles(ctx context.Context, actorUserID, deckID uint
 	for i := range types {
 		cfg, err := types[i].Config()
 		if err != nil {
-			return nil, fmt.Errorf("export anki package: note type %d: %w", types[i].ID, err)
+			return nil, fmt.Errorf("export deck package: note type %d: %w", types[i].ID, err)
 		}
 		configs[types[i].ID] = cfg
 		values = append(values, noteTypeMediaStrings(cfg)...)
@@ -754,14 +754,14 @@ func (s *DeckStore) ankiMediaFiles(ctx context.Context, actorUserID, deckID uint
 	for i := range notes {
 		fields, err := ParseFieldValues(notes[i].FieldsJSON)
 		if err != nil {
-			return nil, fmt.Errorf("export anki package: note %d: %w", notes[i].ID, err)
+			return nil, fmt.Errorf("export deck package: note %d: %w", notes[i].ID, err)
 		}
 		if notes[i].NoteTypeID == nil {
-			return nil, fmt.Errorf("export anki package: missing note type for note %d", notes[i].ID)
+			return nil, fmt.Errorf("export deck package: missing note type for note %d", notes[i].ID)
 		}
 		cfg, ok := configs[*notes[i].NoteTypeID]
 		if !ok {
-			return nil, fmt.Errorf("export anki package: missing note type for note %d", notes[i].ID)
+			return nil, fmt.Errorf("export deck package: missing note type for note %d", notes[i].ID)
 		}
 		for _, value := range mediaFieldValues(cfg, fields) {
 			values = append(values, value)
@@ -796,13 +796,13 @@ func (s *DeckStore) ankiMediaFiles(ctx context.Context, actorUserID, deckID uint
 				continue
 			}
 			if err != nil {
-				return nil, fmt.Errorf("export anki package: resolve media name %q: %w", name, err)
+				return nil, fmt.Errorf("export deck package: resolve media name %q: %w", name, err)
 			}
 			sha = row.Sha256
 		}
 		ok, err := mediaReadableByUser(ctx, s.db, actorUserID, sha)
 		if err != nil {
-			return nil, fmt.Errorf("export anki package: media readability %s: %w", sha, err)
+			return nil, fmt.Errorf("export deck package: media readability %s: %w", sha, err)
 		}
 		if !ok {
 			unreadable = append(unreadable, "media/"+sha)
@@ -810,7 +810,7 @@ func (s *DeckStore) ankiMediaFiles(ctx context.Context, actorUserID, deckID uint
 		}
 		meta, err := mediaStore.BySha256(ctx, sha)
 		if err != nil {
-			return nil, fmt.Errorf("export anki package: media metadata %s: %w", sha, err)
+			return nil, fmt.Errorf("export deck package: media metadata %s: %w", sha, err)
 		}
 		if meta == nil {
 			return nil, fmt.Errorf("%w: sha256=%s", ErrPackageMediaMissing, sha)

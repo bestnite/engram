@@ -31,10 +31,10 @@ func TestNoteTypeStocksList(t *testing.T) {
 	if len(body.Stocks) != 16 {
 		t.Fatalf("stock count = %d, want 16 (engram ten, four templates, two Anki-only)", len(body.Stocks))
 	}
-	if body.Stocks[0].ID != "engram:basic" || body.Stocks[0].Source != stockSourceEngram || body.Stocks[0].LabelKey != "notetype.stock.engram.basic" {
+	if body.Stocks[0].ID != "engram:basic" || body.Stocks[0].Source != stockSourceEngram || body.Stocks[0].LabelKey != "notetype.stock.basic" {
 		t.Fatalf("first stock = %+v, want engram basic", body.Stocks[0])
 	}
-	if body.Stocks[10].ID != "template:vocabulary" || body.Stocks[10].Source != stockSourceTemplate || body.Stocks[10].LabelKey != "notetype.stock.template.vocabulary" {
+	if body.Stocks[10].ID != "template:vocabulary" || body.Stocks[10].Source != stockSourceTemplate || body.Stocks[10].LabelKey != "notetype.stock.vocabulary" {
 		t.Fatalf("eleventh stock = %+v, want the vocabulary template", body.Stocks[10])
 	}
 	if body.Stocks[14].ID != "anki:basic_optional_reversed" || body.Stocks[15].ID != "anki:image_occlusion" {
@@ -42,6 +42,7 @@ func TestNoteTypeStocksList(t *testing.T) {
 	}
 	ids := map[string]bool{}
 	names := map[string]string{}
+	labelKeys := map[string]string{}
 	for _, stock := range body.Stocks {
 		if stock.Name == "" {
 			t.Errorf("stock %q has no name", stock.ID)
@@ -54,6 +55,12 @@ func TestNoteTypeStocksList(t *testing.T) {
 			t.Errorf("stocks %q and %q both display the name %q", other, stock.ID, stock.Name)
 		}
 		names[stock.Name] = stock.ID
+		// The catalog key carries the kind alone, so two definitions sharing a kind would also
+		// share a label; the picker would show the same name twice again.
+		if other, exists := labelKeys[stock.LabelKey]; exists {
+			t.Errorf("stocks %q and %q both use the label key %q", other, stock.ID, stock.LabelKey)
+		}
+		labelKeys[stock.LabelKey] = stock.ID
 	}
 	// The shapes engram defines itself are covered by its own definitions; the Anki ids are not
 	// offered and no longer resolve.

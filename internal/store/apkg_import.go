@@ -751,7 +751,7 @@ func resolvePackageNoteTypes(ctx context.Context, tx *gorm.DB, deckID uint64, pk
 					"updated_at":  now,
 					"version":     gorm.Expr("version + 1"),
 				}).Error; err != nil {
-					return nil, fmt.Errorf("update Anki note type %q: %w", nt.Name, err)
+					return nil, fmt.Errorf("update note type %q: %w", nt.Name, err)
 				}
 				if err := NewMediaNoteTypeStore(tx).Replace(ctx, row.ID, noteTypeMediaNames(target.Config)); err != nil {
 					return nil, fmt.Errorf("record media of note type %q: %w", nt.Name, err)
@@ -772,7 +772,7 @@ func resolvePackageNoteTypes(ctx context.Context, tx *gorm.DB, deckID uint64, pk
 			}
 		}
 		if err := tx.WithContext(ctx).Create(&created).Error; err != nil {
-			return nil, fmt.Errorf("create Anki note type %q: %w", nt.Name, err)
+			return nil, fmt.Errorf("create note type %q: %w", nt.Name, err)
 		}
 		if err := NewMediaNoteTypeStore(tx).Replace(ctx, created.ID, noteTypeMediaNames(target.Config)); err != nil {
 			return nil, fmt.Errorf("record media of note type %q: %w", nt.Name, err)
@@ -969,7 +969,7 @@ func (s *DeckStore) placeDeckMedia(ctx context.Context, files []packageMediaFile
 		seen[file.sha256hex] = true
 		stored, err := mstore.BySha256(ctx, file.sha256hex)
 		if err != nil {
-			return placed, writtenMedia, fmt.Errorf("import Anki package: check media %s: %w", file.sha256hex, err)
+			return placed, writtenMedia, fmt.Errorf("import deck package: check media %s: %w", file.sha256hex, err)
 		}
 		if stored != nil {
 			if !opts.DryRun {
@@ -983,7 +983,7 @@ func (s *DeckStore) placeDeckMedia(ctx context.Context, files []packageMediaFile
 		}
 		rc, err := file.entry.Open()
 		if err != nil {
-			return placed, writtenMedia, fmt.Errorf("import Anki package: open media %q: %w", file.entry.Name, err)
+			return placed, writtenMedia, fmt.Errorf("import deck package: open media %q: %w", file.entry.Name, err)
 		}
 		mime, _ := mediatype.Classify(file.head, file.entry.Name)
 		write, err := mstore.saveStreamFile(opts.MediaRoot, mime, file.sha256hex, rc)
@@ -997,7 +997,7 @@ func (s *DeckStore) placeDeckMedia(ctx context.Context, files []packageMediaFile
 		placed[file.sha256hex] = write
 	}
 	if _, err := clearOrphanedMedia(ctx, s.db, reusedShas); err != nil {
-		return placed, writtenMedia, fmt.Errorf("import Anki package: %w", err)
+		return placed, writtenMedia, fmt.Errorf("import deck package: %w", err)
 	}
 	return placed, writtenMedia, nil
 }
@@ -1114,7 +1114,7 @@ func (s *DeckStore) importPackageInTx(ctx context.Context, tx *gorm.DB, actorUse
 	if !opts.DryRun && opts.MediaRoot != "" {
 		for sha := range rawMediaSizes(files) {
 			if err := RecordMediaUploader(ctx, tx, sha, actorUserID); err != nil {
-				return fmt.Errorf("import Anki package: record media uploader: %w", err)
+				return fmt.Errorf("import deck package: record media uploader: %w", err)
 			}
 		}
 	}
@@ -1172,7 +1172,7 @@ func (s *DeckStore) importPackageInTx(ctx context.Context, tx *gorm.DB, actorUse
 		}
 		id, created, err := writeDeckNote(ctx, tx, actorUserID, deckID, note, target, old, now)
 		if err != nil {
-			return fmt.Errorf("import Anki note %d: %w", i, asPackageMediaForbidden(err))
+			return fmt.Errorf("import note %d: %w", i, asPackageMediaForbidden(err))
 		}
 		noteIDs[note.ID] = id
 		imported[note.ID] = true
@@ -1349,10 +1349,10 @@ func (s *DeckStore) importPackageInTx(ctx context.Context, tx *gorm.DB, actorUse
 		if write, ok := placed[file.sha256hex]; ok {
 			row, err := mstore.recordFile(ctx, write, Ptr(actorUserID))
 			if err != nil {
-				return fmt.Errorf("import Anki package: record media %s: %w", file.sha256hex, err)
+				return fmt.Errorf("import deck package: record media %s: %w", file.sha256hex, err)
 			}
 			if row.Sha256 != file.sha256hex {
-				return fmt.Errorf("import Anki package: media %q was recorded under an unexpected digest", file.entry.Name)
+				return fmt.Errorf("import deck package: media %q was recorded under an unexpected digest", file.entry.Name)
 			}
 			continue
 		}
@@ -1361,12 +1361,12 @@ func (s *DeckStore) importPackageInTx(ctx context.Context, tx *gorm.DB, actorUse
 		}
 		stored, err := mstore.BySha256(ctx, file.sha256hex)
 		if err != nil {
-			return fmt.Errorf("import Anki package: check media %s: %w", file.sha256hex, err)
+			return fmt.Errorf("import deck package: check media %s: %w", file.sha256hex, err)
 		}
 		if stored == nil {
 			// The bytes are written before the transaction; a missing row here means the package's
 			// media never reached the store, which must not be recorded as an empty import.
-			return fmt.Errorf("import Anki package: media %s was not written before the transaction", file.sha256hex)
+			return fmt.Errorf("import deck package: media %s was not written before the transaction", file.sha256hex)
 		}
 		if _, _, err := mstore.reuse(ctx, stored, Ptr(actorUserID)); err != nil {
 			return err
@@ -1620,25 +1620,25 @@ func importDeckProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	}()
 	var user User
 	if err := tx.WithContext(ctx).First(&user, userID).Error; err != nil {
-		return fmt.Errorf("import Anki progress: load user: %w", err)
+		return fmt.Errorf("import progress: load user: %w", err)
 	}
 	loc, cutoff := reviewday.Location(user.Timezone), reviewday.ResolveCutoff(user.DayCutoffHour)
 	var deck Deck
 	if err := tx.WithContext(ctx).First(&deck, deckID).Error; err != nil {
-		return fmt.Errorf("import Anki progress: load deck: %w", err)
+		return fmt.Errorf("import progress: load deck: %w", err)
 	}
 	settings, err := NewDeckStore(tx).StudySettings(ctx, userID, &deck)
 	if err != nil {
-		return fmt.Errorf("import Anki progress: load study settings: %w", err)
+		return fmt.Errorf("import progress: load study settings: %w", err)
 	}
 	var preset Preset
 	if err := tx.WithContext(ctx).First(&preset, settings.PresetID).Error; err != nil {
-		return fmt.Errorf("import Anki progress: load preset: %w", err)
+		return fmt.Errorf("import progress: load preset: %w", err)
 	}
 	params := fsrs.DefaultParam()
 	params.W, err = PresetWeights(preset.WeightsJSON)
 	if err != nil {
-		return fmt.Errorf("import Anki progress: %w", err)
+		return fmt.Errorf("import progress: %w", err)
 	}
 	engine := fsrs.NewFSRS(params)
 	ids := make([]uint64, 0, len(cardIDs))
@@ -1666,14 +1666,14 @@ func importDeckProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
 		}
 		if err := query.Where("user_id = ? AND card_id IN ?", userID, ids[start:end]).Find(&states).Error; err != nil {
-			return fmt.Errorf("load Anki card state: %w", err)
+			return fmt.Errorf("load card state: %w", err)
 		}
 		for _, state := range states {
 			oldStates[state.CardID] = state
 		}
 		var reviews []Review
 		if err := tx.WithContext(ctx).Select("card_id", "reviewed_at").Where("user_id = ? AND card_id IN ?", userID, ids[start:end]).Find(&reviews).Error; err != nil {
-			return fmt.Errorf("check Anki review: %w", err)
+			return fmt.Errorf("check review: %w", err)
 		}
 		for _, review := range reviews {
 			if review.ReviewedAt.After(latestReview[review.CardID]) {
@@ -1749,7 +1749,7 @@ func importDeckProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 		}
 		if card.Data != "" {
 			if err := json.Unmarshal([]byte(card.Data), &data); err != nil {
-				return fmt.Errorf("import Anki card %d data: %w", card.ID, err)
+				return fmt.Errorf("import card %d data: %w", card.ID, err)
 			}
 		}
 		if !deriveMemory(card, data.Stability, data.Difficulty, &state, engine, selectedHistory[card.ID], histories[card.ID], completeHistory[card.ID], rowMemory, &approximated) {
@@ -1835,12 +1835,12 @@ func importDeckProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 			}
 			state.Version++
 			if err := tx.WithContext(ctx).Model(&CardState{}).Where("card_id = ? AND user_id = ?", id, userID).Select("*").Updates(&state).Error; err != nil {
-				return fmt.Errorf("update Anki card state: %w", err)
+				return fmt.Errorf("update card state: %w", err)
 			}
 		} else {
 			result := tx.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&state)
 			if result.Error != nil {
-				return fmt.Errorf("create Anki card state: %w", result.Error)
+				return fmt.Errorf("create card state: %w", result.Error)
 			}
 			if result.RowsAffected == 0 {
 				conflictedStates[id] = true
@@ -1930,7 +1930,7 @@ func importDeckProgress(ctx context.Context, tx *gorm.DB, userID, deckID uint64,
 	}
 	if len(pendingReviews) > 0 {
 		if err := tx.WithContext(ctx).CreateInBatches(&pendingReviews, 100).Error; err != nil {
-			return fmt.Errorf("create Anki review: %w", err)
+			return fmt.Errorf("create review: %w", err)
 		}
 	}
 	return nil
@@ -1974,7 +1974,7 @@ func (s *DeckStore) resolveTargetDeck(ctx context.Context, tx *gorm.DB, actorUse
 			CreatedAt:   opts.Now().UTC(),
 		}
 		if err := tx.WithContext(ctx).Create(&deck).Error; err != nil {
-			return 0, fmt.Errorf("import Anki package: create deck: %w", err)
+			return 0, fmt.Errorf("import deck package: create deck: %w", err)
 		}
 		return deck.ID, nil
 	case "into_deck", "replace_deck":
@@ -2056,7 +2056,7 @@ func registerDeckMediaNames(ctx context.Context, tx *gorm.DB, deckID uint64, fil
 // transaction already serialises the import, so a plain update is all this driver needs.
 func lockTargetDeck(ctx context.Context, tx *gorm.DB, deckID uint64) error {
 	if err := tx.WithContext(ctx).Exec("UPDATE decks SET name = name WHERE id = ?", deckID).Error; err != nil {
-		return fmt.Errorf("import Anki package: lock target deck: %w", err)
+		return fmt.Errorf("import deck package: lock target deck: %w", err)
 	}
 	return nil
 }
@@ -2066,7 +2066,7 @@ func lockTargetDeck(ctx context.Context, tx *gorm.DB, deckID uint64) error {
 func renameDeckMedia(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *apkg.Package, files []packageMediaFile) error {
 	rows, err := NewMediaNameStore(tx).ListByDeck(ctx, deckID)
 	if err != nil {
-		return fmt.Errorf("import Anki package: list existing media names: %w", err)
+		return fmt.Errorf("import deck package: list existing media names: %w", err)
 	}
 	existing := make(map[string]string, len(rows))
 	for _, row := range rows {

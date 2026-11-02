@@ -80,7 +80,7 @@ func (f Format) String() string {
 func ReadFile(path string) (*Package, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("anki package: read %s: %w", path, err)
+		return nil, fmt.Errorf("deck package: read %s: %w", path, err)
 	}
 	return Read(bytes.NewReader(raw), int64(len(raw)))
 }
