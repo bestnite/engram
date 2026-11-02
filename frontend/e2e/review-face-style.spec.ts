@@ -33,7 +33,14 @@ const FRONT = `<div id="first">first</div>
   <ul id="list"><li>item</li></ul>`;
 
 /** Creates a deck whose one note uses a type with the given CSS, and opens its review. */
-async function reviewWithCSS(page: Page, deckName: string, css: string): Promise<Frame> {
+async function reviewWithCSS(
+  page: Page,
+  deckName: string,
+  css: string,
+  // A case that needs a different first block replaces the question side and names the element it waits for; the
+  // defaults are the template above, so a case that only varies the CSS says nothing about either.
+  { front = FRONT, ready = 'second' }: { front?: string; ready?: string } = {},
+): Promise<Frame> {
   const deck = await api(page, 'POST', '/api/v1/decks', { name: deckName });
   expect(deck.status).toBe(201);
   const deckId = (deck.json as { id: string }).id;
@@ -60,7 +67,7 @@ async function reviewWithCSS(page: Page, deckName: string, css: string): Promise
         { id: 'f-picture', name: 'Picture' },
         { id: 'f-back', name: 'Back' },
       ],
-      templates: [{ id: 't-one', name: 'Card 1', qfmt: FRONT, afmt: '{{FrontSide}}<hr id=answer>{{Back}}' }],
+      templates: [{ id: 't-one', name: 'Card 1', qfmt: front, afmt: '{{FrontSide}}<hr id=answer>{{Back}}' }],
       css,
     },
   });
@@ -71,7 +78,7 @@ async function reviewWithCSS(page: Page, deckName: string, css: string): Promise
   expect(created.status).toBe(200);
 
   await page.goto(`/review?deck=${deckId}`);
-  await expect(page.frameLocator('iframe[data-card-frame]').first().locator('#second')).toBeVisible();
+  await expect(page.frameLocator('iframe[data-card-frame]').first().locator(`#${ready}`)).toBeVisible();
   const frame = page.frames().find((candidate) => candidate.url().includes('/card-frame/'));
   expect(frame).toBeTruthy();
   return frame!;
@@ -136,4 +143,16 @@ test('the front and the revealed back keep one default size at both widths', asy
     await expect(back).toContainText('back');
     expect(await back.evaluate((node) => getComputedStyle(node).fontSize), `back at ${width}px`).toBe(expected);
   }
+});
+
+test('a note type rule for paragraphs outranks the trim of the face outermost margins', async ({ page }) => {
+  await signIn(page);
+  // The frame drops the empty line at a face's own top and bottom as a base-layer default, so a note type that sets its
+  // own paragraph spacing keeps it, on the outermost block as on any other.
+  const front = '<p id="first">{{Picture}}</p>';
+  const styled = await reviewWithCSS(page, 'Face paragraph rule', 'p { margin: 20px 0; }', { front, ready: 'first' });
+  expect(await styled.evaluate(() => getComputedStyle(document.querySelector('#qa > p')!).marginTop)).toBe('20px');
+  // Without such a rule the default trim applies to the first block.
+  const plain = await reviewWithCSS(page, 'Face paragraph default', '', { front, ready: 'first' });
+  expect(await plain.evaluate(() => getComputedStyle(document.querySelector('#qa > p')!).marginTop)).toBe('0px');
 });

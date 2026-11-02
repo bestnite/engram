@@ -135,6 +135,10 @@
   // transparent, so the learner sees one transition instead of an empty box filling in piece by piece.
   let frontShown = $state(false);
   const frontPending = $derived(frontInFrame && (frontFace === null || !frontShown));
+  // The question block keeps a floor height only while the frame has no face to measure. The frame reports the height of
+  // the face it shows, so once the face is there the block takes exactly that height and reserves nothing the content
+  // does not need; a floor rather than an added spacer keeps a face that reports early from making the card grow twice.
+  const frontReserve = $derived(frontInFrame && frontFace === null);
   // The current card's zero-based template ordinal, used for the frame body class `cardN` (N = ordinal + 1).
   let cardOrdinal = $state(0);
   // Whether the front template is a type-in placeholder without an answer spec. Such a card is self-rated like any other,
@@ -906,7 +910,7 @@
 {#snippet facePlaceholder()}
   {#if frontPending}
     <div class="pointer-events-none absolute inset-x-0 top-0">
-      <Skeleton testId="review-face-loading" label={$t('review.loading')} lines={3} />
+      <Skeleton testId="review-face-loading" label={$t('review.loading')} lines={2} />
     </div>
   {/if}
 {/snippet}
@@ -1045,7 +1049,10 @@
         </a>
       </div>
     {:else}
-      <article data-testid="review-card" data-card-id={current.card_id} class="space-y-6">
+      <!-- One rhythm for every answer flow: the toggle row, the question, the answer and the action bar sit 16px apart, and a
+           divider with a 16px lead separates the answer from the question above it. A one-line card then reads question,
+           16px, divider, 16px, answer, so the answer stays next to the question it belongs to. -->
+      <article data-testid="review-card" data-card-id={current.card_id} class="space-y-4">
         <div class="flex items-center justify-between gap-3 pb-3 border-b border-border">
           <label class="flex items-center gap-2 -my-1 py-1 cursor-pointer">
             <Checkbox
@@ -1082,7 +1089,7 @@
         {/if}
 
         {#if !machineGraded}
-          <div class={questionHidden ? 'hidden' : 'relative min-h-28'} data-testid="review-front">
+          <div class={questionHidden ? 'hidden' : frontReserve ? 'relative min-h-24' : 'relative'} data-testid="review-front">
             {#if frontInFrame}
               {@render facePlaceholder()}
               <div class="transition-opacity duration-200 {frontPending ? 'opacity-0' : 'opacity-100'}">
@@ -1113,7 +1120,7 @@
                  sent only on reveal, so its audio does not start early. -->
             <div
               bind:this={answerStart}
-              class={!revealed ? 'hidden' : questionHidden ? '' : 'border-t border-input pt-6'}
+              class={!revealed ? 'hidden' : questionHidden ? '' : 'border-t border-input pt-4'}
               data-testid={revealed ? 'review-answer' : undefined}
             >
               {#if backInFrame}
@@ -1140,14 +1147,14 @@
           {#if revealed}
             {#if essay}
               <!-- Short-answer card: first show the answer the learner wrote (plain text, not into the HTML sink), then the reference answer for comparison. -->
-              <div bind:this={answerStart} class="space-y-6">
+              <div bind:this={answerStart} class="space-y-4">
                 {#if essayText.trim() !== ''}
-                  <div class="border-t border-input pt-5" data-testid="review-essay-given">
+                  <div class="border-t border-input pt-4" data-testid="review-essay-given">
                     <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.given')}</div>
                     <div class="text-lg whitespace-pre-wrap break-words leading-relaxed">{essayText}</div>
                   </div>
                 {/if}
-                <div class="border-t border-input pt-5" data-testid="review-answer">
+                <div class="border-t border-input pt-4" data-testid="review-answer">
                   <div class="text-xs text-zinc-500 mb-1">{$t('review.essay.reference')}</div>
                   {#if backFace && backFace.html}
                     <CardFrame
@@ -1210,8 +1217,8 @@
         {:else}
           <!-- The answer card's prompt stays on top in all three states — answering, answer revealed, grading result — with the answer below
                behind a divider, so the learner does not have to recall the original question while reading the answer. -->
-          <div class="space-y-5">
-            <div class="relative min-h-28" data-testid="review-graded-prompt">
+          <div class="space-y-4">
+            <div class={frontReserve ? 'relative min-h-24' : 'relative'} data-testid="review-graded-prompt">
               {#if frontInFrame}
                 {@render facePlaceholder()}
                 <div class="transition-opacity duration-200 {frontPending ? 'opacity-0' : 'opacity-100'}">
@@ -1237,7 +1244,7 @@
               {/if}
             </div>
             {#if feedback}
-              <div bind:this={feedbackSection} class="space-y-5 border-t border-input pt-5" data-testid="review-graded-result">
+              <div bind:this={feedbackSection} class="space-y-4 border-t border-input pt-4" data-testid="review-graded-result">
                 <div class="flex items-center justify-between">
                   <Badge variant={verdictVariant(feedback.verdict)} class="gap-1.5 px-3 py-1 text-sm font-semibold" testId="review-graded-verdict">
                     {#if feedback.verdict === 'correct'}
@@ -1313,7 +1320,7 @@
                 </div>
               </div>
             {:else if gradedRevealed}
-              <div bind:this={answerStart} class="space-y-5 border-t border-input pt-5" data-testid="review-graded-revealed">
+              <div bind:this={answerStart} class="space-y-4 border-t border-input pt-4" data-testid="review-graded-revealed">
                 <div data-testid="review-graded-revealed-answer">
                   <div class="text-xs text-zinc-500 mb-1">{$t('review.graded.answer')}</div>
                   <div data-testid="review-graded-answer">

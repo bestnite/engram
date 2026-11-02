@@ -201,8 +201,10 @@ describe('ReviewView face HTML in the frame, edit, and bury parity', () => {
         initialBackFace: face('<p>A</p>'),
       },
     });
-    expect(html).toMatch(/class="relative min-h-28" data-testid="review-front"/);
-    expect(html).toMatch(/class="border-t border-input pt-6" data-testid="review-answer"/);
+    // The question block carries no height of its own: the frame reports the height of the face it shows, and the answer
+    // divider's padding is the whole breathing room between the question's last line and the answer's first one.
+    expect(html).toMatch(/class="relative" data-testid="review-front"/);
+    expect(html).toMatch(/class="border-t border-input pt-4" data-testid="review-answer"/);
   });
 
   it('keeps both frames mounted and prints no field text while the faces are loading', () => {
@@ -210,6 +212,10 @@ describe('ReviewView face HTML in the frame, edit, and bury parity', () => {
     const { html } = render(ReviewView, { props: { initialLoading: false, initialCards: [basic] } });
     // The question frame waits for its face; the answer frame is mounted hidden, so the reveal needs no frame load.
     expect((html.match(/data-card-frame/g) ?? [])).toHaveLength(2);
+    // With no face to measure yet, the question block holds a floor height, so the card does not start at zero height
+    // and grow when the face arrives.
+    expect(html).toContain('data-testid="review-face-loading"');
+    expect(html).toMatch(/class="relative min-h-24" data-testid="review-front"/);
     expect(html).not.toContain('Loading front');
     expect(html).not.toContain('Loading back');
     expect(html).not.toContain('data-testid="review-answer"');

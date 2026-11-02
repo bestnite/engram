@@ -56,6 +56,19 @@ body {
     list-style: revert;
     padding: revert;
   }
+
+  /* A face's outermost block loses the empty line at the frame's own top and bottom: the page around the frame already
+     spaces a face from its neighbours, and a one-line card wrapped in a paragraph would otherwise carry a full empty
+     line above and below its text, which reads as dead air between the question and the answer. This is a base-layer
+     default like the rules above, so a note type rule for the same property outranks it; the spacing between the blocks
+     of a face keeps the browser defaults either way, because only the two edge margins are set here. */
+  #qa > :first-child {
+    margin-top: 0;
+  }
+
+  #qa > :last-child {
+    margin-bottom: 0;
+  }
 }
 
 body.nightMode,
