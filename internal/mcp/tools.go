@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 
 	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -75,6 +78,69 @@ type listNoteTypesIn struct {
 type getNoteTypeIn struct {
 	DeckID     string `json:"deck_id" jsonschema:"the public id of the deck the note type belongs to"`
 	NoteTypeID string `json:"note_type_id" jsonschema:"the public id of the note type to read"`
+}
+
+type createNoteTypeIn struct {
+	DeckID  string           `json:"deck_id" jsonschema:"public UUID of the deck; editor role required"`
+	Name    string           `json:"name,omitempty" jsonschema:"type name; empty uses the stock name"`
+	StockID string           `json:"stock_id,omitempty" jsonschema:"stock definition id; takes precedence over config"`
+	Config  *notetype.Config `json:"config,omitempty" jsonschema:"complete note type config when no stock id is given"`
+}
+
+type updateNoteTypeIn struct {
+	DeckID             string          `json:"deck_id" jsonschema:"public UUID of the deck; editor role required"`
+	NoteTypeID         string          `json:"note_type_id" jsonschema:"public UUID of the note type"`
+	Name               string          `json:"name" jsonschema:"replacement name"`
+	Config             notetype.Config `json:"config" jsonschema:"complete replacement config"`
+	Version            *int            `json:"version" jsonschema:"current version from get_note_type"`
+	DryRun             bool            `json:"dry_run,omitempty" jsonschema:"preview impact without writes or audit"`
+	ConfirmCardRemoval bool            `json:"confirm_card_removal,omitempty" jsonschema:"allow soft deletion of cards removed by the update"`
+}
+
+type deleteNoteTypeIn struct {
+	DeckID       string `json:"deck_id" jsonschema:"public UUID of the deck; editor role required"`
+	NoteTypeID   string `json:"note_type_id" jsonschema:"public UUID of the note type"`
+	ConfirmPurge bool   `json:"confirm_purge,omitempty" jsonschema:"allow hard deletion of soft-deleted notes and their cards"`
+}
+
+type changeNoteTypeIn struct {
+	DeckID             string            `json:"deck_id" jsonschema:"public UUID of the deck; editor role required"`
+	NoteTypeID         string            `json:"note_type_id" jsonschema:"public UUID of the source note type"`
+	TargetNoteType     string            `json:"target_note_type" jsonschema:"public UUID of the target note type in the same deck"`
+	FieldMapping       map[string]string `json:"field_mapping,omitempty" jsonschema:"source field IDs to target field IDs, not field names"`
+	TemplateMapping    map[string]string `json:"template_mapping,omitempty" jsonschema:"source template IDs to target template IDs, not template names"`
+	DryRun             bool              `json:"dry_run,omitempty" jsonschema:"preview impact without writes or audit"`
+	ConfirmCardRemoval bool              `json:"confirm_card_removal,omitempty" jsonschema:"allow soft deletion of unmapped cards"`
+}
+
+type cleanupEmptyCardsIn struct {
+	DeckID             string `json:"deck_id" jsonschema:"public UUID of the deck; editor role required"`
+	DryRun             bool   `json:"dry_run,omitempty" jsonschema:"preview impact without writes or audit"`
+	ConfirmCardRemoval bool   `json:"confirm_card_removal,omitempty" jsonschema:"allow soft deletion of empty cards"`
+}
+
+// impactError preserves the service decision and code while carrying the counts returned by REST.
+type impactError struct {
+	err    error
+	detail string
+}
+
+func (e *impactError) Error() string { return e.err.Error() }
+func (e *impactError) Unwrap() error { return e.err }
+func withImpact(err error, code, detail string) error {
+	var se *api.ServiceError
+	if errors.As(err, &se) && se.Code == code {
+		return &impactError{err, detail}
+	}
+	return err
+}
+
+type updateNoteTypeOut struct {
+	api.NoteTypeJSON
+	DryRun                bool `json:"dry_run"`
+	CardsAdded            int  `json:"cards_added"`
+	CardsRemoved          int  `json:"cards_removed"`
+	ReviewsOnRemovedCards int  `json:"reviews_on_removed_cards"`
 }
 
 // exportDeckIn contains the export download options.
@@ -362,6 +428,68 @@ func (s *Server) getNoteType(ctx context.Context, id Identity, in getNoteTypeIn)
 		return api.NoteTypeJSON{}, err
 	}
 	return s.api.GetNoteType(ctx, id.User.ID, d.ID, in.NoteTypeID)
+}
+
+func (s *Server) listNoteTypeStocks(_ context.Context, _ Identity, _ struct{}) (api.NoteTypeStocksResponse, error) {
+	return s.api.NoteTypeStocks(), nil
+}
+func (s *Server) listAnswerControls(_ context.Context, _ Identity, _ struct{}) (api.AnswerControlsResponse, error) {
+	return s.api.AnswerControls(), nil
+}
+func (s *Server) createNoteType(ctx context.Context, id Identity, in createNoteTypeIn) (api.NoteTypeJSON, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return api.NoteTypeJSON{}, err
+	}
+	var cfg notetype.Config
+	if in.Config != nil {
+		cfg = *in.Config
+	}
+	return s.api.CreateNoteType(ctx, id.User.ID, d.ID, id.apiKeyID(), api.CreateNoteTypeInput{Name: in.Name, StockID: in.StockID, Config: cfg})
+}
+func (s *Server) updateNoteType(ctx context.Context, id Identity, in updateNoteTypeIn) (updateNoteTypeOut, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return updateNoteTypeOut{}, err
+	}
+	r, err := s.api.UpdateNoteType(ctx, id.User.ID, d.ID, in.NoteTypeID, id.apiKeyID(), api.UpdateNoteTypeInput{Name: in.Name, Config: in.Config, Version: in.Version, DryRun: in.DryRun, ConfirmCardRemoval: in.ConfirmCardRemoval})
+	out := updateNoteTypeOut{r.NoteType, r.DryRun, r.CardsAdded, r.CardsRemoved, r.ReviewsOnRemovedCards}
+	return out, withImpact(err, api.CodeCardRemovalUnconfirmed, fmt.Sprintf("cards_added=%d cards_removed=%d reviews_on_removed_cards=%d", r.CardsAdded, r.CardsRemoved, r.ReviewsOnRemovedCards))
+}
+func (s *Server) deleteNoteType(ctx context.Context, id Identity, in deleteNoteTypeIn) (any, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return nil, err
+	}
+	r, err := s.api.DeleteNoteType(ctx, id.User.ID, d.ID, in.NoteTypeID, id.apiKeyID(), in.ConfirmPurge)
+	if err != nil {
+		return nil, withImpact(err, api.CodeNoteTypePurgeUnconfirmed, fmt.Sprintf("deleted_notes=%d cards=%d reviews=%d", r.DeletedNotes, r.Cards, r.Reviews))
+	}
+	return map[string]any{"deleted": true, "id": in.NoteTypeID}, nil
+}
+func (s *Server) changeNoteType(ctx context.Context, id Identity, in changeNoteTypeIn) (api.ChangeNoteTypeResult, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return api.ChangeNoteTypeResult{}, err
+	}
+	r, err := s.api.ChangeNoteType(ctx, id.User.ID, d.ID, in.NoteTypeID, id.apiKeyID(), api.ChangeNoteTypeInput{TargetNoteType: in.TargetNoteType, FieldMapping: in.FieldMapping, TemplateMapping: in.TemplateMapping, DryRun: in.DryRun, ConfirmCardRemoval: in.ConfirmCardRemoval})
+	return r, withImpact(err, api.CodeCardRemovalUnconfirmed, fmt.Sprintf("notes_moved=%d cards_moved=%d cards_added=%d cards_removed=%d reviews_on_removed_cards=%d", r.NotesMoved, r.CardsMoved, r.CardsAdded, r.CardsRemoved, r.ReviewsOnRemovedCards))
+}
+func (s *Server) listEmptyCards(ctx context.Context, id Identity, in listNoteTypesIn) (api.EmptyCardListResponse, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return api.EmptyCardListResponse{}, err
+	}
+	cards, err := s.api.ListEmptyCards(ctx, id.User.ID, d.ID)
+	return api.EmptyCardListResponse{Cards: cards, Count: len(cards)}, err
+}
+func (s *Server) cleanupEmptyCards(ctx context.Context, id Identity, in cleanupEmptyCardsIn) (api.CleanupEmptyCardsResult, error) {
+	d, err := s.api.DeckByPublicID(ctx, in.DeckID)
+	if err != nil {
+		return api.CleanupEmptyCardsResult{}, err
+	}
+	r, err := s.api.CleanupEmptyCards(ctx, id.User.ID, d.ID, id.apiKeyID(), api.CleanupEmptyCardsInput{DryRun: in.DryRun, ConfirmCardRemoval: in.ConfirmCardRemoval})
+	return r, withImpact(err, api.CodeCardRemovalUnconfirmed, fmt.Sprintf("cards_removed=%d reviews_on_removed_cards=%d", r.CardsRemoved, r.ReviewsOnRemovedCards))
 }
 
 func (s *Server) getStats(ctx context.Context, id Identity, _ getStatsIn) (any, error) {

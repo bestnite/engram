@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -8,6 +9,46 @@ import (
 
 	"git.nite07.com/nite/engram/internal/store"
 )
+
+func TestNoteTypeToolsStockAndConfigRoundTrip(t *testing.T) {
+	_, db, keys, ts := newEnv(t)
+	u := seedUser(t, db, "mcp_note_type_write")
+	d := seedDeck(t, db, u.ID)
+	cs := connect(t, ts.URL, newKey(t, keys, u.ID, []string{store.ScopeAdmin}))
+	for _, name := range []string{"list_note_type_stocks", "list_answer_controls"} {
+		out, bad, text := callTool(t, cs, name, map[string]any{})
+		if bad || len(out) == 0 {
+			t.Fatalf("%s: %v %s", name, out, text)
+		}
+	}
+	args := map[string]any{"deck_id": d.PublicID, "stock_id": "anki:basic"}
+	created, bad, text := callTool(t, cs, "create_note_type", args)
+	if bad {
+		t.Fatalf("create: %s", text)
+	}
+	got, bad, text := callTool(t, cs, "get_note_type", map[string]any{"deck_id": d.PublicID, "note_type_id": created["id"]})
+	if bad || !reflect.DeepEqual(got["config"], created["config"]) {
+		t.Fatalf("get: %v %s", got, text)
+	}
+	update := map[string]any{"deck_id": d.PublicID, "note_type_id": created["id"], "name": created["name"], "config": created["config"], "version": created["version"]}
+	_, bad, text = callTool(t, cs, "update_note_type", update)
+	if bad {
+		t.Fatalf("update: %s", text)
+	}
+	_, bad, text = callTool(t, cs, "update_note_type", update)
+	if !bad || !strings.Contains(text, "version_conflict") {
+		t.Fatalf("stale update: %s", text)
+	}
+	_, bad, text = callTool(t, cs, "delete_note_type", map[string]any{"deck_id": d.PublicID, "note_type_id": created["id"]})
+	if bad {
+		t.Fatalf("delete: %s", text)
+	}
+	args["stock_id"] = "unknown"
+	_, bad, text = callTool(t, cs, "create_note_type", args)
+	if !bad || !strings.Contains(text, "invalid_request") {
+		t.Fatalf("unknown stock: %s", text)
+	}
+}
 
 // Acceptance for list_note_types and get_note_type: the list is scoped to one deck and returns the
 // note type config an agent needs to write a note (field ids and names, templates), and both tools are

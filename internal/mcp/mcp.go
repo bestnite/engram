@@ -297,6 +297,14 @@ var toolScopes = map[string]string{
 	"get_stats":              store.ScopeRead,
 	"list_note_types":        store.ScopeRead,
 	"get_note_type":          store.ScopeRead,
+	"list_note_type_stocks":  store.ScopeRead,
+	"list_answer_controls":   store.ScopeRead,
+	"list_empty_cards":       store.ScopeRead,
+	"create_note_type":       store.ScopeWrite,
+	"update_note_type":       store.ScopeWrite,
+	"delete_note_type":       store.ScopeWrite,
+	"change_note_type":       store.ScopeWrite,
+	"cleanup_empty_cards":    store.ScopeWrite,
 	"create_export_download": store.ScopeRead,
 	"create_deck":            store.ScopeWrite,
 	"update_deck":            store.ScopeWrite,
@@ -340,6 +348,14 @@ func (s *Server) build(id Identity) *sdkmcp.Server {
 	addTool(s, srv, id, "get_stats", "Summary statistics: due count, reviews, retention, notes and cards. retention is true retention: the share of due reviews (cards already in the Review state) not rated Again, over all history; retention_total and retention_passed are its denominator and numerator, and retention_total = 0 means there is no retention data yet.", s.getStats)
 	addTool(s, srv, id, "list_note_types", "List one deck's note types, each with its field ids and names, templates and CSS. Field values in create_notes and update_note are HTML strings keyed by field name. Call it before writing notes so the note_type id and field names are known.", s.listNoteTypes)
 	addTool(s, srv, id, "get_note_type", "Read one note type of a deck: its fields (id, name and options), templates and CSS. Field values in create_notes and update_note are HTML strings keyed by field name.", s.getNoteType)
+	addTool(s, srv, id, "list_note_type_stocks", "List stock note type definitions.", s.listNoteTypeStocks)
+	addTool(s, srv, id, "list_answer_controls", "List answer controls and their roles.", s.listAnswerControls)
+	addTool(s, srv, id, "create_note_type", "Create a note type from a stock id or complete config.", s.createNoteType)
+	addTool(s, srv, id, "update_note_type", "Replace a note type config using its current version; preview card removal with dry_run.", s.updateNoteType)
+	addTool(s, srv, id, "delete_note_type", "Delete a note type; confirm_purge permits purging soft-deleted notes.", s.deleteNoteType)
+	addTool(s, srv, id, "change_note_type", "Move notes between note types with field and template mappings.", s.changeNoteType)
+	addTool(s, srv, id, "list_empty_cards", "List empty cards in a deck (editor role required).", s.listEmptyCards)
+	addTool(s, srv, id, "cleanup_empty_cards", "Preview or confirm removal of empty cards.", s.cleanupEmptyCards)
 	addTool(s, srv, id, "create_export_download", "Create a single-use download URL for a deck package.", s.createExportDownload)
 	addTool(s, srv, id, "create_notes", "Bulk create/update notes in a deck (idempotent by external_ref; supports dry_run). Each note names its note_type and sends fields as a map from field name to HTML string; list_note_types returns the deck's note types and their field names.", s.createNotes)
 	addTool(s, srv, id, "update_note", "Update one note's content and tags. Fields are a map from field name to HTML string, and note_type names the note type those field names belong to. list_note_types returns the available note types and field names.", s.updateNote)
@@ -403,7 +419,12 @@ func addTool[In, Out any](s *Server, srv *sdkmcp.Server, handshake Identity, nam
 		out, err := fn(ctx, id, in)
 		if err != nil {
 			// MCP has no HTTP error envelope: render a stable code + English copy, consistent with REST.
-			return nil, zero, errors.New(api.ErrorText(ctx, err))
+			text := api.ErrorText(ctx, err)
+			var impact *impactError
+			if errors.As(err, &impact) {
+				text += " — " + impact.detail
+			}
+			return nil, zero, errors.New(text)
 		}
 		return nil, out, nil
 	})
