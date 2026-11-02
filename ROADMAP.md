@@ -3902,6 +3902,32 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `refusal body is not JSON (invalid character 'a' looking for beginning of value): "api key required\n"`.
   `go test ./internal/mcp/ -count=1` and `go test ./internal/api/ -count=1` pass.
 
+---
+
+### M20 — Requested capabilities
+
+Capabilities asked for while auditing the repository. Unlike M10, these are wanted in the near term;
+each entry states the behaviour and how it lands without changing Anki's view of a card.
+
+- [ ] **M20-1 Multiple accepted wordings for one cloze blank** — a cloze blank can accept more than
+  one wording (for example `is` / `are` for the same blank), and `cloze_blanks` grades it correct when
+  any accepted wording matches. Today `internal/answer/cloze_blanks.go` states explicitly that there
+  is no alternative-answer rule, so each deletion has exactly one expected wording; the `text`
+  control already has an `accept` role (`internal/answer/text.go:21`) whose matching can be reused.
+  The Anki template syntax cannot carry the alternatives: `{{c1::is|are}}` would make Anki render
+  "is|are" as the answer text, so the `{{c1::…}}` template text must stay exactly as it is.
+  The accepted wordings travel in a note field that no template references: Anki keeps fields through
+  its import and export, never renders a field the templates do not mention, and the granularity is
+  per note rather than per note type. A note-type-level map in the `engram` key was considered and
+  rejected: it has per-note-type granularity, and it rides an extension key that engram itself must
+  decode from each package layout — the failure mode that dropped these specs before the reader fix —
+  rather than ordinary note content. A note-level `notes.data` value was measured not to survive
+  Anki's import, so it is not a candidate either.
+  *Acceptance:* a cloze note whose blank carries two accepted wordings grades as correct for either
+  and wrong for a third; a package round trip through Anki (import and export with `anki==26.9.3`)
+  keeps the wordings; a note with no such field behaves exactly as today; the `{{c1::…}}` template
+  text is unchanged.
+
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
