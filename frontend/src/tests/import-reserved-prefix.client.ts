@@ -51,7 +51,7 @@ describe('ImportView reserved prefix notice', () => {
     setLocale('zh-CN');
     const report = fixture({
       reserved_prefix_fields: ['engram_notes', 'engram_tags'],
-      reserved_prefix_notice: '字段名落在保留前缀内，已按普通字段导入。',
+      reserved_prefix_notice: '字段名以 engram_ 开头，已按普通字段导入。',
     });
 
     vi.spyOn(apiClient, 'getDecks').mockResolvedValue({ decks: [] } as any);
@@ -80,7 +80,7 @@ describe('ImportView reserved prefix notice', () => {
     // Verify reserved prefix notice block is rendered
     const noticeBlock = target.querySelector('[data-testid="package-report-reserved-prefix"]');
     expect(noticeBlock).not.toBeNull();
-    expect(noticeBlock!.textContent).toContain('字段名落在保留前缀内，已按普通字段导入。');
+    expect(noticeBlock!.textContent).toContain('字段名以 engram_ 开头，已按普通字段导入。');
     expect(noticeBlock!.textContent).toContain('engram_notes');
     expect(noticeBlock!.textContent).toContain('engram_tags');
   });

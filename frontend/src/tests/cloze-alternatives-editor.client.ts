@@ -312,7 +312,7 @@ describe('ClozeAlternativesEditor client interactions', () => {
 
     const banner = target.querySelector('[data-testid="cloze-alt-malformed-banner"]');
     expect(banner).not.toBeNull();
-    expect(banner!.textContent).toContain('元数据包含无法解析的内容');
+    expect(banner!.textContent).toContain('填空备选答案数据无法解析');
 
     // Click Clear metadata & reconfigure button
     const resetBtn = target.querySelector('[data-testid="cloze-alt-reset-btn"]') as HTMLButtonElement;
@@ -323,7 +323,7 @@ describe('ClozeAlternativesEditor client interactions', () => {
     // Confirmation dialog opens in document.body
     const dialog = document.body.querySelector('[data-testid="cloze-alt-reset-dialog"]');
     expect(dialog).not.toBeNull();
-    expect(dialog!.textContent).toContain('此操作将永久清空该笔记的全部原始元数据');
+    expect(dialog!.textContent).toContain('此操作将永久清空该笔记中全部原始备选答案数据');
 
     // 1. Cancel
     const cancelBtn = document.body.querySelector('[data-testid="cloze-alt-reset-cancel"]') as HTMLButtonElement;
@@ -355,7 +355,7 @@ describe('ClozeAlternativesEditor client interactions', () => {
     await flush();
     (target.querySelector('[data-testid="cloze-alt-reset-btn"]') as HTMLButtonElement).click();
     await flush();
-    expect(document.body.querySelector('[data-testid="cloze-alt-reset-dialog"]')?.textContent).toContain('其他元数据会保留');
+    expect(document.body.querySelector('[data-testid="cloze-alt-reset-dialog"]')?.textContent).toContain('其他数据会保留');
     (document.body.querySelector('[data-testid="cloze-alt-reset-confirm"]') as HTMLButtonElement).click();
     await flush();
     expect(JSON.parse(onchange.mock.calls.at(-1)![0])).toEqual({ future_key: { nested: [null, false, { x: 1 }] }, cloze_accept: {} });
