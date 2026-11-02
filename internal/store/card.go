@@ -210,6 +210,11 @@ func regenerateNoteTypeCards(tx *gorm.DB, noteTypeID uint64, typeName string, cf
 				return NoteTypeCardImpact{}, fmt.Errorf("update note %d search text: %w", notes[i].ID, err)
 			}
 		}
+		// A field rename can turn content into metadata or vice versa, so the
+		// derived authorization mapping must follow the new field names too.
+		if err := rebuildMediaNotes(tx.Statement.Context, tx, notes[i].ID, notes[i].DeckID, mediaFieldValues(cfg, values)); err != nil {
+			return NoteTypeCardImpact{}, err
+		}
 		_, change, err := syncCardsWithChangeKeeping(tx, notes[i].ID, wanted, keep, now)
 		if err != nil {
 			return NoteTypeCardImpact{}, err

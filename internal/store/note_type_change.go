@@ -330,7 +330,7 @@ func (s *NoteStore) ChangeNoteType(ctx context.Context, deckID, sourceID, target
 			}).Error; err != nil {
 				return fmt.Errorf("move note %d: %w", note.ID, err)
 			}
-			if err := rebuildMediaNotes(ctx, tx, note.ID, deckID, values); err != nil {
+			if err := rebuildMediaNotes(ctx, tx, note.ID, deckID, mediaFieldValues(tgtCfg, values)); err != nil {
 				return err
 			}
 

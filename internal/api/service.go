@@ -1566,7 +1566,7 @@ func (a *API) resolveRating(ctx context.Context, card *store.Card, note *store.N
 		if err != nil {
 			return 0, "", nil, nil, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to read the answer bindings")
 		}
-		result, err := control.Grade(answer.GradeContext{Bindings: bindings, Answer: in.Answer, ClozeOrdinal: clozeOrdinal})
+		result, err := control.Grade(answer.GradeContext{Bindings: bindings, Metadata: answer.MetadataFieldValue(cfg, values), Answer: in.Answer, ClozeOrdinal: clozeOrdinal})
 		if err != nil {
 			return 0, "", nil, nil, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "the answer cannot be recorded")
 		}
@@ -1603,6 +1603,7 @@ func (a *API) resolveRating(ctx context.Context, card *store.Card, note *store.N
 	}
 	gc := answer.GradeContext{
 		Bindings:     bindings,
+		Metadata:     answer.MetadataFieldValue(cfg, values),
 		Answer:       in.Answer,
 		Mapping:      gradeMappingFor(preset),
 		ClozeOrdinal: clozeOrdinal,

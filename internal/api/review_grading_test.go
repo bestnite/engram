@@ -9,6 +9,8 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/notetype"
+	"git.nite07.com/nite/engram/internal/pgtest"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -42,6 +44,86 @@ func seedKindCard(t *testing.T, db *gorm.DB, deckID uint64, kind, fieldsJSON, te
 		t.Fatalf("create card: %v", err)
 	}
 	return c
+}
+
+func TestSubmitReviewClozeMetadata(t *testing.T) {
+	for _, driver := range []string{"sqlite", "postgres"} {
+		t.Run(driver, func(t *testing.T) {
+			var env *testEnv
+			if driver == "postgres" {
+				db, ok := pgtest.Open(t)
+				if !ok {
+					return
+				}
+				env = newTestEnvWithDB(t, db, 60, 60)
+			} else {
+				env = newTestEnv(t, 60, 60)
+			}
+			testSubmitReviewClozeMetadata(t, env)
+		})
+	}
+}
+
+func testSubmitReviewClozeMetadata(t *testing.T, env *testEnv) {
+	user := seedUser(t, env.db, "grader", store.RoleUser)
+	deck := seedDeck(t, env.db, user.ID)
+	card := seedKindCard(t, env.db, deck.ID, "cloze", `{"text":"{{c1::canonical}}"}`, "cloze:1")
+	var note store.Note
+	if err := env.db.First(&note, card.NoteID).Error; err != nil {
+		t.Fatal(err)
+	}
+	var nt store.NoteType
+	if err := env.db.First(&nt, *note.NoteTypeID).Error; err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := nt.Config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Fields = append(cfg.Fields, notetype.Field{ID: "metadata-id", Name: "engram_meta"})
+	rawCfg, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := env.db.Model(&nt).Update("config_json", string(rawCfg)).Error; err != nil {
+		t.Fatal(err)
+	}
+	values := store.NoteFieldValues(note.FieldsJSON)
+	values["metadata-id"] = `{"cloze_accept":{"1":{"canonical":["alternate"]}}}`
+	rawFields, err := json.Marshal(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := env.db.Model(&note).Update("fields_json", string(rawFields)).Error; err != nil {
+		t.Fatal(err)
+	}
+	key := seedKey(t, env.keys, user.ID, []string{store.ScopeReview}, nil)
+	body := fmt.Sprintf(`{"card_id":%q,"expected_version":0,"answer":["alternate"]}`, card.PublicID)
+	status, raw := doJSON(t, env.router(), http.MethodPost, "/api/v1/review", key.Plaintext, body)
+	if status != http.StatusOK {
+		t.Fatalf("status %d: %s", status, raw)
+	}
+	var response SubmitReviewResult
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Grade == nil || response.Grade.Score != 1 {
+		t.Fatalf("grade: %#v", response.Grade)
+	}
+	var review store.Review
+	if err := env.db.Where("card_id = ?", card.ID).First(&review).Error; err != nil {
+		t.Fatal(err)
+	}
+	if review.GradeDetailJSON == nil {
+		t.Fatal("missing grade detail")
+	}
+	var detail map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(*review.GradeDetailJSON), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if string(detail["canonical"]) != `["canonical"]` || string(detail["alternatives"]) != `[["alternate"]]` {
+		t.Fatalf("detail: %s", *review.GradeDetailJSON)
+	}
 }
 
 // TestSubmitReviewGradingRules covers the grade-source rules (REST entry; the same service-layer implementation also serves MCP and web):

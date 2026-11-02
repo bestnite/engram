@@ -320,8 +320,12 @@ func (s *NoteStore) prepareNoteFields(ctx context.Context, tx *gorm.DB, n *Note,
 	}
 	// The editor inserts /media/<sha256> and [sound:<sha256>]; store them as deck-scoped names and register those
 	// names in the same transaction, so the frame, media_notes, garbage collection and export all see the reference.
-	if err := normaliseNoteMediaNames(ctx, tx, n.DeckID, values); err != nil {
+	mediaValues := mediaFieldValues(cfg, values)
+	if err := normaliseNoteMediaNames(ctx, tx, n.DeckID, mediaValues); err != nil {
 		return nil, nil, fmt.Errorf("normalise note media names: %w", err)
+	}
+	for id, value := range mediaValues {
+		values[id] = value
 	}
 	raw, err := json.Marshal(values)
 	if err != nil {
@@ -414,8 +418,13 @@ func (s *NoteStore) createInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if err != nil {
 		return nil, err
 	}
+	_, cfg, err := noteTypeFor(ctx, tx, n)
+	if err != nil {
+		return nil, err
+	}
+	mediaValues := mediaFieldValues(cfg, values)
 	// Pre-write validation: evaluate against the pre-write state (on create the old reference set is empty).
-	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), n.DeckID, nil, values); err != nil {
+	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), n.DeckID, nil, mediaValues); err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
@@ -431,7 +440,7 @@ func (s *NoteStore) createInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if err != nil {
 		return nil, err
 	}
-	if err := rebuildMediaNotes(ctx, tx, n.ID, n.DeckID, values); err != nil {
+	if err := rebuildMediaNotes(ctx, tx, n.ID, n.DeckID, mediaValues); err != nil {
 		return nil, err
 	}
 	return created, nil
@@ -485,13 +494,22 @@ func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if err != nil {
 		return nil, err
 	}
+	_, cfg, err := noteTypeFor(ctx, tx, n)
+	if err != nil {
+		return nil, err
+	}
+	_, oldCfg, err := noteTypeFor(ctx, tx, existing)
+	if err != nil {
+		return nil, err
+	}
+	mediaValues := mediaFieldValues(cfg, values)
 	// Pre-write validation: evaluate against the pre-write state -- the old reference set comes from the fields currently in the database, and the write only happens once it passes.
 	oldValues, perr := ParseFieldValues(existing.FieldsJSON)
 	if perr != nil {
 		// Corrupt fields count as an empty set: that neither waves new references through nor blocks editing because of pre-existing dirty data.
 		oldValues = nil
 	}
-	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), n.DeckID, oldValues, values); err != nil {
+	if err := checkNewMediaRefs(ctx, tx, actorFromContext(ctx), n.DeckID, mediaFieldValues(oldCfg, oldValues), mediaValues); err != nil {
 		return nil, err
 	}
 	if n.TagsJSON == "" {
@@ -516,7 +534,7 @@ func (s *NoteStore) updateInTx(ctx context.Context, tx *gorm.DB, n *Note, fields
 	if err != nil {
 		return nil, err
 	}
-	if err := rebuildMediaNotes(ctx, tx, n.ID, n.DeckID, values); err != nil {
+	if err := rebuildMediaNotes(ctx, tx, n.ID, n.DeckID, mediaValues); err != nil {
 		return nil, err
 	}
 	return synced, nil

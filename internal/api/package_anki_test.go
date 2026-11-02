@@ -3,11 +3,17 @@ package api
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 
+	"golang.org/x/text/language"
+
+	"git.nite07.com/nite/engram/internal/i18n"
+	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -22,6 +28,42 @@ func ankiFixtureBytes(t *testing.T) []byte {
 		t.Fatalf("read fixture: %v", err)
 	}
 	return raw
+}
+
+func TestImportReservedPrefixNoticeLocalized(t *testing.T) {
+	env := newTestEnv(t, 60, 60)
+	user := seedUser(t, env.db, "prefix-import", store.RoleUser)
+	deck := seedDeck(t, env.db, user.ID)
+	cfg := notetype.Config{Kind: notetype.KindNormal, Fields: []notetype.Field{{ID: "front", Name: "Front"}, {ID: "legacy", Name: "engram_notes"}}, Templates: []notetype.Template{{ID: "t", Name: "Card", QFormat: "{{Front}}"}}}
+	nt := store.NoteType{DeckID: deck.ID, Name: "Imported prefix"}
+	if err := store.NewNoteTypeStore(env.db).Create(context.Background(), &nt, cfg); err != nil {
+		t.Fatal(err)
+	}
+	note := store.Note{DeckID: deck.ID, NoteTypeID: store.Ptr(nt.ID)}
+	if _, err := store.NewNoteStore(env.db).Create(context.Background(), &note, map[string]any{"Front": "front", "engram_notes": "ordinary"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := env.api.ExportAnkiPackage(context.Background(), user.ID, deck.ID, store.PackageOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	translator, err := i18n.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		tag  language.Tag
+		want string
+	}{{language.English, "ordinary fields"}, {language.SimplifiedChinese, "普通字段导入"}} {
+		ctx := i18n.WithLocalizer(context.Background(), translator.Localizer(tc.tag))
+		report, err := env.api.ImportDeckPackage(ctx, user, nil, bytes.NewReader(raw), store.PackageImportOptions{Target: store.PackageTargetNewDeck})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(report.ReservedPrefixFields) != 1 || report.ReservedPrefixFields[0] != "engram_notes" || !strings.Contains(report.ReservedPrefixNotice, tc.want) {
+			t.Fatalf("%v: %+v", tc.tag, report)
+		}
+	}
 }
 
 func TestImportPackageAcceptsAnki(t *testing.T) {

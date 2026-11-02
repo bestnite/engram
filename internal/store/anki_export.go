@@ -697,21 +697,30 @@ func (s *DeckStore) ankiMediaFiles(ctx context.Context, actorUserID, deckID uint
 		return nil, fmt.Errorf("%w: media root is empty", ErrPackageMediaMissing)
 	}
 	var values []string
-	for i := range notes {
-		fields, err := ParseFieldValues(notes[i].FieldsJSON)
-		if err != nil {
-			return nil, fmt.Errorf("export anki package: note %d: %w", notes[i].ID, err)
-		}
-		for _, value := range fields {
-			values = append(values, value)
-		}
-	}
+	configs := make(map[uint64]notetype.Config, len(types))
 	for i := range types {
 		cfg, err := types[i].Config()
 		if err != nil {
 			return nil, fmt.Errorf("export anki package: note type %d: %w", types[i].ID, err)
 		}
+		configs[types[i].ID] = cfg
 		values = append(values, noteTypeMediaStrings(cfg)...)
+	}
+	for i := range notes {
+		fields, err := ParseFieldValues(notes[i].FieldsJSON)
+		if err != nil {
+			return nil, fmt.Errorf("export anki package: note %d: %w", notes[i].ID, err)
+		}
+		if notes[i].NoteTypeID == nil {
+			return nil, fmt.Errorf("export anki package: missing note type for note %d", notes[i].ID)
+		}
+		cfg, ok := configs[*notes[i].NoteTypeID]
+		if !ok {
+			return nil, fmt.Errorf("export anki package: missing note type for note %d", notes[i].ID)
+		}
+		for _, value := range mediaFieldValues(cfg, fields) {
+			values = append(values, value)
+		}
 	}
 
 	nameSet := make(map[string]bool)

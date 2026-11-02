@@ -446,12 +446,23 @@ func gradeBreakdown(detail map[string]any) []gin.H {
 	if len(correct) != len(items) {
 		return nil
 	}
+	canonical, hasCanonical := detail["canonical"].([]string)
+	alternatives, hasAlternatives := detail["alternatives"].([][]string)
+	separate := hasCanonical && hasAlternatives && len(canonical) == len(items) && len(alternatives) == len(items)
 	out := make([]gin.H, 0, len(items))
 	for i, wordings := range items {
-		out = append(out, gin.H{
+		entry := gin.H{
 			"answer_html": html.EscapeString(strings.Join(wordings, " / ")),
 			"correct":     correct[i],
-		})
+		}
+		if separate {
+			entry["canonical"] = canonical[i]
+			// A nil slice is encoded as null; clients need an array even without alternatives.
+			extra := make([]string, len(alternatives[i]))
+			copy(extra, alternatives[i])
+			entry["alternatives"] = extra
+		}
+		out = append(out, entry)
 	}
 	return out
 }

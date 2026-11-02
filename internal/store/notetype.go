@@ -60,6 +60,12 @@ type NoteTypeCardImpact struct {
 // names the template and the role it rejected. Every note type write path (API create/update, package import, stock
 // type creation and migration) funnels through this method, so the answer-spec rule has one implementation point.
 func (nt *NoteType) SetConfig(name string, cfg notetype.Config) error {
+	// Field presence enables metadata regardless of whether an action or manual edit added it.
+	for i := range cfg.Fields {
+		if cfg.Fields[i].Name == notetype.MetadataFieldName {
+			cfg.Fields[i].ExcludeFromSearch = true
+		}
+	}
 	if err := notetype.ValidateName(name); err != nil {
 		return fmt.Errorf("validate note type name: %w", err)
 	}
@@ -213,6 +219,48 @@ func (s *NoteTypeStore) Update(ctx context.Context, nt *NoteType, cfg notetype.C
 	// failure: the caller converts it into the dry-run result or the confirmation error.
 	rollbackUpdate := errors.New("rollback note type update")
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockNoteTypeRow(ctx, tx, nt.ID, "UPDATE"); err != nil {
+			return err
+		}
+		var current NoteType
+		if err := tx.First(&current, nt.ID).Error; err != nil {
+			return err
+		}
+		if current.Version != opts.ExpectedVersion {
+			return fmt.Errorf("%w: note type %d is not at version %d", ErrVersionConflict, nt.ID, opts.ExpectedVersion)
+		}
+		oldCfg, err := current.Config()
+		if err != nil {
+			return err
+		}
+		var notes []Note
+		if err := tx.Where("note_type_id = ?", nt.ID).Find(&notes).Error; err != nil {
+			return fmt.Errorf("load note type media: %w", err)
+		}
+		// Validate all notes before rebuilding any mapping, or an earlier note
+		// could grant access to a reference that a later note introduces.
+		for _, note := range notes {
+			values := NoteFieldValues(note.FieldsJSON)
+			oldValues, newValues := mediaFieldValues(oldCfg, values), mediaFieldValues(cfg, values)
+			actor := actorFromContext(ctx)
+			if actor == 0 {
+				before, err := mediaRefsIn(ctx, tx, note.DeckID, oldValues)
+				if err != nil {
+					return err
+				}
+				after, err := mediaRefsIn(ctx, tx, note.DeckID, newValues)
+				if err != nil {
+					return err
+				}
+				for sha := range after {
+					if !before[sha] {
+						return &MediaWriteError{Code: CodeMediaNotReadable, Entries: []string{"media/" + sha}}
+					}
+				}
+			} else if err := checkNewMediaRefs(ctx, tx, actor, note.DeckID, oldValues, newValues); err != nil {
+				return err
+			}
+		}
 		res := tx.Model(&NoteType{}).
 			Where("id = ? AND version = ?", nt.ID, opts.ExpectedVersion).
 			Updates(map[string]any{

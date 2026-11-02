@@ -10,7 +10,9 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/text/language"
 
+	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -65,6 +67,17 @@ func (a *API) ImportDeckPackage(ctx context.Context, u *store.User, apiKeyID *ui
 	report, err := a.decks.ImportPackage(ctx, u.ID, r, opts)
 	if err != nil {
 		return nil, mapPackageError(err)
+	}
+	if len(report.ReservedPrefixFields) > 0 {
+		loc := i18n.FromContext(ctx)
+		if loc == nil {
+			translator, err := i18n.New()
+			if err != nil {
+				return nil, fmt.Errorf("load translations: %w", err)
+			}
+			loc = translator.Localizer(language.English)
+		}
+		report.ReservedPrefixNotice = loc.T("m20.reserved_prefix_import")
 	}
 	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(u.ID),

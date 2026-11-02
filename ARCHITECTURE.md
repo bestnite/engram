@@ -250,9 +250,11 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
   `.apkg` is the only deck package format for import and export. It does not carry a note's
   `external_ref`, `extra` or `source_url`: Anki drops `notes.data` on import, so it cannot
   preserve these values through an Anki round trip.
-- **Cloze answers.** In the `cloze_blanks` answer control each blank has exactly one accepted
-  answer: the text of its deletion. `|` and `\alt` are ordinary content in a cloze, and neither
-  separates alternative accepted answers. The `list` control keeps its own `|` alternative rule.
+- **Cloze answers.** `cloze_blanks` grades against each deletion's canonical text and optional
+  literal alternatives in the exact-name `engram_meta` note field. That field is JSON, is excluded
+  from card generation, media processing and search, and cannot be referenced by a template.
+  Other `engram_` fields remain ordinary content. `|` and `\alt` remain ordinary cloze content;
+  the `list` control keeps its own `|` alternative rule.
 - **Cards and subdecks.** `cards.deck_path` is a nullable TEXT path relative to the imported root
   deck (for example `Lesson 1::Verbs`); a card without it sits directly in the note's deck. A
   subdeck is stored only as this path and never as a deck row.

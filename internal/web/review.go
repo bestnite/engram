@@ -377,6 +377,7 @@ func frontFaceHTML(item *cardFace, source string, optionOrder []int, forFrame bo
 		Marker:       marker,
 		Side:         notetype.SideFront,
 		Bindings:     bindings,
+		Metadata:     answer.MetadataFieldValue(item.config, item.values),
 		ClozeOrdinal: item.ordinal,
 		OptionOrder:  optionOrder,
 	}, source)
@@ -418,6 +419,7 @@ func backFaceHTML(item *cardFace, source string, submitted json.RawMessage, resu
 		Marker:       marker,
 		Side:         notetype.SideBack,
 		Bindings:     bindings,
+		Metadata:     answer.MetadataFieldValue(item.config, item.values),
 		ClozeOrdinal: item.ordinal,
 		OptionOrder:  optionOrder,
 		Answer:       submitted,

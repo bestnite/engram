@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -13,6 +14,35 @@ import (
 	"git.nite07.com/nite/engram/internal/schedule"
 	"git.nite07.com/nite/engram/internal/store"
 )
+
+func TestGradeBreakdownClozeAndOtherControls(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		detail map[string]any
+		want   string
+	}{
+		{"cloze", map[string]any{"answers": [][]string{{"<one>", "a&b"}, {"two"}}, "canonical": []string{"<one>", "two"}, "alternatives": [][]string{{"a&b"}, nil}, "correct": []bool{true, false}}, `[{"alternatives":["a&b"],"answer_html":"&lt;one&gt; / a&amp;b","canonical":"<one>","correct":true},{"alternatives":[],"answer_html":"two","canonical":"two","correct":false}]`},
+		{"list", map[string]any{"items": [][]string{{"a", "b"}}, "correct": []bool{true}}, `[{"answer_html":"a / b","correct":true}]`},
+		{"mismatched metadata", map[string]any{"answers": [][]string{{"a"}}, "canonical": []string{"a"}, "alternatives": [][]string{}, "correct": []bool{false}}, `[{"answer_html":"a","correct":false}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := json.Marshal(gradeBreakdown(tc.detail))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var actual, expected any
+			if err := json.Unmarshal(got, &actual); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal([]byte(tc.want), &expected); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(actual, expected) {
+				t.Fatalf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
 
 // postJSONWithCSRF submits JSON with the session cookie and the X-CSRF-Token header (the uniform shape of SPA writes).
 func postJSONWithCSRF(t *testing.T, srv *Server, path string, body any, cookies []*http.Cookie, csrf string) *httptest.ResponseRecorder {

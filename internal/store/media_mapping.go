@@ -11,7 +11,24 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"git.nite07.com/nite/engram/internal/notetype"
 )
+
+// mediaFieldValues excludes only the metadata field: JSON must not grant media
+// access, trigger a permission check, or be rewritten as if it were card HTML.
+func mediaFieldValues(cfg notetype.Config, values map[string]string) map[string]string {
+	filtered := make(map[string]string, len(values))
+	for id, value := range values {
+		filtered[id] = value
+	}
+	for _, field := range cfg.Fields {
+		if field.Name == notetype.MetadataFieldName {
+			delete(filtered, field.ID)
+		}
+	}
+	return filtered
+}
 
 // Media mapping and readability decisions (settled -10-06).
 //

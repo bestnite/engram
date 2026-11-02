@@ -94,3 +94,22 @@ func TestFrontFaceHTMLChoiceKeepsOptionMarkup(t *testing.T) {
 		})
 	}
 }
+
+func TestClozeMetadataFaceDoesNotLeakBeforeGrading(t *testing.T) {
+	item := &cardFace{
+		config:  notetype.Config{Fields: []notetype.Field{{ID: "metadata-id", Name: "engram_meta"}}},
+		spec:    &notetype.AnswerSpec{Control: "cloze_blanks", Bindings: map[string]string{"text": "text-id"}},
+		values:  map[string]string{"text-id": "{{c1::canonical}}", "metadata-id": `{"cloze_accept":{"1":{"canonical":["alternate"]}}}`},
+		ordinal: 1,
+	}
+	marker := "[[type:text]]"
+	front := frontFaceHTML(item, marker, nil, true)
+	back := backFaceHTML(item, marker, nil, nil, nil)
+	if strings.Contains(front, "alternate") || strings.Contains(back, "alternate") {
+		t.Fatalf("alternative leaked before grading: front %q back %q", front, back)
+	}
+	back = backFaceHTML(item, marker, nil, &answer.GradeResult{Detail: map[string]any{"correct": []bool{true}}}, nil)
+	if !strings.Contains(back, "alternate") {
+		t.Fatalf("graded back omitted alternative: %q", back)
+	}
+}

@@ -47,7 +47,8 @@ func FieldsOrEmpty(raw string) map[string]any {
 func noteSearchText(cfg notetype.Config, values map[string]string) string {
 	parts := make([]string, 0, len(cfg.Fields))
 	for _, field := range cfg.Fields {
-		if field.ExcludeFromSearch {
+		// Imported metadata may lack the flag; its machine data is never searchable.
+		if field.ExcludeFromSearch || field.Name == notetype.MetadataFieldName {
 			continue
 		}
 		text := notetype.PlainText(values[field.ID])

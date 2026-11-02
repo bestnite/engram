@@ -170,6 +170,7 @@ type RenderContext struct {
 	Marker       string
 	Side         notetype.Side
 	Bindings     Bindings
+	Metadata     string
 	ElementID    string
 	Font         string
 	FontSize     int
@@ -185,6 +186,7 @@ type RenderContext struct {
 // ClozeOrdinal and OptionOrder have the same meaning as in RenderContext.
 type GradeContext struct {
 	Bindings     Bindings
+	Metadata     string
 	Answer       json.RawMessage
 	Mapping      *GradeMapping
 	ClozeOrdinal int

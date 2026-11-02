@@ -78,6 +78,17 @@ func clozeCardNumber(cardTemplate string) (int, bool) {
 // template as generating no card and says nothing, but this repository reports
 // the template error to the user, so the caller gets it instead.
 func GenerateCards(cfg Config, data RenderData) ([]GeneratedCard, error) {
+	// Metadata is not a card-generation input, even for legacy templates.
+	fields := make(map[string]string, len(data.Fields))
+	for id, value := range data.Fields {
+		fields[id] = value
+	}
+	for _, field := range cfg.Fields {
+		if field.Name == MetadataFieldName {
+			delete(fields, field.ID)
+		}
+	}
+	data.Fields = fields
 	switch cfg.Kind {
 	case KindCloze:
 		return generateClozeCards(cfg, data), nil
@@ -124,6 +135,10 @@ func generateNormalCards(cfg Config, data RenderData) ([]GeneratedCard, error) {
 func generateClozeCards(cfg Config, data RenderData) []GeneratedCard {
 	values := make([]string, len(cfg.Fields))
 	for i, field := range cfg.Fields {
+		// Capability JSON is not card content, even when malformed or containing cloze markers.
+		if field.Name == MetadataFieldName {
+			continue
+		}
 		values[i] = data.Fields[field.ID]
 	}
 	numbers := clozeNumbersInFields(values)

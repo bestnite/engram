@@ -238,3 +238,11 @@
 # Review: notice on a card whose front renders empty (the note no longer generates it).
 - id: review.empty_card.notice
   translation: "这张卡片是空的。清理空卡片会将它删除。"
+
+- id: m20.metadata_template
+  translation: "模板不能引用 engram_meta 字段。"
+
+- id: m20.reserved_prefix
+  translation: "以 engram_ 开头的字段名已保留，engram_meta 除外。"
+- id: m20.reserved_prefix_import
+  translation: "字段名落在保留前缀内，已按普通字段导入。"

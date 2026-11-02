@@ -309,6 +309,24 @@ func ankiMediaNameIndex(files []ankiMediaFile) map[string]bool {
 	return idx
 }
 
+// forEachAnkiContentField leaves metadata untouched even when it contains media-like text.
+func forEachAnkiContentField(pkg *anki.Package, visit func(*string)) {
+	types := make(map[int64]anki.NoteType, len(pkg.NoteTypes))
+	for _, nt := range pkg.NoteTypes {
+		types[nt.ID] = nt
+	}
+	for i := range pkg.Notes {
+		note := &pkg.Notes[i]
+		nt := types[note.NoteTypeID]
+		for j := range note.Fields {
+			if j < len(nt.Fields) && nt.Fields[j].Name == notetype.MetadataFieldName {
+				continue
+			}
+			visit(&note.Fields[j])
+		}
+	}
+}
+
 // ankiMediaRefs returns every media name referenced by note fields, note-type templates, CSS and
 // LaTeX bodies, de-duplicated and sorted.
 func ankiMediaRefs(pkg *anki.Package) []string {
@@ -318,11 +336,7 @@ func ankiMediaRefs(pkg *anki.Package) []string {
 			seen[name] = struct{}{}
 		}
 	}
-	for i := range pkg.Notes {
-		for _, value := range pkg.Notes[i].Fields {
-			add(value)
-		}
-	}
+	forEachAnkiContentField(pkg, func(value *string) { add(*value) })
 	for i := range pkg.NoteTypes {
 		nt := &pkg.NoteTypes[i]
 		for j := range nt.Templates {
@@ -435,11 +449,7 @@ func ankiExternalAssets(pkg *anki.Package) []string {
 			}
 		}
 	}
-	for i := range pkg.Notes {
-		for _, value := range pkg.Notes[i].Fields {
-			add(value)
-		}
-	}
+	forEachAnkiContentField(pkg, func(value *string) { add(*value) })
 	for i := range pkg.NoteTypes {
 		nt := &pkg.NoteTypes[i]
 		for j := range nt.Templates {
@@ -471,7 +481,10 @@ func ankiMissingLatexImages(pkg *anki.Package, files []ankiMediaFile, types map[
 		if !ok {
 			continue
 		}
-		for _, value := range note.Fields {
+		for index, value := range note.Fields {
+			if index < len(nt.Fields) && nt.Fields[index].Name == notetype.MetadataFieldName {
+				continue
+			}
 			for _, name := range mediaNamesInHTML(notetype.RenderLatex(value, nt.LaTeXSVG)) {
 				if !strings.HasPrefix(path.Base(name), "latex-") {
 					continue
@@ -1027,6 +1040,18 @@ func (s *DeckStore) importAnkiInTx(ctx context.Context, tx *gorm.DB, actorUserID
 	// media references to the report, and no stored row points at them.
 	dropUnusedAnkiNoteTypes(pkg)
 	report.AnswerSpecsMissing = ankiAnswerSpecsMissing(pkg)
+	reserved := map[string]bool{}
+	for _, nt := range pkg.NoteTypes {
+		for _, field := range nt.Fields {
+			if strings.HasPrefix(field.Name, "engram_") && field.Name != notetype.MetadataFieldName {
+				reserved[field.Name] = true
+			}
+		}
+	}
+	for name := range reserved {
+		report.ReservedPrefixFields = append(report.ReservedPrefixFields, name)
+	}
+	sort.Strings(report.ReservedPrefixFields)
 
 	deckID, err := s.resolveAnkiTargetDeck(ctx, tx, actorUserID, pkg, plan, targetKind, targetDeckID, opts, report)
 	if err != nil {
@@ -1384,8 +1409,12 @@ func removeStaleCardsForNoteType(ctx context.Context, tx *gorm.DB, noteID uint64
 // content: an update replaces them, so a re-import reproduces the package exactly.
 func writeAnkiNote(ctx context.Context, tx *gorm.DB, actorUserID, deckID uint64, note *anki.Note, target *ankiTypeTarget, old *Note, now time.Time) (uint64, bool, error) {
 	values := ankiValues(note, target)
-	if err := normaliseNoteMediaNames(ctx, tx, deckID, values); err != nil {
+	mediaValues := mediaFieldValues(target.Config, values)
+	if err := normaliseNoteMediaNames(ctx, tx, deckID, mediaValues); err != nil {
 		return 0, false, fmt.Errorf("normalise note media names: %w", err)
+	}
+	for id, value := range mediaValues {
+		values[id] = value
 	}
 	raw, err := json.Marshal(values)
 	if err != nil {
@@ -1409,13 +1438,13 @@ func writeAnkiNote(ctx context.Context, tx *gorm.DB, actorUserID, deckID uint64,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-		if err := checkNewMediaRefs(ctx, tx, actorUserID, deckID, nil, values); err != nil {
+		if err := checkNewMediaRefs(ctx, tx, actorUserID, deckID, nil, mediaValues); err != nil {
 			return 0, false, err
 		}
 		if err := tx.WithContext(ctx).Create(&created).Error; err != nil {
 			return 0, false, fmt.Errorf("create note: %w", err)
 		}
-		if err := rebuildMediaNotes(ctx, tx, created.ID, deckID, values); err != nil {
+		if err := rebuildMediaNotes(ctx, tx, created.ID, deckID, mediaValues); err != nil {
 			return 0, false, err
 		}
 		return created.ID, true, nil
@@ -1425,7 +1454,11 @@ func writeAnkiNote(ctx context.Context, tx *gorm.DB, actorUserID, deckID uint64,
 	if perr != nil {
 		oldValues = nil
 	}
-	if err := checkNewMediaRefs(ctx, tx, actorUserID, deckID, oldValues, values); err != nil {
+	_, oldCfg, err := noteTypeFor(ctx, tx, old)
+	if err != nil {
+		return 0, false, err
+	}
+	if err := checkNewMediaRefs(ctx, tx, actorUserID, deckID, mediaFieldValues(oldCfg, oldValues), mediaValues); err != nil {
 		return 0, false, err
 	}
 	// A soft-deleted match is restored first: it keeps its id, so its cards and their card_states
@@ -1445,7 +1478,7 @@ func writeAnkiNote(ctx context.Context, tx *gorm.DB, actorUserID, deckID uint64,
 	if err := tx.WithContext(ctx).Model(&Note{}).Where("id = ?", old.ID).Updates(updates).Error; err != nil {
 		return 0, false, fmt.Errorf("update note %d: %w", old.ID, err)
 	}
-	if err := rebuildMediaNotes(ctx, tx, old.ID, deckID, values); err != nil {
+	if err := rebuildMediaNotes(ctx, tx, old.ID, deckID, mediaValues); err != nil {
 		return 0, false, err
 	}
 	return old.ID, false, nil
@@ -2048,11 +2081,7 @@ func renameAnkiMedia(ctx context.Context, tx *gorm.DB, deckID uint64, pkg *anki.
 	if len(renames) == 0 {
 		return nil
 	}
-	for i := range pkg.Notes {
-		for j := range pkg.Notes[i].Fields {
-			pkg.Notes[i].Fields[j] = rewriteMediaRefs(pkg.Notes[i].Fields[j], renames)
-		}
-	}
+	forEachAnkiContentField(pkg, func(value *string) { *value = rewriteMediaRefs(*value, renames) })
 	for i := range pkg.NoteTypes {
 		nt := &pkg.NoteTypes[i]
 		nt.CSS = rewriteMediaRefs(nt.CSS, renames)

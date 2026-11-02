@@ -8,9 +8,8 @@ import (
 )
 
 // clozeBlanksControl is the cloze control: one input per deletion carrying the
-// card's cloze number, graded blank by blank. There is no alternative-answer
-// rule here: | and \alt are ordinary content, so each deletion has exactly one
-// expected wording.
+// card's cloze number, graded blank by blank. Literal | and \alt remain content;
+// optional alternative wordings are stored separately in note metadata.
 type clozeBlanksControl struct{}
 
 func (clozeBlanksControl) Name() string { return "cloze_blanks" }
@@ -48,7 +47,14 @@ func (clozeBlanksControl) RenderBack(ctx RenderContext) (string, error) {
 		if i < len(correct) {
 			b.WriteString(fmt.Sprintf(` data-correct="%t"`, correct[i]))
 		}
-		b.WriteString(`>` + escapeHTML(text) + `</li>`)
+		b.WriteString(`>` + escapeHTML(text))
+		// A back rendered without a submission must not expose alternatives early.
+		if ctx.Result != nil {
+			for _, alternative := range ClozeAlternatives(ctx.Metadata, ctx.ClozeOrdinal, text) {
+				b.WriteString(`; ` + escapeHTML(alternative))
+			}
+		}
+		b.WriteString(`</li>`)
 	}
 	b.WriteString(`</ol>`)
 	return b.String(), nil
@@ -74,14 +80,19 @@ func (clozeBlanksControl) Grade(ctx GradeContext) (GradeResult, error) {
 	correct := make([]bool, len(expected))
 	hits := 0
 	wordings := make([][]string, len(expected))
+	alternatives := make([][]string, len(expected))
 	for i, wording := range expected {
-		wordings[i] = []string{wording}
-		if matchesExpected(given[i], wording, false) {
-			correct[i] = true
-			hits++
+		alternatives[i] = ClozeAlternatives(ctx.Metadata, ctx.ClozeOrdinal, wording)
+		wordings[i] = append([]string{wording}, alternatives[i]...)
+		for _, accepted := range wordings[i] {
+			if matchesExpected(given[i], accepted, false) {
+				correct[i] = true
+				hits++
+				break
+			}
 		}
 	}
-	detail := map[string]any{"answers": wordings, "given": given, "correct": correct}
+	detail := map[string]any{"answers": wordings, "canonical": expected, "alternatives": alternatives, "given": given, "correct": correct}
 	result := finish(ctx, float64(hits)/float64(len(expected)), detail)
 	result.Given = strings.Join(given, ", ")
 	return result, nil

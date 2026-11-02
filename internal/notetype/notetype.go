@@ -13,6 +13,9 @@ import (
 // in its fields.
 type Kind string
 
+// MetadataFieldName is the one field reserved for per-note capability data.
+const MetadataFieldName = "engram_meta"
+
 const (
 	KindNormal Kind = "normal"
 	KindCloze  Kind = "cloze"
@@ -114,7 +117,8 @@ const (
 	RuleAnswerTypePlaceholder Rule = "answer_type_placeholder"
 	// RuleAnswerSpec reports an answer spec a control rejected: an unknown control, a missing
 	// required role, or a role bound to a field the note type does not declare.
-	RuleAnswerSpec Rule = "answer_spec"
+	RuleAnswerSpec       Rule = "answer_spec"
+	RuleMetadataTemplate Rule = "metadata_template"
 )
 
 // ValidationError reports the first rule a note type violates. Detail is English
@@ -198,6 +202,22 @@ func (c Config) Validate() error {
 	}
 
 	for _, template := range c.Templates {
+		// Metadata is not card content: even a conditional reference can expose
+		// its presence or render its JSON on an Anki card face.
+		for _, format := range []string{template.QFormat, template.AFormat, template.BQFormat, template.BAFormat} {
+			for _, token := range lexTemplate(format) {
+				name := ""
+				switch token.kind {
+				case tokenReplacement:
+					name, _ = splitReplacement(token.body)
+				case tokenOpenConditional, tokenOpenNegated, tokenCloseConditional:
+					name = strings.TrimSpace(token.body)
+				}
+				if name == MetadataFieldName {
+					return validationError(RuleMetadataTemplate, "template %q references metadata field", template.Name)
+				}
+			}
+		}
 		for _, reference := range ReferencedFields(template.QFormat) {
 			if _, exists := fieldNames[reference]; !exists {
 				return validationError(RuleUnknownField, "template %q front references unknown field %q", template.Name, reference)

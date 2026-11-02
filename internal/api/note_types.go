@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/text/language"
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/i18n"
 	"git.nite07.com/nite/engram/internal/notetype"
 	"git.nite07.com/nite/engram/internal/store"
 )
@@ -158,9 +161,12 @@ func (a *API) CreateNoteType(ctx context.Context, userID, deckID uint64, apiKeyI
 		cfg = def.Config
 		name = stockNoteTypeName(name, def.JSON.Name)
 	}
+	if err := validateReservedFields(ctx, cfg, notetype.Config{}); err != nil {
+		return NoteTypeJSON{}, err
+	}
 	nt := store.NoteType{DeckID: d.ID, Name: name}
 	if err := a.noteTypes.Create(ctx, &nt, cfg); err != nil {
-		return NoteTypeJSON{}, noteTypeWriteError(err)
+		return NoteTypeJSON{}, noteTypeWriteError(ctx, err)
 	}
 	a.auditor.Record(ctx, store.AuditEntry{
 		UserID:     store.Ptr(userID),
@@ -212,11 +218,14 @@ func (a *API) UpdateNoteType(ctx context.Context, userID, deckID uint64, publicI
 	if currentCfg.Kind != in.Config.Kind {
 		return empty, newServiceError(http.StatusBadRequest, CodeInvalidRequest, "the note type kind cannot change")
 	}
+	if err := validateReservedFields(ctx, in.Config, currentCfg); err != nil {
+		return empty, err
+	}
 	// Keep the stored row as a value so a dry run can render what is still in the database; nt itself
 	// is mutated by the store's validation before the transaction decides whether to commit.
 	before := *nt
 	nt.Name = in.Name
-	impact, err := a.noteTypes.Update(ctx, nt, in.Config, store.NoteTypeUpdateOptions{
+	impact, err := a.noteTypes.Update(store.WithActor(ctx, userID), nt, in.Config, store.NoteTypeUpdateOptions{
 		ExpectedVersion:    *in.Version,
 		DryRun:             in.DryRun,
 		ConfirmCardRemoval: in.ConfirmCardRemoval,
@@ -231,7 +240,7 @@ func (a *API) UpdateNoteType(ctx context.Context, userID, deckID uint64, publicI
 		if errors.Is(err, store.ErrCardRemovalUnconfirmed) {
 			return result, newServiceError(http.StatusConflict, CodeCardRemovalUnconfirmed, "")
 		}
-		return result, noteTypeWriteError(err)
+		return result, noteTypeWriteError(ctx, err)
 	}
 	source := nt
 	if in.DryRun {
@@ -263,6 +272,29 @@ func (a *API) UpdateNoteType(ctx context.Context, userID, deckID uint64, publicI
 		},
 	})
 	return result, nil
+}
+
+// validateReservedFields preserves existing names by stable field ID but reserves
+// new names for future capabilities; imports do not pass through this entry point.
+func validateReservedFields(ctx context.Context, cfg, current notetype.Config) error {
+	previous := map[string]string{}
+	for _, field := range current.Fields {
+		previous[field.ID] = field.Name
+	}
+	for _, field := range cfg.Fields {
+		if strings.HasPrefix(field.Name, "engram_") && field.Name != notetype.MetadataFieldName && previous[field.ID] != field.Name {
+			loc := i18n.FromContext(ctx)
+			if loc == nil {
+				translator, err := i18n.New()
+				if err != nil {
+					return fmt.Errorf("load translations: %w", err)
+				}
+				loc = translator.Localizer(language.English)
+			}
+			return newServiceError(http.StatusBadRequest, CodeInvalidRequest, loc.T("m20.reserved_prefix"))
+		}
+	}
+	return nil
 }
 
 // DeleteNoteType removes a note type (scope: write, editor role). It is refused with 409 note_type_in_use
@@ -321,9 +353,24 @@ func (a *API) noteTypeInDeck(ctx context.Context, deckID uint64, publicID string
 }
 
 // noteTypeWriteError maps a store write error to the service error shape.
-func noteTypeWriteError(err error) error {
+func noteTypeWriteError(ctx context.Context, err error) error {
+	var mediaErr *store.MediaWriteError
+	if errors.As(err, &mediaErr) {
+		return newServiceError(http.StatusForbidden, CodeMediaNotReadable, strings.Join(mediaErr.Entries, ", "))
+	}
 	var ve *notetype.ValidationError
 	if errors.As(err, &ve) {
+		if ve.Rule == notetype.RuleMetadataTemplate {
+			loc := i18n.FromContext(ctx)
+			if loc == nil {
+				translator, err := i18n.New()
+				if err != nil {
+					return fmt.Errorf("load translations: %w", err)
+				}
+				loc = translator.Localizer(language.English)
+			}
+			return newServiceError(http.StatusBadRequest, CodeInvalidRequest, loc.T("m20.metadata_template"))
+		}
 		return newServiceError(http.StatusBadRequest, CodeInvalidRequest, ve.Detail)
 	}
 	if errors.Is(err, store.ErrVersionConflict) {

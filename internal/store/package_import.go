@@ -269,10 +269,13 @@ type PackageImportReport struct {
 	// attribute the absence to Anki, which keeps a key it receives through import and
 	// through both of its export layouts.
 	AnswerSpecsMissing int `json:"answer_specs_missing"`
-	MediaNew           int `json:"media_new"`
-	MediaMissing       int `json:"media_missing"`
-	ProgressApplied    int `json:"progress_applied"`
-	ProgressSkipped    int `json:"progress_skipped"`
+	// ReservedPrefixFields lists imported ordinary fields whose names use the reserved prefix.
+	ReservedPrefixFields []string `json:"reserved_prefix_fields,omitempty"`
+	ReservedPrefixNotice string   `json:"reserved_prefix_notice,omitempty"`
+	MediaNew             int      `json:"media_new"`
+	MediaMissing         int      `json:"media_missing"`
+	ProgressApplied      int      `json:"progress_applied"`
+	ProgressSkipped      int      `json:"progress_skipped"`
 	// ProgressDiscarded means the package's card states or reviews were discarded during import.
 	ProgressDiscarded bool   `json:"progress_discarded"`
 	StatesSkipped     int    `json:"states_skipped"`
