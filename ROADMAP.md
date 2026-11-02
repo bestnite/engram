@@ -3883,17 +3883,40 @@ view of a card.
   control already has an `accept` role (`internal/answer/text.go:21`) whose matching can be reused.
   The Anki template syntax cannot carry the alternatives: `{{c1::is|are}}` would make Anki render
   "is|are" as the answer text, so the `{{c1::…}}` template text must stay exactly as it is.
-  The accepted wordings travel in a note field that no template references: Anki keeps fields through
-  its import and export, never renders a field the templates do not mention, and the granularity is
-  per note rather than per note type. A note-type-level map in the `engram` key was considered and
-  rejected: it has per-note-type granularity, and it rides an extension key that engram itself must
-  decode from each package layout — the failure mode that dropped these specs before the reader fix —
-  rather than ordinary note content. A note-level `notes.data` value was measured not to survive
-  Anki's import, so it is not a candidate either.
+  The accepted wordings travel in **one** note field that no template references, named `engram_meta`,
+  holding a JSON object of capability → data:
+
+  ```json
+  {"cloze_accept": {"1": ["is", "are"], "3": ["Canberra"]}}
+  ```
+
+  - `cloze_accept` maps a **cloze ordinal, as a string, to an array of additional accepted wordings**.
+    The canonical wording stays in `{{c1::…}}` and is not repeated here, so the two cannot drift.
+  - A map, not an array: cloze numbers are sparse (`c1`, `c7` on one card is normal), and an array
+    cannot express "blank 7 only" without padding every gap with empty entries.
+  - JSON, not a `|`-separated string: a legitimate wording may itself contain `|` (regex, `a|b`,
+    code), so any separator scheme needs an escaping rule that authors will get wrong. JSON quoting
+    already covers it, and the shape matches what the repository already uses (`notes.fields_json`
+    and the `engram` key).
+  - One namespaced field rather than one field per capability: every added field is another
+    structural change and another column in Anki's editor, so a second capability later must not
+    mean a second `engram_*` field.
+  - Anki keeps fields through import and export and never renders a field the templates do not
+    mention; the granularity is per note, not per note type. A note-type-level map in the `engram` key
+    was rejected (per-note-type granularity, and it rides an extension key engram must decode per
+    package layout — the failure mode that dropped these specs before the reader fix), and a
+    note-level `notes.data` value was measured not to survive Anki's import.
+
+  Reading it must be forgiving: a missing field, empty value, malformed JSON, an unknown capability
+  key, or an ordinal the card does not have all mean "no alternatives" — the card grades exactly as
+  today and the import does not fail. Enabling it is an explicit step on the note type, not something
+  the first answer silently adds.
+
   *Acceptance:* a cloze note whose blank carries two accepted wordings grades as correct for either
   and wrong for a third; a package round trip through Anki (import and export with `anki==26.9.3`)
-  keeps the wordings; a note with no such field behaves exactly as today; the `{{c1::…}}` template
-  text is unchanged.
+  keeps the wordings; a note with no such field, or with malformed JSON in it, behaves exactly as
+  today; the `{{c1::…}}` template text is unchanged; adding the field leaves the card set unchanged
+  (`NoteTypeCardImpact` reports 0 added and 0 removed).
 
 ## 2. Release ledger
 
