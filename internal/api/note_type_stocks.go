@@ -10,13 +10,12 @@ import (
 	"git.nite07.com/nite/engram/internal/notetype"
 )
 
-// The source names a stock definition id starts with. A stock id is "source:kind", because the three
+// The source names a stock definition id starts with. A stock id is "source:kind", because the two
 // definition lists name their kinds independently; a bare kind would be ambiguous the moment two
 // sources name the same one. The template source holds the common templates of
-// notetype.TemplateStockConfigs, and an anki id is listed only where engram has no definition for the
-// same study shape.
+// notetype.TemplateStockConfigs; every definition engram ships itself, including the two whose
+// templates the reference release dictates, is listed under the engram source.
 const (
-	stockSourceAnki     = "anki"
 	stockSourceTemplate = "template"
 	stockSourceEngram   = "engram"
 )
@@ -97,8 +96,8 @@ func stockNoteTypeDefinitions() []stockNoteTypeDefinition {
 		}
 		out = append(out, stockNoteTypeDefinition{
 			JSON: NoteTypeStockJSON{
-				ID:       stockSourceAnki + ":" + string(kind),
-				Source:   stockSourceAnki,
+				ID:       stockSourceEngram + ":" + string(kind),
+				Source:   stockSourceEngram,
 				Name:     notetype.StockName(kind),
 				LabelKey: "notetype.stock." + string(kind),
 			},

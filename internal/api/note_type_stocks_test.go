@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"git.nite07.com/nite/engram/internal/notetype"
@@ -37,7 +38,7 @@ func TestNoteTypeStocksList(t *testing.T) {
 	if body.Stocks[10].ID != "template:vocabulary" || body.Stocks[10].Source != stockSourceTemplate || body.Stocks[10].LabelKey != "notetype.stock.vocabulary" {
 		t.Fatalf("eleventh stock = %+v, want the vocabulary template", body.Stocks[10])
 	}
-	if body.Stocks[14].ID != "anki:basic_optional_reversed" || body.Stocks[15].ID != "anki:image_occlusion" {
+	if body.Stocks[14].ID != "engram:basic_optional_reversed" || body.Stocks[15].ID != "engram:image_occlusion" {
 		t.Fatalf("last two stocks = %+v, %+v, want the two Anki-only definitions", body.Stocks[14], body.Stocks[15])
 	}
 	ids := map[string]bool{}
@@ -62,11 +63,11 @@ func TestNoteTypeStocksList(t *testing.T) {
 		}
 		labelKeys[stock.LabelKey] = stock.ID
 	}
-	// The shapes engram defines itself are covered by its own definitions; the Anki ids are not
-	// offered and no longer resolve.
-	for _, kind := range []string{"basic", "basic_and_reversed", "basic_typing", "cloze"} {
-		if ids["anki:"+kind] {
-			t.Errorf("stock %q is listed although an engram definition covers the same shape", "anki:"+kind)
+	// Every definition is listed under the source engram owns; an id in the reference release's
+	// namespace would offer the same shape twice or name a source the picker no longer has.
+	for id := range ids {
+		if strings.HasPrefix(id, "anki:") {
+			t.Errorf("stock %q still uses the reference release's id namespace", id)
 		}
 	}
 }
@@ -122,7 +123,7 @@ func TestCreateNoteTypeFromStock(t *testing.T) {
 	assertErrorCode(t, raw, CodeInvalidRequest)
 
 	// The Anki definitions engram does not replace still create, styled like engram's own.
-	code, raw = doJSON(t, router, http.MethodPost, base, key, `{"stock_id":"anki:image_occlusion"}`)
+	code, raw = doJSON(t, router, http.MethodPost, base, key, `{"stock_id":"engram:image_occlusion"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("POST Anki-only stock type = %d, want 201 (body %s)", code, raw)
 	}
