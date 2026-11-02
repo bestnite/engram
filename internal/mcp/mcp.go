@@ -132,19 +132,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Header.Set(requestScopesHeader, id.Scopes)
 
 	rec := &statusWriter{ResponseWriter: w}
+	if sid == "" {
+		rec.onSuccess = func() {
+			if newSID := rec.Header().Get(mcpSessionHeader); newSID != "" {
+				s.rememberSession(newSID, id.User.ID)
+			}
+		}
+	}
 	s.handler.ServeHTTP(rec, r)
 
 	switch {
-	case sid == "":
-		// New session: the successful handshake response carries Mcp-Session-Id; record its owner for later requests to verify.
-		if newSID := rec.Header().Get(mcpSessionHeader); newSID != "" {
-			s.rememberSession(newSID, id.User.ID)
-		}
-	case r.Method == http.MethodDelete && rec.status >= http.StatusOK && rec.status < http.StatusMultipleChoices:
+	case sid != "" && r.Method == http.MethodDelete && rec.status >= http.StatusOK && rec.status < http.StatusMultipleChoices:
 		// Rule 4: when the client closes the session normally with DELETE /mcp (2xx), the owner record must be cleared as well.
 		// Miss this path and session entries would only be cleared on 404, growing without bound in a long-running process (F10c).
 		s.forgetSession(sid)
-	case rec.status == http.StatusNotFound:
+	case sid != "" && rec.status == http.StatusNotFound:
 		// The session no longer exists (expired or already DELETEd): clear the owner record while we are at it, so this table does not grow without bound.
 		s.forgetSession(sid)
 	}
@@ -210,12 +212,33 @@ func (s *Server) forgetSession(sid string) {
 // so the SSE streaming response is not broken.
 type statusWriter struct {
 	http.ResponseWriter
-	status int
+	status    int
+	onSuccess func()
 }
 
 func (w *statusWriter) WriteHeader(code int) {
-	w.status = code
+	if w.status == 0 && (code >= 200 || code == http.StatusSwitchingProtocols) {
+		w.status = code
+		if code >= 200 && code < 300 && w.onSuccess != nil {
+			// Publish ownership before the underlying writer exposes the session ID.
+			w.onSuccess()
+		}
+	}
 	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusWriter) Write(p []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+func (w *statusWriter) FlushError() error {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	return http.NewResponseController(w.ResponseWriter).Flush()
 }
 
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
