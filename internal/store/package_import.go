@@ -262,10 +262,12 @@ type PackageImportReport struct {
 	// readable cards of notes left out by on_conflict skip, because the count
 	// comes from the reader rather than conflict handling.
 	CardsSkipped int `json:"cards_skipped"`
-	// AnswerSpecsMissing counts the imported note types whose package model carried no usable
-	// engram answer-spec key. Zero means every imported note type carried one; a positive count
-	// is how a package that Anki re-exported in its default modern layout shows the lost machine
-	// grading.
+	// AnswerSpecsMissing counts the imported note types whose package carried no usable
+	// engram answer-spec key. Zero means every imported note type carried one; a positive
+	// count means those note types supplied no answer control with the package, so their
+	// machine grading cannot be imported. The count describes the package only and does not
+	// attribute the absence to Anki, which keeps a key it receives through import and
+	// through both of its export layouts.
 	AnswerSpecsMissing int `json:"answer_specs_missing"`
 	MediaNew           int `json:"media_new"`
 	MediaMissing       int `json:"media_missing"`

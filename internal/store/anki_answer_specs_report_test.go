@@ -8,9 +8,9 @@ import (
 	"git.nite07.com/nite/engram/internal/anki"
 )
 
-// TestAnkiImportReportsMissingAnswerSpecs is the visible half of the round-trip limitation: a
-// package whose model JSON carries the engram key imports with answer_specs_missing at 0, and a
-// package whose note type has no key imports with the count of note types that lost it.
+// TestAnkiImportReportsMissingAnswerSpecs pins the report field: a package whose model JSON
+// carries the engram key imports with answer_specs_missing at 0, and a package whose note type
+// has no key imports with the count of note types that supplied none.
 func TestAnkiImportReportsMissingAnswerSpecs(t *testing.T) {
 	for driver, db := range packageDatabases(t) {
 		for _, tc := range []struct {

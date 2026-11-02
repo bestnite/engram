@@ -411,13 +411,12 @@ type legacyTmplOut struct {
 	Did      *int64 `json:"did"`
 }
 
-// legacyEngramOut is the one unknown model key engram adds. The key survives engram to
-// engram and engram to Anki: engram's reader reads it back, and Anki's importer keeps an
-// unknown top-level model key. It is dropped when Anki re-exports the collection in its
-// default modern layout, which stores note types as protobuf; engram's reader returns such
-// a note type without the key, so machine grading is lost on that path. This is a known
-// limitation, not a promise, and the import report's answer_specs_missing count makes the
-// loss visible. Version 1 stores answer specs keyed by template name, with binding values
+// legacyEngramOut is the one unknown model key engram adds. Anki keeps an unknown
+// top-level model key through import and through both of its export layouts: the legacy
+// layout keeps it in the model JSON, and the default modern layout stores note types as
+// protobuf and keeps the unknown keys in Notetype.Config.other as a JSON object. engram's
+// reader reads the key back from either layout, so machine grading survives a round trip
+// through Anki. Version 1 stores answer specs keyed by template name, with binding values
 // taken from field names.
 type legacyEngramOut struct {
 	V           int                   `json:"v"`

@@ -2034,99 +2034,77 @@ contract violations instead of intrusion steps. Every entry says whether it was 
   `go test ./internal/web/ -run 'TestAdminUser|TestAdminWrite|TestAdminGate' -count=1` passes, and
   `go vet ./internal/web/` is clean.
 
-- [x] **M19-48 Anki drops the `engram` note-type key, so machine grading does not survive a round trip
-  through Anki** — *should-fix.* `internal/anki/write.go:414-418` states that "Anki carries an unknown
-  top-level model key through import and through both of its exports", and `AGENTS.md` §2.7 turns that into
-  the contract: "answer controls ride in one note type key (`engram`) that Anki keeps through import and
-  export". It does not hold for the pinned release. Reproduced with `anki==26.9.3`: I added
-  `"engram":{"v":1,"answer_specs":{"Card 1":{"control":"text","bindings":{"answer":"Back"}}}}` to the model
-  JSON of `internal/notetype/testdata/anki/stock.anki21.apkg`, imported it with
-  `Collection.import_anki_package`, and `collection.models.all()` came back without the key;
-  `Collection.export_anki_package` then wrote a `collection.anki2` whose model JSON has no `engram` key
-  either. engram's own reader still returns the spec from the same package, so the loss happens only when
-  Anki sits in the middle, and nothing reports it: `PackageImportReport` has no answer-spec field, so a deck
-  that travelled engram → Anki → engram imports with every answer control silently gone.
-  `tools/anki-oracle/verify_package.py:14-52` cannot catch this, because `count_answer_specs` counts the
-  specs in the *input* package's own model JSON instead of in the collection Anki produced, which makes the
-  check circular. *Acceptance:* carry the spec in something Anki preserves and pin it with a golden that
-  imports an engram package through Anki and reads the spec back out of Anki's own collection, or state in
-  `AGENTS.md` §2.7 and `write.go` that the key survives engram-to-engram traffic only and report the loss
-  on import. Retested with `anki==26.9.3` on a
-  package written by `anki.WriteArchive` (one `numeric` spec, note type not named after a stock type).
-  Anki's `import_anki_package` keeps the key, so the entry's "`collection.models.all()` came back
-  without the key" is wrong: `models.all()` returns `"engram"` on the imported note type. Anki's legacy
-  export (`export_anki_package(..., legacy=True)`, `collection.anki21`) also keeps it, and
-  `anki.ReadFile` returns `map[Card 1:{numeric map[value:Back]}]`. The loss is specific to Anki's
-  default modern export: `collection.anki21b` stores note types as protobuf, and `anki.ReadFile`
-  returns the note type with no answer specs.
-  *Closed by this commit (`fix(anki): report answer specs lost through an Anki re-export`).*
-  This takes the documentation-and-visibility branch. `AGENTS.md` §2.7 and the `legacyEngramOut` comment in
-  `internal/anki/write.go` now state that the key survives engram → engram and engram → Anki, but a default
-  modern re-export by Anki leaves engram's reader without it, so machine grading is lost on that path; the
-  text calls this a known limitation and makes no promise. `PackageImportReport` gained
-  `answer_specs_missing`, the count of imported note types whose package model carried no usable engram
-  key, with 0 meaning every one carried it; REST and MCP return it through the same report struct, and the
-  import view renders it only when positive using the new `package.report.answer_specs_missing` key in both
-  catalogs. `tools/anki-oracle/verify_package.py` now counts answer specs on the note types of the
-  collection Anki built from the package, instead of on the input package's own model JSON.
+- [x] **M19-48 engram's reader discards the unknown note-type key when reading a modern package** —
+  *should-fix.* The loss is in engram's reader, not in Anki. Measured with `anki==26.9.3`: I injected
+  `{"engram":{"v":1,"answer_specs":{"Card 1":{"control":"text","bindings":{"answer":"Back"}}}}}` into
+  the model JSON of `internal/notetype/testdata/anki/stock.anki21.apkg`, imported the package into a
+  fresh collection, and `collection.models.all()` still returned the key on that note type. Exporting
+  that collection with `legacy=False` (modern layout, `collection.anki21b`) and importing the export
+  into another fresh collection kept the key again. Decompressing the zstd `collection.anki21b` shows
+  the key in the protobuf payload as the JSON object in `Notetype.Config.other`, the field Anki keeps
+  unknown top-level model keys in. A note-level `notes.data` value did not survive the same trip, while
+  an unreferenced note field and an HTML comment inside `qfmt` both did.
+
+  The reader ignored that field: `readModernCollection` decoded only the known fields of
+  `Notetype.Config`, so `NoteType.AnswerSpecsKey` was false on every note type of a modern package
+  Anki wrote. An overlay test against the package Anki exported after the injected import — no probe
+  file is committed — reported, before the fix:
+  ```
+  format=modern note_types=6
+  Basic+: AnswerSpecsKey=false AnswerSpecs=map[]
+  Basic (and reversed card)+: AnswerSpecsKey=false AnswerSpecs=map[]
+  Basic (optional reversed card)+: AnswerSpecsKey=false AnswerSpecs=map[]
+  Basic (type in the answer)+: AnswerSpecsKey=false AnswerSpecs=map[]
+  Cloze+: AnswerSpecsKey=false AnswerSpecs=map[]
+  Image Occlusion+: AnswerSpecsKey=false AnswerSpecs=map[]
+  ```
+  `decodeNoteTypeConfig` now reads field 255 as the JSON object of unknown model keys and decodes
+  `engram` version 1 from it with the shape the schema-11 model JSON uses. Invalid JSON, a non-object
+  value, another version and a missing key yield no answer spec: they are unknown note-type data, and
+  the package is not refused. The same overlay test after the fix reports:
+  ```
+  format=modern note_types=6
+  Basic+: AnswerSpecsKey=true AnswerSpecs=map[Card 1:{text map[answer:Back]}]
+  Basic (and reversed card)+: AnswerSpecsKey=false AnswerSpecs=map[]
+  Basic (optional reversed card)+: AnswerSpecsKey=false AnswerSpecs=map[]
+  Basic (type in the answer)+: AnswerSpecsKey=false AnswerSpecs=map[]
+  Cloze+: AnswerSpecsKey=false AnswerSpecs=map[]
+  Image Occlusion+: AnswerSpecsKey=false AnswerSpecs=map[]
+  ```
+  The `answer_specs_missing` report field stays. Its comment now says it counts imported note types
+  whose package carried no usable key, with no claim about Anki; `AGENTS.md` §2.7 and the
+  `legacyEngramOut` comment in `internal/anki/write.go` state the measured behaviour instead of the
+  "Anki drops it" limitation, and the "a modern protobuf note type never carries one" comment in
+  `internal/anki/model.go` is gone.
+
+  *Closed by this commit (`fix(anki): read the engram note-type key from a modern package`).*
   Raw output of
-  `/home/nite/.hermes/cache/scratch/pgtest ./internal/store/ -run TestAnkiImportReportsMissingAnswerSpecs -count=1 -v`:
+  `go test ./internal/anki/ -run 'TestDecodeNoteTypeConfigReadsAnswerSpecsFromOther|TestAnswerSpecsFromOther' -count=1 -v`:
   ```
-  === RUN   TestAnkiImportReportsMissingAnswerSpecs
-  === RUN   TestAnkiImportReportsMissingAnswerSpecs/sqlite/carried
-  === RUN   TestAnkiImportReportsMissingAnswerSpecs/sqlite/absent
-  === RUN   TestAnkiImportReportsMissingAnswerSpecs/postgres/carried
-  === RUN   TestAnkiImportReportsMissingAnswerSpecs/postgres/absent
-  --- PASS: TestAnkiImportReportsMissingAnswerSpecs (0.37s)
-      --- PASS: TestAnkiImportReportsMissingAnswerSpecs/sqlite/carried (0.01s)
-      --- PASS: TestAnkiImportReportsMissingAnswerSpecs/sqlite/absent (0.00s)
-      --- PASS: TestAnkiImportReportsMissingAnswerSpecs/postgres/carried (0.02s)
-      --- PASS: TestAnkiImportReportsMissingAnswerSpecs/postgres/absent (0.01s)
+  === RUN   TestDecodeNoteTypeConfigReadsAnswerSpecsFromOther
+  --- PASS: TestDecodeNoteTypeConfigReadsAnswerSpecsFromOther (0.00s)
+  === RUN   TestAnswerSpecsFromOther
+  === RUN   TestAnswerSpecsFromOther/engram_key_beside_another_unknown_key
+  === RUN   TestAnswerSpecsFromOther/no_other_field
+  === RUN   TestAnswerSpecsFromOther/no_engram_key
+  === RUN   TestAnswerSpecsFromOther/not_a_JSON_object
+  === RUN   TestAnswerSpecsFromOther/not_JSON
+  === RUN   TestAnswerSpecsFromOther/engram_is_not_an_object
+  === RUN   TestAnswerSpecsFromOther/unknown_version
+  === RUN   TestAnswerSpecsFromOther/empty_object
+  --- PASS: TestAnswerSpecsFromOther (0.00s)
+      --- PASS: TestAnswerSpecsFromOther/engram_key_beside_another_unknown_key (0.00s)
+      --- PASS: TestAnswerSpecsFromOther/no_other_field (0.00s)
+      --- PASS: TestAnswerSpecsFromOther/no_engram_key (0.00s)
+      --- PASS: TestAnswerSpecsFromOther/not_a_JSON_object (0.00s)
+      --- PASS: TestAnswerSpecsFromOther/not_JSON (0.00s)
+      --- PASS: TestAnswerSpecsFromOther/engram_is_not_an_object (0.00s)
+      --- PASS: TestAnswerSpecsFromOther/unknown_version (0.00s)
+      --- PASS: TestAnswerSpecsFromOther/empty_object (0.00s)
   PASS
-  ok  	git.nite07.com/nite/engram/internal/store	0.379s
+  ok  	git.nite07.com/nite/engram/internal/anki	0.006s
   ```
-  Raw output of `go test ./internal/api -run TestImportPackageAcceptsAnki -count=1 -v`:
-  ```
-  === RUN   TestImportPackageAcceptsAnki
-  --- PASS: TestImportPackageAcceptsAnki (0.03s)
-  PASS
-  ok  	git.nite07.com/nite/engram/internal/api	0.050s
-  ```
-  Raw output of `go test ./internal/mcp -run TestImportDeckAcceptsAnki -count=1 -v`:
-  ```
-  === RUN   TestImportDeckAcceptsAnki
-  --- PASS: TestImportDeckAcceptsAnki (0.05s)
-  PASS
-  ok  	git.nite07.com/nite/engram/internal/mcp	0.061s
-  ```
-  Each decodes the same stock fixture and asserts that `answer_specs_missing` is positive over its
-  transport. Raw output of `npm --prefix frontend run test:client -- src/tests/import-url.client.ts`:
-  ```
-   Test Files  1 passed (1)
-        Tests  41 passed (41)
-  ```
-  `npm --prefix frontend run check` ends with:
-  ```
-  svelte-check found 0 errors and 0 warnings
-  ```
-  The oracle script on a package produced by engram and then re-exported by Anki's default modern layout
-  prints:
-  ```
-  notes: 1
-  cards: 1
-  note_types: 7
-  note_type_names: Basic, Basic (and reversed card), Basic (optional reversed card), Basic (type in the answer), Basic+, Cloze, Image Occlusion
-  media: 0
-  media_names: 
-  deck_configs: 1
-  deck_config_names: Default
-  answer_specs: 1
-  ```
-  The count is read from the collection Anki built after the import, so it is no longer circular. Anki's
-  collection still exposes the key, while engram's own reader on the same modern export prints
-  `Basic+: answer_specs=0 key=false`; the legacy export keeps it (`answer_specs=1 key=true`). That separates
-  the two halves of the limitation: Anki keeps the key in its model API, and engram's modern reader does not
-  read it back.
+  `go test ./internal/anki/ -count=1` passes and `go vet ./internal/anki/` is clean.
 
 - [x] **M19-49 An unclosed `[anki:` marker makes audio-tag parsing quadratic, so one note field can stall a
   review** — *should-fix.* `parseAVTagNode` looks for the closing tag of each candidate with

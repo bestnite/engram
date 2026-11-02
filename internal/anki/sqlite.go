@@ -94,10 +94,9 @@ type legacyModel struct {
 	LaTeXPost         string           `json:"latexPost"`
 	LaTeXSVG          bool             `json:"latexsvg"`
 	OriginalStockKind int              `json:"originalStockKind"`
-	// Engram is the one unknown top-level key engram writes. It survives engram to engram
-	// and engram to Anki, but Anki's default modern export stores note types as protobuf,
-	// and the reader below does not read the key back from that layout. See write.go's
-	// legacyEngramOut comment for the full limitation.
+	// Engram is the one unknown top-level key engram writes. Anki keeps it through
+	// import and through both export layouts; the modern reader reads the same key from
+	// Notetype.Config.other instead of this JSON field.
 	Engram *legacyEngram `json:"engram"`
 }
 
@@ -417,6 +416,8 @@ func modernNoteTypes(db *gorm.DB) ([]NoteType, error) {
 			LaTeXSVG:          cfg.LaTeXSVG,
 			OriginalID:        originalID,
 			OriginalStockKind: cfg.OriginalStockKind,
+			AnswerSpecs:       cfg.AnswerSpecs,
+			AnswerSpecsKey:    cfg.AnswerSpecsKey,
 		})
 	}
 	if err := rows.Err(); err != nil {

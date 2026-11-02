@@ -2,6 +2,7 @@ package anki
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math"
 
@@ -101,6 +102,8 @@ type noteTypeConfig struct {
 	OriginalStockKind int
 	HasOriginalID     bool
 	OriginalID        int64
+	AnswerSpecs       map[string]AnswerSpec
+	AnswerSpecsKey    bool
 }
 
 // decodeNoteTypeConfig reads Notetype.Config by field number.
@@ -133,6 +136,11 @@ func decodeNoteTypeConfig(b []byte) (noteTypeConfig, error) {
 			cfg.LaTeXPre = string(raw)
 		case 6:
 			cfg.LaTeXPost = string(raw)
+		case 255:
+			// Anki stores unknown top-level model keys in Notetype.Config.other as one
+			// JSON object. engram's answer-spec key lives there after Anki imports and
+			// re-exports a package, so the modern reader reads it back from this field.
+			cfg.AnswerSpecs, cfg.AnswerSpecsKey = answerSpecsFromOther(raw)
 		}
 		return nil
 	})
@@ -140,6 +148,33 @@ func decodeNoteTypeConfig(b []byte) (noteTypeConfig, error) {
 		return noteTypeConfig{}, err
 	}
 	return cfg, nil
+}
+
+// answerSpecsFromOther reads the engram key out of an other field holding unknown
+// note-type keys. Anki's importer keeps that object through import and through both of
+// its export layouts, including the modern protobuf one. Data that is not a JSON object,
+// or an engram key with another version, carries no usable spec: it is unknown note-type
+// data, so it yields no answer control instead of refusing the package.
+func answerSpecsFromOther(other []byte) (map[string]AnswerSpec, bool) {
+	if len(other) == 0 {
+		return nil, false
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(other, &keys); err != nil {
+		return nil, false
+	}
+	raw, ok := keys["engram"]
+	if !ok {
+		return nil, false
+	}
+	var engram legacyEngram
+	if err := json.Unmarshal(raw, &engram); err != nil {
+		return nil, false
+	}
+	if engram.V != 1 {
+		return nil, false
+	}
+	return engram.AnswerSpecs, true
 }
 
 // fieldConfig is the subset of Notetype.Field.Config this package needs.

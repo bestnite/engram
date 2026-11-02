@@ -1008,8 +1008,9 @@ func dropUnusedAnkiNoteTypes(pkg *anki.Package) {
 }
 
 // ankiAnswerSpecsMissing counts the imported note types that carry no usable engram
-// answer-spec key. Zero means every imported note type carried one; a positive count is how a
-// package that Anki re-exported in its default modern layout shows the lost machine grading.
+// answer-spec key. Zero means every imported note type carried one; a positive count means
+// those note types supplied no answer control with the package, so their machine grading
+// cannot be imported.
 func ankiAnswerSpecsMissing(pkg *anki.Package) int {
 	missing := 0
 	for i := range pkg.NoteTypes {

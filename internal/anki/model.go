@@ -55,7 +55,10 @@ type NoteType struct {
 	// note type that carries no answer control.
 	AnswerSpecs map[string]AnswerSpec
 	// AnswerSpecsKey reports whether the package carried a usable engram answer-spec key
-	// (version 1) for this note type. A modern protobuf note type never carries one.
+	// (version 1) for this note type. Both layouts carry it: schema 11 stores it as a
+	// top-level model key, and schema 18 stores the same key in Notetype.Config.other,
+	// where Anki keeps the unknown keys of a model it imported. A note type that never
+	// carried the key reports false.
 	AnswerSpecsKey bool
 }
 
