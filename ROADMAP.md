@@ -3870,6 +3870,55 @@ contract violations instead of intrusion steps. Every entry says whether it was 
 
 ---
 
+### M20 — Cloze alternatives follow-up
+
+- [ ] **M20-5 Make the cloze-alternatives metadata field built in, locked, and optional on export**
+  — Every note type whose template declares the `cloze_blanks` answer control carries the
+  exact-name `engram_meta` field without the note-type settings action. One helper,
+  `notetype.EnsureMetadataField`, appends it when the config uses `cloze_blanks` and normalises
+  its flags (`plain_text`, `collapsed`, `exclude_from_search`, `prevent_deletion`) when it is
+  already present; `store.NoteType.SetConfig` calls it so create, update, copy and package import
+  share one rule; `engramClozeStock` includes it so the stock preview matches the created type;
+  and migration `0022_ensure_cloze_metadata_field` adds it to stored rows, preserving an existing
+  metadata field's id and values and bumping the note-type version. The field cannot be renamed
+  or removed through the note-type API (`validateReservedFields` compares by stable field id), and
+  no answer spec may bind a role to it. `.apkg` export gains `include_engram_meta` (default on)
+  on every transport: `PackageOptions`, `ExportAnkiPackage`, the REST query and download ticket,
+  the web single and batch export, the MCP input, and the CLI flag. When off, the exported note
+  type and notes carry neither the field definition nor its values; the `engram` answer-spec key
+  is unchanged, so re-importing into engram re-adds an empty field.
+  *Acceptance:* a created, copied and imported `cloze_blanks` type carries the field with the
+  flags, and a non-`cloze_blanks` type does not; a stored `cloze_blanks` type gains the field
+  through the migration on SQLite and PostgreSQL without losing an existing metadata field's id
+  or values, and a second run writes nothing; rename and removal are refused with the
+  catalog-backed message, and a binding to the field is refused as a validation error; an export
+  with the switch off has no `engram_meta` field or value while the remaining field ordinals and
+  values line up, and the default export still round-trips alternatives. Evidence is raw scoped
+  `go test` and `go vet` output for `internal/notetype`, `internal/store`, `internal/api`,
+  `internal/web`, `internal/mcp` and `cmd/engram`, with `TEST_PG_DSN` set for the migration case.
+  Do not edit `ROADMAP.md` or `AGENTS.md`.
+
+- [ ] **M20-6 Remove the cloze-alternatives enable action and expose the export switch in the UI**
+  — In `frontend/src/lib/views/NoteTypesView.svelte`, remove the cloze-alternatives section, the
+  enable/fix controls, the metadata delete dialog and their state; render the exact-name
+  `engram_meta` row read-only, with its name, order, delete button and field options locked;
+  exclude it from the answer-binding selector and from both the target rows and the source options
+  of the change-note-type field selector while keeping the same-name auto-mapping that carries its
+  value. Add `include_engram_meta` to `PackageExportOptions.svelte`, checked by default, and wire
+  it through `DeckDetailView.svelte`, `DecksView.svelte`, `frontend/src/lib/api/client.ts` and
+  `types.ts` for the single and batch exports. Add the new keys at the end of both
+  `frontend/src/lib/i18n/locales/{zh-CN,en}.ts` files with identical key sets, and remove the
+  now-unused `notetype.cloze_alternatives.*` and `notetype.meta.delete_*` keys.
+  *Acceptance:* the settings page never shows an enable button; the metadata row cannot be
+  renamed, moved, deleted or reconfigured; the binding and change selectors omit it; the export
+  checkbox is present and checked by default and sends `include_engram_meta=1`/`0` in the
+  single-export query and `include_engram_meta` in the batch body; the note editor still shows
+  the alternatives editor for a `cloze_blanks` type. Evidence is raw output of
+  `npm --prefix frontend run check`, `npm --prefix frontend run test:client` and
+  `npm --prefix frontend run build`. Do not edit `ROADMAP.md` or `AGENTS.md`.
+
+---
+
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
