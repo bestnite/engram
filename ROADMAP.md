@@ -10,6 +10,33 @@ the backlog, section 2 the release ledger. The rules for writing, counting and c
 
 ## 1. Task backlog
 
+### M21 — Deck content preview
+
+- [ ] **M21-1 Deck card preview page** — a deck reader can page through every card in the deck
+  and see both rendered faces without studying. Backend: `GET /decks/:id/preview` serves the SPA
+  shell only after the reader-role check; `GET /api/v1/decks/:id/preview/cards` is a session JSON
+  endpoint taking `page`, `per_page` and `sort` (`created` or `note_type`) and returning
+  `LIMIT/OFFSET` pages of cards whose notes belong to the deck, each card carrying both faces
+  rendered by the review renderer (`renderCard` and `faces` in `internal/web/review.go`, not a
+  second renderer), the stored-note-type CSS and the frame media base. Cards of soft-deleted
+  notes and soft-deleted cards are excluded; suspended cards are included because the page
+  inspects content, not study state. Listing is a new `CardStore` method in
+  `internal/store/card.go`. Frontend: `frontend/src/lib/views/DeckPreviewView.svelte` at
+  `/decks/:id/preview`, with the front face above the back face, previous/next buttons,
+  arrow-key paging, an `N / total` counter, a sort switch, loading/error/empty states and
+  en + zh-CN catalog keys; the entry is a header button in `DeckDetailView.svelte`. Faces render
+  in the existing `CardFrame.svelte`, so the page shows the same answer controls, audio, TTS and
+  image-occlusion behaviour as review.
+  *Acceptance:* `go test ./internal/web ./internal/store` covers anonymous 401, a signed-in
+  non-reader 403, an unknown deck 404, an empty deck 200 with no cards, page boundaries, both
+  sort orders, deleted note and card exclusion, and a response whose faces carry `side`,
+  `media_base`, body class and the note type's CSS. The deck-scoped page-route table in
+  `internal/web/page_routes_test.go` gains the preview path. The SPA client tests cover paging
+  and the sort switch; `npm --prefix frontend run check` and
+  `npm --prefix frontend run test:client` pass, and the built SPA serves the new route.
+
+---
+
 ### M99 — Future work (not part of the current release)
 
 This task is recorded so the design keeps room for it. It is not part of the current release; it
