@@ -304,3 +304,60 @@ func assertAdminCode(t *testing.T, rec interface {
 		t.Fatalf("response = %d %q, want %d %q", res.StatusCode, body.Error.Code, status, code)
 	}
 }
+
+// TestAdminJobTimesFollowAdminTimezone: the history and the task overview show their times in the viewing admin's
+// timezone, the way the audit and API key pages do, and an unknown or empty timezone falls back to UTC.
+func TestAdminJobTimesFollowAdminTimezone(t *testing.T) {
+	created := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	cases := []struct {
+		tz   string
+		want string
+	}{
+		{"UTC", "2026-01-02 03:04:05"},
+		{"Asia/Shanghai", "2026-01-02 11:04:05"},
+		// The local day is the day before the UTC one.
+		{"America/New_York", "2026-01-01 22:04:05"},
+		{"", "2026-01-02 03:04:05"},
+		{"Mars/Phobos", "2026-01-02 03:04:05"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tz, func(t *testing.T) {
+			srv, retention, _, cookies, _, _ := taskServer(t)
+			if err := srv.db.Model(&store.User{}).Where("1 = 1").Update("timezone", tc.tz).Error; err != nil {
+				t.Fatalf("set timezone: %v", err)
+			}
+			loc := auditLocation(&store.User{Timezone: tc.tz})
+			finished := created.Add(time.Minute)
+			if err := srv.db.Create(&store.Job{
+				Kind: worker.KindRetention, Trigger: store.Ptr(worker.TriggerManual), Status: jobs.StatusSucceeded,
+				CreatedAt: created, StartedAt: &created, FinishedAt: &finished,
+			}).Error; err != nil {
+				t.Fatalf("create job: %v", err)
+			}
+
+			var history adminJobsResponse
+			if err := json.Unmarshal(getJSON(t, srv, "/api/v1/admin/jobs?kind="+worker.KindRetention, cookies, nil).Body.Bytes(), &history); err != nil {
+				t.Fatalf("decode jobs: %v", err)
+			}
+			if len(history.Jobs) != 1 {
+				t.Fatalf("jobs = %+v, want the seeded row", history.Jobs)
+			}
+			if got := history.Jobs[0]; got.CreatedAt != tc.want || got.StartedAt != tc.want || got.FinishedAt != finished.In(loc).Format("2006-01-02 15:04:05") {
+				t.Fatalf("job times = %q/%q/%q, want created and started %q", got.CreatedAt, got.StartedAt, got.FinishedAt, tc.want)
+			}
+
+			var overview adminTasksResponse
+			if err := json.Unmarshal(getJSON(t, srv, "/api/v1/admin/tasks", cookies, nil).Body.Bytes(), &overview); err != nil {
+				t.Fatalf("decode tasks: %v", err)
+			}
+			st := retention.lifecycle.Status()
+			got := overview.Tasks[0]
+			if want := st.NextRunAt.In(loc).Format("2006-01-02 15:04:05"); got.NextRunAt != want {
+				t.Errorf("next_run_at = %q, want %q", got.NextRunAt, want)
+			}
+			if want := st.Last.FinishedAt.In(loc).Format("2006-01-02 15:04:05"); got.Last == nil || got.Last.FinishedAt != want {
+				t.Errorf("last round = %+v, want finished_at %q", got.Last, want)
+			}
+		})
+	}
+}

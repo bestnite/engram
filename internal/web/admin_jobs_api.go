@@ -22,7 +22,8 @@ import (
 // s.jobRunner.Cancel and jobs.ErrNotRunning. The overview and the manual run go through the worker registry.
 // kind/status/stage/trigger and the summary keys are stable English identifiers whose copy is mapped by the frontend.
 
-// adminJob is a job's metadata; times are UTC text, and an empty string means it has not happened yet.
+// adminJob is a job's metadata; times are already formatted in the current admin's timezone, and an empty string
+// means it has not happened yet.
 type adminJob struct {
 	ID         string  `json:"id"`
 	Kind       string  `json:"kind"`
@@ -54,6 +55,8 @@ type adminJobsResponse struct {
 // optimizer's nor a periodic task's is 400 invalid_kind.
 func (s *Server) adminJobs(c *gin.Context) {
 	ctx := c.Request.Context()
+	actor, _ := auth.CurrentUser(c)
+	userLoc := auditLocation(actor)
 	page := parsePage(c.Query("page"))
 	kind := strings.TrimSpace(c.Query("kind"))
 	if kind != "" && kind != jobs.KindOptimize && !worker.IsKind(kind) {
@@ -72,20 +75,20 @@ func (s *Server) adminJobs(c *gin.Context) {
 	}
 	rows := make([]adminJob, 0, len(list))
 	for i := range list {
-		rows = append(rows, adminJobRow(&list[i]))
+		rows = append(rows, adminJobRow(&list[i], userLoc))
 	}
 	c.JSON(http.StatusOK, adminJobsResponse{Jobs: rows, Page: page, Pages: pages, Total: total})
 }
 
-// adminJobRow converts one jobs row into the list item.
-func adminJobRow(job *store.Job) adminJob {
+// adminJobRow converts one jobs row into the list item, with its times shown in loc.
+func adminJobRow(job *store.Job, loc *time.Location) adminJob {
 	row := adminJob{
 		ID: job.PublicID, Kind: job.Kind, Status: job.Status, Stage: job.Stage,
 		// A NULL trigger was written before the column existed, when only a user's optimization request wrote this table.
 		Trigger:    jobs.TriggerUser,
-		CreatedAt:  formatJobTime(&job.CreatedAt),
-		StartedAt:  formatJobTime(job.StartedAt),
-		FinishedAt: formatJobTime(job.FinishedAt),
+		CreatedAt:  formatJobTime(&job.CreatedAt, loc),
+		StartedAt:  formatJobTime(job.StartedAt, loc),
+		FinishedAt: formatJobTime(job.FinishedAt, loc),
 		CanCancel:  job.Status == jobs.StatusQueued || job.Status == jobs.StatusRunning,
 	}
 	if job.Trigger != nil {
@@ -138,17 +141,19 @@ type adminTasksResponse struct {
 
 // adminTasks returns the status of every registered periodic task, in the order of worker.Kinds.
 func (s *Server) adminTasks(c *gin.Context) {
+	actor, _ := auth.CurrentUser(c)
+	userLoc := auditLocation(actor)
 	out := adminTasksResponse{Tasks: make([]adminTask, 0, len(worker.Kinds))}
 	if s.tasks != nil {
 		for _, st := range s.tasks.Statuses() {
-			out.Tasks = append(out.Tasks, adminTaskPayload(st))
+			out.Tasks = append(out.Tasks, adminTaskPayload(st, userLoc))
 		}
 	}
 	c.JSON(http.StatusOK, out)
 }
 
-// adminTaskPayload converts a lifecycle status into the overview item.
-func adminTaskPayload(st worker.Status) adminTask {
+// adminTaskPayload converts a lifecycle status into the overview item, with its times shown in loc.
+func adminTaskPayload(st worker.Status, loc *time.Location) adminTask {
 	task := adminTask{
 		Kind:            st.Kind,
 		IntervalSeconds: int64(st.Interval / time.Second),
@@ -156,13 +161,13 @@ func adminTaskPayload(st worker.Status) adminTask {
 		Pending:         st.Pending,
 	}
 	if !st.NextRunAt.IsZero() {
-		task.NextRunAt = formatJobTime(&st.NextRunAt)
+		task.NextRunAt = formatJobTime(&st.NextRunAt, loc)
 	}
 	if last := st.Last; last != nil {
 		round := &adminTaskRound{
 			Trigger:    last.Trigger,
-			StartedAt:  formatJobTime(&last.StartedAt),
-			FinishedAt: formatJobTime(&last.FinishedAt),
+			StartedAt:  formatJobTime(&last.StartedAt, loc),
+			FinishedAt: formatJobTime(&last.FinishedAt, loc),
 			Status:     jobs.StatusSucceeded,
 			Summary:    map[string]int64(last.Summary),
 		}
@@ -213,7 +218,7 @@ func (s *Server) adminTaskRun(c *gin.Context) {
 		UserID: store.Ptr(actor.ID), Action: store.ActionJobRun,
 		Detail: map[string]any{"kind": kind},
 	})
-	c.JSON(http.StatusAccepted, adminTaskPayload(task.Status()))
+	c.JSON(http.StatusAccepted, adminTaskPayload(task.Status(), auditLocation(actor)))
 }
 
 // adminJobCancel cancels a job: a running one has its process group killed and is marked failed, a queued one is marked failed directly.

@@ -12,10 +12,11 @@ import (
 // adminJobsPageSize is the number of rows per page in the job list.
 const adminJobsPageSize = 20
 
-// formatJobTime formats a nullable timestamp; returns an empty string for nil.
-func formatJobTime(t *time.Time) string {
+// formatJobTime formats a nullable timestamp in the viewing admin's timezone, the same one the audit and API key
+// pages use; returns an empty string for nil.
+func formatJobTime(t *time.Time, loc *time.Location) string {
 	if t == nil {
 		return ""
 	}
-	return t.UTC().Format("2006-01-02 15:04:05")
+	return t.In(loc).Format("2006-01-02 15:04:05")
 }

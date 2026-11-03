@@ -1808,7 +1808,7 @@ export interface AdminOIDCRequest {
 
 /** Jobs and language pack report (Go: internal/web/admin_jobs_api.go, admin_i18n_api.go). */
 
-/** One row of the job history: an optimizer job or a recorded periodic task round. Times are UTC text; empty means not yet. */
+/** One row of the job history: an optimizer job or a recorded periodic task round. Times are already formatted in the current admin's timezone; empty means not yet. */
 export interface AdminJob {
   id: string;
   /** `optimize` or a periodic task kind (`retention`, `media_gc`, `reminder`, `digest`, `mail_delivery`). */
@@ -1854,7 +1854,7 @@ export interface AdminTask {
   interval_seconds: number;
   running: boolean;
   pending: boolean;
-  /** UTC text; empty when the worker is not started. */
+  /** Formatted in the current admin's timezone; empty when the worker is not started. */
   next_run_at: string;
   last: AdminTaskRound | null;
 }
