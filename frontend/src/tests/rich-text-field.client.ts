@@ -2,6 +2,11 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import RichTextField from '../lib/components/RichTextField.svelte';
 import Harness from './rich-text-field-harness.svelte';
+import { apiClient } from '../lib/api';
+import { toast } from '../lib/components/ui/toast';
+
+// Selection failures are reported through a toast; the stand-in records the calls the cases assert.
+vi.mock('../lib/components/ui/toast', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
 
 /**
  * The parent side of the rich-text field: the toolbar sends commands, the frame's `change` updates
@@ -446,5 +451,66 @@ describe('RichTextField field options', () => {
     flushSync();
     expect(target.querySelector('[data-testid="field"]')).not.toBeNull();
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  });
+});
+
+describe('RichTextField media library picker', () => {
+  const sha = 'b'.repeat(64);
+  const name = `${sha}.png`;
+  const libraryItem = { sha256: sha, mime: 'image/png', bytes: 12, url: `/media/${sha}`, created_at: '2026-11-01T00:00:00Z', names: [], decks: [], state: 'referenced' as const, cleanup_at: null };
+
+  function libraryButton(): HTMLButtonElement | null {
+    return target.querySelector('[data-testid="field-insert-library"]') as HTMLButtonElement | null;
+  }
+
+  function pickerDialog(): HTMLElement | null {
+    return document.body.querySelector('[data-testid="field-media-picker"]');
+  }
+
+  it('offers the library button only when a picker callback is provided', () => {
+    mountField();
+    expect(libraryButton()).toBeNull();
+  });
+
+  it('inserts a chosen library item without reloading the field', async () => {
+    vi.spyOn(apiClient, 'listMediaForPicker').mockResolvedValue({ items: [libraryItem], next_cursor: '' });
+    const chosen = vi.fn(async () => ({ url: name, name, mime: 'image/png' }));
+    const fake = mountField({ pickMedia: chosen, mediaDeckId: 'deck-1' });
+    const loadsBefore = posted(fake).filter((entry) => entry.type === 'load').length;
+
+    libraryButton()!.click();
+    await flushAsync();
+
+    expect(pickerDialog()).toBeTruthy();
+    const item = document.body.querySelector(`[data-testid="field-media-picker-item-${sha}"]`) as HTMLButtonElement | null;
+    expect(item).toBeTruthy();
+    item!.click();
+    await flushAsync();
+
+    expect(chosen).toHaveBeenCalledWith(libraryItem);
+    expect(lastPosted(fake)).toMatchObject({
+      type: 'command',
+      name: 'insertMedia',
+      media: { url: name, name, mime: 'image/png' },
+    });
+    // Opening the dialog and choosing the item never reloads the field, so the frame's saved caret is still the insert point.
+    expect(posted(fake).filter((entry) => entry.type === 'load').length).toBe(loadsBefore);
+  });
+
+  it('reports a rejected selection and keeps the picker open', async () => {
+    vi.spyOn(apiClient, 'listMediaForPicker').mockResolvedValue({ items: [libraryItem], next_cursor: '' });
+    const chosen = vi.fn(async () => {
+      throw new Error('refused');
+    });
+    mountField({ pickMedia: chosen });
+
+    libraryButton()!.click();
+    await flushAsync();
+    (document.body.querySelector(`[data-testid="field-media-picker-item-${sha}"]`) as HTMLButtonElement).click();
+    await flushAsync();
+
+    expect(chosen).toHaveBeenCalledTimes(1);
+    expect(toast.error).toHaveBeenCalled();
+    expect(pickerDialog()).toBeTruthy();
   });
 });

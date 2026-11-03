@@ -13,9 +13,11 @@
    */
   import { appVersion } from '../version';
   import { t } from '../i18n';
-  import { uploadErrorKeyFor } from '../media-upload';
+  import { pickerErrorKeyFor, uploadErrorKeyFor } from '../media-upload';
+  import type { MediaItem } from '../api';
   import { toast } from './ui/toast';
   import Dialog from './ui/Dialog.svelte';
+  import MediaPicker from './MediaPicker.svelte';
   import Button from './ui/Button.svelte';
   import Checkbox from './ui/Checkbox.svelte';
   import type { MediaReference } from '../../editframe/runtime';
@@ -30,6 +32,7 @@
     CodeXml,
     Highlighter,
     ImagePlus,
+    Images,
     Italic,
     Languages,
     List,
@@ -77,13 +80,20 @@
     /** Uploads one file and returns its URL, deck media name and detected mime type. */
     upload?: (file: File) => Promise<MediaReference>;
     /**
+     * Registers the deck-scoped name of an item chosen from the media library and returns the media reference to insert.
+     * Without it the toolbar has no "insert from library" button.
+     */
+    pickMedia?: (item: MediaItem) => Promise<MediaReference>;
+    /** Public id of the deck being edited, used to scope the library picker's deck filter. */
+    mediaDeckId?: string;
+    /**
      * The deck's frame media base (`/fm/<token>/`). A field refers to media by deck-scoped name and the sandboxed frame has
      * no session cookie, so without the base the frame shows every stored image as broken.
      */
     mediaBase?: string;
   }
 
-  let { value, label, testId, onvalue, options = {}, upload, mediaBase = '' }: Props = $props();
+  let { value, label, testId, onvalue, options = {}, upload, pickMedia, mediaDeckId = '', mediaBase = '' }: Props = $props();
 
   // The version segment only busts the iframe cache; a build without an injected version uses a fixed placeholder.
   const src = $derived(`/edit-frame/${encodeURIComponent(appVersion() || 'dev')}`);
@@ -103,6 +113,7 @@
   // svelte-ignore state_referenced_locally
   let expanded = $state(!(options.collapsed ?? false));
   let fileInput = $state<HTMLInputElement | null>(null);
+  let pickerOpen = $state(false);
   let audioInput = $state<HTMLInputElement | null>(null);
   let audioOpen = $state(false);
   let audioFile = $state<File | null>(null);
@@ -257,6 +268,26 @@
     } catch (err) {
       if (disposed) return;
       toast.error($t(uploadErrorKeyFor(err)));
+    }
+  }
+
+  /**
+   * Inserts one item chosen from the media library. The caller registers the deck-scoped name first, and the frame's saved
+   * caret is untouched by the dialog, so the insert lands where the author was writing; a rejected registration reports
+   * the failure and leaves the picker open.
+   */
+  async function chooseFromLibrary(item: MediaItem): Promise<void> {
+    const picker = pickMedia;
+    if (!picker) return;
+    try {
+      const media = await picker(item);
+      if (disposed) return;
+      command('insertMedia', { media });
+      pickerOpen = false;
+    } catch (err) {
+      if (disposed) return;
+      toast.error($t(pickerErrorKeyFor(err)));
+      throw err;
     }
   }
 
@@ -645,6 +676,20 @@
       >
         <Music class="size-4" aria-hidden="true" />
       </button>
+      {#if pickMedia}
+        <button
+          type="button"
+          class={toolbarButton}
+          data-testid="{testId}-insert-library"
+          aria-label={$t('media.open')}
+          title={$t('media.open')}
+          disabled={sourceOpen}
+          onmousedown={(event) => event.preventDefault()}
+          onclick={() => (pickerOpen = true)}
+        >
+          <Images class="size-4" aria-hidden="true" />
+        </button>
+      {/if}
       <button
         type="button"
         class={toolbarButton}
@@ -946,3 +991,7 @@
     </div>
   </form>
 </Dialog>
+
+{#if pickMedia}
+  <MediaPicker bind:open={pickerOpen} deckId={mediaDeckId} onchoose={chooseFromLibrary} testId="{testId}-media-picker" />
+{/if}

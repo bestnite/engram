@@ -1513,6 +1513,71 @@ describe('unified note editor — field media', () => {
   });
 });
 
+describe('unified note editor — media library picker', () => {
+  const sha = 'c'.repeat(64);
+  const registeredName = `${sha}.png`;
+  const libraryItem = {
+    sha256: sha,
+    mime: 'image/png',
+    bytes: 8,
+    url: `/media/${sha}`,
+    created_at: '2026-11-01T00:00:00Z',
+    names: [],
+    decks: [],
+    state: 'referenced' as const,
+    cleanup_at: null,
+  };
+
+  function loadCount(frame: FakeFrame): number {
+    return frame.postMessage.mock.calls.filter((call) => (call[0] as Record<string, unknown>)?.type === 'load').length;
+  }
+
+  it('registers a library pick in the note deck and inserts it by that name', async () => {
+    vi.spyOn(apiClient, 'previewNote').mockResolvedValue(createResponse([]));
+    const listMedia = vi.spyOn(apiClient, 'listMediaForPicker').mockResolvedValue({ items: [libraryItem], next_cursor: '' });
+    const register = vi.spyOn(apiClient, 'registerDeckMediaName').mockResolvedValue({ name: registeredName });
+    mountEditor({ id: '5' });
+    await flush();
+    const frame = frameFor(FRONT);
+    fromFrame(frame, { type: 'ready' });
+    await flush();
+    const loadsBefore = loadCount(frame);
+
+    const button = target.querySelector(`[data-testid="${FRONT}-insert-library"]`) as HTMLButtonElement | null;
+    expect(button).toBeTruthy();
+    button!.click();
+    await flush();
+
+    expect(listMedia).toHaveBeenCalledWith('', {});
+    expect(document.body.querySelector(`[data-testid="${FRONT}-media-picker"]`)).toBeTruthy();
+    (document.body.querySelector(`[data-testid="${FRONT}-media-picker-item-${sha}"]`) as HTMLButtonElement).click();
+    await flush();
+
+    expect(register).toHaveBeenCalledWith('5', sha);
+    const inserted = frame.postMessage.mock.calls
+      .map((call) => call[0] as Record<string, unknown>)
+      .find((message) => message.name === 'insertMedia');
+    expect(inserted).toMatchObject({
+      type: 'command',
+      name: 'insertMedia',
+      media: { url: registeredName, name: registeredName, mime: 'image/png' },
+    });
+    // The dialog never reloads the field, so the frame still holds the caret the insert used.
+    expect(loadCount(frame)).toBe(loadsBefore);
+
+    // Once the frame reports the edit, the preview request carries the registered name; the field's frame resolves it
+    // against the deck media base, so the picked medium renders before the note is saved.
+    fromFrame(frame, { type: 'change', html: `<img src="${registeredName}">` });
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+    const previewNote = vi.mocked(apiClient.previewNote);
+    expect(previewNote).toHaveBeenCalled();
+    expect(previewNote.mock.calls.at(-1)?.[2]).toMatchObject({ Front: `<img src="${registeredName}">` });
+    expect(lastLoad(FRONT).mediaBase).toBe('/fm/token/');
+  });
+});
+
 describe('unified note editor — preview pager', () => {
   function pager(): Element | null {
     return target.querySelector('[data-testid="note-preview-pager"]');

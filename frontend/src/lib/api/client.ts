@@ -23,6 +23,8 @@ import {
   type NotePreviewResponse,
   type MediaListResponse,
   type MediaListParams,
+  type MediaNameResponse,
+  type MediaPickerFilters,
   type MediaUploadResult,
   type FrameMediaBaseResponse,
   type StatsSummary,
@@ -873,6 +875,26 @@ export class ApiClient {
   }
 
   /**
+   * List one page of the media library for the editor's picker (GET /api/v1/media with the picker filters).
+   *
+   * This method is separate from listMedia because the picker and the global media browser are separate features whose
+   * filter shapes are owned separately. The endpoint is the same, so no change is needed here once the server applies
+   * the filters. An absent filter is left out of the query string entirely, and the server supplies the page size when
+   * no limit is given.
+   */
+  async listMediaForPicker(cursor = '', filters: MediaPickerFilters = {}): Promise<MediaListResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set('cursor', cursor);
+    if (filters.deck) params.set('deck', filters.deck);
+    if (filters.class) params.set('class', filters.class);
+    if (filters.state) params.set('state', filters.state);
+    if (filters.q) params.set('q', filters.q);
+    if (filters.limit !== undefined) params.set('limit', String(filters.limit));
+    const query = params.toString();
+    return this.request<MediaListResponse>(`/api/v1/media${query ? `?${query}` : ''}`);
+  }
+
+  /**
    * Upload one media file through the in-deck editor upload entry (POST /decks/:id/media).
    * The endpoint requires editor and above, enforced by the server, and the frontend does not hide failures; the multipart boundary is left to the browser,
    * so request does not set Content-Type for FormData (only string bodies force application/json).
@@ -900,6 +922,30 @@ export class ApiClient {
       !/^[0-9a-f]{64}\.[a-z0-9]+$/.test(name)
     ) {
       throw new ApiClientError('Invalid media upload response', { status: 201, code: 'invalid_response' });
+    }
+    return result;
+  }
+
+  /**
+   * Register the deck-scoped name of an already stored medium for the editor's media picker
+   * (POST /api/v1/decks/:id/media/names).
+   *
+   * The response name is the canonical `<sha256>.<ext>` that the field markup must reference, so it is checked against the
+   * requested sha256 before the editor can insert it: a response that does not name exactly these bytes is rejected
+   * rather than written into the note. The request is idempotent; the server returns the same name for a repeated call.
+   */
+  async registerDeckMediaName(deckId: string, sha256: string): Promise<MediaNameResponse> {
+    if (!this.csrfToken) {
+      await this.getSession();
+    }
+    const encodedId = encodeURIComponent(String(deckId));
+    const result = await this.request<MediaNameResponse>(`/api/v1/decks/${encodedId}/media/names`, {
+      method: 'POST',
+      body: JSON.stringify({ sha256 }),
+    });
+    const name = result?.name;
+    if (typeof name !== 'string' || !/^[0-9a-f]{64}\.[a-z0-9]+$/.test(name) || !name.startsWith(`${sha256}.`)) {
+      throw new ApiClientError('Invalid media name response', { status: 200, code: 'invalid_response' });
     }
     return result;
   }

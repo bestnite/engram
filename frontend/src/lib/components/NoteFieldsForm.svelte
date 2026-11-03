@@ -5,6 +5,7 @@
   import Select from './ui/Select.svelte';
   import HelpTip from './ui/HelpTip.svelte';
   import RichTextField, { type RichFieldOptions } from './RichTextField.svelte';
+  import type { MediaItem } from '../api';
   import type { MediaReference } from '../../editframe/runtime';
 
   /**
@@ -39,6 +40,10 @@
     labels?: Record<string, string>;
     /** Uploads one media file for the editor; without it the field inserts nothing by upload. */
     upload?: (file: File) => Promise<MediaReference>;
+    /** Registers and returns one media library item chosen from a field's picker; without it a field has no picker. */
+    pickMedia?: (item: MediaItem) => Promise<MediaReference>;
+    /** Public id of the deck being edited, used to scope the picker's deck filter. */
+    mediaDeckId?: string;
     /** The deck's frame media base, which the rich-text fields resolve stored media names against. */
     mediaBase?: string;
   }
@@ -51,6 +56,8 @@
     fieldOptions = {},
     labels = {},
     upload,
+    pickMedia,
+    mediaDeckId = '',
     mediaBase = '',
   }: Props = $props();
 
@@ -144,6 +151,8 @@
             testId="{testIdPrefix}-{spec.key}"
             options={fieldOptions[spec.key]}
             {upload}
+            {pickMedia}
+            {mediaDeckId}
             {mediaBase}
             onvalue={(value) => setString(spec.key, value)}
           />

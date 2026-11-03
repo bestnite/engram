@@ -1935,4 +1935,28 @@ export const zhCN: LocaleCatalog = {
   'media.browser.empty_filter': '没有符合这些筛选条件的媒体。',
   'media.browser.load_more': '加载更多',
   'media.browser.load_more_failed': '无法加载更多媒体。',
+
+
+  // ---- M22-2: media picker in the rich-text field editor ----
+  'media.picker.search': '搜索媒体',
+  'media.picker.class.label': '媒体类型',
+  'media.picker.class.all': '全部类型',
+  'media.picker.class.image': '图片',
+  'media.picker.class.audio': '音频',
+  'media.picker.class.video': '视频',
+  'media.picker.class.font': '字体',
+  'media.picker.class.script': '脚本',
+  'media.picker.class.style': '样式',
+  'media.picker.class.other': '其他',
+  'media.picker.scope.label': '卡组',
+  'media.picker.scope.all': '全部卡组',
+  'media.picker.scope.deck': '当前卡组',
+  'media.picker.no_results': '没有符合筛选条件的媒体。',
+  'media.picker.more_failed': '无法加载更多媒体。',
+  'media.picker.insert': '插入 {name}',
+  'media.picker.close': '关闭',
+  'media.picker.error_failed': '无法插入该媒体，请重试。',
+  'media.picker.error_not_found': '该媒体文件已不存在。',
+  'media.picker.error_not_readable': '你无法读取该媒体，请先上传或获取访问权限。',
+  'media.picker.error_invalid_response': '服务器返回了无效的媒体名称。',
 };

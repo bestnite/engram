@@ -128,7 +128,11 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
   names load through `/fm/` like a card face; the note editor reads it from
   `GET /api/v1/decks/:id/frame-media-base` (editor role). An upload through `/decks/:id/media`
   registers the file's deck name `<sha256>.<ext>` and returns it as `name`, and the editor inserts
-  that name, so an uploaded image shows in the frame before the note is saved.
+  that name, so an uploaded image shows in the frame before the note is saved. The same toolbar
+  inserts an already stored medium: its picker lists `GET /api/v1/media` with the deck, media-class,
+  reference-state and name filters, and `POST /api/v1/decks/:id/media/names` (editor role, CSRF)
+  registers the canonical deck name for the chosen bytes, so the frame shows the medium before the
+  note is saved instead of uploading the bytes again.
 - **Frame media.** `GET /fm/<token>/<name>` (`internal/web/frame_media.go`) serves media to the
   sandboxed frame, which has no session cookie. The token is an HMAC over `(user_id, deck_id,
   expiry)`; its key lives in the encrypted settings channel under `frame_media_key` and is
@@ -190,7 +194,9 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
   basic, both-directions, typed and cloze definitions cover the same study shapes; they stay in
   `notetype`, where a package import still names them. `GET /answer-controls` lists the registered controls and their roles with the names,
   parses and translation label keys of both, so a client builds a localised answer spec without a
-  second hard-coded list.
+  second hard-coded list. `GET /api/v1/media` lists the caller's readable media with keyset paging
+  and the `deck`, `class`, `state` and `q` filters; each item carries the names and decks visible to
+  the caller, the reclamation state and the cleanup time when the collector has stamped it.
 - **MCP clients.** `/mcp` (`internal/mcp`) accepts API keys only and re-resolves the identity on
   every request. Note type tools list stocks and answer controls, list and read a deck's types,
   create, update, delete and change types, and list or clean up empty cards. `create_notes`

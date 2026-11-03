@@ -2004,3 +2004,32 @@ export interface AdminMailTemplatePreview {
   html: string;
   variables: Record<string, string>;
 }
+
+/**
+ * One medium class, as the server classifies it (`internal/mediatype`).
+ * The picker's class filter sends one of these values; the server compares it exactly.
+ */
+export type MediaPickerClass = 'image' | 'audio' | 'video' | 'font' | 'script' | 'style' | 'other';
+
+/**
+ * The filters the editor's media picker may pass to GET /api/v1/media.
+ * Every field is optional, and an absent field is omitted from the query string rather than sent empty.
+ */
+export interface MediaPickerFilters {
+  /** Public id of a deck: only media that deck references or names. */
+  deck?: string;
+  /** One media class. */
+  class?: MediaPickerClass;
+  /** Reference state the server reports for an item. */
+  state?: 'referenced' | 'pending' | 'restorable' | 'unreferenced';
+  /** Case-insensitive substring of a media name the caller can see. */
+  q?: string;
+  /** Rows per page; the server clamps and validates it, so the picker leaves it out and takes the server default. */
+  limit?: number;
+}
+
+/** POST /api/v1/decks/:id/media/names response: the canonical deck-scoped name of the medium. */
+export interface MediaNameResponse {
+  /** `<sha256>.<ext>`: the name the field markup references and the frame media route resolves. */
+  name: string;
+}

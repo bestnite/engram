@@ -12,6 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/api"
+	"git.nite07.com/nite/engram/internal/auth"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/mediatype"
 	"git.nite07.com/nite/engram/internal/store"
@@ -40,7 +42,88 @@ func (s *Server) registerMediaRoutes(router *gin.Engine) {
 	// into someone else's deck; the permission check shares auth.DeckAccess with the other write paths (a single implementation).
 	if s.access != nil {
 		router.POST("/decks/:id/media", s.sessions.CSRFMiddleware(), s.deckMediaUpload)
+		// The media picker's insert entry, mounted under /api/v1 because it answers the SPA's JSON call rather than a form:
+		// it registers a name for a medium that is already stored, which is a deck write and needs the same editor role
+		// and CSRF protection as an upload.
+		router.POST("/api/v1/decks/:id/media/names", s.sessions.CSRFMiddleware(), s.deckMediaNameRegister)
 	}
+}
+
+// codeMediaNotFound is the stable code for naming a sha256 that has no media row.
+//
+// The editor maps a refusal to localized copy from the stable code; the English text below is what a caller that reads the
+// API message directly is shown.
+const codeMediaNotFound = "media_not_found"
+
+// mediaNotFoundMessage is the stable English text for codeMediaNotFound.
+const mediaNotFoundMessage = "The media file was not found."
+
+// deckMediaNameRegister is the media picker's insert entry: it registers the deck-scoped name of an already stored medium
+// and returns that name, without copying the bytes again.
+//
+// The name is the same content-addressed "<sha256>.<ext>" the upload path registers, so a field inserted from the picker
+// saves, renders and resolves exactly like one uploaded into the deck. Registering a name is a write to the deck, so it
+// requires the editor role, the same check as the upload entry above.
+//
+// A caller who cannot read the medium is refused with media_not_readable before any row is written: the note write path
+// would reject the same reference later, and refusing here keeps the two decisions identical instead of creating a name
+// the caller could never save.
+//
+// The request is idempotent: the canonical name is looked up by (deck, name) and written once, so a repeated request
+// returns the same name. An imported alias for the same bytes is untouched — the canonical name is an extra media_names
+// row, never a rename or a repoint of the existing one.
+func (s *Server) deckMediaNameRegister(c *gin.Context) {
+	user, ok := auth.CurrentUser(c)
+	if !ok || user.Status != store.StatusActive {
+		writeMediaError(c, http.StatusUnauthorized, api.CodeUnauthorized, api.ErrorMessage(c.Request.Context(), api.CodeUnauthorized))
+		return
+	}
+	deckID, ok := s.deckIDParam(c)
+	if !ok {
+		return
+	}
+	if _, ok := s.loadDeckForRole(c, user, deckID, store.RoleEditor); !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	// The body is read after the permission check so a caller without the editor role learns nothing about which shapes
+	// are accepted.
+	var req struct {
+		Sha256 string `json:"sha256"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || !mediaShaParamRE.MatchString(req.Sha256) {
+		writeMediaError(c, http.StatusBadRequest, api.CodeInvalidRequest, api.ErrorMessage(ctx, api.CodeInvalidRequest))
+		return
+	}
+	// The stored mime decides the canonical extension; the name is derived from it, never taken from the request.
+	m, err := store.NewMediaStore(s.db).BySha256(ctx, req.Sha256)
+	if err != nil {
+		s.logger.Error("media name registration lookup failed", "user_id", user.ID, "deck_id", deckID, "media_sha", req.Sha256, "error", err)
+		writeMediaError(c, http.StatusInternalServerError, api.CodeInternal, api.ErrorMessage(ctx, api.CodeInternal))
+		return
+	}
+	if m == nil {
+		writeMediaError(c, http.StatusNotFound, codeMediaNotFound, mediaNotFoundMessage)
+		return
+	}
+	readable, err := store.MediaAccessibleToUser(ctx, s.db, user.ID, req.Sha256)
+	if err != nil {
+		s.logger.Error("media name registration access check failed", "user_id", user.ID, "deck_id", deckID, "media_sha", req.Sha256, "error", err)
+		writeMediaError(c, http.StatusInternalServerError, api.CodeInternal, api.ErrorMessage(ctx, api.CodeInternal))
+		return
+	}
+	if !readable {
+		s.logger.Info("media name registration refused", "user_id", user.ID, "deck_id", deckID, "media_sha", req.Sha256, "code", store.CodeMediaNotReadable)
+		writeMediaError(c, http.StatusForbidden, store.CodeMediaNotReadable, api.ErrorMessage(ctx, store.CodeMediaNotReadable))
+		return
+	}
+	name, err := store.RegisterUploadedMediaName(ctx, s.db, deckID, req.Sha256, m.Mime)
+	if err != nil {
+		s.logger.Error("media name registration failed", "user_id", user.ID, "deck_id", deckID, "media_sha", req.Sha256, "error", err)
+		writeMediaError(c, http.StatusInternalServerError, api.CodeInternal, api.ErrorMessage(ctx, api.CodeInternal))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"name": name})
 }
 
 // deckMediaUpload is the upload entry the editor uses: first confirm the current user has at least the editor role on the deck,

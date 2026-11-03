@@ -5,7 +5,7 @@
   import { NOTE_TYPE_PARAM, RETURN_PARAM, safeReturnPath, withParam, withReturn, withoutParam } from '../return-to';
   import { t } from '../i18n';
   import { apiClient, ApiClientError } from '../api';
-  import type { Note, NotePreviewCard, NoteType, NoteTypeField } from '../api';
+  import type { MediaItem, Note, NotePreviewCard, NoteType, NoteTypeField } from '../api';
   import NoteFieldsForm from '../components/NoteFieldsForm.svelte';
   import ImageOcclusionEditor from '../components/ImageOcclusionEditor.svelte';
   import ClozeAlternativesEditor from '../components/ClozeAlternativesEditor.svelte';
@@ -405,6 +405,17 @@
     return { url: name, name, mime: uploaded.mime };
   }
 
+  /**
+   * Registers one media library item's deck-scoped name for this note's deck and hands back the reference the editor
+   * inserts. The response name is the canonical "<sha256>.<ext>" that a save stores, so the field refers to the picked
+   * medium exactly as it would to one uploaded into the deck; the mime comes from the library's server response and
+   * decides the markup (image, sound or link).
+   */
+  async function pickFieldMedia(item: MediaItem): Promise<MediaReference> {
+    const registered = await apiClient.registerDeckMediaName(deckId, item.sha256);
+    return { url: registered.name, name: registered.name, mime: item.mime };
+  }
+
   /** The name the preview gives one card: its template, and for a cloze card also its cloze number. */
   function previewCardName(card: NotePreviewCard): string {
     return card.cloze_ordinal > 0
@@ -727,6 +738,8 @@
               labels={fieldLabels}
               testIdPrefix="note-field"
               upload={uploadFieldMedia}
+              pickMedia={pickFieldMedia}
+              mediaDeckId={deckId}
               mediaBase={fieldMediaBase}
             />
 

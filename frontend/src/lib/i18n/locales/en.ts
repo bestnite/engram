@@ -1936,4 +1936,28 @@ export const en: LocaleCatalog = {
   'media.browser.empty_filter': 'No media matches these filters.',
   'media.browser.load_more': 'Load more',
   'media.browser.load_more_failed': 'Could not load more media.',
+
+
+  // ---- M22-2: media picker in the rich-text field editor ----
+  'media.picker.search': 'Search media',
+  'media.picker.class.label': 'Media type',
+  'media.picker.class.all': 'All types',
+  'media.picker.class.image': 'Images',
+  'media.picker.class.audio': 'Audio',
+  'media.picker.class.video': 'Video',
+  'media.picker.class.font': 'Fonts',
+  'media.picker.class.script': 'Scripts',
+  'media.picker.class.style': 'Styles',
+  'media.picker.class.other': 'Other',
+  'media.picker.scope.label': 'Deck',
+  'media.picker.scope.all': 'All decks',
+  'media.picker.scope.deck': 'This deck',
+  'media.picker.no_results': 'No media matches these filters.',
+  'media.picker.more_failed': 'Could not load more media.',
+  'media.picker.insert': 'Insert {name}',
+  'media.picker.close': 'Close',
+  'media.picker.error_failed': 'Could not insert the media. Try again.',
+  'media.picker.error_not_found': 'That media file no longer exists.',
+  'media.picker.error_not_readable': 'You cannot read this media. Upload it first or obtain access.',
+  'media.picker.error_invalid_response': 'The server returned an invalid media name.',
 };

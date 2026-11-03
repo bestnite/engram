@@ -420,6 +420,36 @@ describe('edit frame paste and source view', () => {
   });
 });
 
+describe('edit frame media picker insertion', () => {
+  /** Records the caret, then loses the live selection the way focusing the picker dialog does. */
+  function saveCaretAndLeaveFrame(start: number): void {
+    select(start, start);
+    (document.getElementById('editor') as HTMLElement).dispatchEvent(new Event('input', { bubbles: true }));
+    window.getSelection()?.removeAllRanges();
+  }
+
+  it('inserts an image by its deck name at the saved caret after focus left the frame', () => {
+    load('ab', { mediaBase: '/fm/token/' });
+    saveCaretAndLeaveFrame(1);
+    command('insertMedia', { media: { url: 'abc.png', name: 'abc.png', mime: 'image/png' } });
+    expect(editorHtml()).toBe('a<img src="abc.png">b');
+    expect(lastChange()).toBe('a<img src="abc.png">b');
+    // The frame keeps the deck's media base, so the relative name renders before the note is saved.
+    expect(document.head.querySelector('base')?.getAttribute('href')).toBe('/fm/token/');
+  });
+
+  it.each([
+    ['audio', 'audio/mpeg', 'abc.mp3', 'a[sound:abc.mp3]b'],
+    ['video', 'video/mp4', 'abc.mp4', 'a[sound:abc.mp4]b'],
+    ['other', 'application/pdf', 'abc.bin', 'a<a href="abc.bin">abc.bin</a>b'],
+  ])('inserts %s media at the saved caret', (_kind, mime, name, expected) => {
+    load('ab');
+    saveCaretAndLeaveFrame(1);
+    command('insertMedia', { media: { url: name, name, mime } });
+    expect(editorHtml()).toBe(expected);
+  });
+});
+
 describe('edit frame ruby and speech', () => {
   it('reports the selected text when the parent asks', () => {
     load('漢字です');
