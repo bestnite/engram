@@ -3952,6 +3952,111 @@ contract violations instead of intrusion steps. Every entry says whether it was 
 
 ---
 
+### M23 — Admin jobs panel
+
+The admin jobs page (`/admin/jobs`) lists only rows of the `jobs` table, and only the parameter
+optimiser writes that table. The periodic workers — expired-row cleanup, orphaned-media cleanup,
+review reminders, the weekly digest and mail delivery — keep no history and cannot be started by
+hand, so the page shows nothing about them. Decisions taken with the maintainer on 2026-11-03:
+
+- The history records a periodic round only when the round did work (at least one count in its
+  summary is above zero), failed, or was started by hand. A round that did nothing writes no row.
+  The task overview shows every task's latest round, including rounds that did nothing.
+- Expired-row cleanup and orphaned-media cleanup become two separate tasks. A manual media cleanup
+  still keeps media orphaned for less than `retention.MediaOrphanGrace`.
+- Mail delivery is a task on the panel. The history records its rounds that sent or failed mail;
+  the per-message detail stays on the existing mail page.
+- History rows of periodic tasks are deleted 30 days after they finished. Optimiser rows are never
+  deleted by this rule.
+
+- [ ] **M23-1 Periodic task history, overview and manual run (backend)** — every periodic worker
+  reports its rounds, the admin API exposes an overview and a manual trigger, and the job list
+  carries the periodic rows.
+  *Task kinds* (stable English identifiers, used as `jobs.kind` and in the API):
+  `retention` (expired sessions, action tokens, invites, deck share invites, login fingerprints
+  and periodic history rows; `internal/retention`), `media_gc` (orphaned media;
+  `internal/retention` calling `media.Store.CollectGarbage`), `reminder` (`internal/reminder`),
+  `digest` (`internal/digest`) and `mail_delivery` (`internal/mail` outbox). `optimize` stays the
+  optimiser's kind and is not a periodic task.
+  *Worker contract* (`internal/worker`): `Config` gains a required `Kind`; `RunOnce` returns a
+  summary `map[string]int64` together with the error, and every value in it counts an action the
+  round performed (rows deleted, mails queued, mails sent), never a number of rows scanned.
+  `Lifecycle` keeps, in memory, the start and finish time, the error text and the summary of its
+  latest round, whether a round is running, the interval, and the time of the next tick.
+  `Lifecycle.RunNow` asks the loop to run one round with trigger `manual`; it returns
+  `worker.ErrBusy` when a round is running or a manual round is already pending, and
+  `worker.ErrNotStarted` before `Start`. Ticks and `Wake` signals run rounds with trigger `auto`.
+  A manual round applies exactly the rules of an automatic one: the reminder and digest gates and
+  ledgers, the media grace period and the mail retry schedule are unchanged.
+  `worker.Registry` holds the process's lifecycles by kind; `cmd/engram` adds every lifecycle it
+  starts, and `web.Deps.Tasks` receives the registry. A lifecycle that is not started (the mail
+  workers when the outbox is not wired) is not added.
+  *Recording*: the registry's record function writes one terminal `jobs` row after a round that
+  meets the history rule above: `kind`, `status` `succeeded` or `failed`, `created_at` and
+  `started_at` set to the round's start, `finished_at`, `error` (the round's error text, English),
+  `result_json` (the summary as a JSON object) and the new nullable `jobs.trigger` column
+  (`auto` | `manual` | `user`; additive, AutoMigrate). Periodic rows are never queued or running,
+  so `jobs.Store.Active`, `RecoverStale` and the optimiser's single-concurrency `409` ignore them
+  without change. New optimiser rows write `trigger` `user`; a row whose `trigger` is NULL was
+  written before this change, when only the optimiser wrote the table, and the API reports it as
+  `user`. A failed recording write is logged in English and does not change the round's outcome.
+  The `retention` task deletes rows whose `trigger` is `auto` or `manual` and whose `finished_at`
+  is more than 30 days old, and reports the count under the summary key `job_runs`.
+  *Summary keys*: `retention` — `sessions`, `action_tokens`, `invites`, `deck_share_invites`,
+  `login_fingerprints`, `job_runs`; `media_gc` — `removed`; `reminder` — `queued`; `digest` —
+  `queued`; `mail_delivery` — `sent`, `failed` (mails that reached their final failed state),
+  `retried` (mails rescheduled for another attempt).
+  *API* (admin session; writes use CSRF; every route registered next to the existing
+  `/api/v1/admin/jobs` routes in `internal/web/admin_api.go`):
+  `GET /api/v1/admin/tasks` returns `{"tasks":[{kind, interval_seconds, running, pending,
+  next_run_at, last: null | {trigger, started_at, finished_at, status, error, summary}}]}` in the
+  kind order listed above, times as the existing UTC text of `formatJobTime`;
+  `POST /api/v1/admin/tasks/:kind/run` returns `202` and writes the audit action `job.run` with
+  the kind in its detail, `404 invalid_task` for an unknown or unregistered kind, `409
+  already_running` for `worker.ErrBusy`, and `503 unavailable` when no registry is wired;
+  `GET /api/v1/admin/jobs` accepts an optional `kind` filter (`400 invalid_kind` for a value that
+  is neither `optimize` nor a task kind) and each row gains `trigger`, `duration_ms` (null until
+  finished) and `summary` (the parsed `result_json` object for a periodic row, null for an
+  optimiser row, whose result carries weights and stays private).
+  `ARCHITECTURE.md` section 7 and the dependency list are updated in the same commit
+  (`web → worker`, the registry, the recorded history).
+  *Acceptance:* `go test ./internal/worker ./internal/retention ./internal/reminder
+  ./internal/digest ./internal/mail ./internal/jobs ./internal/web ./cmd/engram -count=1` covers:
+  a round with a positive count writes one row and a round with all zero counts writes none; a
+  failed round and a manual round with zero counts each write one row; `RunNow` returns
+  `ErrBusy` while a round runs and `ErrNotStarted` before start; the overview reports the latest
+  round of every registered task, including a round that did nothing; the run endpoint returns
+  `202` and an audit row, `404`, `409`, `503`, `403` for a non-admin and `403` without a CSRF
+  token; the kind filter and its `400`; a NULL-trigger optimiser row listed as `user`; the
+  30-day purge deleting an old periodic row and keeping an equally old optimiser row; an
+  optimiser enqueue succeeding while periodic rows exist. The purge and the recording pass with
+  `TEST_PG_DSN` set.
+
+- [ ] **M23-2 Admin jobs page shows tasks and their history (frontend)** —
+  `frontend/src/lib/views/admin/AdminJobsView.svelte` becomes two sections. *Tasks*: one row per
+  task from `GET /api/v1/admin/tasks`, showing the task name and a one-line description from the
+  catalog, the interval, the latest round (time, status badge, summary counts or error), the next
+  run, and a "run now" button. The button calls `POST /api/v1/admin/tasks/:kind/run`, shows a
+  success toast on `202` and a localised toast for `already_running`, `invalid_task` and
+  `unavailable`; while any task is running or pending the section reloads every 3 seconds and
+  stops when none is. A task whose latest round did nothing reads as "nothing to do", not as an
+  empty value. *History*: the existing paged table with a kind filter (all kinds plus
+  `optimize`), and columns for kind, trigger, status, start time, duration and the result (the
+  summary counts as labelled numbers for a periodic row, the error or log tail otherwise);
+  cancelling an optimiser job keeps working. API types and client methods go in
+  `frontend/src/lib/api/types.ts` and `client.ts`. Catalog keys for task names, descriptions,
+  triggers and summary labels are appended in one block at the end of both
+  `frontend/src/lib/i18n/locales/zh-CN.ts` and `en.ts` under the `admin.jobs.` prefix, keeping
+  the two key sets identical (AGENTS.md section 6).
+  *Acceptance:* `npm --prefix frontend run check`, `npm --prefix frontend run test:client` and
+  `npm --prefix frontend run build` pass; `frontend/src/tests/admin-panel-jobs.test.ts` covers
+  the overview rendering every kind, a "nothing to do" round, a failed round showing its error,
+  the run button's request and its `202`/`409` toasts, polling that starts while a task runs and
+  stops after it finishes, the kind filter's request URL, the summary labels in the history, and
+  optimiser cancellation.
+
+---
+
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
