@@ -3870,6 +3870,86 @@ contract violations instead of intrusion steps. Every entry says whether it was 
 
 ---
 
+### M22 — Media library
+
+- [ ] **M22-1 A global media browser with filters** — a signed-in user can browse every medium
+  they may read across all their decks on one page, and narrow the list by deck, media class,
+  reference state and name. The readable set is exactly `store.ListReadableMedia`'s
+  (`internal/store/media_readable.go`): media the caller supplied (a deduplication hit counts)
+  or media referenced by a live note in a deck the caller can see. It is not an instance-wide
+  administrator catalogue: a medium outside that set appears in no item and in no total.
+  Backend: `GET /api/v1/media` (`internal/api/media.go`) gains optional `deck`, `class`, `state`
+  and `q` filters over its existing keyset paging, and each item gains `names`, `decks`,
+  `state` and `cleanup_at`. `deck` is a public deck id and matches when that deck either has a
+  live note referencing the medium or has a `media_names` row for it. `class` is one of the
+  seven `internal/mediatype` classes. `state` is one of `referenced`, `pending`, `restorable`,
+  `unreferenced`: `pending` means the collector stamped `orphaned_at` and has not reclaimed the
+  medium yet (whether or not the grace period has elapsed), `restorable` means the medium has
+  references and every reference belongs to a soft-deleted note (the collector keeps it so the
+  note can be restored), `unreferenced` means the collector's orphan conditions hold but no
+  stamp exists yet, and `referenced` is every other case. `q` is a case-insensitive substring
+  of a media name the caller can see. `names` and `decks` list only the deck-scoped names and
+  the decks the caller can see, so a shared sha never leaks another user's file name or deck.
+  `cleanup_at` is `orphaned_at + retention.MediaOrphanGrace` and is non-null only for a
+  `pending` item; every other state reports null even if a stale stamp has not been cleared
+  yet. An `unreferenced` item therefore has a null `cleanup_at` because the next sweep writes
+  the stamp. A pending item whose grace has already elapsed but whose sweep has not run yet
+  still reports `pending` with a past `cleanup_at`, and the page says the next sweep removes
+  it. The state must reuse the collector's orphan definition
+  (`orphanCondition` in `internal/store/media_gc.go`), so the page and the reclamation job
+  cannot disagree, and the grace must come from the server rather than a client constant.
+  Frontend: `frontend/src/lib/views/MediaView.svelte` at `/media`, with a sidebar entry
+  (`frontend/src/lib/components/shell/AppSidebar.svelte`), a responsive grid/list, an image
+  thumbnail for image classes, name, mime, size, created time, state badge, cleanup time, the
+  filters, a search box, empty/loading/error states and "load more" paging; the route is
+  registered in `frontend/src/lib/router/routes.ts` and its catalog keys are appended in one
+  block to both frontend catalogs as AGENTS.md section 6 requires.
+  *Acceptance:* `go test ./internal/api ./internal/store -count=1` covers each filter alone and
+  combined, every state (a pending row just inside and just past the grace boundary, a
+  restorable row referenced by a soft-deleted note, a note-type `_` asset counted as
+  referenced, and an unreferenced upload), a sha shared by two decks, an item readable only
+  through the uploader branch, filtered paging across a page boundary, a bad `class`, `state`
+  or cursor returning 400, anonymous 401, and a second user's unreadable medium absent from
+  both items and totals; the same cases pass with `TEST_PG_DSN` set.
+  `npm --prefix frontend run check` and `npm --prefix frontend run test:client` cover filtering,
+  state and cleanup copy, and paging; `npm --prefix frontend run build` succeeds and the built
+  SPA serves `/media`.
+
+- [ ] **M22-2 A media picker in the rich-text field editor** — a user editing a card face field
+  can insert an already stored medium instead of uploading it again. The toolbar of
+  `frontend/src/lib/components/RichTextField.svelte` gains an "insert from library" button next
+  to the image and audio buttons; it opens
+  `frontend/src/lib/components/MediaPicker.svelte`, which pages the readable set with the
+  `deck`, `class` and `q` filters and shows thumbnails. Choosing an item registers its
+  deck-scoped name for the note's deck and inserts the markup the upload path already inserts,
+  chosen by the stored mime: `<img src="<name>">` for images, `[sound:<name>]` for audio and
+  video, and `<a href="<name>">` otherwise. The insertion reuses the frame's saved-caret
+  `insertMedia` command in `frontend/src/editframe/runtime.ts`; moving focus to the picker must
+  not lose the caret. `NoteEditView.svelte` passes the deck id or a picker callback down through
+  `NoteFieldsForm.svelte` to `RichTextField.svelte`, following the shape of the existing upload
+  prop. Backend: `POST /api/v1/decks/:id/media/names` (mounted by `registerMediaRoutes` in
+  `internal/web/media.go`, session and CSRF, the same `loadDeckForRole(..., store.RoleEditor)`
+  check as the upload entry) takes `{"sha256": "..."}` and returns
+  `{"name": "<sha256>.<ext>"}` after `store.RegisterUploadedMediaName` registers the canonical
+  content-addressed name. The handler refuses a caller who cannot read the bytes with the
+  existing `media_not_readable` code and writes no row. It is idempotent, and it never renames
+  or repoints a `media_names` row: a deck that holds only an imported alias for the same bytes
+  gains the canonical name as an additional alias. The note write path is unchanged; saving
+  still normalises `/media/<sha256>` references, rebuilds `media_notes` and keeps imported
+  plain names working. The orphaned `media.open/heading/loading/failed/retry/empty/next`
+  catalog keys are reused when their copy still fits; any new key goes in one appended block in
+  both catalogs. The picker reuses the filter shape and listing method added by M22-1, so M22-1
+  lands first or the shared method is extracted in the same change.
+  *Acceptance:* `go test ./internal/web ./internal/store -count=1` covers the editor success, a
+  reader refused with 403, an editor who cannot read the bytes refused with
+  `media_not_readable` and no name row written, a repeated request returning the same name, a
+  cross-deck pick of a medium readable through a visible deck, the canonical name registered in
+  the target deck, and a note save after insertion whose stored field still resolves the
+  medium; the cases pass on both drivers. Frontend client tests cover opening the picker,
+  filtering, image/sound/link markup inserted at the saved caret, and the editor rendering the
+  picked medium through the frame base before the note is saved;
+  `npm --prefix frontend run check` and `npm --prefix frontend run test:client` pass.
+
 ---
 
 ## 2. Release ledger
