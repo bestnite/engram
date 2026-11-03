@@ -17,6 +17,7 @@ function signIn(hasPassword: boolean | undefined): void {
     email: 'alice@example.com',
     role: 'user',
     locale: 'zh-CN',
+    timezone: 'UTC',
     has_password: true,
   };
   if (hasPassword === undefined) {

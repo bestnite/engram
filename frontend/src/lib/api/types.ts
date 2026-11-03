@@ -1099,6 +1099,8 @@ export interface User {
   display_name?: string;
   role: string;
   locale: string;
+  /** The IANA timezone from the settings page; every time on the page is shown in it (empty or unknown means UTC). */
+  timezone: string;
   /**
    * Whether the account has a local password. An OIDC-created account starts without one; the security page uses this
    * to show "set a password" instead of "change the password", and to explain why its only sign-in identity cannot be unlinked.
@@ -1637,7 +1639,7 @@ export interface AdminUserCreateRequest {
 
 /** Registration and invites (Go: internal/web/admin_registration_api.go). */
 
-/** One invite; role/status are stored values, and link is for the admin to copy. */
+/** One invite; role/status are stored values, link is for the admin to copy, and times are already formatted in the current admin's timezone. */
 export interface AdminInvite {
   id: string;
   token: string;
@@ -1775,6 +1777,7 @@ export interface AdminOIDCIdentity {
   subject: string;
   email: string;
   username: string;
+  /** Already formatted in the current admin's timezone. */
   linked_at: string;
 }
 
@@ -2006,6 +2009,7 @@ export interface AdminMailTemplateRow {
   locale: string;
   subject: string;
   body_md: string;
+  /** Already formatted in the current admin's timezone. */
   updated_at: string;
 }
 

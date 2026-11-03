@@ -23,10 +23,10 @@ func inviteStatus(inv store.Invite, now time.Time) string {
 	return "active"
 }
 
-// formatTimePtr formats a nullable time into a display string; returns empty for nil.
-func formatTimePtr(t *time.Time) string {
+// formatTimePtr formats a nullable time into a display string in loc; returns empty for nil.
+func formatTimePtr(t *time.Time, loc *time.Location) string {
 	if t == nil {
 		return ""
 	}
-	return t.UTC().Format("2006-01-02 15:04")
+	return t.In(loc).Format("2006-01-02 15:04")
 }

@@ -1,7 +1,10 @@
+import { dayIn, resolveTimeZone } from './timezones';
+
 /**
  * The single place the UI turns numbers, ratios, byte counts, dates and raw field values into text. Every page formats
  * the same kind of quantity the same way, in the current locale; a component passes the locale it reads from
- * `$localeStore`, so the text follows a language switch.
+ * `$localeStore`, so the text follows a language switch. A date or time is shown in the account's timezone, which a
+ * component reads from `$timeZoneStore`, never in the browser's: the server decides days in the account's timezone too.
  */
 
 /** A count or measurement with the locale's digit grouping. */
@@ -52,11 +55,26 @@ export function formatDuration(ms: number, locale: string, unitDisplay: 'long' |
   return new Intl.NumberFormat(locale, { style: 'unit', unit: 'millisecond', unitDisplay, maximumFractionDigits: 0 }).format(value);
 }
 
-/** A calendar date (medium style) from an ISO timestamp or a Date; a value that does not parse is shown as it came. */
-export function formatDate(value: string | Date, locale: string): string {
+/**
+ * A calendar date (medium style) in the given timezone from an ISO timestamp or a Date; a value that does not parse is
+ * shown as it came. An empty or unknown timezone means UTC.
+ */
+export function formatDate(value: string | Date, locale: string, timeZone: string): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date);
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: resolveTimeZone(timeZone) }).format(date);
+}
+
+/** A calendar date as `YYYY-MM-DD` in the given timezone, for a narrow column; a value that does not parse reads as empty. */
+export function formatIsoDay(value: string, timeZone: string): string {
+  return dayIn(timeZone, Date.parse(value));
+}
+
+/** A date with its time to the minute (medium date, short time) in the given timezone; otherwise as formatDate. */
+export function formatDateTime(value: string | Date, locale: string, timeZone: string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: resolveTimeZone(timeZone) }).format(date);
 }
 
 /**

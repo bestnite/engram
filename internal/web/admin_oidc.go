@@ -28,6 +28,7 @@ type adminOIDCIdentity struct {
 	Subject  string `json:"subject"`
 	Email    string `json:"email"`
 	Username string `json:"username"`
+	// LinkedAt is already formatted in the current admin's timezone.
 	LinkedAt string `json:"linked_at"`
 }
 
@@ -62,6 +63,8 @@ type adminOIDCRequest struct {
 // adminOIDC returns the OIDC config, the callback URL and the linked identity list.
 func (s *Server) adminOIDC(c *gin.Context) {
 	ctx := c.Request.Context()
+	actor, _ := auth.CurrentUser(c)
+	userLoc := auditLocation(actor)
 	cfg, err := s.oidcLoadConfig(c)
 	if err != nil {
 		s.logger.Error("spa admin: load oidc config failed", "error", err)
@@ -117,7 +120,7 @@ func (s *Server) adminOIDC(c *gin.Context) {
 			resp.Identities = append(resp.Identities, adminOIDCIdentity{
 				ID: row.PublicID, Provider: row.Provider, Subject: row.Subject,
 				Email: email, Username: username,
-				LinkedAt: row.LinkedAt.Format(time.RFC3339),
+				LinkedAt: row.LinkedAt.In(userLoc).Format("2006-01-02 15:04"),
 			})
 		}
 	}

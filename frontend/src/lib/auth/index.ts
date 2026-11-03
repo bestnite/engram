@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { derived, writable } from 'svelte/store';
 import { apiClient } from '../api';
 import { resetSidebarDecks } from '../components/shell/sidebar';
 import type {
@@ -31,6 +31,17 @@ const initialState: AuthState = {
 };
 
 export const authStore = writable<AuthState>(initialState);
+
+/**
+ * The signed-in account's timezone as stored, empty when signed out. Pages pass it to the date formatters, which read
+ * an empty or unknown name as UTC.
+ */
+export const timeZoneStore = derived(authStore, (s) => s.user?.timezone ?? '');
+
+/** Apply a timezone the settings page just saved, so every page shows times in it without a reload. */
+export function setSessionTimeZone(timezone: string): void {
+  authStore.update((s) => (s.user ? { ...s, user: { ...s.user, timezone } } : s));
+}
 
 /**
  * Initialize auth session state (calls GET /api/v1/auth/session)

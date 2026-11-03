@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fieldText, formatBytes, formatDate, formatDuration, formatNumber, formatPercent, htmlToText } from '../lib/format';
+import { fieldText, formatBytes, formatDate, formatDateTime, formatDuration, formatIsoDay, formatNumber, formatPercent, htmlToText } from '../lib/format';
 
 describe('shared formatting', () => {
   it.each([
@@ -37,8 +37,37 @@ describe('shared formatting', () => {
   });
 
   it('formatDate formats a timestamp and passes an unparsable value through', () => {
-    expect(formatDate('2026-10-02T12:00:00Z', 'en')).toBe('Oct 2, 2026');
-    expect(formatDate('not a date', 'en')).toBe('not a date');
+    expect(formatDate('2026-10-02T12:00:00Z', 'en', 'UTC')).toBe('Oct 2, 2026');
+    expect(formatDate('not a date', 'en', 'UTC')).toBe('not a date');
+  });
+
+  // The account's timezone decides the day, not the browser's; an empty or unknown name reads as UTC, as on the server.
+  it.each([
+    ['UTC', 'Oct 2, 2026'],
+    ['Asia/Shanghai', 'Oct 3, 2026'],
+    ['America/New_York', 'Oct 2, 2026'],
+    ['', 'Oct 2, 2026'],
+    ['Mars/Phobos', 'Oct 2, 2026'],
+  ])('formatDate in %s', (tz, want) => {
+    expect(formatDate('2026-10-02T20:00:00Z', 'en', tz)).toBe(want);
+  });
+
+  it.each([
+    ['UTC', '2026-10-02'],
+    ['Asia/Shanghai', '2026-10-03'],
+    ['Mars/Phobos', '2026-10-02'],
+  ])('formatIsoDay in %s', (tz, want) => {
+    expect(formatIsoDay('2026-10-02T20:00:00Z', tz)).toBe(want);
+    expect(formatIsoDay('not a date', tz)).toBe('');
+  });
+
+  it.each([
+    ['UTC', 'Oct 2, 2026, 8:00 PM'],
+    ['Asia/Shanghai', 'Oct 3, 2026, 4:00 AM'],
+    ['Mars/Phobos', 'Oct 2, 2026, 8:00 PM'],
+  ])('formatDateTime in %s', (tz, want) => {
+    expect(formatDateTime('2026-10-02T20:00:00Z', 'en', tz).replace(/\u202f/g, ' ')).toBe(want);
+    expect(formatDateTime('not a date', 'en', tz)).toBe('not a date');
   });
 
   it.each([

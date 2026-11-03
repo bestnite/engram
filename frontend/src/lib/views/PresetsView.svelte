@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { t } from '../i18n';
+  import { t, localeStore } from '../i18n';
+  import { formatDateTime } from '../format';
+  import { timeZoneStore } from '../auth';
   import { apiClient, ApiClientError } from '../api';
   import Dialog from '../components/ui/Dialog.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -537,7 +539,7 @@
           {#if p.weights_optimized_at || p.weights_review_count !== null || p.weights_raw}
             <div class="space-y-1 border-t border-border px-5 py-3 text-[13px] text-muted-foreground">
               <p>
-                {#if p.weights_optimized_at}{$t('presets.weights.optimized_at', { time: p.weights_optimized_at })}{/if}
+                {#if p.weights_optimized_at}{$t('presets.weights.optimized_at', { time: formatDateTime(p.weights_optimized_at, $localeStore, $timeZoneStore) })}{/if}
                 {#if p.weights_optimized_at && p.weights_review_count !== null}<span aria-hidden="true"> · </span>{/if}
                 {#if p.weights_review_count !== null}{$t('presets.weights.review_count', { count: p.weights_review_count })}{/if}
               </p>

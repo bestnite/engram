@@ -11,6 +11,8 @@
   import { onMount } from 'svelte';
   import { t, localeStore } from '../i18n';
   import { formatDate } from '../format';
+  import { timeZoneStore } from '../auth';
+  import { dayIn, zonedInstant } from '../timezones';
   import { apiClient, getApiErrorMessageKey, type APIKeyRecord } from '../api';
   import Checkbox from '../components/ui/Checkbox.svelte';
   import Button from '../components/ui/Button.svelte';
@@ -58,19 +60,13 @@
     { value: 'custom', label: $t('keys.expiry.custom') },
   ]);
 
-  /** Today as `YYYY-MM-DD` in local time, the earliest day the date input offers. */
-  function todayLocal(): string {
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  }
-
   /**
    * Resolves the chosen expiry into the UTC instant sent to the server.
    * Returns null for "never", a string for a valid choice, and undefined when the input is invalid (the error is set instead).
    *
-   * A custom date means the end of the chosen local day: the user picks a day, not a time, and the key stays usable
-   * through that whole day. The instant is therefore 23:59:59 local, which `Date` converts to UTC on serialisation.
+   * A custom date means the end of the chosen day in the account's timezone: the user picks a day, not a time, and the
+   * key stays usable through that whole day. The instant is therefore 23:59:59 on the account's clock, the same clock the
+   * expiry date is shown in afterwards.
    */
   function resolveExpiresAt(): string | null | undefined {
     expiryError = '';
@@ -85,7 +81,7 @@
         expiryError = 'keys.expiry.error_required';
         return undefined;
       }
-      const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 0);
+      const endOfDay = zonedInstant(year, month, day, 23, 59, 59, $timeZoneStore);
       if (!(endOfDay.getTime() > Date.now())) {
         expiryError = 'keys.expiry.error_past';
         return undefined;
@@ -263,7 +259,7 @@
           <input
             type="date"
             bind:value={customDate}
-            min={todayLocal()}
+            min={dayIn($timeZoneStore)}
             oninput={() => (expiryError = '')}
             aria-label={$t('keys.expiry.custom_label')}
             data-testid="keys-expiry-date"
@@ -303,7 +299,7 @@
               <p class="truncate text-sm font-medium text-foreground">{key.name}</p>
               <p class="truncate font-mono text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
               <p class="mt-0.5 text-xs text-muted-foreground">
-                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatDate(key.expires_at, $localeStore) }) : $t('keys.expiry.never_expires')}
+                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatDate(key.expires_at, $localeStore, $timeZoneStore) }) : $t('keys.expiry.never_expires')}
               </p>
             </div>
             <Button
@@ -324,7 +320,7 @@
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium text-foreground">{key.name}</p>
                 <p class="truncate font-mono text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
-                <p class="mt-0.5 text-xs text-muted-foreground">{key.expires_at ? $t('keys.expiry.expired_on', { date: formatDate(key.expires_at, $localeStore) }) : ''}</p>
+                <p class="mt-0.5 text-xs text-muted-foreground">{key.expires_at ? $t('keys.expiry.expired_on', { date: formatDate(key.expires_at, $localeStore, $timeZoneStore) }) : ''}</p>
               </div>
               <Badge variant="warning" testId={`keys-expired-badge-${key.id}`}>{$t('keys.state.expired')}</Badge>
               <Button
@@ -344,7 +340,7 @@
               <p class="truncate text-sm text-muted-foreground line-through">{key.name}</p>
               <p class="truncate font-mono text-xs text-muted-foreground">{key.prefix} · {key.scopes}</p>
               <p class="mt-0.5 text-xs text-muted-foreground">
-                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatDate(key.expires_at, $localeStore) }) : $t('keys.expiry.never_expires')}
+                {key.expires_at ? $t('keys.expiry.expires_on', { date: formatDate(key.expires_at, $localeStore, $timeZoneStore) }) : $t('keys.expiry.never_expires')}
               </p>
             </div>
             <Badge testId={`keys-revoked-badge-${key.id}`}>{$t('keys.revoked')}</Badge>

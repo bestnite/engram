@@ -403,7 +403,10 @@ rules as a timer round), and lists the history with `GET /api/v1/admin/jobs`.
   so the view shows the same answer controls, audio, TTS and image occlusion as review without a
   second renderer, and card HTML still reaches the page only through `CardFrame.svelte`.
 - `frontend/src/lib/format.ts` is the only place numbers, percentages, byte counts, dates and raw field
-  values become text; components pass the current locale.
+  values become text; components pass the current locale. Dates and times are shown in the account's timezone, which
+  the session payload carries and `timeZoneStore` (`frontend/src/lib/auth`) exposes, never in the browser's; an empty
+  or unknown name reads as UTC, as in `internal/reviewday`. Admin pages whose times the server formats get them in the
+  viewing admin's timezone, and a mail shows its times in the recipient's timezone followed by the zone name.
 - UI text comes from `frontend/src/lib/i18n/locales/{zh-CN,en}.ts`. Text produced by the
   server (emails, server-side messages) comes from `internal/i18n/locales/{zh-CN,en}.yaml`.
 - Tests run in two vitest suites: an SSR suite and a happy-dom suite for `*.client.ts` files.

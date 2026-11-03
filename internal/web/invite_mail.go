@@ -54,12 +54,13 @@ func (s *Server) sendInviteEmail(c *gin.Context, loc *i18n.Localizer, inv *store
 	m := mail.Mail{Type: mail.TypeInvite, To: to, BaseURL: s.requestBaseURL(c), Vars: mail.Vars{
 		"url": s.absoluteURL(c, "/register?invite="+url.QueryEscape(inv.Token)),
 	}}
+	recipientLoc := loc
+	recipient := s.inviteRecipient(ctx, to)
 	// The expiry is an optional variable: without it the built-in body leaves that line out.
 	if inv.ExpiresAt != nil {
-		m.Vars["expires"] = mailTime(*inv.ExpiresAt)
+		m.Vars["expires"] = mailTime(*inv.ExpiresAt, recipient)
 	}
-	recipientLoc := loc
-	if recipient := s.inviteRecipient(ctx, to); recipient != nil {
+	if recipient != nil {
 		m.UserID = recipient.ID
 		if code := strings.TrimSpace(recipient.Locale); code != "" {
 			recipientLoc = s.i18n.Localizer(s.i18n.Pick(code, "", ""))

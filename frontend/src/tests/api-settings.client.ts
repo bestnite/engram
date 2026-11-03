@@ -4,6 +4,7 @@ import APIKeysView from '../lib/views/APIKeysView.svelte';
 import { apiClient, type APIKeyRecord } from '../lib/api';
 import ConfirmHost from '../lib/components/ui/ConfirmHost.svelte';
 import { setLocale } from '../lib/i18n';
+import { authStore } from '../lib/auth';
 
 /**
  * API and MCP page: the access address is taken from the site address the browser is currently visiting; the MCP config snippet is normally a placeholder,
@@ -18,6 +19,7 @@ describe('API & MCP settings page', () => {
     instance = null;
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+    authStore.update((s) => ({ ...s, user: null }));
   });
 
   async function flush(): Promise<void> {
@@ -129,7 +131,13 @@ describe('API & MCP settings page', () => {
     expect(create.mock.calls[0]![0]).toEqual({ name: 'agent', scopes: ['read'], expires_at: undefined });
   });
 
-  it('sends the end of the chosen local day for a custom date', async () => {
+  // The day is the account's, not the browser's: 23:59:59 on Asia/Shanghai's clock is 15:59:59 UTC.
+  it("sends the end of the chosen day in the account's timezone for a custom date", async () => {
+    authStore.update((s) => ({
+      ...s,
+      authenticated: true,
+      user: { id: 'u1', username: 'owner', email: 'owner@example.com', role: 'user', locale: 'zh-CN', timezone: 'Asia/Shanghai', has_password: true },
+    }));
     await setup();
     const create = createSpy();
     await fillName();
@@ -138,7 +146,7 @@ describe('API & MCP settings page', () => {
     await submit();
 
     const payload = create.mock.calls[0]![0] as { expires_at?: string };
-    expect(payload.expires_at).toBe(new Date(2099, 4, 4, 23, 59, 59, 0).toISOString());
+    expect(payload.expires_at).toBe('2099-05-04T15:59:59.000Z');
   });
 
   it('refuses a custom date that is not in the future and creates nothing', async () => {

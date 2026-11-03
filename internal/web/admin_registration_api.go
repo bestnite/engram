@@ -21,12 +21,13 @@ import (
 
 // adminInvite is an invite's raw fields; role/status are stored values whose copy is mapped by the frontend.
 type adminInvite struct {
-	ID        string `json:"id"`
-	Token     string `json:"token"`
-	Link      string `json:"link"`
-	Email     string `json:"email"`
-	Role      string `json:"role"`
-	Status    string `json:"status"`
+	ID     string `json:"id"`
+	Token  string `json:"token"`
+	Link   string `json:"link"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
+	Status string `json:"status"`
+	// The times are already formatted in the current admin's timezone; an empty string means not set.
 	CreatedAt string `json:"created_at"`
 	ExpiresAt string `json:"expires_at"`
 	UsedAt    string `json:"used_at"`
@@ -62,8 +63,11 @@ type adminInviteCreateResponse struct {
 }
 
 // adminInviteJSON converts an invite into the response structure; used_by is resolved to a username, falling back to the decimal id when that fails.
+// Times are formatted in the current admin's timezone, as on the audit page.
 func (s *Server) adminInviteJSON(c *gin.Context, inv store.Invite, now time.Time) adminInvite {
 	ctx := c.Request.Context()
+	actor, _ := auth.CurrentUser(c)
+	userLoc := auditLocation(actor)
 	email := ""
 	if inv.Email != nil {
 		email = *inv.Email
@@ -74,10 +78,6 @@ func (s *Server) adminInviteJSON(c *gin.Context, inv store.Invite, now time.Time
 			usedBy = u.Username
 		}
 	}
-	expires := ""
-	if inv.ExpiresAt != nil {
-		expires = inv.ExpiresAt.UTC().Format("2006-01-02 15:04")
-	}
 	return adminInvite{
 		ID:        inv.PublicID,
 		Token:     inv.Token,
@@ -85,9 +85,9 @@ func (s *Server) adminInviteJSON(c *gin.Context, inv store.Invite, now time.Time
 		Email:     email,
 		Role:      inv.Role,
 		Status:    inviteStatus(inv, now),
-		CreatedAt: inv.CreatedAt.UTC().Format("2006-01-02 15:04"),
-		ExpiresAt: expires,
-		UsedAt:    formatTimePtr(inv.UsedAt),
+		CreatedAt: formatTimePtr(&inv.CreatedAt, userLoc),
+		ExpiresAt: formatTimePtr(inv.ExpiresAt, userLoc),
+		UsedAt:    formatTimePtr(inv.UsedAt, userLoc),
 		UsedBy:    usedBy,
 	}
 }

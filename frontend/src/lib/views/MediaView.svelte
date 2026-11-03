@@ -12,6 +12,7 @@
   import EmptyState from '../components/ui/EmptyState.svelte';
   import type { SelectOption } from '../components/ui/options';
   import { formatBytes, formatDate } from '../format';
+  import { timeZoneStore } from '../auth';
   import { FileText, Image as ImageIcon, Music, RefreshCw, Search, SearchX } from '@lucide/svelte';
 
   /**
@@ -195,7 +196,7 @@
     const at = new Date(item.cleanup_at);
     if (Number.isNaN(at.getTime())) return item.cleanup_at;
     if (at.getTime() <= Date.now()) return $t('media.browser.cleanup.overdue');
-    return $t('media.browser.cleanup.pending', { date: formatDate(at, $localeStore) });
+    return $t('media.browser.cleanup.pending', { date: formatDate(at, $localeStore, $timeZoneStore) });
   }
 
   onMount(() => {
@@ -346,7 +347,7 @@
               {item.mime} · {formatBytes(item.bytes, $localeStore)}
             </p>
             <p class="text-xs text-muted-foreground" data-testid="media-created">
-              {$t('media.browser.created', { date: formatDate(item.created_at, $localeStore) })}
+              {$t('media.browser.created', { date: formatDate(item.created_at, $localeStore, $timeZoneStore) })}
             </p>
             <p class="text-xs text-muted-foreground" data-testid="media-decks">
               {$t('media.browser.decks')}: {decksText(item)}

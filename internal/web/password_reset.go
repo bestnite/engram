@@ -60,7 +60,7 @@ func (s *Server) issuePasswordReset(c *gin.Context, u *store.User) {
 		Vars: mail.Vars{
 			"username": u.Username,
 			"url":      s.absoluteURL(c, "/reset-password?token="+url.QueryEscape(token)),
-			"expires":  mailTime(now.Add(auth.PasswordResetTTL)),
+			"expires":  mailTime(now.Add(auth.PasswordResetTTL), u),
 		},
 	})
 }

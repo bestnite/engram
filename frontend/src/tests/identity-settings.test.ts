@@ -25,6 +25,7 @@ function signIn(hasPassword: boolean): void {
     email: 'alice@example.com',
     role: 'user',
     locale: 'zh-CN',
+    timezone: 'UTC',
     has_password: hasPassword,
   };
   authStore.set({ initialized: true, loading: false, authenticated: true, user, error: null });

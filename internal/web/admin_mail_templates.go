@@ -35,10 +35,11 @@ type mailTemplateType struct {
 
 // mailTemplateRow is one saved custom template.
 type mailTemplateRow struct {
-	Type      string `json:"type"`
-	Locale    string `json:"locale"`
-	Subject   string `json:"subject"`
-	BodyMD    string `json:"body_md"`
+	Type    string `json:"type"`
+	Locale  string `json:"locale"`
+	Subject string `json:"subject"`
+	BodyMD  string `json:"body_md"`
+	// UpdatedAt is already formatted in the current admin's timezone.
 	UpdatedAt string `json:"updated_at"`
 }
 
@@ -141,6 +142,8 @@ func sampleVars(t mail.Type) mail.Vars {
 // adminMailTemplates returns the type list, the variable tables and the saved templates.
 func (s *Server) adminMailTemplates(c *gin.Context) {
 	ctx := c.Request.Context()
+	actor, _ := auth.CurrentUser(c)
+	userLoc := auditLocation(actor)
 	loc, ok := s.localizer(c)
 	if !ok {
 		return
@@ -187,7 +190,7 @@ func (s *Server) adminMailTemplates(c *gin.Context) {
 	for _, row := range rows {
 		resp.Rows = append(resp.Rows, mailTemplateRow{
 			Type: row.Type, Locale: row.Locale, Subject: row.Subject, BodyMD: row.BodyMD,
-			UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339),
+			UpdatedAt: row.UpdatedAt.In(userLoc).Format("2006-01-02 15:04"),
 		})
 	}
 	_ = loc

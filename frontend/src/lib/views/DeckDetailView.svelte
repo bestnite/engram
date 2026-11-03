@@ -4,7 +4,8 @@
   import { navigate, replaceAddress, routeStore } from '../router';
   import { withReturn } from '../return-to';
   import { t } from '../i18n';
-  import { fieldText, htmlToText } from '../format';
+  import { fieldText, formatIsoDay, htmlToText } from '../format';
+  import { timeZoneStore } from '../auth';
   import { apiClient, ApiClientError } from '../api';
   import type { Deck, DeckQueueCount, DeckTag, Note, BulkNotesResponse } from '../api';
   import DeckSharingView from './DeckSharingView.svelte';
@@ -845,7 +846,7 @@
                 <span class="inline-flex h-5 items-center px-1 text-xs text-muted-foreground" title={note.tags.slice(3).join(', ')}>+{note.tags.length - 3}</span>
               {/if}
             </div>
-            <span class="hidden text-[13px] tabular-nums text-muted-foreground md:block">{note.created_at ? note.created_at.slice(0, 10) : ''}</span>
+            <span class="hidden text-[13px] tabular-nums text-muted-foreground md:block">{note.created_at ? formatIsoDay(note.created_at, $timeZoneStore) : ''}</span>
             <div class="{listClasses.rowAction} flex items-center justify-end gap-0.5">
               {#if canEditContent}
                 <a

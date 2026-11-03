@@ -19,6 +19,7 @@
     type ShareAllowRow,
   } from '../api';
   import { timezoneOptions } from '../timezones';
+  import { setSessionTimeZone } from '../auth';
   import Select from '../components/ui/Select.svelte';
   import Combobox from '../components/ui/Combobox.svelte';
   import Skeleton from '../components/ui/Skeleton.svelte';
@@ -172,6 +173,7 @@
     try {
       const updated = await apiClient.updateProfile(validation.data);
       serverApiAvailable = true;
+      setSessionTimeZone(updated.timezone);
       if (isSupportedLocale(updated.locale)) {
         selectedLocale = updated.locale;
         setLocale(updated.locale);

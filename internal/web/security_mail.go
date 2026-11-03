@@ -65,9 +65,12 @@ func (s *Server) sendMail(ctx context.Context, loc *i18n.Localizer, m mail.Mail)
 	return s.mailer.Send(ctx, loc, m) == mail.SendQueued
 }
 
-// mailTime formats an instant the way every mail shows it.
-func mailTime(t time.Time) string {
-	return t.UTC().Format("2006-01-02 15:04 UTC")
+// mailTime formats an instant the way every mail shows it: in the recipient's timezone, followed by that zone's IANA
+// name, because a mail is read away from the site and must say which clock it uses. A nil recipient (an address that
+// belongs to no user) and an empty or unknown timezone read in UTC.
+func mailTime(t time.Time, recipient *store.User) string {
+	loc := auditLocation(recipient)
+	return t.In(loc).Format("2006-01-02 15:04") + " " + loc.String()
 }
 
 // loginFingerprint normalizes the client IP and User-Agent into a stable fingerprint (sha256 hex).
@@ -102,7 +105,7 @@ func (s *Server) notifyNewDeviceLogin(c *gin.Context, u *store.User) {
 	}
 	s.sendMail(ctx, s.userLocalizer(u), mail.Mail{
 		Type: mail.TypeNewDeviceLogin, To: u.Email, UserID: u.ID,
-		Vars: mail.Vars{"ip": strings.TrimSpace(c.ClientIP()), "time": mailTime(now)},
+		Vars: mail.Vars{"ip": strings.TrimSpace(c.ClientIP()), "time": mailTime(now, u)},
 	})
 }
 
@@ -163,7 +166,7 @@ func (s *Server) sendEmailVerification(c *gin.Context, u *store.User) bool {
 		Type: mail.TypeEmailVerification, To: u.Email, UserID: u.ID,
 		Vars: mail.Vars{
 			"url":     s.absoluteURL(c, "/verify-email?token="+url.QueryEscape(token)),
-			"expires": mailTime(now.Add(auth.EmailVerifyTTL)),
+			"expires": mailTime(now.Add(auth.EmailVerifyTTL), u),
 		},
 	})
 }
@@ -187,7 +190,7 @@ func (s *Server) sendEmailChangeConfirmation(c *gin.Context, u *store.User, newE
 		Type: mail.TypeEmailVerification, Variant: mail.VariantEmailChange, To: newEmail, UserID: u.ID,
 		Vars: mail.Vars{
 			"url":     s.absoluteURL(c, "/confirm-email-change?token="+url.QueryEscape(token)),
-			"expires": mailTime(now.Add(auth.EmailChangeTTL)),
+			"expires": mailTime(now.Add(auth.EmailChangeTTL), u),
 		},
 	})
 }

@@ -32,7 +32,7 @@ function stubClient(decks: Deck[]) {
 }
 
 function signedIn(id: string, username: string): void {
-  const user: User = { id, username, email: `${username}@example.com`, role: 'user', locale: 'en', has_password: true };
+  const user: User = { id, username, email: `${username}@example.com`, role: 'user', locale: 'en', timezone: 'UTC', has_password: true };
   authStore.set({ initialized: true, loading: false, authenticated: true, user, error: null });
 }
 
@@ -74,7 +74,7 @@ describe('sidebar session isolation', () => {
 
     vi.spyOn(apiClient, 'login').mockResolvedValue({
       authenticated: true,
-      user: { id: '2', username: 'bob', email: 'bob@example.com', role: 'user', locale: 'en', has_password: true },
+      user: { id: '2', username: 'bob', email: 'bob@example.com', role: 'user', locale: 'en', timezone: 'UTC', has_password: true },
     });
     await login('bob', 'secret');
     expect(names()).toEqual([]);

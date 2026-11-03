@@ -167,6 +167,8 @@ func (s *Server) apiLogin(c *gin.Context) {
 
 // sessionUserPayload is the user object shared by the session probe and the login response, so the two shapes cannot drift.
 // has_password tells the client whether the account needs an old password to change it, or may set a first one.
+// timezone is the stored IANA name the client formats times in, so every page shows the zone set on the settings page
+// rather than the browser's.
 func sessionUserPayload(u *store.User) gin.H {
 	return gin.H{
 		"id":           u.PublicID,
@@ -175,6 +177,7 @@ func sessionUserPayload(u *store.User) gin.H {
 		"display_name": u.DisplayName,
 		"role":         u.Role,
 		"locale":       u.Locale,
+		"timezone":     u.Timezone,
 		"has_password": u.PasswordHash != nil,
 	}
 }
