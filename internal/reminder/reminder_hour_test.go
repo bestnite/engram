@@ -72,7 +72,7 @@ func TestUserSendHourGatesDelivery(t *testing.T) {
 			ctx := context.Background()
 
 			// 07:00: earlier than the send time, no send.
-			if err := r.RunOnce(ctx); err != nil {
+			if _, err := r.RunOnce(ctx); err != nil {
 				t.Fatalf("RunOnce at 07:00: %v", err)
 			}
 			if got := enq.count(); got != 0 {
@@ -81,7 +81,7 @@ func TestUserSendHourGatesDelivery(t *testing.T) {
 
 			// 18:59: still not due.
 			clock = localTimeAt(t, "Asia/Shanghai", 2, 18, 59)
-			if err := r.RunOnce(ctx); err != nil {
+			if _, err := r.RunOnce(ctx); err != nil {
 				t.Fatalf("RunOnce at 18:59: %v", err)
 			}
 			if got := enq.count(); got != 0 {
@@ -90,7 +90,7 @@ func TestUserSendHourGatesDelivery(t *testing.T) {
 
 			// 19:00: due, send one.
 			clock = localTimeAt(t, "Asia/Shanghai", 2, 19, 0)
-			if err := r.RunOnce(ctx); err != nil {
+			if _, err := r.RunOnce(ctx); err != nil {
 				t.Fatalf("RunOnce at 19:00: %v", err)
 			}
 			if got := enq.count(); got != 1 {
@@ -126,7 +126,7 @@ func TestExplicitMidnightIsDistinctFromUnset(t *testing.T) {
 	clock := localTimeAt(t, "Asia/Shanghai", 2, 0, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce at midnight: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -151,7 +151,7 @@ func TestSendHourOncePerReviewDayAcrossTicks(t *testing.T) {
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-02 19:05: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -160,7 +160,7 @@ func TestSendHourOncePerReviewDayAcrossTicks(t *testing.T) {
 
 	// Later tick within the same review day (cutoff 4): the ledger already has an entry, so no repeat.
 	clock = localTimeAt(t, "Asia/Shanghai", 2, 23, 30)
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-02 23:30: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -169,7 +169,7 @@ func TestSendHourOncePerReviewDayAcrossTicks(t *testing.T) {
 
 	// Early morning of the new review day: not yet 19:00, no send.
 	clock = localTimeAt(t, "Asia/Shanghai", 3, 7, 0)
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-03 07:00: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -178,7 +178,7 @@ func TestSendHourOncePerReviewDayAcrossTicks(t *testing.T) {
 
 	// The new review day reaches the hour: send the second mail.
 	clock = localTimeAt(t, "Asia/Shanghai", 3, 19, 0)
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-03 19:00: %v", err)
 	}
 	if got := enq.count(); got != 2 {
@@ -203,7 +203,7 @@ func TestSendHourFollowsUserTimezone(t *testing.T) {
 	clock := time.Date(2026, 6, 2, 11, 0, 0, 0, time.UTC)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce at 11:00 UTC: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -215,7 +215,7 @@ func TestSendHourFollowsUserTimezone(t *testing.T) {
 
 	// UTC 2026-06-02 23:00 = Shanghai 07:00 next day (not due), New York 19:00 (due).
 	clock = time.Date(2026, 6, 2, 23, 0, 0, 0, time.UTC)
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce at 23:00 UTC: %v", err)
 	}
 	if got := enq.count(); got != 2 {

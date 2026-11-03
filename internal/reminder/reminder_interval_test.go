@@ -28,7 +28,7 @@ func TestMinSendIntervalBlocksBackToBackDoubleSend(t *testing.T) {
 	ctx := context.Background()
 
 	// 06-02 00:00: belongs to the previous review day (06-01), send the first mail.
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-02 00:00: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -38,7 +38,7 @@ func TestMinSendIntervalBlocksBackToBackDoubleSend(t *testing.T) {
 	// 06-02 04:00: the day cutoff; this is the head of the new review day (06-02), only 4 hours apart —
 	// the ledger, which counts by review day, cannot stop it; the minimum interval gate must.
 	clock = localTimeAt(t, "Asia/Shanghai", 2, 4, 0)
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-02 04:00: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -47,7 +47,7 @@ func TestMinSendIntervalBlocksBackToBackDoubleSend(t *testing.T) {
 
 	// 06-02 21:00: 21 hours since the first mail (>= 20h), the interval gate lets it through; 06-02 has no send yet, so send the second mail.
 	clock = localTimeAt(t, "Asia/Shanghai", 2, 0, 0).Add(21 * time.Hour)
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce 06-02 21:00: %v", err)
 	}
 	if got := enq.count(); got != 2 {
@@ -68,7 +68,7 @@ func TestMinSendIntervalLeavesDailyCadenceIntact(t *testing.T) {
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce day1 19:00: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -77,7 +77,7 @@ func TestMinSendIntervalLeavesDailyCadenceIntact(t *testing.T) {
 
 	// Same hour the next day: exactly 24 hours, far above the 20-hour minimum interval, sent as usual.
 	clock = localTimeAt(t, "Asia/Shanghai", 3, 19, 0)
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce day2 19:00: %v", err)
 	}
 	if got := enq.count(); got != 2 {

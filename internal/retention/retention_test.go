@@ -11,8 +11,10 @@ import (
 
 	"gorm.io/gorm"
 
+	"git.nite07.com/nite/engram/internal/jobs"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/worker"
 )
 
 // Per the rule in AGENTS.md §2.5 this package uses a real database (a sqlite file) instead of mocks: the retention boundaries are exactly what needs verifying.
@@ -23,6 +25,7 @@ type fixture struct {
 	invites      *store.InviteStore
 	shareInvites *store.DeckShareInviteStore
 	fingerprints *store.LoginFingerprintStore
+	jobRuns      *jobs.Store
 	media        *media.Store
 	logs         *bytes.Buffer
 	db           *gorm.DB
@@ -48,6 +51,7 @@ func newFixture(t *testing.T) fixture {
 		invites:      store.NewInviteStore(db),
 		shareInvites: store.NewDeckShareInviteStore(db),
 		fingerprints: store.NewLoginFingerprintStore(db),
+		jobRuns:      jobs.NewStore(db),
 		logs:         &bytes.Buffer{},
 		db:           db,
 	}
@@ -61,6 +65,7 @@ func (f fixture) deps() Deps {
 		Invites:      f.invites,
 		ShareInvites: f.shareInvites,
 		Fingerprints: f.fingerprints,
+		JobRuns:      f.jobRuns,
 		Media:        f.media,
 		Logger:       slog.New(slog.NewTextHandler(f.logs, nil)),
 		Interval:     time.Hour,
@@ -71,11 +76,13 @@ func (f fixture) deps() Deps {
 //
 // It deliberately calls sweep directly instead of going through Start/Stop: the latter is asynchronous and Stop cancels the context
 // before the round finishes, so the assertion would race the scheduler (this once bit us — all four delete categories reported context canceled).
-func (f fixture) sweepOnce(t *testing.T) {
+func (f fixture) sweepOnce(t *testing.T) worker.Summary {
 	t.Helper()
-	if err := sweep(context.Background(), f.deps()); err != nil {
+	summary, err := sweep(context.Background(), f.deps())
+	if err != nil {
 		t.Fatalf("sweep() error = %v", err)
 	}
+	return summary
 }
 
 // TestWorkerRunsASweepOnStart pins down that "the wiring really runs": the worker runs a round on start, so an expired session
@@ -84,14 +91,17 @@ func TestWorkerRunsASweepOnStart(t *testing.T) {
 	f := newFixture(t)
 	f.addSession(t, "session-expired", -time.Minute)
 
-	lifecycle, err := New(f.deps())
+	workers, err := New(f.deps())
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
+	if workers.Records.Kind() != worker.KindRetention || workers.Media.Kind() != worker.KindMediaGC {
+		t.Fatalf("worker kinds = %q, %q", workers.Records.Kind(), workers.Media.Kind())
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	lifecycle.Start(ctx)
-	defer lifecycle.Stop()
+	workers.Records.Start(ctx)
+	defer workers.Records.Stop()
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -178,7 +188,33 @@ func TestSweepRespectsEachRetentionWindow(t *testing.T) {
 		t.Fatalf("touch recent-device: %v", err)
 	}
 
-	f.sweepOnce(t)
+	// Periodic history rows: deleted once finished more than JobRunRetention ago; an equally old optimiser row stays.
+	oldFinish := time.Now().UTC().Add(-JobRunRetention - time.Hour)
+	recentFinish := time.Now().UTC().Add(-JobRunRetention + time.Hour)
+	oldRound := store.Job{Kind: worker.KindRetention, Trigger: store.Ptr(worker.TriggerAuto), Status: "succeeded", CreatedAt: oldFinish, FinishedAt: &oldFinish}
+	recentRound := store.Job{Kind: worker.KindMediaGC, Trigger: store.Ptr(worker.TriggerManual), Status: "succeeded", CreatedAt: recentFinish, FinishedAt: &recentFinish}
+	oldOptimize := store.Job{Kind: jobs.KindOptimize, Trigger: store.Ptr(jobs.TriggerUser), Status: "succeeded", CreatedAt: oldFinish, FinishedAt: &oldFinish}
+	for _, row := range []*store.Job{&oldRound, &recentRound, &oldOptimize} {
+		if err := f.db.Create(row).Error; err != nil {
+			t.Fatalf("create job row: %v", err)
+		}
+	}
+
+	summary := f.sweepOnce(t)
+	want := worker.Summary{"sessions": 1, "action_tokens": 1, "invites": 1, "deck_share_invites": 1, "login_fingerprints": 1, "job_runs": 1}
+	for key, n := range want {
+		if summary[key] != n {
+			t.Errorf("summary[%s] = %d, want %d (summary %v)", key, summary[key], n, summary)
+		}
+	}
+	if _, err := f.jobRuns.ByID(ctx, oldRound.ID); err == nil {
+		t.Error("periodic row older than JobRunRetention should be gone")
+	}
+	for _, id := range []uint64{recentRound.ID, oldOptimize.ID} {
+		if _, err := f.jobRuns.ByID(ctx, id); err != nil {
+			t.Errorf("job row %d must survive: %v", id, err)
+		}
+	}
 
 	// Deck share invites: the expired one is gone, the unexpired one remains (the read path also judges expiry; this verifies reclamation really deleted it).
 	if _, err := f.shareInvites.ByDeckAndUser(ctx, 7, 11); !errors.Is(err, store.ErrShareInviteNotFound) {
@@ -276,7 +312,7 @@ func TestNewRequiresEveryStore(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 	base := Deps{
 		Sessions: f.sessions, ActionTokens: f.tokens, Invites: f.invites,
-		ShareInvites: f.shareInvites, Fingerprints: f.fingerprints, Media: f.media, Logger: logger,
+		ShareInvites: f.shareInvites, Fingerprints: f.fingerprints, JobRuns: f.jobRuns, Media: f.media, Logger: logger,
 	}
 	if _, err := New(base); err != nil {
 		t.Fatalf("New() with all deps error = %v", err)
@@ -287,6 +323,7 @@ func TestNewRequiresEveryStore(t *testing.T) {
 		"invites":       func(d *Deps) { d.Invites = nil },
 		"share_invites": func(d *Deps) { d.ShareInvites = nil },
 		"fingerprints":  func(d *Deps) { d.Fingerprints = nil },
+		"job_runs":      func(d *Deps) { d.JobRuns = nil },
 		"media":         func(d *Deps) { d.Media = nil },
 		"logger":        func(d *Deps) { d.Logger = nil },
 	} {
@@ -309,5 +346,50 @@ func seedShareInvite(t *testing.T, f fixture, deckID, userID uint64, ttl time.Du
 	})
 	if err != nil {
 		t.Fatalf("seed share invite: %v", err)
+	}
+}
+
+// fakeCollector stands in for the media store, so the summary and error mapping of a media round can be asserted
+// without seeding files; the reclamation itself is covered in internal/media.
+type fakeCollector struct {
+	removed int64
+	err     error
+	grace   time.Duration
+}
+
+func (c *fakeCollector) CollectGarbage(_ context.Context, _ time.Time, grace time.Duration) (int64, error) {
+	c.grace = grace
+	return c.removed, c.err
+}
+
+// TestCollectMediaSummary: the media round reports the reclaimed count under removed, keeps it on a partial failure,
+// and always passes MediaOrphanGrace, so a manual round keeps media still inside the grace period.
+func TestCollectMediaSummary(t *testing.T) {
+	cases := []struct {
+		name    string
+		removed int64
+		err     error
+	}{
+		{"nothing to reclaim", 0, nil},
+		{"two reclaimed", 2, nil},
+		{"one reclaimed, then a file failed", 1, errors.New("remove file")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			c := &fakeCollector{removed: tc.removed, err: tc.err}
+			d := f.deps()
+			d.Media = c
+			summary, err := collectMedia(context.Background(), d)
+			if (err != nil) != (tc.err != nil) {
+				t.Fatalf("collectMedia() error = %v, want error %v", err, tc.err != nil)
+			}
+			if summary["removed"] != tc.removed {
+				t.Fatalf("summary = %v, want removed %d", summary, tc.removed)
+			}
+			if c.grace != MediaOrphanGrace {
+				t.Fatalf("grace = %v, want MediaOrphanGrace", c.grace)
+			}
+		})
 	}
 }

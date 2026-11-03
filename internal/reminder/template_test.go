@@ -61,7 +61,7 @@ func TestReminderUsesAdminTemplate(t *testing.T) {
 	}
 
 	r := newReminderWithTemplates(t, db, enq, func() time.Time { return now })
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce() error = %v", err)
 	}
 	if enq.count() == 0 {
@@ -95,7 +95,7 @@ func TestReminderWithoutTemplateRendersBuiltinHTML(t *testing.T) {
 	enableReminder(t, db, userID)
 
 	r := newReminderWithTemplates(t, db, enq, func() time.Time { return now })
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce() error = %v", err)
 	}
 	msg := enq.last()

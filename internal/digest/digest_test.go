@@ -200,27 +200,35 @@ func TestDigestSendsExactlyOncePerWeek(t *testing.T) {
 	ctx := context.Background()
 
 	// First time this week: send.
-	if err := w.RunOnce(ctx); err != nil {
+	summary, err := w.RunOnce(ctx)
+	if err != nil {
 		t.Fatalf("first RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 1 {
 		t.Fatalf("first run enqueued %d, want 1", got)
 	}
+	if summary["queued"] != 1 {
+		t.Fatalf("first run summary = %v, want queued 1", summary)
+	}
 
 	// Later the same day, plus every other day of the week run repeatedly: no further sends.
 	for _, offset := range []time.Duration{8 * time.Hour, 24 * time.Hour, 3 * 24 * time.Hour, 6 * 24 * time.Hour} {
 		clock = shanghaiAt(t, 20, 0).Add(offset)
-		if err := w.RunOnce(ctx); err != nil {
+		summary, err := w.RunOnce(ctx)
+		if err != nil {
 			t.Fatalf("RunOnce at +%v: %v", offset, err)
 		}
 		if got := enq.count(); got != 1 {
 			t.Fatalf("same week (+%v) enqueued %d, want 1 (one per week)", offset, got)
 		}
+		if summary.DidWork() {
+			t.Fatalf("same week (+%v) summary = %v, want no work", offset, summary)
+		}
 	}
 
 	// Next Monday: a new week, send the second mail.
 	clock = shanghaiAt(t, 20, 0).Add(7 * 24 * time.Hour)
-	if err := w.RunOnce(ctx); err != nil {
+	if _, err := w.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce next week: %v", err)
 	}
 	if got := enq.count(); got != 2 {
@@ -251,7 +259,7 @@ func TestDigestOptOutStopsImmediately(t *testing.T) {
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
-	if err := w.RunOnce(ctx); err != nil {
+	if _, err := w.RunOnce(ctx); err != nil {
 		t.Fatalf("enabled RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -262,7 +270,7 @@ func TestDigestOptOutStopsImmediately(t *testing.T) {
 	// so not sending can only mean the preference gate took effect, not that the dedup ledger blocked it.
 	setDigestPref(t, db, userID, false)
 	clock = shanghaiAt(t, 20, 0).Add(7 * 24 * time.Hour)
-	if err := w.RunOnce(ctx); err != nil {
+	if _, err := w.RunOnce(ctx); err != nil {
 		t.Fatalf("disabled RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -274,7 +282,7 @@ func TestDigestOptOutStopsImmediately(t *testing.T) {
 	// back on + the week after next resumes sending, proving that "off" is not irreversible.
 	setDigestPref(t, db, userID, true)
 	clock = shanghaiAt(t, 20, 0).Add(14 * 24 * time.Hour)
-	if err := w.RunOnce(ctx); err != nil {
+	if _, err := w.RunOnce(ctx); err != nil {
 		t.Fatalf("re-enabled RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 2 {
@@ -367,7 +375,7 @@ func TestDigestNumbersMatchStatsPage(t *testing.T) {
 	// The mail body must actually use these numbers.
 	enq := &fakeEnqueuer{configured: true}
 	w := newWorker(t, db, enq, func() time.Time { return clock })
-	if err := w.RunOnce(context.Background()); err != nil {
+	if _, err := w.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	if enq.count() != 1 {
@@ -394,7 +402,7 @@ func TestDigestDefaultOffWhenNoPreference(t *testing.T) {
 	clock := shanghaiAt(t, 20, 0)
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 
-	if err := w.RunOnce(context.Background()); err != nil {
+	if _, err := w.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 0 {
@@ -412,7 +420,7 @@ func TestDigestNotConfiguredDoesNotSendOrError(t *testing.T) {
 	clock := shanghaiAt(t, 20, 0)
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 
-	if err := w.RunOnce(context.Background()); err != nil {
+	if _, err := w.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce with smtp unconfigured returned error: %v", err)
 	}
 	if got := enq.count(); got != 0 {
@@ -431,7 +439,7 @@ func TestDigestUnsubscribeHeaders(t *testing.T) {
 	clock := shanghaiAt(t, 20, 0)
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 
-	if err := w.RunOnce(context.Background()); err != nil {
+	if _, err := w.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	if enq.count() != 1 {
@@ -476,7 +484,7 @@ func TestDigestUsesUserSendHour(t *testing.T) {
 	w := newWorker(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
-	if err := w.RunOnce(ctx); err != nil {
+	if _, err := w.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce at 19:00: %v", err)
 	}
 	if got := enq.count(); got != 0 {
@@ -484,7 +492,7 @@ func TestDigestUsesUserSendHour(t *testing.T) {
 	}
 
 	clock = shanghaiAt(t, 21, 0)
-	if err := w.RunOnce(ctx); err != nil {
+	if _, err := w.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce at 21:00: %v", err)
 	}
 	if got := enq.count(); got != 1 {

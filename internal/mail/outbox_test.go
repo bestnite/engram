@@ -105,9 +105,10 @@ func TestFailedStatusWriteEndsTheRound(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	done := make(chan struct{})
+	var drainErr error
 	go func() {
 		defer close(done)
-		ob.drain(ctx)
+		_, drainErr = ob.drain(ctx)
 	}()
 	select {
 	case <-done:
@@ -118,6 +119,10 @@ func TestFailedStatusWriteEndsTheRound(t *testing.T) {
 	}
 	if got := sender.calls(); got > 2 {
 		t.Errorf("Send calls = %d, want at most one batch (2)", got)
+	}
+	// The stopped round is a failed round, so the history records it.
+	if drainErr == nil {
+		t.Error("drain returned no error after the status write failed")
 	}
 	var pending int64
 	if err := db.Model(&store.OutboxMessage{}).Where("status = ?", store.OutboxStatusPending).Count(&pending).Error; err != nil {
@@ -259,5 +264,48 @@ func TestRetryPolicyBackoff(t *testing.T) {
 		if got := p.backoff(attempts); got != w {
 			t.Errorf("backoff(%d) = %s, want %s", attempts, got, w)
 		}
+	}
+}
+
+// TestDrainSummaryCountsOutcomes: a delivery round reports each written outcome under its summary key, and a round
+// with nothing due reports no work, so the history skips it.
+func TestDrainSummaryCountsOutcomes(t *testing.T) {
+	cases := []struct {
+		name        string
+		maxAttempts int
+		errs        []error
+		want        map[string]int64
+	}{
+		{"nothing due", 3, nil, map[string]int64{}},
+		{"one sent, one rescheduled", 3, []error{errors.New("421 try later")}, map[string]int64{"sent": 1, "retried": 1}},
+		{"one sent, one failed for good", 1, []error{errors.New("550 no such user")}, map[string]int64{"sent": 1, "failed": 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testDB(t)
+			if tc.errs != nil {
+				for i := 0; i < 2; i++ {
+					if err := store.EnqueueOutboxMessage(context.Background(), db, &store.OutboxMessage{
+						To: "a@example.com", Type: "invite", Subject: "summary", HeadersJSON: "{}",
+					}, time.Now().UTC()); err != nil {
+						t.Fatalf("EnqueueOutboxMessage: %v", err)
+					}
+				}
+			}
+			ob := NewOutbox(Deps{DB: db, Sender: &recordingSender{errs: tc.errs}, Retry: fastRetry(tc.maxAttempts)})
+			configuredSettings(t, db, "127.0.0.1:587", "no-reply@example.com")
+			summary, err := ob.drain(context.Background())
+			if err != nil {
+				t.Fatalf("drain: %v", err)
+			}
+			for _, key := range []string{"sent", "failed", "retried"} {
+				if summary[key] != tc.want[key] {
+					t.Errorf("summary[%s] = %d, want %d (summary %v)", key, summary[key], tc.want[key], summary)
+				}
+			}
+			if summary.DidWork() != (len(tc.want) > 0) {
+				t.Errorf("DidWork() = %v for summary %v", summary.DidWork(), summary)
+			}
+		})
 	}
 }

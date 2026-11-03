@@ -135,6 +135,9 @@ func (s *Server) registerAdminAPIRoutes(router *gin.Engine) {
 	// Job list and cancellation.
 	g.GET("/jobs", s.adminJobs)
 	g.POST("/jobs/:id/cancel", s.sessions.CSRFMiddleware(), s.adminJobCancel)
+	// Periodic task overview and manual run.
+	g.GET("/tasks", s.adminTasks)
+	g.POST("/tasks/:kind/run", s.sessions.CSRFMiddleware(), s.adminTaskRun)
 
 	// Language pack completeness report (read-only).
 	g.GET("/i18n", s.adminI18n)

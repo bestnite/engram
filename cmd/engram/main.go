@@ -30,6 +30,7 @@ import (
 	"git.nite07.com/nite/engram/internal/retention"
 	"git.nite07.com/nite/engram/internal/store"
 	"git.nite07.com/nite/engram/internal/web"
+	"git.nite07.com/nite/engram/internal/worker"
 )
 
 // version is injected at build time: -ldflags "-X main.version=<tag>"; devVersion when nothing was injected.
@@ -201,22 +202,34 @@ func runServe(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	retentionWorker, err := retention.New(retention.Deps{
+	retentionWorkers, err := retention.New(retention.Deps{
 		Sessions:     store.NewSessionStore(db),
 		ActionTokens: store.NewActionTokenStore(db),
 		Invites:      store.NewInviteStore(db),
 		ShareInvites: store.NewDeckShareInviteStore(db),
 		Fingerprints: store.NewLoginFingerprintStore(db),
+		JobRuns:      jobs.NewStore(db),
 		Media:        mediaStore,
 		Logger:       logger,
 	})
 	if err != nil {
 		return err
 	}
-	retentionWorker.Start(ctx)
-	defer retentionWorker.Stop()
+	// Every periodic worker is registered before it starts, so its first round already reaches the admin jobs page
+	// and the history; a worker that is not started is not registered, so the page never offers a run nothing would pick up.
+	tasks := srv.Tasks()
+	for _, w := range []*worker.Lifecycle{retentionWorkers.Records, retentionWorkers.Media} {
+		if err := tasks.Add(w); err != nil {
+			return err
+		}
+		w.Start(ctx)
+		defer w.Stop()
+	}
 	// Mail outbox worker: starts with serve and stops gracefully on signal; skipped when not assembled.
 	if mb := srv.Mail(); mb != nil {
+		if err := tasks.Add(mb.Lifecycle()); err != nil {
+			return err
+		}
 		mb.Start(ctx)
 		defer mb.Stop()
 		// Review due reminder worker (C-class): an independent periodic scan that does not reuse the optimizer's single-concurrency jobs system.
@@ -236,6 +249,9 @@ func runServe(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		if err := tasks.Add(reminderWorker.Lifecycle); err != nil {
+			return err
+		}
 		reminderWorker.Start(ctx)
 		defer reminderWorker.Stop()
 		// Weekly study digest worker (C-class): also a periodic scan, but weekly, with every mail-receivable user as the
@@ -247,6 +263,9 @@ func runServe(ctx context.Context) error {
 			Logger:     logger,
 		})
 		if err != nil {
+			return err
+		}
+		if err := tasks.Add(digestWorker.Lifecycle); err != nil {
 			return err
 		}
 		digestWorker.Start(ctx)
@@ -379,6 +398,8 @@ func newWebServer(ctx context.Context, cfg *config.Config, db *gorm.DB, logger *
 		API:     apiSrv,
 		MCP:     mcpSrv,
 		Jobs:    jobRunner,
+		// The periodic workers are registered by runServe as it starts them; the registry records their rounds in the jobs table.
+		Tasks: worker.NewRegistry(jobs.RoundRecorder(jobs.NewStore(db), logger)),
 	})
 	if err != nil {
 		return nil, err

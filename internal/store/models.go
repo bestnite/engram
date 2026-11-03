@@ -384,12 +384,17 @@ type APIKey struct {
 
 func (APIKey) TableName() string { return "api_keys" }
 
-// Job is a long-running background task (currently only parameter optimization); triggered by the web, executed by a subprocess, polled by the page.
+// Job is one background task run. Parameter optimization rows are triggered by a user on the web, executed by a subprocess and
+// polled by the page; periodic task rows (retention, media_gc, reminder, digest, mail_delivery) are written once, already finished,
+// after a round that did work, failed or was started by hand.
 type Job struct {
-	ID         uint64     `gorm:"primaryKey" json:"-"`
-	PublicID   string     `gorm:"column:public_id;uniqueIndex" json:"id"`
-	Kind       string     `gorm:"not null" json:"kind"`
-	TargetID   *uint64    `json:"target_id,omitempty"`
+	ID       uint64  `gorm:"primaryKey" json:"-"`
+	PublicID string  `gorm:"column:public_id;uniqueIndex" json:"id"`
+	Kind     string  `gorm:"not null" json:"kind"`
+	TargetID *uint64 `json:"target_id,omitempty"`
+	// Trigger is what started the run: auto (a periodic timer or wake-up), manual (an administrator) or user (an optimization request).
+	// NULL on rows written before the column existed, when only optimization wrote this table.
+	Trigger    *string    `gorm:"column:trigger" json:"trigger,omitempty"`
 	Status     string     `gorm:"not null" json:"status"` // queued | running | succeeded | failed
 	Stage      *string    `json:"stage,omitempty"`
 	LogTail    *string    `gorm:"column:log_tail" json:"log_tail,omitempty"`

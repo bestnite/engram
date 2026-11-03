@@ -64,9 +64,9 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 // counter is a RunOnce stand-in that records the number of calls.
 type counter struct{ n atomic.Int64 }
 
-func (c *counter) run(context.Context) error {
+func (c *counter) run(context.Context) (Summary, error) {
 	c.n.Add(1)
-	return nil
+	return nil, nil
 }
 
 // TestLifecycleRunsAndStops covers: one round immediately on start, ticks keep firing, repeated Start is idempotent,
@@ -74,6 +74,7 @@ func (c *counter) run(context.Context) error {
 func TestLifecycleRunsAndStops(t *testing.T) {
 	var c counter
 	l, err := New(Config{
+		Kind:        KindRetention,
 		RunOnce:     c.run,
 		Logger:      slog.New(discardHandler{}),
 		FailMessage: "test run failed",
@@ -112,6 +113,7 @@ func TestLifecycleWakeRunsBetweenTicks(t *testing.T) {
 			var c counter
 			wake := make(chan struct{}, 1)
 			cfg := Config{
+				Kind:        KindRetention,
 				RunOnce:     c.run,
 				Logger:      slog.New(discardHandler{}),
 				FailMessage: "test run failed",
@@ -140,6 +142,7 @@ func TestLifecycleWakeRunsBetweenTicks(t *testing.T) {
 func TestLifecycleContextCancel(t *testing.T) {
 	var c counter
 	l, err := New(Config{
+		Kind:        KindRetention,
 		RunOnce:     c.run,
 		Logger:      slog.New(discardHandler{}),
 		FailMessage: "test run failed",
@@ -170,6 +173,7 @@ func TestLifecycleContextCancel(t *testing.T) {
 func TestStopBeforeStart(t *testing.T) {
 	var c counter
 	l, err := New(Config{
+		Kind:        KindRetention,
 		RunOnce:     c.run,
 		Logger:      slog.New(discardHandler{}),
 		FailMessage: "test run failed",
@@ -190,11 +194,12 @@ func TestRunOnceErrorIsLogged(t *testing.T) {
 	var c counter
 	logs := &countHandler{}
 	l, err := New(Config{
-		RunOnce: func(ctx context.Context) error {
+		Kind: KindRetention,
+		RunOnce: func(ctx context.Context) (Summary, error) {
 			if c.n.Add(1) == 1 {
-				return errors.New("boom")
+				return nil, errors.New("boom")
 			}
-			return nil
+			return nil, nil
 		},
 		Logger:      slog.New(logs),
 		FailMessage: "custom failure message",
@@ -211,17 +216,18 @@ func TestRunOnceErrorIsLogged(t *testing.T) {
 	waitFor(t, "a later run after the failure", func() bool { return c.n.Load() >= 2 })
 }
 
-// TestNewValidatesConfig covers constructor argument validation: all three are mandatory.
+// TestNewValidatesConfig covers constructor argument validation: all four are mandatory.
 func TestNewValidatesConfig(t *testing.T) {
-	okRun := func(context.Context) error { return nil }
+	okRun := func(context.Context) (Summary, error) { return nil, nil }
 	okLogger := slog.New(discardHandler{})
 	cases := []struct {
 		name string
 		cfg  Config
 	}{
-		{"missing RunOnce", Config{Logger: okLogger, FailMessage: "x"}},
-		{"missing Logger", Config{RunOnce: okRun, FailMessage: "x"}},
-		{"missing FailMessage", Config{RunOnce: okRun, Logger: okLogger}},
+		{"missing Kind", Config{RunOnce: okRun, Logger: okLogger, FailMessage: "x"}},
+		{"missing RunOnce", Config{Kind: KindRetention, Logger: okLogger, FailMessage: "x"}},
+		{"missing Logger", Config{Kind: KindRetention, RunOnce: okRun, FailMessage: "x"}},
+		{"missing FailMessage", Config{Kind: KindRetention, RunOnce: okRun, Logger: okLogger}},
 	}
 	for _, tc := range cases {
 		if _, err := New(tc.cfg); err == nil {

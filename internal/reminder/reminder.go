@@ -142,6 +142,7 @@ func New(deps Deps) (*Reminder, error) {
 	}
 	// Start/stop and the tick loop are handed to the shared skeleton; RunOnce is injected as the business phase, and the failure log wording is kept verbatim.
 	lifecycle, err := worker.New(worker.Config{
+		Kind:        worker.KindReminder,
 		RunOnce:     r.RunOnce,
 		Logger:      logger,
 		FailMessage: runFailedLog,
@@ -155,28 +156,33 @@ func New(deps Deps) (*Reminder, error) {
 }
 
 // RunOnce runs one due scan: for every active user with due cards, decide whether a reminder should be sent.
-// Exported so tests and operators can trigger it manually; the returned error only reflects query/enqueue-level failures, a single user's failure
-// is logged and the remaining users are still processed.
-func (r *Reminder) RunOnce(ctx context.Context) error {
+// Exported so tests and operators can trigger it manually; the summary's queued counts the reminders enqueued in this round. The returned
+// error only reflects query/enqueue-level failures, a single user's failure is logged and the remaining users are still processed.
+func (r *Reminder) RunOnce(ctx context.Context) (worker.Summary, error) {
+	summary := worker.Summary{"queued": 0}
 	if !r.mailer.Configured() {
 		// Class C is optional operational mail: skip silently when SMTP is unconfigured, no error, but leave an English log line.
 		r.logger.Info("review reminder skipped: smtp not configured")
-		return nil
+		return summary, nil
 	}
 	now := r.now().UTC()
 	candidates, err := store.ReminderCandidates(ctx, r.db, now)
 	if err != nil {
-		return err
+		return summary, err
 	}
 	for _, c := range candidates {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return summary, ctx.Err()
 		}
-		if err := r.maybeSend(ctx, c, now); err != nil {
+		queued, err := r.maybeSend(ctx, c, now)
+		if queued {
+			summary["queued"]++
+		}
+		if err != nil {
 			r.logger.Error("review reminder failed", "user_id", c.ID, "error", err)
 		}
 	}
-	return nil
+	return summary, nil
 }
 
 // maybeSend decides and (when the conditions hold) enqueues one reminder.
@@ -192,49 +198,50 @@ func (r *Reminder) RunOnce(ctx context.Context) error {
 //  5. Something to review: the number of cards the user's queue serves now (schedule.QueueBuilder.DueNow) must be above zero;
 //     an empty queue skips the round without touching the ledger.
 //
-// The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume that day's quota.
+// The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume that day's quota. The boolean reports
+// whether a reminder was enqueued, also when the ledger write after it failed.
 //
 // Hour vs review-day boundary: send time is compared against the user's local hour (local.Hour() >= chosen hour), while the review day is still split by
 // day_cutoff_hour. If the chosen hour precedes the day cutoff (e.g. choose 0, cutoff 4), that instant still belongs to
 // the previous review day, so 0 and 4 in the same calendar day each hit a different review day; the ledger cannot help here, so the
 // second minimum-interval gate above (MinSendInterval) catches it, see that constant's comment.
-func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now time.Time) error {
+func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now time.Time) (bool, error) {
 	loc := reviewday.Location(c.Timezone)
 	if !ReachedSendHour(now.In(loc), SendHour(c.ReminderHour)) {
-		return nil
+		return false, nil
 	}
 	if last, ok, err := store.LastReminderSentAt(ctx, r.db, c.ID); err != nil {
-		return err
+		return false, err
 	} else if ok && now.Sub(last) < MinSendInterval {
-		return nil
+		return false, nil
 	}
 	cutoff := reviewday.ResolveCutoff(c.DayCutoffHour)
 	day := reviewday.Day(now, loc, cutoff)
 
 	sent, err := store.HasReminderBeenSent(ctx, r.db, c.ID, day)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if sent {
-		return nil
+		return false, nil
 	}
 
 	enabled, err := r.mailer.Enabled(ctx, c.ID, mail.TypeReviewReminder)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !enabled {
-		return nil
+		return false, nil
 	}
 
 	// The candidate list is only a prefilter; the number announced is what /review serves. A queue emptied by daily caps,
 	// paused decks or revoked grants sends nothing and leaves the ledger untouched, so a later round can still send.
 	due, err := r.queue.DueNow(ctx, c.ID, schedule.QueueOptions{Now: now, Timezone: c.Timezone, DayCutoffHour: c.DayCutoffHour})
 	if err != nil {
-		return err
+		return false, err
 	}
 	if due == 0 {
-		return nil
+		return false, nil
 	}
 
 	lc := r.translator.Localizer(r.translator.Pick("", c.Locale, ""))
@@ -244,15 +251,15 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 	}) {
 	case mail.SendQueued:
 	case mail.SendOptedOut, mail.SendNotConfigured:
-		return nil
+		return false, nil
 	default:
-		return errors.New("reminder: enqueue failed")
+		return false, errors.New("reminder: enqueue failed")
 	}
 	if err := store.RecordReminderSent(ctx, r.db, c.ID, day, now); err != nil {
-		return err
+		return true, err
 	}
 	r.logger.Info("review reminder enqueued", "user_id", c.ID, "review_day", day, "due_count", due)
-	return nil
+	return true, nil
 }
 
 // SendHour resolves the user's chosen send hour into the hour actually used: nil (unset) or out-of-range values fall back to

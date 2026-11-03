@@ -25,6 +25,7 @@ func (s *Store) CreateQueued(ctx context.Context, kind string, targetID *uint64,
 	job := store.Job{
 		Kind:      kind,
 		TargetID:  targetID,
+		Trigger:   store.Ptr(TriggerUser),
 		Status:    StatusQueued,
 		CreatedAt: at.UTC(),
 	}
@@ -107,17 +108,25 @@ func (s *Store) RecoverStale(ctx context.Context, at time.Time, runningReason, q
 }
 
 // List returns a page of jobs and the total count in descending id order, for the admin panel to page through.
-// It must be limited: the jobs table keeps growing with every optimization, and rendering everything at once would drag the page down.
-func (s *Store) List(ctx context.Context, limit, offset int) ([]store.Job, int64, error) {
+// A non-empty kind keeps only rows of that kind. It must be limited: the jobs table keeps growing with every optimization
+// and every recorded periodic round, and rendering everything at once would drag the page down.
+func (s *Store) List(ctx context.Context, kind string, limit, offset int) ([]store.Job, int64, error) {
 	if limit <= 0 {
 		limit = 20
 	}
+	scope := func() *gorm.DB {
+		q := s.db.WithContext(ctx).Model(&store.Job{})
+		if kind != "" {
+			q = q.Where("kind = ?", kind)
+		}
+		return q
+	}
 	var total int64
-	if err := s.db.WithContext(ctx).Model(&store.Job{}).Count(&total).Error; err != nil {
+	if err := scope().Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count jobs: %w", err)
 	}
 	var jobs []store.Job
-	if err := s.db.WithContext(ctx).
+	if err := scope().
 		Order("id DESC").
 		Limit(limit).
 		Offset(offset).

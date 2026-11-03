@@ -16,8 +16,13 @@
 //   - Invites: delete on expiry; an invite with expires_at NULL never expires and is never deleted.
 //   - Login fingerprints: keep for FingerprintRetention after last seen — deleting too early would misjudge an old device as new and trigger a reminder.
 //   - Deck share invites: delete on expiry (the read path also judges expiry; deleting just stops the table from growing).
+//   - Periodic task history: a jobs row written by a periodic round (trigger auto or manual) is kept for JobRunRetention after it finished.
+//     Optimiser rows are not touched: they are a user's record of a parameter change, not operational noise.
 //   - Media: media that no note references first gets an orphaned timestamp recorded, and once orphaned for longer than MediaOrphanGrace it is deleted together with its file.
 //     The grace period leaves a window for "deleted an image while editing and put it back" and for "uploaded but not yet inserted into a card".
+//
+// Media reclamation is its own task (worker.KindMediaGC) beside the row reclamation (worker.KindRetention): the two have unrelated
+// failure modes (a file system against row deletes), and an administrator who starts one by hand from the jobs panel should not run the other.
 //
 // **API keys are deliberately not deleted automatically**: they are user-visible assets the user can delete, and their count is on the
 // order of the user count (not a growth source); automatically deleting a key that is "expired but still in the list" would be deciding for the user.
@@ -40,6 +45,8 @@ const (
 	FingerprintRetention = 90 * 24 * time.Hour
 	// MediaOrphanGrace is how long media is kept after it becomes unreferenced (7 days).
 	MediaOrphanGrace = 7 * 24 * time.Hour
+	// JobRunRetention is how long a periodic task's history row is kept after it finished (30 days).
+	JobRunRetention = 30 * 24 * time.Hour
 )
 
 // Expirer is the minimal ability to "delete expired rows by time", implemented by the store's session/token/invite types.
@@ -47,7 +54,8 @@ type Expirer interface {
 	DeleteExpired(ctx context.Context, before time.Time) (int64, error)
 }
 
-// StalePurger is the minimal ability to "delete by last-seen time", implemented by the login fingerprint store.
+// StalePurger is the minimal ability to "delete rows older than a time", implemented by the login fingerprint store
+// (by last-seen time) and the jobs store (periodic history rows by finish time).
 type StalePurger interface {
 	DeleteStale(ctx context.Context, before time.Time) (int64, error)
 }
@@ -64,42 +72,69 @@ type Deps struct {
 	Invites      Expirer
 	ShareInvites Expirer
 	Fingerprints StalePurger
+	JobRuns      StalePurger
 	Media        MediaCollector
 	Logger       *slog.Logger
-	// Interval is the reclamation interval; the worker's ten-minute default is used when <=0.
+	// Interval is the reclamation interval of both workers; the worker's ten-minute default is used when <=0.
 	Interval time.Duration
 }
 
-// New constructs the reclamation worker; it does not start it, call Start afterwards.
-func New(deps Deps) (*worker.Lifecycle, error) {
-	switch {
-	case deps.Sessions == nil:
-		return nil, errors.New("retention: Deps.Sessions is required")
-	case deps.ActionTokens == nil:
-		return nil, errors.New("retention: Deps.ActionTokens is required")
-	case deps.Invites == nil:
-		return nil, errors.New("retention: Deps.Invites is required")
-	case deps.ShareInvites == nil:
-		return nil, errors.New("retention: Deps.ShareInvites is required")
-	case deps.Fingerprints == nil:
-		return nil, errors.New("retention: Deps.Fingerprints is required")
-	case deps.Media == nil:
-		return nil, errors.New("retention: Deps.Media is required")
-	case deps.Logger == nil:
-		return nil, errors.New("retention: Deps.Logger is required")
-	}
-	return worker.New(worker.Config{
-		Interval: deps.Interval,
-		Logger:   deps.Logger,
-		RunOnce:  func(ctx context.Context) error { return sweep(ctx, deps) },
-		// A failed round is logged by the worker and processing continues: being unable to delete one category should not hold up the other four.
-		FailMessage: "retention: sweep failed",
-	})
+// Workers are the two reclamation tasks New builds.
+type Workers struct {
+	// Records deletes expired and stale rows (worker.KindRetention).
+	Records *worker.Lifecycle
+	// Media reclaims orphaned media (worker.KindMediaGC).
+	Media *worker.Lifecycle
 }
 
-// sweep runs one reclamation round: the categories are independent and each failure is recorded (returned together via
+// New constructs the reclamation workers; it does not start them, call Start on each afterwards.
+func New(deps Deps) (Workers, error) {
+	switch {
+	case deps.Sessions == nil:
+		return Workers{}, errors.New("retention: Deps.Sessions is required")
+	case deps.ActionTokens == nil:
+		return Workers{}, errors.New("retention: Deps.ActionTokens is required")
+	case deps.Invites == nil:
+		return Workers{}, errors.New("retention: Deps.Invites is required")
+	case deps.ShareInvites == nil:
+		return Workers{}, errors.New("retention: Deps.ShareInvites is required")
+	case deps.Fingerprints == nil:
+		return Workers{}, errors.New("retention: Deps.Fingerprints is required")
+	case deps.JobRuns == nil:
+		return Workers{}, errors.New("retention: Deps.JobRuns is required")
+	case deps.Media == nil:
+		return Workers{}, errors.New("retention: Deps.Media is required")
+	case deps.Logger == nil:
+		return Workers{}, errors.New("retention: Deps.Logger is required")
+	}
+	records, err := worker.New(worker.Config{
+		Kind:     worker.KindRetention,
+		Interval: deps.Interval,
+		Logger:   deps.Logger,
+		RunOnce:  func(ctx context.Context) (worker.Summary, error) { return sweep(ctx, deps) },
+		// A failed round is logged by the worker and processing continues: being unable to delete one category should not hold up the others.
+		FailMessage: "retention: sweep failed",
+	})
+	if err != nil {
+		return Workers{}, err
+	}
+	mediaWorker, err := worker.New(worker.Config{
+		Kind:        worker.KindMediaGC,
+		Interval:    deps.Interval,
+		Logger:      deps.Logger,
+		RunOnce:     func(ctx context.Context) (worker.Summary, error) { return collectMedia(ctx, deps) },
+		FailMessage: "retention: media collection failed",
+	})
+	if err != nil {
+		return Workers{}, err
+	}
+	return Workers{Records: records, Media: mediaWorker}, nil
+}
+
+// sweep runs one row reclamation round: the categories are independent and each failure is recorded (returned together via
 // errors.Join); the counts of rows successfully deleted are still reported, so logging is not dropped because another category failed.
-func sweep(ctx context.Context, deps Deps) error {
+// The summary is keyed by table name, with job_runs for the periodic history rows.
+func sweep(ctx context.Context, deps Deps) (worker.Summary, error) {
 	// **The boundary values must be UTC**: the time columns of these tables are all written in UTC (auth.Manager.now,
 	// ActionTokenService.now, invite creation and fingerprint Touch all call .UTC() explicitly), while SQLite compares times as
 	// strings and does not honour timezone offsets — passing boundary values in the local timezone shifts the whole window by a UTC
@@ -116,8 +151,10 @@ func sweep(ctx context.Context, deps Deps) error {
 		{"invites", now, deps.Invites.DeleteExpired},
 		{"deck_share_invites", now, deps.ShareInvites.DeleteExpired},
 		{"login_fingerprints", now.Add(-FingerprintRetention), deps.Fingerprints.DeleteStale},
+		{"job_runs", now.Add(-JobRunRetention), deps.JobRuns.DeleteStale},
 	}
 
+	summary := worker.Summary{}
 	var errs []error
 	for _, t := range targets {
 		removed, err := t.run(ctx, t.before)
@@ -125,17 +162,24 @@ func sweep(ctx context.Context, deps Deps) error {
 			errs = append(errs, fmt.Errorf("%s: %w", t.table, err))
 			continue
 		}
-		// Log a line only when something was actually deleted: an ordinary hourly no-op should not produce log noise.
+		summary[t.table] = removed
+		// Log a line only when something was actually deleted: an ordinary no-op round should not produce log noise.
 		if removed > 0 {
 			deps.Logger.Info("expired rows removed", "table", t.table, "count", removed)
 		}
 	}
-	removed, err := deps.Media.CollectGarbage(ctx, now, MediaOrphanGrace)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("media: %w", err))
-	}
+	return summary, errors.Join(errs...)
+}
+
+// collectMedia runs one media reclamation round; the summary's removed counts the media whose file was reclaimed.
+func collectMedia(ctx context.Context, deps Deps) (worker.Summary, error) {
+	removed, err := deps.Media.CollectGarbage(ctx, time.Now().UTC(), MediaOrphanGrace)
 	if removed > 0 {
 		deps.Logger.Info("orphaned media removed", "count", removed)
 	}
-	return errors.Join(errs...)
+	summary := worker.Summary{"removed": removed}
+	if err != nil {
+		return summary, fmt.Errorf("media: %w", err)
+	}
+	return summary, nil
 }

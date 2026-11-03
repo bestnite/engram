@@ -24,6 +24,7 @@ import (
 	"git.nite07.com/nite/engram/internal/mcp"
 	"git.nite07.com/nite/engram/internal/media"
 	"git.nite07.com/nite/engram/internal/store"
+	"git.nite07.com/nite/engram/internal/worker"
 )
 
 // Deps holds the explicitly wired dependencies (AGENTS.md §2.4: explicit wiring at the entry point, no container).
@@ -79,8 +80,11 @@ type Deps struct {
 	// encrypted OIDC secrets and the like, and only shows "configured / not configured".
 	Secrets *store.SecretCodec
 	// Jobs is the single-concurrency executor for background jobs; when non-empty the preset page can trigger parameter optimization
-	// and the admin panel can list and cancel jobs; when empty the jobs page only renders an empty list.
+	// and the admin panel can cancel jobs. The admin job history reads the jobs table directly, so it lists rows either way.
 	Jobs *jobs.Runner
+	// Tasks is the registry of periodic workers; when non-empty the admin jobs page shows their status and can start a
+	// round by hand; when empty the task overview is empty and a manual run answers 503.
+	Tasks *worker.Registry
 	// Mail is the mail outbox and background worker; when non-empty the SMTP settings page works and the admin panel can
 	// read delivery status; when empty the related features only show "not configured".
 	Mail *mail.Outbox
@@ -145,6 +149,8 @@ type Server struct {
 	// They are not merged into a single field: list and cancel only need the Runner, while polling reads the Store.
 	jobRunner *jobs.Runner
 	jobStore  *jobs.Store
+	// tasks is the periodic worker registry the admin jobs page reads and triggers.
+	tasks *worker.Registry
 	// mail is the mail outbox; cmd/engram starts and stops its worker.
 	mail *mail.Outbox
 	// mailer is the single path for composing and sending mail.
@@ -260,6 +266,7 @@ func New(addr string, deps Deps) (*Server, error) {
 		secrets:        deps.Secrets,
 		jobRunner:      deps.Jobs,
 		jobStore:       jobs.NewStore(deps.DB),
+		tasks:          deps.Tasks,
 		mail:           deps.Mail,
 	}
 	// Class A transactional security mail: the delivery helper is only built when the outbox is wired; the token and fingerprint stores are always available.
@@ -443,6 +450,11 @@ func (s *Server) setMailOutbox(ob *mail.Outbox, baseURL string) {
 
 // Mailer returns the process's single mail.Mailer, for cmd/engram to hand to the review reminder and weekly digest workers.
 func (s *Server) Mailer() *mail.Mailer { return s.mailer }
+
+// Tasks returns the periodic worker registry wired through Deps.Tasks; cmd/engram adds each worker before starting it.
+func (s *Server) Tasks() *worker.Registry {
+	return s.tasks
+}
 
 // StopJobs cancels the job worker and waits for the job currently executing to reach a terminal state.
 // cmd/engram defers it during shutdown, so an optimisation interrupted by a signal is recorded as failed

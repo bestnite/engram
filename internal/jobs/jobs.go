@@ -33,9 +33,14 @@ import (
 
 // Job kinds: consistent with the jobs.kind column, English values that stay stable.
 const (
-	// KindOptimize is the parameter optimization job (currently the only kind).
+	// KindOptimize is the parameter optimization job, the only kind the Runner executes. The periodic task kinds
+	// are listed in internal/worker; their rows are written finished by RoundRecorder and never pass through the Runner.
 	KindOptimize = "optimize"
 )
+
+// TriggerUser is the jobs.trigger value of a job a user requested (parameter optimization from the preset page). The
+// periodic triggers auto and manual are internal/worker's TriggerAuto and TriggerManual.
+const TriggerUser = "user"
 
 // Job state machine: queued -> running -> succeeded | failed.
 const (
@@ -300,8 +305,9 @@ func (r *Runner) RecoverStale(ctx context.Context) (int64, error) {
 }
 
 // List returns a page of jobs (with status/stage/log tail) and the total count, for the admin panel to page through.
-func (r *Runner) List(ctx context.Context, limit, offset int) ([]store.Job, int64, error) {
-	return r.store.List(ctx, limit, offset)
+// A non-empty kind keeps only rows of that kind.
+func (r *Runner) List(ctx context.Context, kind string, limit, offset int) ([]store.Job, int64, error) {
+	return r.store.List(ctx, kind, limit, offset)
 }
 
 // Cancel cancels a job: a running job has its whole process group killed, after which execute persists it

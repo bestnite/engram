@@ -120,6 +120,7 @@ func New(deps Deps) (*Worker, error) {
 	}
 	// Start/stop and the tick loop are delegated to the shared skeleton; RunOnce is injected as the business phase, and the failure log copy is kept verbatim.
 	lifecycle, err := worker.New(worker.Config{
+		Kind:        worker.KindDigest,
 		RunOnce:     w.RunOnce,
 		Logger:      logger,
 		FailMessage: runFailedLog,
@@ -133,26 +134,32 @@ func New(deps Deps) (*Worker, error) {
 }
 
 // RunOnce runs one scan round: for each active user who can receive mail, decide whether the weekly digest should be sent.
-// Exported for tests and manual operations triggering; a single user's failure is logged and processing continues with the rest.
-func (w *Worker) RunOnce(ctx context.Context) error {
+// Exported for tests and manual operations triggering; the summary's queued counts the digests enqueued in this round. A single user's
+// failure is logged and processing continues with the rest.
+func (w *Worker) RunOnce(ctx context.Context) (worker.Summary, error) {
+	summary := worker.Summary{"queued": 0}
 	if !w.mailer.Configured() {
 		w.logger.Info("weekly digest skipped: smtp not configured")
-		return nil
+		return summary, nil
 	}
 	now := w.now().UTC()
 	candidates, err := store.DigestCandidates(ctx, w.db)
 	if err != nil {
-		return err
+		return summary, err
 	}
 	for _, c := range candidates {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return summary, ctx.Err()
 		}
-		if err := w.maybeSend(ctx, c, now); err != nil {
+		queued, err := w.maybeSend(ctx, c, now)
+		if queued {
+			summary["queued"]++
+		}
+		if err != nil {
 			w.logger.Error("weekly digest failed", "user_id", c.ID, "error", err)
 		}
 	}
-	return nil
+	return summary, nil
 }
 
 // MinDigestInterval only catches hour-level collisions at the week boundary; it does not act as a one-week cooldown, so a
@@ -167,17 +174,18 @@ const MinDigestInterval = 20 * time.Hour
 //  2. Weekly cap: do not send again once it has been sent for the user's local week start (Monday).
 //  3. Preference gate: C-class defaults to off, and turning it off takes effect immediately (preferences are re-read every round, not cached).
 //
-// The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume the current week's quota.
-func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now time.Time) error {
+// The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume the current week's quota. The boolean reports
+// whether a digest was enqueued, also when the ledger write after it failed.
+func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now time.Time) (bool, error) {
 	loc := reviewday.Location(c.Timezone)
 	if !reminder.ReachedSendHour(now.In(loc), reminder.SendHour(c.ReminderHour)) {
-		return nil
+		return false, nil
 	}
 	// When blocked by the interval gate, the weekly ledger is not written, so it can still be backfilled once the time is reached.
 	if last, ok, err := store.LastDigestSentAt(ctx, w.db, c.ID); err != nil {
-		return err
+		return false, err
 	} else if ok && now.Sub(last) < MinDigestInterval {
-		return nil
+		return false, nil
 	}
 	cutoff := reviewday.ResolveCutoff(c.DayCutoffHour)
 	day := reviewday.Day(now, loc, cutoff)
@@ -185,24 +193,24 @@ func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now tim
 
 	sent, err := store.HasDigestBeenSent(ctx, w.db, c.ID, weekStart)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if sent {
-		return nil
+		return false, nil
 	}
 
 	// Preferences are checked before the statistics are computed, so an opted-out user costs no aggregation.
 	enabled, err := w.mailer.Enabled(ctx, c.ID, mail.TypeStudyDigest)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !enabled {
-		return nil
+		return false, nil
 	}
 
 	stats, err := ComputeStats(ctx, w.db, c.ID, now, loc, cutoff)
 	if err != nil {
-		return err
+		return false, err
 	}
 	lc := w.translator.Localizer(w.translator.Pick("", c.Locale, ""))
 	switch w.mailer.Send(ctx, lc, mail.Mail{
@@ -218,15 +226,15 @@ func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now tim
 	}) {
 	case mail.SendQueued:
 	case mail.SendOptedOut, mail.SendNotConfigured:
-		return nil
+		return false, nil
 	default:
-		return errors.New("digest: enqueue failed")
+		return false, errors.New("digest: enqueue failed")
 	}
 	if err := store.RecordDigestSent(ctx, w.db, c.ID, weekStart, now); err != nil {
-		return err
+		return true, err
 	}
 	w.logger.Info("weekly digest enqueued", "user_id", c.ID, "week_start", weekStart, "reviews", stats.Reviewed)
-	return nil
+	return true, nil
 }
 
 // DigestStats holds the numbers shown in one weekly digest. Each field comes directly from a StatsStore aggregate method.

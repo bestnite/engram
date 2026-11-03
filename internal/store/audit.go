@@ -106,6 +106,9 @@ const (
 	ActionDeckPreset = "deck.preset_change"
 	// ActionJobCancel is the audit action written when the admin panel cancels a background job.
 	ActionJobCancel = "job.cancel"
+	// ActionJobRun is the audit action written when the admin panel starts a periodic task round by hand; the detail
+	// names the task kind.
+	ActionJobRun = "job.run"
 
 	// TOTP second factor: binding started / enabled / disabled / recovery codes regenerated / recovery code consumed / second step failed.
 	// Recovery code plaintext never enters the audit (detail records only the count and the source IP).

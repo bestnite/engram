@@ -39,7 +39,7 @@ func TestReminderCarriesUnsubscribeHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reminder.New: %v", err)
 	}
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	msg := enq.last()
@@ -79,7 +79,7 @@ func TestReminderWithoutTokenServiceHasNoUnsubscribeHeader(t *testing.T) {
 	enq := &fakeEnqueuer{configured: true}
 	clock := shanghaiAt(t, 20, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	if enq.count() != 1 {

@@ -26,7 +26,7 @@ func TestDigestMinIntervalBlocksWeekBoundary(t *testing.T) {
 		{0, 1}, {4 * time.Hour, 1}, {20*time.Hour - time.Nanosecond, 1}, {20 * time.Hour, 2}, {21 * time.Hour, 2},
 	} {
 		clock = shanghaiAt(t, 0, 0).Add(tc.offset)
-		if err := w.RunOnce(context.Background()); err != nil {
+		if _, err := w.RunOnce(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 		if got := enq.count(); got != tc.want {
@@ -46,7 +46,7 @@ func TestDigestMinIntervalAllowsRecoveryAfterFourDays(t *testing.T) {
 	}
 	enq := &fakeEnqueuer{configured: true}
 	w := newWorker(t, db, enq, func() time.Time { return clock })
-	if err := w.RunOnce(t.Context()); err != nil {
+	if _, err := w.RunOnce(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if enq.count() != 1 {

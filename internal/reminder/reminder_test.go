@@ -173,19 +173,28 @@ func TestSecondReminderSameDayNotSent(t *testing.T) {
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 	ctx := context.Background()
 
-	if err := r.RunOnce(ctx); err != nil {
+	summary, err := r.RunOnce(ctx)
+	if err != nil {
 		t.Fatalf("first RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 1 {
 		t.Fatalf("first run enqueued %d, want 1", got)
 	}
+	if summary["queued"] != 1 {
+		t.Fatalf("first run summary = %v, want queued 1", summary)
+	}
 	// Run another round later the same day: the ledger already has an entry, so no second mail.
 	clock = shanghaiAt(t, 23, 30)
-	if err := r.RunOnce(ctx); err != nil {
+	summary, err = r.RunOnce(ctx)
+	if err != nil {
 		t.Fatalf("second RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 1 {
 		t.Fatalf("second run same day enqueued %d, want 1", got)
+	}
+	// The round did nothing, so the history skips it.
+	if summary.DidWork() {
+		t.Fatalf("second run summary = %v, want no work", summary)
 	}
 }
 
@@ -203,7 +212,7 @@ func TestOptOutStopsImmediately(t *testing.T) {
 	ctx := context.Background()
 
 	// While on, one mail goes out normally.
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("enabled RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -213,7 +222,7 @@ func TestOptOutStopsImmediately(t *testing.T) {
 	// Turn the preference off and run again on a **new day**: the new day is not capped by the daily limit, so only the preference being off can stop it.
 	disableReminder(t, db, userID)
 	clock = shanghaiAt(t, 19, 5).Add(24 * time.Hour)
-	if err := r.RunOnce(ctx); err != nil {
+	if _, err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("disabled RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 1 {
@@ -231,7 +240,7 @@ func TestDefaultOffWhenNoPreference(t *testing.T) {
 	clock := shanghaiAt(t, 20, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 0 {
@@ -250,7 +259,7 @@ func TestNotConfiguredDoesNotSendOrError(t *testing.T) {
 	clock := shanghaiAt(t, 20, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce with smtp unconfigured returned error: %v", err)
 	}
 	if got := enq.count(); got != 0 {
@@ -270,7 +279,7 @@ func TestNoDueCardsNoReminder(t *testing.T) {
 	clock := shanghaiAt(t, 20, 0)
 	r := newReminder(t, db, enq, func() time.Time { return clock })
 
-	if err := r.RunOnce(context.Background()); err != nil {
+	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	if got := enq.count(); got != 0 {
@@ -335,7 +344,7 @@ func TestReminderAnnouncesOnlyWhatTheQueueServes(t *testing.T) {
 
 			enq := &fakeEnqueuer{configured: true}
 			r := newReminder(t, db, enq, func() time.Time { return clock })
-			if err := r.RunOnce(context.Background()); err != nil {
+			if _, err := r.RunOnce(context.Background()); err != nil {
 				t.Fatalf("RunOnce: %v", err)
 			}
 			sent, err := store.HasReminderBeenSent(context.Background(), db, userID, "2026-06-01")

@@ -163,7 +163,8 @@ func NewOutbox(deps Deps) *Outbox {
 		wake:     make(chan struct{}, 1),
 	}
 	life, err := worker.New(worker.Config{
-		RunOnce:     func(ctx context.Context) error { o.drain(ctx); return nil },
+		Kind:        worker.KindMailDelivery,
+		RunOnce:     o.drain,
 		Logger:      logger,
 		FailMessage: "mail: outbox round failed",
 		Interval:    poll,
@@ -256,67 +257,84 @@ func (o *Outbox) Stop() {
 	o.life.Stop()
 }
 
-// drain delivers every due mail. When SMTP is not configured it returns immediately: pending mail
-// stays in the queue until the configuration is complete, instead of being wrongly marked failed
-// (otherwise one missing configuration would burn through the whole backlog).
-func (o *Outbox) drain(ctx context.Context) {
+// Lifecycle returns the delivery worker's lifecycle, so the process can register it with the admin panel's task
+// registry before Start.
+func (o *Outbox) Lifecycle() *worker.Lifecycle {
+	return o.life
+}
+
+// drain delivers every due mail and returns the round's summary: sent counts mails delivered, failed counts mails
+// that reached their final failed state, and retried counts mails rescheduled for another attempt. When SMTP is not
+// configured it returns immediately: pending mail stays in the queue until the configuration is complete, instead of
+// being wrongly marked failed (otherwise one missing configuration would burn through the whole backlog).
+func (o *Outbox) drain(ctx context.Context) (worker.Summary, error) {
+	summary := worker.Summary{deliverySent: 0, deliveryFailed: 0, deliveryRetried: 0}
 	if _, ok, err := o.resolver.Config(ctx); err != nil {
-		o.logger.Error("mail: resolve smtp config failed", "error", err)
-		return
+		return summary, fmt.Errorf("resolve smtp config: %w", err)
 	} else if !ok {
-		return
+		return summary, nil
 	}
 	for {
 		if ctx.Err() != nil {
-			return
+			return summary, nil
 		}
 		rows, err := store.DueOutboxMessages(ctx, o.db, o.now(), o.batch)
 		if err != nil {
-			o.logger.Error("mail: load due outbox messages failed", "error", err)
-			return
+			return summary, fmt.Errorf("load due outbox messages: %w", err)
 		}
 		if len(rows) == 0 {
-			return
+			return summary, nil
 		}
 		for _, row := range rows {
 			if ctx.Err() != nil {
-				return
+				return summary, nil
 			}
-			if err := o.deliver(ctx, row); err != nil {
+			outcome, err := o.deliver(ctx, row)
+			if err != nil {
 				// A failed status write leaves the row exactly as the next SELECT expects it, so carrying on
 				// would pick the same row again and deliver it again. Stop this round; the next tick retries.
-				o.logger.Error("mail: delivery round stopped after a failed status write", "outbox_id", row.ID, "error", err)
-				return
+				return summary, fmt.Errorf("delivery round stopped after a failed status write for outbox %d: %w", row.ID, err)
+			}
+			if outcome != "" {
+				summary[outcome]++
 			}
 		}
 		if len(rows) < o.batch {
-			return
+			return summary, nil
 		}
 	}
 }
 
+// Delivery outcomes, used as the summary keys of a mail delivery round.
+const (
+	deliverySent    = "sent"
+	deliveryFailed  = "failed"
+	deliveryRetried = "retried"
+)
+
 // deliver delivers one mail and writes the state back according to the result: success -> sent;
-// failure -> rescheduled with backoff, or permanently failed. The returned error means the outcome
+// failure -> rescheduled with backoff, or permanently failed. It returns the outcome written, or "" when
+// SMTP was unconfigured in the meantime and the row was left alone. The returned error means the outcome
 // could not be written; the caller stops the round because the unchanged row is due again at once.
-func (o *Outbox) deliver(ctx context.Context, row store.OutboxMessage) error {
+func (o *Outbox) deliver(ctx context.Context, row store.OutboxMessage) (string, error) {
 	cfg, ok, err := o.resolver.Config(ctx)
 	if err != nil {
-		return fmt.Errorf("resolve smtp config: %w", err)
+		return "", fmt.Errorf("resolve smtp config: %w", err)
 	}
 	if !ok {
-		return nil
+		return "", nil
 	}
 	sendErr := o.sender.Send(ctx, cfg, messageFromRow(row))
 	attempts := row.Attempts + 1
 	if sendErr == nil {
-		return store.MarkOutboxSent(ctx, o.db, row.ID, o.now())
+		return deliverySent, store.MarkOutboxSent(ctx, o.db, row.ID, o.now())
 	}
 	o.logger.Warn("mail: delivery failed", "outbox_id", row.ID, "attempts", attempts, "error", sendErr)
 	if attempts >= o.retry.MaxAttempts {
-		return store.MarkOutboxFailed(ctx, o.db, row.ID, attempts, sendErr.Error(), o.now())
+		return deliveryFailed, store.MarkOutboxFailed(ctx, o.db, row.ID, attempts, sendErr.Error(), o.now())
 	}
 	next := o.now().Add(o.retry.backoff(attempts))
-	return store.MarkOutboxRetry(ctx, o.db, row.ID, attempts, next, sendErr.Error(), o.now())
+	return deliveryRetried, store.MarkOutboxRetry(ctx, o.db, row.ID, attempts, next, sendErr.Error(), o.now())
 }
 
 // messageFromRow turns an outbox row back into a Message (for delivery).

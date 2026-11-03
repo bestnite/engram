@@ -69,9 +69,9 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/mailstyle` | Leaf package holding the inline style map of a mail body and the one Markdown-to-HTML conversion used by the store's template migration. The built-in bodies and the migration read the same styles, so a converted custom template keeps the delivered look. |
 | `internal/reminder` | Worker that emails users who have due cards. |
 | `internal/digest` | Worker that sends the weekly digest email. |
-| `internal/retention` | Worker that deletes expired sessions, used or expired action tokens, expired invites, and old login fingerprints. |
-| `internal/worker` | The shared start, stop, and tick loop used by the periodic workers. |
-| `internal/jobs` | Single-concurrency background jobs persisted in the `jobs` table; runs the optimiser subprocess with timeout and progress capture. |
+| `internal/retention` | Two workers: one deletes expired sessions, used or expired action tokens, expired invites, deck share invites, old login fingerprints and periodic history rows older than 30 days; the other reclaims orphaned media. |
+| `internal/worker` | The shared start, stop, and tick loop used by the periodic workers, the summary and in-memory status of each worker's latest round, the manual trigger, and the `Registry` the admin jobs page reads. |
+| `internal/jobs` | Single-concurrency background jobs persisted in the `jobs` table; runs the optimiser subprocess with timeout and progress capture, and writes the periodic rounds the registry records into the same table. |
 | `internal/urlfetch` | Guarded HTTPS download used to import a deck package from a URL. |
 | `internal/pgtest` | Test helper that gives each test its own PostgreSQL schema when `TEST_PG_DSN` is set. |
 
@@ -80,13 +80,13 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 Imports between internal packages, as reported by `go list`:
 
 ```
-cmd/engram → web, api, mcp, auth, config, digest, i18n, jobs, mail, media, reminder, retention, store
-web        → answer, api, mcp, auth, config, i18n, jobs, mail, media, mediatype, notetype, reminder, reviewday, schedule, store
+cmd/engram → web, api, mcp, auth, config, digest, i18n, jobs, mail, media, reminder, retention, store, worker
+web        → answer, api, mcp, auth, config, i18n, jobs, mail, media, mediatype, notetype, reminder, reviewday, schedule, store, worker
 mcp        → api, store
 api        → answer, auth, media, notetype, retention, reviewday, schedule, store, urlfetch
 digest     → i18n, mail, reminder, reviewday, schedule, store, worker
 reminder   → i18n, mail, reviewday, schedule, store, worker
-jobs       → schedule, store
+jobs       → schedule, store, worker
 mail       → config, mailstyle, notetype, store, worker
 mailstyle  → texmath
 schedule   → reviewday, store
@@ -327,12 +327,26 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
 
 `cmd/engram serve` starts these alongside the HTTP server and stops them on shutdown:
 
-- the retention worker (`internal/retention`), always;
+- the row retention worker and the media reclamation worker (`internal/retention`), always;
 - the mail delivery worker (`internal/mail`) and the reminder and digest workers, when the mail
   outbox is wired; the mail outbox and the reminder, digest, and retention workers share
   `internal/worker`;
 - the jobs runner (`internal/jobs`), which runs at most one optimisation job at a time and
   answers `409` when another job is already unfinished.
+
+Each periodic worker has a task kind (`retention`, `media_gc`, `reminder`, `digest`,
+`mail_delivery`) and is added to one `worker.Registry` before it starts; a worker that is not
+started is not added. A round returns a summary of action counts (rows deleted, mails queued or
+sent, never rows scanned). The registry keeps each worker's latest round in memory and records a
+round in the `jobs` table, already finished, when it did work, failed, or was started by hand; a
+round that did nothing writes no row, and a round cut short by shutdown is not recorded. The
+`jobs.trigger` column tells the rows apart: `auto` (timer or wake-up), `manual` (an
+administrator) and `user` (an optimisation request; a NULL trigger is an optimisation row
+written before the column existed). Periodic rows are never queued or running, so the
+optimiser's single-concurrency check and restart recovery never see them, and the row retention
+worker deletes them 30 days after they finished. The admin jobs page reads the registry through
+`GET /api/v1/admin/tasks`, starts a round with `POST /api/v1/admin/tasks/:kind/run` (the same
+rules as a timer round), and lists the history with `GET /api/v1/admin/jobs`.
 
 ## 8. Frontend
 
