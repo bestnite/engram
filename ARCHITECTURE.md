@@ -397,11 +397,18 @@ rules as a timer round), and lists the history with `GET /api/v1/admin/jobs`.
   HTML sinks are the per-item grading breakdown and the option labels `RadioGroup` renders, and
   `frontend/src/tests/html-sink-allowlist.test.ts` lists each of them with its reason.
 - `frontend/src/lib/views/DeckPreviewView.svelte` is the deck content preview: one card at a time,
-  front above back, with a previous/next cursor and an order switch. Its cards come from the
+  front above back, with a cursor that steps card by card, a previous/next button pair, an editable
+  card number, a note-step pair that skips the rest of the current note, and an order switch. In the
+  note type order a second selector jumps to a note type's block; its options come from the response's
+  `note_types` sections, whose first positions are that order's list positions. Its cards come from the
   session endpoint `GET /api/v1/decks/:id/preview/cards` (reader role, `LIMIT/OFFSET` pages), which
   renders both faces with the review renderer (`renderCard` and `faces` in `internal/web/review.go`),
   so the view shows the same answer controls, audio, TTS and image occlusion as review without a
-  second renderer, and card HTML still reaches the page only through `CardFrame.svelte`.
+  second renderer, and card HTML still reaches the page only through `CardFrame.svelte`. A note step
+  asks the session endpoint `GET /api/v1/decks/:id/preview/note-step` where it lands, because a
+  note's cards can cross a page and need not be adjacent in the list; the server resolves the
+  neighbouring note in the same order the card list uses and returns the first card's position, or
+  null when the deck has no other note in that direction.
 - `frontend/src/lib/format.ts` is the only place numbers, percentages, byte counts, dates and raw field
   values become text; components pass the current locale. Dates and times are shown in the account's timezone, which
   the session payload carries and `timeZoneStore` (`frontend/src/lib/auth`) exposes, never in the browser's; an empty

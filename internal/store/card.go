@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -114,20 +115,194 @@ func (s *CardStore) ListByDeck(ctx context.Context, deckID uint64, opts CardList
 	if err := build().Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count cards of deck %d: %w", deckID, err)
 	}
-	query := build()
-	switch opts.Sort {
-	case CardListSortNoteType:
-		query = query.Joins("JOIN note_types ON note_types.id = notes.note_type_id").
-			Order("note_types.name ASC, cards.id ASC")
-	default:
-		query = query.Order("cards.id ASC")
-	}
+	query := s.deckCardOrderQuery(ctx, deckID, opts.Sort).Order(cardOrderClause(opts.Sort, true))
 	var cards []Card
 	offset := (opts.Page - 1) * opts.PerPage
 	if err := query.Select("cards.*").Limit(opts.PerPage).Offset(offset).Find(&cards).Error; err != nil {
 		return nil, 0, fmt.Errorf("list cards of deck %d: %w", deckID, err)
 	}
 	return cards, total, nil
+}
+
+// CardNoteTypeCount is one note type's visible card count in a deck, the grouping behind the deck
+// preview's jump to a note type.
+type CardNoteTypeCount struct {
+	Name  string `gorm:"column:name"`
+	Count int64  `gorm:"column:count"`
+}
+
+// CountByNoteType counts one deck's visible cards per note type name, ordered by the name the note
+// type sort orders cards by. Note type rows that share a name produce one entry, which matches the
+// list: cards are sorted by name, so every card under that name forms one contiguous block.
+func (s *CardStore) CountByNoteType(ctx context.Context, deckID uint64) ([]CardNoteTypeCount, error) {
+	var counts []CardNoteTypeCount
+	if err := s.visibleCards(ctx).
+		Joins("JOIN note_types ON note_types.id = notes.note_type_id").
+		Where("notes.deck_id = ?", deckID).
+		Select("note_types.name AS name, COUNT(*) AS count").
+		Group("note_types.name").
+		Order("note_types.name ASC").
+		Scan(&counts).Error; err != nil {
+		return nil, fmt.Errorf("count note type cards of deck %d: %w", deckID, err)
+	}
+	return counts, nil
+}
+
+// orderedCard is a card's ordering identity: the row id, the owning note and, for the note type
+// order, the note type name the order compares.
+type orderedCard struct {
+	ID     uint64 `gorm:"column:id"`
+	NoteID uint64 `gorm:"column:note_id"`
+	Name   string `gorm:"column:name"`
+}
+
+// NoteStepPosition returns the 1-based position the deck preview's note step lands on: the first
+// card of the next or previous note in the deck's card list, using the same order ListByDeck uses.
+// Zero means no other note exists in that direction, and a cursor outside the list yields zero.
+//
+// A forward step lands on the first card after the cursor whose note differs. A backward step walks
+// to the first card of the previous note's run, so both directions enter a multi-card note at its
+// first card instead of its last one. A note whose cards are not adjacent in the list, which happens
+// after a template is added to a note type, is stepped to the run next to the cursor: that run is
+// what the reader sees as the neighbouring block.
+func (s *CardStore) NoteStepPosition(ctx context.Context, deckID uint64, sort string, fromPosition int, forward bool) (int64, error) {
+	if fromPosition < 1 {
+		return 0, nil
+	}
+	sort = NormalizeCardListOptions(CardListOptions{Sort: sort}).Sort
+	current, ok, err := s.cardAtPosition(ctx, deckID, sort, fromPosition)
+	if err != nil || !ok {
+		return 0, err
+	}
+	condition, args := cardOrderCondition(sort, current.Name, current.ID, forward)
+	var neighbour orderedCard
+	err = s.deckCardOrderQuery(ctx, deckID, sort).
+		Select(orderedCardSelect(sort)).
+		Where("cards.note_id <> ?", current.NoteID).
+		Where(condition, args...).
+		Order(cardOrderClause(sort, forward)).
+		Limit(1).
+		Take(&neighbour).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("find the adjacent note of deck %d: %w", deckID, err)
+	}
+	target := neighbour
+	if !forward {
+		if target, err = s.noteRunStart(ctx, deckID, sort, neighbour); err != nil {
+			return 0, err
+		}
+	}
+	return s.cardPosition(ctx, deckID, sort, target)
+}
+
+// deckCardOrderQuery builds the visible-card query of one deck in one list order. The note type
+// order joins the note types table, because the order and the note step's comparisons need its name.
+func (s *CardStore) deckCardOrderQuery(ctx context.Context, deckID uint64, sort string) *gorm.DB {
+	query := s.visibleCards(ctx).Where("notes.deck_id = ?", deckID)
+	if sort == CardListSortNoteType {
+		query = query.Joins("JOIN note_types ON note_types.id = notes.note_type_id")
+	}
+	return query
+}
+
+// orderedCardSelect selects the columns an ordering decision needs, including the note type name
+// for the note type order.
+func orderedCardSelect(sort string) string {
+	if sort == CardListSortNoteType {
+		return "cards.id AS id, cards.note_id AS note_id, note_types.name AS name"
+	}
+	return "cards.id AS id, cards.note_id AS note_id"
+}
+
+// cardOrderClause is the ORDER BY of the list order in the direction the caller needs.
+func cardOrderClause(sort string, ascending bool) string {
+	direction := "DESC"
+	if ascending {
+		direction = "ASC"
+	}
+	if sort == CardListSortNoteType {
+		return "note_types.name " + direction + ", cards.id " + direction
+	}
+	return "cards.id " + direction
+}
+
+// cardOrderCondition keeps the cards after (forward) or before the reference card in the list
+// order, so a neighbour query never pages through the list to reach it.
+func cardOrderCondition(sort, name string, id uint64, forward bool) (string, []any) {
+	if sort == CardListSortNoteType {
+		if forward {
+			return "(note_types.name > ? OR (note_types.name = ? AND cards.id > ?))", []any{name, name, id}
+		}
+		return "(note_types.name < ? OR (note_types.name = ? AND cards.id < ?))", []any{name, name, id}
+	}
+	if forward {
+		return "cards.id > ?", []any{id}
+	}
+	return "cards.id < ?", []any{id}
+}
+
+// cardAtPosition reads the card at one 1-based position of the list. The boolean is false when the
+// position is past the end.
+func (s *CardStore) cardAtPosition(ctx context.Context, deckID uint64, sort string, position int) (orderedCard, bool, error) {
+	var card orderedCard
+	err := s.deckCardOrderQuery(ctx, deckID, sort).
+		Select(orderedCardSelect(sort)).
+		Order(cardOrderClause(sort, true)).
+		Offset(position - 1).
+		Limit(1).
+		Take(&card).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return orderedCard{}, false, nil
+	}
+	if err != nil {
+		return orderedCard{}, false, fmt.Errorf("read card at position %d of deck %d: %w", position, deckID, err)
+	}
+	return card, true, nil
+}
+
+// noteRunStart returns the first card of the run the given card ends: the earliest card of the same
+// note with no other note's card between it and the given card in the list order.
+func (s *CardStore) noteRunStart(ctx context.Context, deckID uint64, sort string, end orderedCard) (orderedCard, error) {
+	condition, args := cardOrderCondition(sort, end.Name, end.ID, false)
+	var blocker orderedCard
+	err := s.deckCardOrderQuery(ctx, deckID, sort).
+		Select(orderedCardSelect(sort)).
+		Where("cards.note_id <> ?", end.NoteID).
+		Where(condition, args...).
+		Order(cardOrderClause(sort, false)).
+		Limit(1).
+		Take(&blocker).Error
+	hasBlocker := true
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		hasBlocker = false
+	} else if err != nil {
+		return orderedCard{}, fmt.Errorf("find the card before a note of deck %d: %w", deckID, err)
+	}
+	query := s.deckCardOrderQuery(ctx, deckID, sort).
+		Select(orderedCardSelect(sort)).
+		Where("cards.note_id = ?", end.NoteID)
+	if hasBlocker {
+		condition, args = cardOrderCondition(sort, blocker.Name, blocker.ID, true)
+		query = query.Where(condition, args...)
+	}
+	var start orderedCard
+	if err := query.Order(cardOrderClause(sort, true)).Limit(1).Take(&start).Error; err != nil {
+		return orderedCard{}, fmt.Errorf("find the first card of a note of deck %d: %w", deckID, err)
+	}
+	return start, nil
+}
+
+// cardPosition returns the 1-based position of one card in the deck's list order.
+func (s *CardStore) cardPosition(ctx context.Context, deckID uint64, sort string, card orderedCard) (int64, error) {
+	condition, args := cardOrderCondition(sort, card.Name, card.ID, false)
+	var count int64
+	if err := s.deckCardOrderQuery(ctx, deckID, sort).Where(condition, args...).Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("count the cards before a card of deck %d: %w", deckID, err)
+	}
+	return count + 1, nil
 }
 
 // cardSyncChange records which cards one syncCards call made visible or invisible.

@@ -41,6 +41,7 @@ import {
   type ReviewQueueResponse,
   type DeckPreviewCardsResponse,
   type DeckPreviewSort,
+  type DeckPreviewNoteStepResponse,
   type ReviewUndoResponse,
   type ApiErrorEnvelope,
   type UserProfile,
@@ -1181,6 +1182,22 @@ export class ApiClient {
     return this.request<DeckPreviewCardsResponse>(
       `/api/v1/decks/${encodeURIComponent(deckId)}/preview/cards${query ? `?${query}` : ''}`,
       { headers: frameHeaders(options) },
+    );
+  }
+
+  /**
+   * Resolve where the preview's note stepping lands (GET /api/v1/decks/:id/preview/note-step): the
+   * 1-based position of the first card of the adjacent note in the given order, or null when the
+   * deck has no other note in that direction.
+   */
+  async deckPreviewNoteStep(
+    deckId: string,
+    input: { from: number; direction: 'next' | 'prev'; sort?: DeckPreviewSort },
+  ): Promise<DeckPreviewNoteStepResponse> {
+    const params = new URLSearchParams({ from: String(input.from), dir: input.direction });
+    if (input.sort) params.set('sort', input.sort);
+    return this.request<DeckPreviewNoteStepResponse>(
+      `/api/v1/decks/${encodeURIComponent(deckId)}/preview/note-step?${params.toString()}`,
     );
   }
 
