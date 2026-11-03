@@ -28,7 +28,9 @@ const (
 var ErrInvalidMediaCursor = errors.New("store: invalid media cursor")
 
 // mediaBaseColumns are the columns both union branches select; the order must match for UNION.
-const mediaBaseColumns = "media.sha256, media.rel_path, media.mime, media.bytes, media.width, media.height, media.created_by, media.created_at"
+// orphaned_at is included because the media browser's page query wraps this union and derives an item's reference state
+// and cleanup time from the reclamation job's orphan stamp.
+const mediaBaseColumns = "media.sha256, media.rel_path, media.mime, media.bytes, media.width, media.height, media.created_by, media.created_at, media.orphaned_at"
 
 // readableMediaUnionQuery returns the union subquery of 'media readable by a user' (two sources UNION-deduped):
 //  1. media_uploaders has a record pointing at userID — they supplied these bytes (a dedup hit counts, irrevocable);

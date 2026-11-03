@@ -4,6 +4,7 @@ import DecksView from '../views/DecksView.svelte';
 import DeckDetailView from '../views/DeckDetailView.svelte';
 import DeckPreviewView from '../views/DeckPreviewView.svelte';
 import StatsView from '../views/StatsView.svelte';
+import MediaView from '../views/MediaView.svelte';
 import SettingsView from '../views/SettingsView.svelte';
 import APIKeysView from '../views/APIKeysView.svelte';
 import LoginView from '../views/LoginView.svelte';
@@ -138,6 +139,14 @@ export const routes: RouteDefinition[] = [
     path: '/stats',
     name: 'stats',
     component: StatsView as unknown as RouteDefinition['component'],
+  },
+  {
+    // Global media browser: every medium the signed-in user may read, with deck/class/state/name filters.
+    // The server has no GET /media page route; NoRoute falls back to the app shell for it, while /media/<sha256>
+    // stays the media proxy, so this path and the media URL space do not collide.
+    path: '/media',
+    name: 'media',
+    component: MediaView as unknown as RouteDefinition['component'],
   },
   {
     path: '/settings',

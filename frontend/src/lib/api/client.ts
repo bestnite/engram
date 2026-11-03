@@ -22,6 +22,7 @@ import {
   type BulkDecksResponse,
   type NotePreviewResponse,
   type MediaListResponse,
+  type MediaListParams,
   type MediaUploadResult,
   type FrameMediaBaseResponse,
   type StatsSummary,
@@ -853,15 +854,22 @@ export class ApiClient {
   }
 
   /**
-   * List one page of the media library the current user can read (GET /api/v1/media).
-   * Replaces the removed SSR fragment endpoint: each returned JSON item has a sha256 and a directly usable url (/media/<sha256>),
-   * so the frontend no longer parses HTML. When params are omitted the server applies a default page size; an invalid/oversized cursor gets a 400 from the server.
+   * List one page of the media library the current user can read (GET /api/v1/media), newest first.
+   *
+   * Every filter is optional and the server validates it (an unknown deck, class, state, limit or cursor is a 400/403/404, never a silent clamp):
+   * `deck` is a public deck id, `class` one media class, `state` one reference state and `q` a case-insensitive substring of a visible
+   * deck-scoped name. Paging continues with the previous response's `next_cursor`: pass it back as `cursor`.
    */
-  async listMedia(cursor = ''): Promise<MediaListResponse> {
-    const params = new URLSearchParams();
-    if (cursor) params.set('cursor', cursor);
-    const query = params.toString();
-    return this.request<MediaListResponse>(`/api/v1/media${query ? `?${query}` : ''}`);
+  async listMedia(params: MediaListParams = {}): Promise<MediaListResponse> {
+    const query = new URLSearchParams();
+    if (params.deck) query.set('deck', params.deck);
+    if (params.class) query.set('class', params.class);
+    if (params.state) query.set('state', params.state);
+    if (params.q) query.set('q', params.q);
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.cursor) query.set('cursor', params.cursor);
+    const search = query.toString();
+    return this.request<MediaListResponse>(`/api/v1/media${search ? `?${search}` : ''}`);
   }
 
   /**

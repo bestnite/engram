@@ -18,15 +18,26 @@ import (
 // Why two steps instead of deleting as soon as something looks orphaned: removing an image while editing a note and adding it back later is common, and there is also a
 // time gap between upload and card insertion. Recording 'since when it has been orphaned' and deleting only past the grace period avoids deleting by mistake.
 
-// orphanCondition is the portable SQL condition for 'no note field and no note type references it', shared by marking,
-// clearing and deleting. The note-type branch joins media_note_types to the note type's own deck and then to
-// media_names by name, because a note type stores the deck-scoped file name while the media table stores the content
-// sha; without the deck scope another deck's file of the same name would keep this one alive.
-const orphanCondition = "NOT EXISTS (SELECT 1 FROM media_notes AS ref WHERE ref.media_sha = media.sha256) " +
-	"AND NOT EXISTS (SELECT 1 FROM media_note_types AS mnt " +
+// mediaAnyReferenceCondition is the portable SQL condition for 'at least one media_notes row points at these bytes'.
+// The rows of soft-deleted notes are included: a note can be restored, so such a reference is not nothing.
+//
+// It is one half of orphanCondition and is shared with the media browser's reference-state computation, so what the page
+// reports as referenced/restorable and what the reclamation job reclaims come from one definition.
+const mediaAnyReferenceCondition = "EXISTS (SELECT 1 FROM media_notes AS any_ref WHERE any_ref.media_sha = media.sha256)"
+
+// mediaNoteTypeReferenceCondition is the portable SQL condition for 'a note type's `_`-prefixed template or CSS reference
+// resolves to these bytes'. It joins media_note_types to the note type's own deck and then to media_names by name,
+// because a note type stores the deck-scoped file name while the media table stores the content sha; without the deck
+// scope another deck's file of the same name would keep this one alive.
+const mediaNoteTypeReferenceCondition = "EXISTS (SELECT 1 FROM media_note_types AS mnt " +
 	"JOIN note_types AS nt ON nt.id = mnt.note_type_id " +
 	"JOIN media_names AS mn ON mn.deck_id = nt.deck_id AND mn.name = mnt.media_name " +
 	"WHERE mn.sha256 = media.sha256)"
+
+// orphanCondition is the portable SQL condition for 'no note field and no note type references it', shared by marking,
+// clearing and deleting. It is composed from the two reference conditions above so the media browser's state and the
+// collector's reclamation decision cannot drift apart.
+const orphanCondition = "NOT " + mediaAnyReferenceCondition + " AND NOT " + mediaNoteTypeReferenceCondition
 
 // MarkOrphanedMedia stamps orphaned_at = now on newly orphaned media and clears the mark on media that got referenced again.
 // It returns the number of rows newly marked and cleared.

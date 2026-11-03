@@ -481,6 +481,24 @@ export interface ChangeNoteTypeResult {
 }
 
 /**
+ * The media classes the server's classifier produces (`internal/mediatype`). A `class` filter accepts exactly one of these.
+ */
+export type MediaClass = 'image' | 'audio' | 'video' | 'font' | 'script' | 'style' | 'other';
+
+/**
+ * The reference states of a stored medium, computed from the media collector's own orphan definition:
+ * `referenced` has a live note or a note-type asset reference, `restorable` is referenced only by soft-deleted notes,
+ * `pending` already carries the collector's orphan stamp, and `unreferenced` holds the orphan condition without a stamp yet.
+ */
+export type MediaState = 'referenced' | 'pending' | 'restorable' | 'unreferenced';
+
+/** One visible deck a medium belongs to (aligned with Go internal/api.MediaDeck). */
+export interface MediaDeck {
+  id: string;
+  name: string;
+}
+
+/**
  * One item of GET /api/v1/media (aligned with Go internal/api.MediaItem).
  * url is built from sha256 as /media/<sha256> and can be used directly in <img src> and for inserting Markdown references.
  */
@@ -492,6 +510,26 @@ export interface MediaItem {
   width?: number | null;
   height?: number | null;
   created_at: string;
+  /** Deck-scoped file names visible to the caller, sorted and deduplicated; never a name from an invisible deck. */
+  names: string[];
+  /** Visible decks that reference the medium by a live note or hold a name for it, sorted by name. */
+  decks: MediaDeck[];
+  state: MediaState;
+  /** When the next sweep may remove the bytes; null unless state is `pending`. */
+  cleanup_at: string | null;
+}
+
+/**
+ * Filters and paging of GET /api/v1/media. Every field is optional; an absent field means "no filter".
+ * deck is a public deck id the caller can read; q is matched case-insensitively against visible deck-scoped names only.
+ */
+export interface MediaListParams {
+  deck?: string;
+  class?: MediaClass;
+  state?: MediaState;
+  q?: string;
+  cursor?: string;
+  limit?: number;
 }
 
 /** One page of GET /api/v1/media; an empty next_cursor means the end is reached. */

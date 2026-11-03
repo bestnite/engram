@@ -208,7 +208,7 @@ describe('Centralized typed same-origin REST API client', () => {
 
     it('passes the cursor as a query parameter when paginating', async () => {
       mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ items: [], next_cursor: '' }), { status: 200 }));
-      await expect(client.listMedia('cursor tok/1')).resolves.toEqual({ items: [], next_cursor: '' });
+      await expect(client.listMedia({ cursor: 'cursor tok/1' })).resolves.toEqual({ items: [], next_cursor: '' });
       expect(mockFetch.mock.calls[0]?.[0]).toBe('/api/v1/media?cursor=cursor+tok%2F1');
     });
 

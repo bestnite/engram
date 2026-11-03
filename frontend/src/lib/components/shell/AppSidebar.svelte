@@ -5,6 +5,7 @@
     CirclePlay,
     ChartColumn,
     Layers,
+    Image,
     Upload,
     SlidersHorizontal,
     Shield,
@@ -73,6 +74,7 @@
   });
 
   const libraryItems = $derived<NavItem[]>([
+    { href: '/media', label: $t('nav.media'), icon: Image, active: path.startsWith('/media') },
     { href: '/import', label: $t('sidebar.import'), icon: Upload, active: path.startsWith('/import') },
     { href: '/presets', label: $t('nav.presets'), icon: SlidersHorizontal, active: path.startsWith('/presets') },
   ]);

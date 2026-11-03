@@ -92,7 +92,7 @@ mailstyle  → texmath
 schedule   → reviewday, store
 auth       → store
 media      → mediatype, store
-store      → anki, answer, mailstyle, mediatype, notetype, reviewday, texmath
+store      → anki, answer, mailstyle, mediatype, notetype, retention, reviewday, texmath
 answer     → notetype
 retention  → worker
 anki, config, i18n, mediatype, notetype, reviewday, texmath, urlfetch, worker, pgtest → (no internal imports)
