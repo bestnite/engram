@@ -12,7 +12,7 @@
   import EmptyState from '../components/ui/EmptyState.svelte';
   import type { SelectOption } from '../components/ui/options';
   import { formatBytes, formatDate } from '../format';
-  import { Image as ImageIcon, RefreshCw, Search, SearchX } from '@lucide/svelte';
+  import { FileText, Image as ImageIcon, Music, RefreshCw, Search, SearchX } from '@lucide/svelte';
 
   /**
    * Global media browser: every medium the signed-in user may read across all their decks, on one page.
@@ -168,6 +168,14 @@
     return mime.startsWith('image/');
   }
 
+  function isAudio(mime: string): boolean {
+    return mime.startsWith('audio/');
+  }
+
+  function isVideo(mime: string): boolean {
+    return mime.startsWith('video/');
+  }
+
   /** All deck-scoped names of an item, or the explicit "no visible name" copy. */
   function namesText(item: MediaItem): string {
     return item.names.length > 0 ? item.names.join(', ') : $t('media.browser.no_names');
@@ -291,8 +299,42 @@
                 data-testid="media-thumbnail"
                 class="h-full w-full object-contain"
               />
+            {:else if isAudio(item.mime)}
+              <!-- The URL is the same session-authorized media route the thumbnail uses, so the browser plays the bytes in place. -->
+              <div class="flex w-full flex-col items-center gap-1.5 px-3">
+                <Music class="size-6 text-muted-foreground/50" aria-hidden="true" />
+                <audio
+                  controls
+                  preload="metadata"
+                  src={item.url}
+                  aria-label={$t('media.browser.preview.audio')}
+                  data-testid="media-audio"
+                  class="w-full"
+                ></audio>
+              </div>
+            {:else if isVideo(item.mime)}
+              <!-- svelte-ignore a11y_media_has_caption (stored video carries no caption track; the card frame has the same limit) -->
+              <video
+                controls
+                preload="metadata"
+                playsinline
+                src={item.url}
+                aria-label={$t('media.browser.preview.video')}
+                data-testid="media-video"
+                class="h-full w-full object-contain"
+              ></video>
             {:else}
-              <ImageIcon class="size-8 text-muted-foreground/50" aria-hidden="true" />
+              <div class="flex flex-col items-center gap-2 px-4 text-center">
+                <FileText class="size-8 text-muted-foreground/50" aria-hidden="true" />
+                <a
+                  href={item.url}
+                  download
+                  data-testid="media-download"
+                  class="text-xs font-medium text-foreground underline underline-offset-2"
+                >
+                  {$t('media.browser.download')}
+                </a>
+              </div>
             {/if}
           </div>
           <div class="flex flex-1 flex-col gap-1.5 p-4">

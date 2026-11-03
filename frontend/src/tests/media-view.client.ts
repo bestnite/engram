@@ -97,8 +97,44 @@ describe('media browser view', () => {
     expect(thumbnails).toHaveLength(1);
     expect(thumbnails[0]?.getAttribute('src')).toBe(`/media/${'a'.repeat(64)}`);
 
+    // The audio item plays in place through the same session-authorized media URL instead of a generic icon.
+    const audio = target.querySelector('[data-testid="media-audio"]') as HTMLAudioElement | null;
+    expect(audio).not.toBeNull();
+    expect(audio?.getAttribute('src')).toBe(`/media/${'b'.repeat(64)}`);
+    expect(audio?.hasAttribute('controls')).toBe(true);
+    expect(audio?.getAttribute('preload')).toBe('metadata');
+    expect(audio?.getAttribute('aria-label')).toBe('音频预览');
+
     // The first load sends no filter at all.
     expect(apiClient.listMedia).toHaveBeenCalledWith({ limit: 24 });
+  });
+
+  it('previews video and downloads media that cannot be previewed', async () => {
+    const videoSha = '1'.repeat(64);
+    const fontSha = '2'.repeat(64);
+    vi.spyOn(apiClient, 'listMedia').mockResolvedValueOnce(
+      page([
+        media(videoSha, { mime: 'video/mp4', names: ['clip.mp4'] }),
+        media(fontSha, { mime: 'font/woff2', names: ['_body.woff2'] }),
+      ])
+    );
+    await mountView();
+
+    const video = target.querySelector('[data-testid="media-video"]') as HTMLVideoElement | null;
+    expect(video).not.toBeNull();
+    expect(video?.getAttribute('src')).toBe(`/media/${videoSha}`);
+    expect(video?.hasAttribute('controls')).toBe(true);
+    expect(video?.hasAttribute('playsinline')).toBe(true);
+    expect(video?.getAttribute('preload')).toBe('metadata');
+
+    const download = target.querySelector('[data-testid="media-download"]') as HTMLAnchorElement | null;
+    expect(download).not.toBeNull();
+    expect(download?.getAttribute('href')).toBe(`/media/${fontSha}`);
+    expect(download?.hasAttribute('download')).toBe(true);
+    expect(download?.textContent).toContain('下载文件');
+
+    // Neither item is an image, so no thumbnail is rendered for them.
+    expect(target.querySelectorAll('[data-testid="media-thumbnail"]')).toHaveLength(0);
   });
 
   it('shows the elapsed-grace copy for a pending item whose cleanup time has passed', async () => {
