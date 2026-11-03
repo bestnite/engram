@@ -253,7 +253,7 @@
   const clozeKind = $derived(draft?.config.kind === 'cloze');
   const fromStock = $derived(draft?.config.original_stock_kind ?? '');
   const kindLabel = $derived(draft ? $t(`notetype.kind.${draft.config.kind}`) : '');
-  const stockLabel = $derived(fromStock ? $t(`notetype.stock.anki.${fromStock}`) : '');
+  const stockLabel = $derived(fromStock ? $t(`notetype.stock.${fromStock}`) : '');
 
   /**
    * A deep copy the editor can change without touching the stored entry. The entries live in `$state`, so they are

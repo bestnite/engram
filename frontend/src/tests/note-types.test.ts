@@ -37,7 +37,7 @@ function noteType(overrides: Partial<NoteType> = {}): NoteType {
 
 const stocks: NoteTypeStock[] = [
   { id: 'engram:basic', source: 'engram', name: 'Basic', label_key: 'notetype.stock.basic' },
-  { id: 'engram:numeric', source: 'engram', name: 'Numeric answer', label_key: 'notetype.stock.engram.numeric' },
+  { id: 'engram:numeric', source: 'engram', name: 'Numeric answer', label_key: 'notetype.stock.numeric' },
 ];
 
 const controls: AnswerControl[] = [
@@ -73,6 +73,16 @@ describe('NoteTypesView', () => {
     expect(html).toContain('data-testid="notetype-syntax-more"');
     // The styling hint names the rule behind the centred default.
     expect(html).toContain('text-align: center');
+  });
+
+  it('names the stock a note type came from instead of printing its catalog key', () => {
+    const fromStock = noteType({ config: { ...noteType().config, original_stock_kind: 'basic_optional_reversed' } });
+    const { html } = render(NoteTypesView, {
+      props: { initialLoading: false, initialNoteTypes: [fromStock], initialStocks: stocks, initialControls: controls },
+    });
+    expect(html).toContain('内置来源');
+    expect(html).toContain('基础（可选反向卡片）');
+    expect(html).not.toContain('notetype.stock.anki');
   });
 
   it('offers the help link on an empty page too, where a first-time reader lands', () => {
@@ -175,7 +185,7 @@ describe('common template catalog keys', () => {
   it.each(['vocabulary', 'japanese_furigana', 'listening', 'basic_extra'])('%s has a label in both catalogs', async (kind) => {
     const { formatMessage } = await import('../lib/i18n');
     for (const locale of ['zh-CN', 'en'] as const) {
-      const key = `notetype.stock.template.${kind}`;
+      const key = `notetype.stock.${kind}`;
       expect(formatMessage(locale, key)).not.toBe(key);
     }
   });
