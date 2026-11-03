@@ -191,6 +191,19 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(url).toBe('/api/v1/decks/d1/preview/cards');
       expect(new Headers(init?.headers ?? {}).get('X-Engram-Frame')).toBeNull();
     });
+
+    it('resolves a note step with the cursor, direction and order', async () => {
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ position: 7 }), { status: 200 }));
+      await expect(
+        client.deckPreviewNoteStep('deck /1', { from: 3, direction: 'next', sort: 'note_type' }),
+      ).resolves.toEqual({ position: 7 });
+
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/decks/deck%20%2F1/preview/note-step?from=3&dir=next&sort=note_type');
+      expect(init?.method ?? 'GET').toBe('GET');
+      expect(init?.credentials).toBe('same-origin');
+      expect(new Headers(init?.headers ?? {}).get('X-Engram-Frame')).toBeNull();
+    });
   });
 
   describe('SPA media library list', () => {

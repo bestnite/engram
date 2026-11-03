@@ -1040,6 +1040,17 @@ export interface DeckPreviewCard {
 /** The two orders a deck preview can request; the server falls back to `created` for anything else. */
 export type DeckPreviewSort = 'created' | 'note_type';
 
+/**
+ * One note type's block in the note type order: how many cards it holds and the 1-based position of
+ * its first card, which is where a jump to that type lands. Sections are ordered by note type name,
+ * so they are listed in the same order as the cards.
+ */
+export interface DeckPreviewNoteTypeSection {
+  name: string;
+  count: number;
+  first_position: number;
+}
+
 /** GET /api/v1/decks/:id/preview/cards response body: one LIMIT/OFFSET page of a deck's rendered cards. */
 export interface DeckPreviewCardsResponse {
   cards: DeckPreviewCard[];
@@ -1047,6 +1058,16 @@ export interface DeckPreviewCardsResponse {
   page: number;
   per_page: number;
   sort: DeckPreviewSort;
+  /** Present only for the note type order: the deck's note type groups, in list order. */
+  note_types?: DeckPreviewNoteTypeSection[];
+}
+
+/**
+ * GET /api/v1/decks/:id/preview/note-step response body: the 1-based position of the first card of
+ * the adjacent note, or null when the deck has no other note in that direction.
+ */
+export interface DeckPreviewNoteStepResponse {
+  position: number | null;
 }
 
 /**
