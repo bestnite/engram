@@ -2,10 +2,10 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import NoteTypesView from '../lib/views/NoteTypesView.svelte';
 import { routeStore, matchRoute } from '../lib/router';
-import { apiClient, ApiClientError, type NoteType, type UpdateNoteTypeResponse } from '../lib/api';
+import { apiClient, ApiClientError, type NoteType, type NoteTypeTemplate, type UpdateNoteTypeResponse } from '../lib/api';
 import { setLocale } from '../lib/i18n';
 
-function noteType(): NoteType {
+function noteType(template: Partial<NoteTypeTemplate> = {}): NoteType {
   return {
     id: 'nt-1',
     deck_id: 'd1',
@@ -17,7 +17,7 @@ function noteType(): NoteType {
         { id: 'f-front', name: 'Front', sticky: false, rtl: false, font: '', font_size: 0, description: '', plain_text: false, collapsed: false },
         { id: 'f-back', name: 'Back', sticky: false, rtl: false, font: '', font_size: 0, description: '', plain_text: false, collapsed: false },
       ],
-      templates: [{ id: 't-1', name: 'Card 1', qfmt: '{{Front}}', afmt: '{{Back}}', answer: null }],
+      templates: [{ id: 't-1', name: 'Card 1', qfmt: '{{Front}}', afmt: '{{Back}}', answer: null, ...template }],
       css: '.card {}',
       sort_field_id: 'f-front',
     },
@@ -53,7 +53,7 @@ describe('NoteTypesView editor', () => {
     flushSync();
   }
 
-  async function setup(): Promise<ReturnType<typeof vi.fn>> {
+  async function setup(types: NoteType[] = [noteType()]): Promise<ReturnType<typeof vi.fn>> {
     setLocale('zh-CN');
     routeStore.set(matchRoute('/decks/d1/note-types'));
     const update = vi.spyOn(apiClient, 'updateNoteType');
@@ -63,7 +63,7 @@ describe('NoteTypesView editor', () => {
       target,
       props: {
         initialLoading: false,
-        initialNoteTypes: [noteType()],
+        initialNoteTypes: types,
         initialStocks: [],
         initialControls: [],
       },
@@ -159,6 +159,55 @@ describe('NoteTypesView editor', () => {
     expect(update).toHaveBeenCalledTimes(2);
     expect(update.mock.calls[1]?.[2]).toMatchObject({ dry_run: false, confirm_card_removal: false });
     expect(document.body.querySelector('[data-testid="notetype-impact"]')).toBeNull();
+  });
+
+  it('keeps the browser appearance fields an edit does not expose', async () => {
+    // These values arrive from an imported .apkg. The editor does not expose them, so the only way they can survive a
+    // save is the whole config travelling back: a save that rebuilt templates field by field would erase them.
+    const update = await setup([
+      noteType({ bqfmt: 'Q {{Front}}', bafmt: 'A {{Back}}', browser_font: 'Arial', browser_font_size: 18 }),
+    ]);
+    update.mockResolvedValueOnce(impactResponse(0, 0, 0));
+    update.mockResolvedValueOnce({ ...impactResponse(0, 0, 0), dry_run: false, version: 5 });
+
+    expect(document.body.querySelector('[data-testid="notetype-template-bqfmt"]')).toBeNull();
+
+    const qfmt = document.body.querySelector('[data-testid="notetype-template-qfmt"]') as HTMLTextAreaElement | null;
+    qfmt!.value = '{{Front}} EDITED';
+    qfmt!.dispatchEvent(new Event('input', { bubbles: true }));
+    await flush();
+
+    (document.body.querySelector('[data-testid="notetype-save"]') as HTMLButtonElement).click();
+    await flush();
+
+    const body = update.mock.calls[1]?.[2] as { config: { templates: NoteTypeTemplate[] } };
+    expect(body.config.templates[0]).toMatchObject({
+      qfmt: '{{Front}} EDITED',
+      bqfmt: 'Q {{Front}}',
+      bafmt: 'A {{Back}}',
+      browser_font: 'Arial',
+      browser_font_size: 18,
+    });
+  });
+
+  it('rewrites browser appearance template references when a field is renamed', async () => {
+    // A rename must reach these templates too, or the exported note type would point a browser column at the old
+    // field name and Anki would render it empty.
+    const update = await setup([noteType({ bqfmt: 'Q {{Front}}', bafmt: 'A {{Back}}' })]);
+    update.mockResolvedValueOnce(impactResponse(0, 0, 0));
+    update.mockResolvedValueOnce({ ...impactResponse(0, 0, 0), dry_run: false, version: 5 });
+
+    const name = document.body.querySelector('[data-testid="notetype-field-name-f-front"]') as HTMLInputElement | null;
+    name!.value = 'Prompt';
+    name!.dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+
+    (document.body.querySelector('[data-testid="notetype-save"]') as HTMLButtonElement).click();
+    await flush();
+
+    const body = update.mock.calls[1]?.[2] as { config: { templates: NoteTypeTemplate[] } };
+    expect(body.config.templates[0]?.bqfmt).toBe('Q {{Prompt}}');
+    expect(body.config.templates[0]?.bafmt).toBe('A {{Back}}');
   });
 
   it('sends the unsaved config to the server preview and shows the returned HTML in the frame', async () => {

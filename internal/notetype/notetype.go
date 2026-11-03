@@ -74,7 +74,9 @@ type Field struct {
 }
 
 // Template is one card template. ID is opaque and stable in the same way as
-// Field.ID. The browser fields drive the card browser's own rendering.
+// Field.ID. The browser fields drive the note type's appearance in Anki's card
+// browser; engram stores and round-trips them but renders nothing from them,
+// because engram has no card browser view.
 type Template struct {
 	ID              string      `json:"id"`
 	Name            string      `json:"name"`

@@ -277,6 +277,11 @@ export interface NoteTypeTemplate {
   name: string;
   qfmt: string;
   afmt: string;
+  /**
+   * Browser appearance: Anki renders these in its Browser's question and answer columns, and the
+   * font and size set that rendering. engram has no card browser view, so it stores and round-trips
+   * the values unchanged and renders nothing from them.
+   */
   bqfmt?: string;
   bafmt?: string;
   browser_font?: string;

@@ -402,6 +402,8 @@
       name: $t('notetype.templates.new_name', { index: draft.config.templates.length + 1 }),
       qfmt: `{{${first}}}`,
       afmt: `{{FrontSide}}\n\n<hr id=answer>\n\n{{${second}}}`,
+      // Browser appearance is not edited here: the fields are carried so a template imported from
+      // Anki keeps its values, and a new template declares the same empty defaults the server stores.
       bqfmt: '',
       bafmt: '',
       browser_font: '',
@@ -1329,63 +1331,6 @@
                     ></textarea>
                   </label>
                 </div>
-
-                <details>
-                  <summary class="cursor-pointer text-xs text-muted-foreground">{$t('notetype.templates.browser')}</summary>
-                  <div class="mt-3 grid gap-4 xl:grid-cols-2">
-                    <label class="block">
-                      <span class="text-xs font-medium text-muted-foreground">{$t('notetype.templates.browser_front')}</span>
-                      <textarea
-                        rows="4"
-                        value={selectedTemplate.bqfmt ?? ''}
-                        oninput={(event) => {
-                          const template = draft!.config.templates.find((entry) => entry.id === selectedTemplateId);
-                          if (template) template.bqfmt = event.currentTarget.value;
-                        }}
-                        data-testid="notetype-template-bqfmt"
-                        class="field-input mt-1 block w-full font-mono text-xs"
-                      ></textarea>
-                    </label>
-                    <label class="block">
-                      <span class="text-xs font-medium text-muted-foreground">{$t('notetype.templates.browser_back')}</span>
-                      <textarea
-                        rows="4"
-                        value={selectedTemplate.bafmt ?? ''}
-                        oninput={(event) => {
-                          const template = draft!.config.templates.find((entry) => entry.id === selectedTemplateId);
-                          if (template) template.bafmt = event.currentTarget.value;
-                        }}
-                        data-testid="notetype-template-bafmt"
-                        class="field-input mt-1 block w-full font-mono text-xs"
-                      ></textarea>
-                    </label>
-                    <label class="block">
-                      <span class="text-xs font-medium text-muted-foreground">{$t('notetype.templates.browser_font')}</span>
-                      <input
-                        type="text"
-                        value={selectedTemplate.browser_font ?? ''}
-                        oninput={(event) => {
-                          const template = draft!.config.templates.find((entry) => entry.id === selectedTemplateId);
-                          if (template) template.browser_font = event.currentTarget.value;
-                        }}
-                        class="field-input mt-1 block w-full text-xs"
-                      />
-                    </label>
-                    <label class="block">
-                      <span class="text-xs font-medium text-muted-foreground">{$t('notetype.templates.browser_font_size')}</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={selectedTemplate.browser_font_size ?? 0}
-                        oninput={(event) => {
-                          const template = draft!.config.templates.find((entry) => entry.id === selectedTemplateId);
-                          if (template) template.browser_font_size = Number(event.currentTarget.value) || 0;
-                        }}
-                        class="field-input mt-1 block w-full text-xs"
-                      />
-                    </label>
-                  </div>
-                </details>
 
                 <!-- Answer spec: the control list and role names come from the server registry. -->
                 <div class="rounded-md border border-border p-3" data-testid="notetype-answer">
