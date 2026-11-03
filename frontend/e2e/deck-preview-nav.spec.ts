@@ -19,8 +19,8 @@ test.use({ baseURL });
 
 const LONG_FRONT = Array.from({ length: 40 }, (_, index) => `<p>question line ${index + 1}</p>`).join('');
 
-/** Creates a deck with three long cards and opens its preview. */
-async function previewLongCards(page: Page): Promise<void> {
+/** Creates a deck with one card per front, in that order, and opens its preview. */
+async function previewCards(page: Page, fronts: string[]): Promise<void> {
   const deck = await api(page, 'POST', '/api/v1/decks', { name: 'Long preview' });
   expect(deck.status).toBe(201);
   const deckId = (deck.json as { id: string }).id;
@@ -38,11 +38,17 @@ async function previewLongCards(page: Page): Promise<void> {
   });
   expect(type.status, JSON.stringify(type.json)).toBe(201);
   const typeId = (type.json as { id: string }).id;
-  const notes = Array.from({ length: 3 }, () => ({ note_type: typeId, fields: { Front: LONG_FRONT, Back: 'back' } }));
+  const notes = fronts.map((front) => ({ note_type: typeId, fields: { Front: front, Back: 'back' } }));
   const created = await api(page, 'POST', `/api/v1/decks/${deckId}/notes`, { notes });
   expect(created.status).toBe(200);
 
   await page.goto(`/decks/${deckId}/preview`);
+  await expect(page.getByTestId('preview-nav-position')).toHaveText(`1 / ${fronts.length}`);
+}
+
+/** Opens a preview of three long cards and waits for the first face to reach its full height. */
+async function previewLongCards(page: Page): Promise<void> {
+  await previewCards(page, [LONG_FRONT, LONG_FRONT, LONG_FRONT]);
   await expect(page.frameLocator('iframe[data-side="question"]').locator('text=question line 40')).toBeAttached();
 }
 
@@ -97,4 +103,23 @@ test('on a narrow screen every step keeps only its icon and the bar fits in one 
   );
   expect(new Set(centres).size).toBe(1);
   expect(await bottomOf(page, 'preview-nav')).toBeLessThanOrEqual(viewport.height);
+});
+
+test('a short card and a long card put the bar at the same place on the viewport bottom edge', async ({ page }) => {
+  const viewport = { width: 1280, height: 700 };
+  await page.setViewportSize(viewport);
+  await signIn(page);
+  await previewCards(page, ['short question', LONG_FRONT]);
+  await expect(page.frameLocator('iframe[data-side="question"]').locator('text=short question')).toBeAttached();
+
+  // The short card does not fill the screen, and the bar still sits on the viewport's bottom edge rather than under it.
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(viewport.height);
+  const short = await page.getByTestId('preview-nav').boundingBox();
+  expect(Math.round(short!.y + short!.height)).toBe(viewport.height);
+
+  await page.getByTestId('preview-next').click();
+  await expect(page.frameLocator('iframe[data-side="question"]').locator('text=question line 40')).toBeAttached();
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(viewport.height * 2);
+  const long = await page.getByTestId('preview-nav').boundingBox();
+  expect(long).toEqual(short);
 });

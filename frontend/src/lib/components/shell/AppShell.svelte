@@ -71,7 +71,12 @@
 </script>
 
 {#if layout === 'sidebar'}
-  <div class="flex min-h-screen bg-background text-foreground" style="--app-sidebar-w: {$sidebarCollapsed ? '4rem' : '15rem'}">
+  <!-- --app-header-h is the height of the narrow-screen top bar, zero once the bar is hidden; a page that fills the viewport
+       below the bar subtracts it, the way the selection bar reads --app-sidebar-w. -->
+  <div
+    class="flex min-h-screen bg-background text-foreground [--app-header-h:3.5rem] md:[--app-header-h:0px]"
+    style="--app-sidebar-w: {$sidebarCollapsed ? '4rem' : '15rem'}"
+  >
     <aside
       class={cn(
         'app-sidebar sticky top-0 hidden h-screen shrink-0 border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out md:block',
@@ -84,7 +89,7 @@
     <div class="flex min-w-0 flex-1 flex-col">
       <!-- Narrow-screen top bar: the sidebar folds into a drawer, so only the button that opens it and the brand stay here. -->
       <header
-        class="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur-md md:hidden"
+        class="sticky top-0 z-30 flex h-(--app-header-h) items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur-md md:hidden"
       >
         <BitsDialog.Root bind:open={drawerOpen}>
           <BitsDialog.Trigger

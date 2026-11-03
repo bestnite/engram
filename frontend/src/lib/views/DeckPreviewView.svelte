@@ -12,6 +12,7 @@
   import Skeleton from '../components/ui/Skeleton.svelte';
   import EmptyState from '../components/ui/EmptyState.svelte';
   import { toast } from '../components/ui/toast';
+  import { cn } from '../components/ui/utils';
   import CardFrame, { type CardFrameKey } from '../components/CardFrame.svelte';
   import { REVIEW_BACK_CSS, REVIEW_FRONT_CSS, faceStyle } from '../card-frame';
   import { ChevronLeft, ChevronRight, Layers, SkipBack, SkipForward } from '@lucide/svelte';
@@ -74,6 +75,8 @@
   );
   const backNoteBlocked = $derived(atStart || noPreviousNote || noteStepping);
   const forwardNoteBlocked = $derived(atEnd || noNextNote || noteStepping);
+  // The bar outlives the faces while a page of cards loads; it needs only the deck total.
+  const showNav = $derived(total > 0 && !failed);
 
   async function load(page: number): Promise<void> {
     const token = ++requestToken;
@@ -229,9 +232,12 @@
 
 <svelte:window onkeydown={onWindowKey} />
 
-<!-- The navigation bar carries its own vertical padding, so the page's default bottom padding would only add an empty band
-     under it once the reader scrolls to the end. -->
-<Page class={card ? 'pb-0' : ''}>
+<!-- The page is at least one viewport tall, below the shell's top bar, and the navigation bar is its last flex item pushed
+     down by mt-auto: a short card leaves the bar at the viewport's bottom edge instead of right under the faces, and a tall
+     card keeps it there through the sticky offset. Either way the buttons do not move when the next card has another
+     height. The bar carries its own vertical padding, so the page's default bottom padding would only add an empty band
+     under it. -->
+<Page class={cn('flex min-h-[calc(100dvh-var(--app-header-h,0px))] flex-col', showNav && 'pb-0')}>
   <PageHeader
     title={$t('deck.preview.title')}
     back={{ href: `/decks/${encodeURIComponent(deckId)}`, label: $t('deck.preview.back'), testId: 'preview-back-to-deck' }}
@@ -289,59 +295,64 @@
     {/snippet}
   </PageHeader>
 
-  {#if failed}
-    <div class="rounded-lg border border-border p-6 text-center" data-testid="preview-failed">
-      <p class="text-sm text-muted-foreground">{$t('deck.preview.failed')}</p>
-      <Button class="mt-3" variant="outline" onclick={() => void load(pageOf(position))} testId="preview-retry">
-        {$t('deck.preview.retry')}
-      </Button>
-    </div>
-  {:else if loading && !card}
-    <Skeleton testId="preview-loading" label={$t('deck.preview.title')} variant="lines" lines={6} />
-  {:else if total === 0}
-    <EmptyState testId="preview-empty" icon={Layers} text={$t('deck.preview.empty')} />
-  {:else if card}
-    <div class="space-y-4" data-testid="preview-card">
-      <p class="text-[13px] text-muted-foreground" data-testid="preview-meta">
-        {$t('deck.preview.meta', { note_type: card.note_type, template: card.template })}
-      </p>
-      <section class="space-y-2" aria-label={$t('deck.preview.side.front')}>
-        <h2 class="text-sm font-medium text-muted-foreground">{$t('deck.preview.side.front')}</h2>
-        <CardFrame
-          html={card.front.html}
-          css={faceStyle(REVIEW_FRONT_CSS, card.front.css)}
-          bodyClass={card.front.body_class}
-          side="question"
-          mediaBase={card.front.media_base}
-          autoplay={card.front.autoplay ?? false}
-          avTags={card.front.av_tags ?? []}
-          ordinal={card.ordinal}
-          title={$t('deck.preview.side.front')}
-          focusAnswer={false}
-          onkey={onFrameKey}
-        />
-      </section>
-      <section class="space-y-2" aria-label={$t('deck.preview.side.back')}>
-        <h2 class="text-sm font-medium text-muted-foreground">{$t('deck.preview.side.back')}</h2>
-        <CardFrame
-          html={card.back.html}
-          css={faceStyle(REVIEW_BACK_CSS, card.back.css)}
-          bodyClass={card.back.body_class}
-          side="answer"
-          mediaBase={card.back.media_base}
-          autoplay={card.back.autoplay ?? false}
-          avTags={card.back.av_tags ?? []}
-          ordinal={card.ordinal}
-          title={$t('deck.preview.side.back')}
-          focusAnswer={false}
-          onkey={onFrameKey}
-        />
-      </section>
-    </div>
-    <!-- One navigation bar pinned to the viewport's bottom edge, so a tall card never pushes it out of reach. The card
-         steps sit inside, around the position, as the main action; the note steps sit outside and lighter. Below sm every
-         step keeps only its icon, because four labelled buttons do not fit a phone's width in one row; the name stays on
-         the button for screen readers. The title carries the keyboard shortcut, which the bar has no room to print. -->
+  <div class="flex-1">
+    {#if failed}
+      <div class="rounded-lg border border-border p-6 text-center" data-testid="preview-failed">
+        <p class="text-sm text-muted-foreground">{$t('deck.preview.failed')}</p>
+        <Button class="mt-3" variant="outline" onclick={() => void load(pageOf(position))} testId="preview-retry">
+          {$t('deck.preview.retry')}
+        </Button>
+      </div>
+    {:else if loading && !card}
+      <Skeleton testId="preview-loading" label={$t('deck.preview.title')} variant="lines" lines={6} />
+    {:else if total === 0}
+      <EmptyState testId="preview-empty" icon={Layers} text={$t('deck.preview.empty')} />
+    {:else if card}
+      <div class="space-y-4" data-testid="preview-card">
+        <p class="text-[13px] text-muted-foreground" data-testid="preview-meta">
+          {$t('deck.preview.meta', { note_type: card.note_type, template: card.template })}
+        </p>
+        <section class="space-y-2" aria-label={$t('deck.preview.side.front')}>
+          <h2 class="text-sm font-medium text-muted-foreground">{$t('deck.preview.side.front')}</h2>
+          <CardFrame
+            html={card.front.html}
+            css={faceStyle(REVIEW_FRONT_CSS, card.front.css)}
+            bodyClass={card.front.body_class}
+            side="question"
+            mediaBase={card.front.media_base}
+            autoplay={card.front.autoplay ?? false}
+            avTags={card.front.av_tags ?? []}
+            ordinal={card.ordinal}
+            title={$t('deck.preview.side.front')}
+            focusAnswer={false}
+            onkey={onFrameKey}
+          />
+        </section>
+        <section class="space-y-2" aria-label={$t('deck.preview.side.back')}>
+          <h2 class="text-sm font-medium text-muted-foreground">{$t('deck.preview.side.back')}</h2>
+          <CardFrame
+            html={card.back.html}
+            css={faceStyle(REVIEW_BACK_CSS, card.back.css)}
+            bodyClass={card.back.body_class}
+            side="answer"
+            mediaBase={card.back.media_base}
+            autoplay={card.back.autoplay ?? false}
+            avTags={card.back.av_tags ?? []}
+            ordinal={card.ordinal}
+            title={$t('deck.preview.side.back')}
+            focusAnswer={false}
+            onkey={onFrameKey}
+          />
+        </section>
+      </div>
+    {/if}
+  </div>
+  {#if showNav}
+    <!-- One navigation bar pinned to the viewport's bottom edge. It stays while a page of cards loads, so crossing a page
+         boundary does not make it flicker. The card steps sit inside, around the position, as the main action; the note
+         steps sit outside and lighter. Below sm every step keeps only its icon, because four labelled buttons do not fit a
+         phone's width in one row; the name stays on the button for screen readers. The title carries the keyboard
+         shortcut, which the bar has no room to print. -->
     <div
       class="sticky bottom-0 z-10 -mx-4 mt-6 flex items-center justify-center gap-1.5 border-t border-border bg-background/90 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:-mx-8 sm:gap-2 sm:px-8"
       data-testid="preview-nav"
