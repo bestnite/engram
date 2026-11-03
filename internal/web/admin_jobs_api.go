@@ -141,40 +141,46 @@ func (s *Server) adminTasks(c *gin.Context) {
 	out := adminTasksResponse{Tasks: make([]adminTask, 0, len(worker.Kinds))}
 	if s.tasks != nil {
 		for _, st := range s.tasks.Statuses() {
-			task := adminTask{
-				Kind:            st.Kind,
-				IntervalSeconds: int64(st.Interval / time.Second),
-				Running:         st.Running,
-				Pending:         st.Pending,
-			}
-			if !st.NextRunAt.IsZero() {
-				task.NextRunAt = formatJobTime(&st.NextRunAt)
-			}
-			if last := st.Last; last != nil {
-				round := &adminTaskRound{
-					Trigger:    last.Trigger,
-					StartedAt:  formatJobTime(&last.StartedAt),
-					FinishedAt: formatJobTime(&last.FinishedAt),
-					Status:     jobs.StatusSucceeded,
-					Summary:    map[string]int64(last.Summary),
-				}
-				if round.Summary == nil {
-					round.Summary = map[string]int64{}
-				}
-				if last.Err != nil {
-					round.Status = jobs.StatusFailed
-					round.Error = last.Err.Error()
-				}
-				task.Last = round
-			}
-			out.Tasks = append(out.Tasks, task)
+			out.Tasks = append(out.Tasks, adminTaskPayload(st))
 		}
 	}
 	c.JSON(http.StatusOK, out)
 }
 
-// adminTaskRun starts one round of a periodic task with the manual trigger and returns 202 without waiting for it.
-// The round applies the same rules as a timer round; it is always recorded in the job history.
+// adminTaskPayload converts a lifecycle status into the overview item.
+func adminTaskPayload(st worker.Status) adminTask {
+	task := adminTask{
+		Kind:            st.Kind,
+		IntervalSeconds: int64(st.Interval / time.Second),
+		Running:         st.Running,
+		Pending:         st.Pending,
+	}
+	if !st.NextRunAt.IsZero() {
+		task.NextRunAt = formatJobTime(&st.NextRunAt)
+	}
+	if last := st.Last; last != nil {
+		round := &adminTaskRound{
+			Trigger:    last.Trigger,
+			StartedAt:  formatJobTime(&last.StartedAt),
+			FinishedAt: formatJobTime(&last.FinishedAt),
+			Status:     jobs.StatusSucceeded,
+			Summary:    map[string]int64(last.Summary),
+		}
+		if round.Summary == nil {
+			round.Summary = map[string]int64{}
+		}
+		if last.Err != nil {
+			round.Status = jobs.StatusFailed
+			round.Error = last.Err.Error()
+		}
+		task.Last = round
+	}
+	return task
+}
+
+// adminTaskRun starts one round of a periodic task with the manual trigger and returns 202 with the task's overview
+// item, without waiting for the round. The round applies the same rules as a timer round; it is always recorded in
+// the job history.
 func (s *Server) adminTaskRun(c *gin.Context) {
 	actor, ok := auth.CurrentUser(c)
 	if !ok {
@@ -207,7 +213,7 @@ func (s *Server) adminTaskRun(c *gin.Context) {
 		UserID: store.Ptr(actor.ID), Action: store.ActionJobRun,
 		Detail: map[string]any{"kind": kind},
 	})
-	c.Status(http.StatusAccepted)
+	c.JSON(http.StatusAccepted, adminTaskPayload(task.Status()))
 }
 
 // adminJobCancel cancels a job: a running one has its process group killed and is marked failed, a queued one is marked failed directly.

@@ -150,6 +150,13 @@ func TestAdminTaskRun(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("run = %d (body %s), want 202", rec.Code, snippet(rec.Body.String()))
 	}
+	var accepted adminTask
+	if err := json.Unmarshal(rec.Body.Bytes(), &accepted); err != nil {
+		t.Fatalf("decode run response: %v", err)
+	}
+	if accepted.Kind != worker.KindRetention || !(accepted.Pending || accepted.Running) {
+		t.Fatalf("run response = %+v, want the retention task pending or running", accepted)
+	}
 	<-retention.entered
 	// While the manual round runs a second request is refused.
 	busy := postJSONWithCSRF(t, srv, "/api/v1/admin/tasks/retention/run", map[string]any{}, cookies, csrf)

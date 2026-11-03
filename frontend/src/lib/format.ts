@@ -32,6 +32,26 @@ export function formatBytes(bytes: number, locale: string): string {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value)} ${byteUnits[unit]}`;
 }
 
+/**
+ * A duration given in milliseconds, in the largest unit that keeps it readable: milliseconds below a second, seconds
+ * below a minute, minutes below an hour, hours above, with at most one decimal place. `long` spells the unit out
+ * ("10 minutes"), `short` abbreviates it ("10 min").
+ */
+export function formatDuration(ms: number, locale: string, unitDisplay: 'long' | 'short' = 'short'): string {
+  const value = Math.max(0, ms);
+  const steps: Array<[number, string]> = [
+    [3_600_000, 'hour'],
+    [60_000, 'minute'],
+    [1_000, 'second'],
+  ];
+  for (const [size, unit] of steps) {
+    if (value >= size) {
+      return new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay, maximumFractionDigits: 1 }).format(value / size);
+    }
+  }
+  return new Intl.NumberFormat(locale, { style: 'unit', unit: 'millisecond', unitDisplay, maximumFractionDigits: 0 }).format(value);
+}
+
 /** A calendar date (medium style) from an ISO timestamp or a Date; a value that does not parse is shown as it came. */
 export function formatDate(value: string | Date, locale: string): string {
   const date = value instanceof Date ? value : new Date(value);

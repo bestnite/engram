@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fieldText, formatBytes, formatDate, formatNumber, formatPercent, htmlToText } from '../lib/format';
+import { fieldText, formatBytes, formatDate, formatDuration, formatNumber, formatPercent, htmlToText } from '../lib/format';
 
 describe('shared formatting', () => {
   it.each([
@@ -25,6 +25,15 @@ describe('shared formatting', () => {
     [-1, '0 B'],
   ])('formatBytes(%s)', (bytes, want) => {
     expect(formatBytes(bytes, 'en')).toBe(want);
+  });
+
+  it('formatDuration picks the largest readable unit', () => {
+    expect(formatDuration(250, 'en')).toBe('250 ms');
+    expect(formatDuration(1500, 'en')).toBe('1.5 sec');
+    expect(formatDuration(600_000, 'en', 'long')).toBe('10 minutes');
+    expect(formatDuration(5_000, 'en', 'long')).toBe('5 seconds');
+    expect(formatDuration(7_200_000, 'en', 'long')).toBe('2 hours');
+    expect(formatDuration(-3, 'en')).toBe('0 ms');
   });
 
   it('formatDate formats a timestamp and passes an unparsable value through', () => {

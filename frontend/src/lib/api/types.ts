@@ -1808,15 +1808,22 @@ export interface AdminOIDCRequest {
 
 /** Jobs and language pack report (Go: internal/web/admin_jobs_api.go, admin_i18n_api.go). */
 
-/** Metadata of one job; stage null means it has not entered the training stage yet. */
+/** One row of the job history: an optimizer job or a recorded periodic task round. Times are UTC text; empty means not yet. */
 export interface AdminJob {
   id: string;
+  /** `optimize` or a periodic task kind (`retention`, `media_gc`, `reminder`, `digest`, `mail_delivery`). */
   kind: string;
+  /** `auto` (timer or wake-up), `manual` (an administrator) or `user` (an optimization request). */
+  trigger: string;
   status: string;
   stage: string | null;
   created_at: string;
   started_at: string;
   finished_at: string;
+  /** Null until the job has both started and finished. */
+  duration_ms: number | null;
+  /** Action counts of a periodic round; null for an optimizer job. */
+  summary: Record<string, number> | null;
   log_tail: string;
   error: string;
   can_cancel: boolean;
@@ -1828,6 +1835,33 @@ export interface AdminJobsResponse {
   page: number;
   pages: number;
   total: number;
+}
+
+/** The latest finished round of a periodic task. */
+export interface AdminTaskRound {
+  trigger: string;
+  started_at: string;
+  finished_at: string;
+  /** `succeeded` or `failed`. */
+  status: string;
+  error: string;
+  summary: Record<string, number>;
+}
+
+/** One periodic task in the overview; the state covers the running server process only. */
+export interface AdminTask {
+  kind: string;
+  interval_seconds: number;
+  running: boolean;
+  pending: boolean;
+  /** UTC text; empty when the worker is not started. */
+  next_run_at: string;
+  last: AdminTaskRound | null;
+}
+
+/** GET /api/v1/admin/tasks response. */
+export interface AdminTasksResponse {
+  tasks: AdminTask[];
 }
 
 /** Coverage of one language. */

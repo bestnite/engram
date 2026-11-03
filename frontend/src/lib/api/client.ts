@@ -1860,10 +1860,27 @@ export class ApiClient {
     await this.request<void>(`/api/v1/admin/oidc/identities/${encodeURIComponent(String(id))}/unlink`, { method: 'POST', body: '{}' });
   }
 
-  /** Job list (GET /api/v1/admin/jobs). */
-  async getAdminJobs(params?: { page?: number }): Promise<import('./types').AdminJobsResponse> {
-    const qs = params?.page !== undefined ? `?page=${params.page}` : '';
-    return this.request<import('./types').AdminJobsResponse>(`/api/v1/admin/jobs${qs}`);
+  /** Job history (GET /api/v1/admin/jobs), optionally narrowed to one kind. */
+  async getAdminJobs(params?: { page?: number; kind?: string }): Promise<import('./types').AdminJobsResponse> {
+    const query = new URLSearchParams();
+    if (params?.page !== undefined) query.set('page', String(params.page));
+    if (params?.kind) query.set('kind', params.kind);
+    const qs = query.toString();
+    return this.request<import('./types').AdminJobsResponse>(`/api/v1/admin/jobs${qs ? `?${qs}` : ''}`);
+  }
+
+  /** Periodic task overview (GET /api/v1/admin/tasks). */
+  async getAdminTasks(): Promise<import('./types').AdminTasksResponse> {
+    return this.request<import('./types').AdminTasksResponse>('/api/v1/admin/tasks');
+  }
+
+  /**
+   * Start one round of a periodic task now (POST /api/v1/admin/tasks/:kind/run). The server answers 202 with the
+   * task's overview item without waiting for the round.
+   */
+  async runAdminTask(kind: string): Promise<import('./types').AdminTask> {
+    if (!this.csrfToken) await this.getSession();
+    return this.request<import('./types').AdminTask>(`/api/v1/admin/tasks/${encodeURIComponent(kind)}/run`, { method: 'POST', body: '{}' });
   }
 
   /** Cancel a job (POST /api/v1/admin/jobs/:id/cancel). */

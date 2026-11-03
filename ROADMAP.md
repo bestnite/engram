@@ -3870,51 +3870,48 @@ contract violations instead of intrusion steps. Every entry says whether it was 
 
 ---
 
-### M23 — Admin jobs panel
-
-The admin jobs page (`/admin/jobs`) lists only rows of the `jobs` table, and only the parameter
-optimiser writes that table. The periodic workers — expired-row cleanup, orphaned-media cleanup,
-review reminders, the weekly digest and mail delivery — keep no history and cannot be started by
-hand, so the page shows nothing about them. Decisions taken with the maintainer on 2026-11-03:
-
-- The history records a periodic round only when the round did work (at least one count in its
-  summary is above zero), failed, or was started by hand. A round that did nothing writes no row.
-  The task overview shows every task's latest round, including rounds that did nothing.
-- Expired-row cleanup and orphaned-media cleanup become two separate tasks. A manual media cleanup
-  still keeps media orphaned for less than `retention.MediaOrphanGrace`.
-- Mail delivery is a task on the panel. The history records its rounds that sent or failed mail;
-  the per-message detail stays on the existing mail page.
-- History rows of periodic tasks are deleted 30 days after they finished. Optimiser rows are never
-  deleted by this rule.
-
-- [ ] **M23-2 Admin jobs page shows tasks and their history (frontend)** —
-  `frontend/src/lib/views/admin/AdminJobsView.svelte` becomes two sections. *Tasks*: one row per
-  task from `GET /api/v1/admin/tasks`, showing the task name and a one-line description from the
-  catalog, the interval, the latest round (time, status badge, summary counts or error), the next
-  run, and a "run now" button. The button calls `POST /api/v1/admin/tasks/:kind/run`, shows a
-  success toast on `202` and a localised toast for `already_running`, `invalid_task` and
-  `unavailable`; while any task is running or pending the section reloads every 3 seconds and
-  stops when none is. A task whose latest round did nothing reads as "nothing to do", not as an
-  empty value. *History*: the existing paged table with a kind filter (all kinds plus
-  `optimize`), and columns for kind, trigger, status, start time, duration and the result (the
-  summary counts as labelled numbers for a periodic row, the error or log tail otherwise);
-  cancelling an optimiser job keeps working. API types and client methods go in
-  `frontend/src/lib/api/types.ts` and `client.ts`. Catalog keys for task names, descriptions,
-  triggers and summary labels are appended in one block at the end of both
-  `frontend/src/lib/i18n/locales/zh-CN.ts` and `en.ts` under the `admin.jobs.` prefix, keeping
-  the two key sets identical (AGENTS.md section 6).
-  *Acceptance:* `npm --prefix frontend run check`, `npm --prefix frontend run test:client` and
-  `npm --prefix frontend run build` pass; `frontend/src/tests/admin-panel-jobs.test.ts` covers
-  the overview rendering every kind, a "nothing to do" round, a failed round showing its error,
-  the run button's request and its `202`/`409` toasts, polling that starts while a task runs and
-  stops after it finishes, the kind filter's request URL, the summary labels in the history, and
-  optimiser cancellation.
-
----
-
 ## 2. Release ledger
 
 ### 2.1 Completed since v0.2.0 (2026-10-26)
+
+#### Admin jobs panel: scheduled tasks and their history (M23-1, M23-2)
+
+**Completed 2026-11-03.** Commits `2c6e419` (M23-1) and the M23-2 commit that removes this
+milestone from the backlog.
+
+Every periodic worker has a task kind — `retention` (expired sessions, action tokens, invites,
+deck share invites, stale login fingerprints and periodic history rows), `media_gc` (orphaned
+media, now its own worker), `reminder`, `digest` and `mail_delivery` — and returns a summary of
+the actions a round performed. `worker.Registry` keeps the latest round of each worker in memory
+and records a round in the `jobs` table, already finished, when it did work, failed, or was
+started by hand; a round that did nothing writes no row. The new nullable `jobs.trigger` column
+holds `auto`, `manual` or `user`; a NULL trigger is reported as `user`, because only the
+optimiser wrote the table before. Periodic rows are never queued or running, so the optimiser's
+single-job `409` and restart recovery ignore them, and the `retention` task deletes them 30 days
+after they finished while keeping optimiser rows.
+
+`GET /api/v1/admin/tasks` returns the overview; `POST /api/v1/admin/tasks/:kind/run` (CSRF,
+audit action `job.run`) answers `202` with the task's overview item, `404 invalid_task`,
+`409 already_running` or `503 unavailable`, and a manual round applies the rules of a timer
+round. `GET /api/v1/admin/jobs` accepts `kind` (`400 invalid_kind`) and each row gains
+`trigger`, `duration_ms` and `summary` (null for optimiser rows). The jobs page shows a task
+section — description, interval, latest round with its counts or error, next run and a run
+button, reloading every 3 seconds while a task is busy — above the history with a kind filter.
+Both frontend catalogs gain one appended `admin.jobs.` block.
+
+**Verification.** `go build ./...`, `go vet ./...`, tracked-file `gofmt -l` and
+`go test ./... -count=1` passed on each merge (25 packages). The new `internal/jobs` round and
+purge tests, `internal/store` and `internal/digest` passed with `TEST_PG_DSN` set. Frontend
+`svelte-check` reported 0 errors, the node suite passed 645 tests, the client suite 618 tests,
+and the build succeeded. A local SQLite server listed all five tasks, accepted a manual
+`media_gc` run with `202`, wrote its history row and `job.run` audit row, and refused an
+unknown kind (`404`), a missing CSRF token (`403`) and a bad history filter (`400`). The page
+was not checked in a browser, because the available browser could not reach the local server.
+
+**Breaking change.** No — one additive nullable column, additive response fields, two new
+admin endpoints and one optional query parameter. Go-internal only: `worker.Config` requires a
+`Kind`, `RunOnce` returns a summary, `retention.New` returns two workers, and
+`jobs.Store.List` takes a kind.
 
 #### Global media browser and editor media picker (M22-1, M22-2)
 
