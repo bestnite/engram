@@ -3915,8 +3915,8 @@ admin endpoints and one optional query parameter. Go-internal only: `worker.Conf
 
 #### Global media browser and editor media picker (M22-1, M22-2)
 
-**Completed 2026-11-03.** Commits `e6437e7` (M22-1), `5c9ccbc` (M22-2) and `49150ac` (the
-reclamation-policy placement).
+**Completed 2026-11-03.** Commits `e6437e7` (M22-1), `5c9ccbc` (M22-2), `49150ac` (the
+reclamation-policy placement) and `75812a3` (audio/video previews in the browser).
 
 `GET /api/v1/media` keeps the readable set it had (media the caller supplied, including a
 deduplication hit, or media referenced by a live note in a deck the caller can see) and adds
@@ -3928,9 +3928,11 @@ definition split into its two halves in `internal/store/media_gc.go`; `cleanup_a
 `pending` item, so the page never promises a removal the sweep will not make and the store does
 not import the reclamation policy package, whose tests import the store.
 
-The SPA adds `/media`: a responsive grid with an image thumbnail, name, mime, size and creation
-time, state and cleanup labels, deck/class/state filters, a debounced name search and cursor
-paging, reached from the sidebar. The rich-text field toolbar gains an insert-from-library
+The SPA adds `/media`: a responsive grid with a preview for images (thumbnail), audio and video
+(a player on the same session-authorized media URL), a download link for the classes the browser
+cannot render inline, name, mime, size and creation time, state and cleanup labels, deck/class/
+state filters, a debounced name search and cursor paging, reached from the sidebar. The rich-text
+field toolbar gains an insert-from-library
 picker backed by `POST /api/v1/decks/:id/media/names` (session and CSRF, editor role, the same
 readability check as a read, idempotent canonical `<sha256>.<ext>` registration), which inserts
 an already stored medium at the saved caret as the same `<img>`/`[sound:]`/`<a>` markup an
