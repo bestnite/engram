@@ -83,6 +83,7 @@ func TestDeckScopedPageRoutesEnforceRole(t *testing.T) {
 		{"note create", func(d, _ string) string { return "/decks/" + d + "/new-note" }, "reader"},
 		{"deck settings", func(d, _ string) string { return "/decks/" + d + "/settings" }, "none"},
 		{"deck sharing", func(d, _ string) string { return "/decks/" + d + "/sharing" }, "reader"},
+		{"deck preview", func(d, _ string) string { return "/decks/" + d + "/preview" }, "none"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

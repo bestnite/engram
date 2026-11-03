@@ -23,7 +23,7 @@
   import ColumnResizeHandle from '../components/ui/ColumnResizeHandle.svelte';
   import PackageExportOptions from '../components/PackageExportOptions.svelte';
   import { DropdownMenu } from 'bits-ui';
-  import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, FileText, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, SearchX, Tags, Trash2, X } from '@lucide/svelte';
+  import { ChevronLeft, ChevronRight, CirclePause, CirclePlay, Copy, Download, Eye, FileText, MoreHorizontal, Pause, Pencil, Play, Plus, RefreshCw, Search, SearchX, Tags, Trash2, X } from '@lucide/svelte';
   import EmptyState from '../components/ui/EmptyState.svelte';
 
   interface Props {
@@ -613,6 +613,16 @@
       <Button variant="outline" size="lg" onclick={() => (showExportModal = true)} testId="deck-export-open">
         <Download class="size-4" aria-hidden="true" />
         <span>{$t('package.export.short')}</span>
+      </Button>
+      <Button
+        variant="outline"
+        size="lg"
+        href={`/decks/${encodeURIComponent(deckId)}/preview`}
+        testId="deck-preview-open"
+        label={$t('deck.preview.open')}
+      >
+        <Eye class="size-4" aria-hidden="true" />
+        <span>{$t('deck.preview.open')}</span>
       </Button>
       {#if canEditContent}
         <Button variant="outline" size="lg" href={createHref} testId="create-note-link">

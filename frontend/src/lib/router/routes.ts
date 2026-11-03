@@ -2,6 +2,7 @@ import type { RouteDefinition } from './types';
 import HomeView from '../views/HomeView.svelte';
 import DecksView from '../views/DecksView.svelte';
 import DeckDetailView from '../views/DeckDetailView.svelte';
+import DeckPreviewView from '../views/DeckPreviewView.svelte';
 import StatsView from '../views/StatsView.svelte';
 import SettingsView from '../views/SettingsView.svelte';
 import APIKeysView from '../views/APIKeysView.svelte';
@@ -81,6 +82,13 @@ export const routes: RouteDefinition[] = [
     path: '/decks/:id/note-types',
     name: 'deck-note-types',
     component: NoteTypesView as unknown as RouteDefinition['component'],
+  },
+  {
+    // Deck content preview: every card of the deck with both rendered faces. The server serves the
+    // shell after the reader-role check; the cards come from /api/v1/decks/:id/preview/cards.
+    path: '/decks/:id/preview',
+    name: 'deck-preview',
+    component: DeckPreviewView as unknown as RouteDefinition['component'],
   },
   {
     path: '/decks/:id',

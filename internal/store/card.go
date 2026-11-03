@@ -49,6 +49,87 @@ func (s *CardStore) ByNote(ctx context.Context, noteID uint64) ([]Card, error) {
 	return cards, nil
 }
 
+// Card list sort modes. They only choose the browse order; paging is always LIMIT/OFFSET.
+const (
+	// CardListSortCreated orders by card row id, so the order is stable and matches creation order.
+	CardListSortCreated = "created"
+	// CardListSortNoteType groups a deck's cards by their note type name, then by creation order.
+	CardListSortNoteType = "note_type"
+)
+
+// Paging bounds of a deck card list. The defaults and caps are applied by NormalizeCardListOptions, which
+// every caller runs first, so the JSON handler and the store never disagree about what a page is.
+const (
+	DefaultCardPageSize = 20
+	MaxCardPageSize     = 100
+	// MaxCardPage caps the page number: a huge page would make (page-1)*perPage overflow int into a
+	// negative LIMIT/OFFSET, and pages past the bound are treated as past the last page (empty result).
+	MaxCardPage = 1_000_000
+)
+
+// CardListOptions holds the browse criteria of a deck card list.
+type CardListOptions struct {
+	// Page starts at 1; values below 1 are treated as 1.
+	Page int
+	// PerPage 0 falls back to DefaultCardPageSize.
+	PerPage int
+	// Sort takes the CardListSort constants; any other value falls back to CardListSortCreated.
+	Sort string
+}
+
+// NormalizeCardListOptions applies the paging defaults and bounds in one place.
+func NormalizeCardListOptions(opts CardListOptions) CardListOptions {
+	if opts.Page < 1 {
+		opts.Page = 1
+	}
+	if opts.Page > MaxCardPage {
+		opts.Page = MaxCardPage
+	}
+	if opts.PerPage <= 0 {
+		opts.PerPage = DefaultCardPageSize
+	}
+	if opts.PerPage > MaxCardPageSize {
+		opts.PerPage = MaxCardPageSize
+	}
+	if opts.Sort != CardListSortNoteType {
+		opts.Sort = CardListSortCreated
+	}
+	return opts
+}
+
+// ListByDeck pages through one deck's visible cards and returns the page plus the total number of
+// matches. Visibility follows the store's card rule: a card of a soft-deleted note is excluded, and
+// so is a card whose own row is soft-deleted. Suspension is a per-user study state, not a visibility
+// rule, so suspended cards are listed like any other content.
+//
+// The order is stable across pages, which is what makes next/previous paging safe: by card id, or by
+// note type name and then card id. The note type join is only added for that sort, so the other order
+// never pays for it.
+func (s *CardStore) ListByDeck(ctx context.Context, deckID uint64, opts CardListOptions) ([]Card, int64, error) {
+	opts = NormalizeCardListOptions(opts)
+	build := func() *gorm.DB {
+		return s.visibleCards(ctx).Where("notes.deck_id = ?", deckID)
+	}
+	var total int64
+	if err := build().Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count cards of deck %d: %w", deckID, err)
+	}
+	query := build()
+	switch opts.Sort {
+	case CardListSortNoteType:
+		query = query.Joins("JOIN note_types ON note_types.id = notes.note_type_id").
+			Order("note_types.name ASC, cards.id ASC")
+	default:
+		query = query.Order("cards.id ASC")
+	}
+	var cards []Card
+	offset := (opts.Page - 1) * opts.PerPage
+	if err := query.Select("cards.*").Limit(opts.PerPage).Offset(offset).Find(&cards).Error; err != nil {
+		return nil, 0, fmt.Errorf("list cards of deck %d: %w", deckID, err)
+	}
+	return cards, total, nil
+}
+
 // cardSyncChange records which cards one syncCards call made visible or invisible.
 //
 // Added lists cards that did not exist as visible cards before the sync: a newly inserted row and a

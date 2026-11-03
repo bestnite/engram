@@ -372,6 +372,7 @@ func New(addr string, deps Deps) (*Server, error) {
 	s.registerCloneRoutes(router)
 	s.registerMediaRoutes(router)
 	s.registerReviewRoutes(router)
+	s.registerPreviewRoutes(router)
 	s.registerPresetRoutes(router)
 	s.registerSettingsRoutes(router)
 	// Class A transactional security mail: the pages and trigger points for password reset, email verification and email change confirmation.

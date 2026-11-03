@@ -977,6 +977,41 @@ export interface ReviewRenderResponse {
 }
 
 /**
+ * One card of GET /api/v1/decks/:id/preview/cards: both faces the review frame would show, plus
+ * its identity. The preview renders the same CardFace objects as review, so the sandboxed frame
+ * draws the answer controls, audio, TTS and image occlusion exactly as it does while studying.
+ */
+export interface DeckPreviewCard {
+  card_id: string;
+  note_id: string;
+  /** The note type name, shown as the card's grouping label and used by the `note_type` sort. */
+  note_type: string;
+  /** The template that produced the card. */
+  template: string;
+  /** The card's zero-based template ordinal; the frame writes it as the body class `card` + ordinal + 1. */
+  ordinal: number;
+  front: CardFace;
+  back: CardFace;
+  type_in: boolean;
+  answer_includes_question: boolean;
+  /** True when the front no longer renders anything; the preview shows the empty-card notice, not a blank frame. */
+  empty: boolean;
+  edit_href: string;
+}
+
+/** The two orders a deck preview can request; the server falls back to `created` for anything else. */
+export type DeckPreviewSort = 'created' | 'note_type';
+
+/** GET /api/v1/decks/:id/preview/cards response body: one LIMIT/OFFSET page of a deck's rendered cards. */
+export interface DeckPreviewCardsResponse {
+  cards: DeckPreviewCard[];
+  total: number;
+  page: number;
+  per_page: number;
+  sort: DeckPreviewSort;
+}
+
+/**
  * POST /api/v1/review/bury response body: burying writes only your own progress and creates no reviews rows;
  * cards / remaining are the queue rebuilt over the same scope.
  */

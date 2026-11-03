@@ -146,6 +146,53 @@ describe('Centralized typed same-origin REST API client', () => {
     });
   });
 
+  describe('deck content preview', () => {
+    it('requests one rendered page with the frame header and the paging query', async () => {
+      const page = {
+        cards: [
+          {
+            card_id: 'c1',
+            note_id: 'n1',
+            note_type: 'Basic',
+            template: 'Card 1',
+            ordinal: 0,
+            front: { html: '<p>front</p>', css: '.card{}', body_class: 'card', side: 'front', media_base: '/fm/t/' },
+            back: { html: '<p>back</p>', css: '.card{}', body_class: 'card', side: 'back', media_base: '/fm/t/' },
+            type_in: false,
+            answer_includes_question: true,
+            empty: false,
+            edit_href: '/decks/d1/notes/n1',
+          },
+        ],
+        total: 21,
+        page: 2,
+        per_page: 20,
+        sort: 'note_type',
+      };
+      mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(page), { status: 200 }));
+
+      await expect(
+        client.deckPreviewCards('deck /1', { page: 2, perPage: 20, sort: 'note_type' }, { frame: true }),
+      ).resolves.toEqual(page);
+
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/decks/deck%20%2F1/preview/cards?page=2&per_page=20&sort=note_type');
+      expect(init?.method ?? 'GET').toBe('GET');
+      expect(init?.credentials).toBe('same-origin');
+      expect(new Headers(init?.headers).get('X-Engram-Frame')).toBe('1');
+    });
+
+    it('omits the query and the frame header when nothing is asked', async () => {
+      mockFetch.mockResolvedValueOnce(
+        new Response(JSON.stringify({ cards: [], total: 0, page: 1, per_page: 20, sort: 'created' }), { status: 200 }),
+      );
+      await client.deckPreviewCards('d1');
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe('/api/v1/decks/d1/preview/cards');
+      expect(new Headers(init?.headers ?? {}).get('X-Engram-Frame')).toBeNull();
+    });
+  });
+
   describe('SPA media library list', () => {
     it('loads the readable media library over same-origin JSON and keeps no bearer token', async () => {
       const sha = 'a'.repeat(64);

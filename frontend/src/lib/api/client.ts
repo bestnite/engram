@@ -36,6 +36,8 @@ import {
   type RevealAnswerResponse,
   type ReviewRenderResponse,
   type ReviewQueueResponse,
+  type DeckPreviewCardsResponse,
+  type DeckPreviewSort,
   type ReviewUndoResponse,
   type ApiErrorEnvelope,
   type UserProfile,
@@ -1105,6 +1107,27 @@ export class ApiClient {
       headers: frameHeaders(options),
       body: JSON.stringify(input),
     });
+  }
+
+  /**
+   * Fetch one page of a deck's rendered cards for the content preview page
+   * (GET /api/v1/decks/:id/preview/cards). The faces go into the sandboxed card frame, so the
+   * request asks for frame-ready HTML and relative media names.
+   */
+  async deckPreviewCards(
+    deckId: string,
+    input: { page?: number; perPage?: number; sort?: DeckPreviewSort } = {},
+    options?: CardFaceRequestOptions,
+  ): Promise<DeckPreviewCardsResponse> {
+    const params = new URLSearchParams();
+    if (input.page !== undefined) params.set('page', String(input.page));
+    if (input.perPage !== undefined) params.set('per_page', String(input.perPage));
+    if (input.sort) params.set('sort', input.sort);
+    const query = params.toString();
+    return this.request<DeckPreviewCardsResponse>(
+      `/api/v1/decks/${encodeURIComponent(deckId)}/preview/cards${query ? `?${query}` : ''}`,
+      { headers: frameHeaders(options) },
+    );
   }
 
   /**

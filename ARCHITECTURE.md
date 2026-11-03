@@ -376,6 +376,12 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
   administrator-written HTML and CSS are only ever rendered inside a sandbox. The SPA's remaining
   HTML sinks are the per-item grading breakdown and the option labels `RadioGroup` renders, and
   `frontend/src/tests/html-sink-allowlist.test.ts` lists each of them with its reason.
+- `frontend/src/lib/views/DeckPreviewView.svelte` is the deck content preview: one card at a time,
+  front above back, with a previous/next cursor and an order switch. Its cards come from the
+  session endpoint `GET /api/v1/decks/:id/preview/cards` (reader role, `LIMIT/OFFSET` pages), which
+  renders both faces with the review renderer (`renderCard` and `faces` in `internal/web/review.go`),
+  so the view shows the same answer controls, audio, TTS and image occlusion as review without a
+  second renderer, and card HTML still reaches the page only through `CardFrame.svelte`.
 - `frontend/src/lib/format.ts` is the only place numbers, percentages, byte counts, dates and raw field
   values become text; components pass the current locale.
 - UI text comes from `frontend/src/lib/i18n/locales/{zh-CN,en}.ts`. Text produced by the
