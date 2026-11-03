@@ -152,6 +152,7 @@ describe('deck preview page', () => {
     await mountPreview(21);
     expect(shownPosition()).toBe('1');
     expect(text('preview-position')).toBe('/ 21');
+    expect(text('preview-nav-position')).toBe('1 / 21');
     expect(el('preview-prev')?.hasAttribute('disabled')).toBe(true);
     expect(el('preview-next')?.hasAttribute('disabled')).toBe(false);
     // One frame for the front face and one for the back face of the same card.
@@ -167,6 +168,7 @@ describe('deck preview page', () => {
       await flush();
     }
     expect(shownPosition()).toBe('21');
+    expect(text('preview-nav-position')).toBe('21 / 21');
     expect(el('preview-next')?.hasAttribute('disabled')).toBe(true);
     expect(el('preview-prev')?.hasAttribute('disabled')).toBe(false);
     expect(apiClient.deckPreviewCards).toHaveBeenCalledTimes(2);

@@ -14,7 +14,7 @@
   import { toast } from '../components/ui/toast';
   import CardFrame, { type CardFrameKey } from '../components/CardFrame.svelte';
   import { REVIEW_BACK_CSS, REVIEW_FRONT_CSS, faceStyle } from '../card-frame';
-  import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Layers } from '@lucide/svelte';
+  import { ChevronLeft, ChevronRight, Layers, SkipBack, SkipForward } from '@lucide/svelte';
 
   /**
    * Deck content preview: every card of one deck with both rendered faces, front above back, and a
@@ -229,7 +229,9 @@
 
 <svelte:window onkeydown={onWindowKey} />
 
-<Page>
+<!-- The navigation bar carries its own vertical padding, so the page's default bottom padding would only add an empty band
+     under it once the reader scrolls to the end. -->
+<Page class={card ? 'pb-0' : ''}>
   <PageHeader
     title={$t('deck.preview.title')}
     back={{ href: `/decks/${encodeURIComponent(deckId)}`, label: $t('deck.preview.back'), testId: 'preview-back-to-deck' }}
@@ -336,55 +338,75 @@
         />
       </section>
     </div>
-    <div class="mt-6 space-y-2">
-      <div class="flex items-center justify-between gap-3">
-        <Button
-          variant="outline"
-          size="lg"
-          disabled={atStart}
-          onclick={() => void move(-1)}
-          testId="preview-prev"
-          label={$t('deck.preview.previous')}
-        >
-          <ChevronLeft class="size-4" aria-hidden="true" />
-          <span>{$t('deck.preview.previous')}</span>
-        </Button>
-        <Button
-          variant="outline"
-          size="lg"
-          disabled={atEnd}
-          onclick={() => void move(1)}
-          testId="preview-next"
-          label={$t('deck.preview.next')}
-        >
-          <span>{$t('deck.preview.next')}</span>
-          <ChevronRight class="size-4" aria-hidden="true" />
-        </Button>
-      </div>
-      <div class="flex items-center justify-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={backNoteBlocked}
-          onclick={() => void stepNote(false)}
-          testId="preview-note-prev"
-          label={$t('deck.preview.note.previous')}
-        >
-          <ChevronsLeft class="size-4" aria-hidden="true" />
-          <span>{$t('deck.preview.note.previous')}</span>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={forwardNoteBlocked}
-          onclick={() => void stepNote(true)}
-          testId="preview-note-next"
-          label={$t('deck.preview.note.next')}
-        >
-          <span>{$t('deck.preview.note.next')}</span>
-          <ChevronsRight class="size-4" aria-hidden="true" />
-        </Button>
-      </div>
+    <!-- One navigation bar pinned to the viewport's bottom edge, so a tall card never pushes it out of reach. The card
+         steps sit inside, around the position, as the main action; the note steps sit outside and lighter. Below sm every
+         step keeps only its icon, because four labelled buttons do not fit a phone's width in one row; the name stays on
+         the button for screen readers. The title carries the keyboard shortcut, which the bar has no room to print. -->
+    <div
+      class="sticky bottom-0 z-10 -mx-4 mt-6 flex items-center justify-center gap-1.5 border-t border-border bg-background/90 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md sm:-mx-8 sm:gap-2 sm:px-8"
+      data-testid="preview-nav"
+    >
+      <Button
+        variant="ghost"
+        size="lg"
+        class="px-2.5 sm:px-4"
+        disabled={backNoteBlocked}
+        onclick={() => void stepNote(false)}
+        testId="preview-note-prev"
+        label={$t('deck.preview.note.previous')}
+        title={$t('deck.preview.note.previous.title')}
+      >
+        <SkipBack class="size-4" aria-hidden="true" />
+        <span class="hidden sm:inline">{$t('deck.preview.note.previous')}</span>
+      </Button>
+      <Button
+        variant="outline"
+        size="lg"
+        class="px-2.5 sm:px-4"
+        disabled={atStart}
+        onclick={() => void move(-1)}
+        testId="preview-prev"
+        label={$t('deck.preview.previous')}
+        title={$t('deck.preview.previous.title')}
+      >
+        <ChevronLeft class="size-4" aria-hidden="true" />
+        <span class="hidden sm:inline">{$t('deck.preview.previous')}</span>
+      </Button>
+      <span
+        class="min-w-16 px-1 text-center text-sm text-muted-foreground tabular-nums sm:min-w-20"
+        data-testid="preview-nav-position"
+      >
+        {$t('deck.preview.position', {
+          current: formatNumber(position + 1, $localeStore),
+          total: formatNumber(total, $localeStore),
+        })}
+      </span>
+      <Button
+        variant="outline"
+        size="lg"
+        class="px-2.5 sm:px-4"
+        disabled={atEnd}
+        onclick={() => void move(1)}
+        testId="preview-next"
+        label={$t('deck.preview.next')}
+        title={$t('deck.preview.next.title')}
+      >
+        <span class="hidden sm:inline">{$t('deck.preview.next')}</span>
+        <ChevronRight class="size-4" aria-hidden="true" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="lg"
+        class="px-2.5 sm:px-4"
+        disabled={forwardNoteBlocked}
+        onclick={() => void stepNote(true)}
+        testId="preview-note-next"
+        label={$t('deck.preview.note.next')}
+        title={$t('deck.preview.note.next.title')}
+      >
+        <span class="hidden sm:inline">{$t('deck.preview.note.next')}</span>
+        <SkipForward class="size-4" aria-hidden="true" />
+      </Button>
     </div>
   {/if}
 </Page>

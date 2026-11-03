@@ -2024,4 +2024,11 @@ export const zhCN: LocaleCatalog = {
   'admin.jobs.notice.invalid_task': '该任务不存在或未启动。',
   'admin.jobs.notice.run_unavailable': '定时任务当前不可用。',
   'admin.jobs.notice.run_failed': '无法开始运行，请重试。',
+
+  // ---- deck preview navigation bar: position and shortcut titles ----
+  'deck.preview.position': '{current} / {total}',
+  'deck.preview.previous.title': '上一张（←）',
+  'deck.preview.next.title': '下一张（→）',
+  'deck.preview.note.previous.title': '上一条笔记（Shift + ←）',
+  'deck.preview.note.next.title': '下一条笔记（Shift + →）',
 };

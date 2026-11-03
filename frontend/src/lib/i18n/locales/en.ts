@@ -2025,4 +2025,11 @@ export const en: LocaleCatalog = {
   'admin.jobs.notice.invalid_task': 'That task does not exist or is not running.',
   'admin.jobs.notice.run_unavailable': 'Scheduled tasks are not available right now.',
   'admin.jobs.notice.run_failed': 'The task could not be started. Try again.',
+
+  // ---- deck preview navigation bar: position and shortcut titles ----
+  'deck.preview.position': '{current} / {total}',
+  'deck.preview.previous.title': 'Previous card (←)',
+  'deck.preview.next.title': 'Next card (→)',
+  'deck.preview.note.previous.title': 'Previous note (Shift + ←)',
+  'deck.preview.note.next.title': 'Next note (Shift + →)',
 };
