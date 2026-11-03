@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-
-	"git.nite07.com/nite/engram/internal/retention"
 )
 
 // This file is the read side of the global media browser: one page of the readable set together with its deck-scoped
@@ -136,9 +134,6 @@ type MediaLibraryEntry struct {
 	Decks []MediaLibraryDeck
 	// State is one of the four MediaState* values.
 	State string
-	// CleanupAt is when a sweep may remove the bytes; it is set only for a pending medium and comes from the server's
-	// retention grace, never from a client constant.
-	CleanupAt *time.Time
 }
 
 // mediaLibraryRow is one scanned page row: the media columns plus the three reference flags derived from the collector's
@@ -171,7 +166,9 @@ type mediaLibraryDeckRow struct {
 // meaning as ListReadableMedia's, so a filter and a cursor compose without gaps or duplicates.
 //
 // The page costs one keyset query plus two bounded batch lookups (names, decks) for the page's shas, never one query per
-// item. The result includes each item's reference state; CleanupAt is set only for a pending item.
+// item. The result includes each item's reference state and, for a pending item, the orphan stamp the transport turns
+// into the cleanup time with retention.MediaOrphanGrace; the store does not import the policy package, so it stays out
+// of the reclamation worker's test dependency graph.
 func ListMediaLibrary(ctx context.Context, db *gorm.DB, userID uint64, limit int, cursor string, filter MediaLibraryFilter) ([]MediaLibraryEntry, string, error) {
 	if db == nil || userID == 0 {
 		return nil, "", nil
@@ -284,10 +281,6 @@ func ListMediaLibrary(ctx context.Context, db *gorm.DB, userID uint64, limit int
 		}
 		if entry.Decks == nil {
 			entry.Decks = []MediaLibraryDeck{}
-		}
-		if entry.State == MediaStatePending && row.OrphanedAt != nil {
-			cleanupAt := row.OrphanedAt.Add(retention.MediaOrphanGrace)
-			entry.CleanupAt = &cleanupAt
 		}
 		entries = append(entries, entry)
 	}

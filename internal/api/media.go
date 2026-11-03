@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"git.nite07.com/nite/engram/internal/retention"
 	"git.nite07.com/nite/engram/internal/store"
 )
 
@@ -62,7 +63,9 @@ type MediaFilter struct {
 // ListReadableMedia returns one page of media the user can read (REST `GET /api/v1/media`).
 //
 // The business rules live in the store (readability predicate, reference state and keyset paging); this only does
-// parameter validation, error mapping and shape conversion:
+// parameter validation, error mapping and shape conversion. The cleanup time is derived here, from the orphan stamp the
+// store returns plus retention.MediaOrphanGrace: the store does not import the reclamation policy package, because the
+// policy package's tests depend on the store and that edge would close an import cycle.
 //   - limit must fall in [1, MaxMediaPageSize], otherwise 400 (never silently clamp to the maximum - the caller would think
 //     it got the requested number of rows);
 //   - an unknown class or state is 400 with the same stable code, instead of silently returning everything or nothing;
@@ -101,6 +104,12 @@ func (a *API) ListReadableMedia(ctx context.Context, userID uint64, limit int, c
 		for _, deck := range row.Decks {
 			decks = append(decks, MediaDeck{ID: deck.PublicID, Name: deck.Name})
 		}
+		// The store reports the orphan stamp, not a cleanup time; only a pending medium has one to report.
+		var cleanupAt *time.Time
+		if row.State == store.MediaStatePending && row.OrphanedAt != nil {
+			at := row.OrphanedAt.Add(retention.MediaOrphanGrace)
+			cleanupAt = &at
+		}
 		items = append(items, MediaItem{
 			Sha256: row.Sha256,
 			Mime:   row.Mime,
@@ -114,7 +123,7 @@ func (a *API) ListReadableMedia(ctx context.Context, userID uint64, limit int, c
 			Names:     row.Names,
 			Decks:     decks,
 			State:     row.State,
-			CleanupAt: row.CleanupAt,
+			CleanupAt: cleanupAt,
 		})
 	}
 	return MediaPage{Items: items, NextCursor: next}, nil

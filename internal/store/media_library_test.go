@@ -243,13 +243,15 @@ func TestMediaLibraryStatesLabelsAndPrivacy(t *testing.T) {
 				}
 			}
 
-			// cleanup_at is non-null only for pending items and comes from the server's grace, not a client constant.
+			// The store reports the orphan stamp; the transport turns it into cleanup_at. It is non-null only for a
+			// pending item, and the store never subtracts the grace itself (that policy lives in internal/retention and
+			// is applied by internal/api, so the store stays out of the retention test dependency graph).
 			for _, tc := range cases {
 				entry := libraryEntryBySha(t, entries, tc.sha)
 				switch tc.state {
 				case MediaStatePending:
-					if entry.CleanupAt == nil {
-						t.Fatalf("pending media %s has no cleanup_at", tc.sha)
+					if entry.OrphanedAt == nil {
+						t.Fatalf("pending media %s has no orphan stamp", tc.sha)
 					}
 					stamp := now
 					if tc.sha == f.shaPendingInside {
@@ -258,13 +260,14 @@ func TestMediaLibraryStatesLabelsAndPrivacy(t *testing.T) {
 					if tc.sha == f.shaPendingPast {
 						stamp = now.Add(-retention.MediaOrphanGrace - time.Hour)
 					}
-					want := stamp.Add(retention.MediaOrphanGrace)
-					if !entry.CleanupAt.Equal(want) {
-						t.Errorf("media %s cleanup_at = %s, want %s", tc.sha, entry.CleanupAt, want)
+					if !entry.OrphanedAt.Equal(stamp) {
+						t.Errorf("media %s orphan stamp = %s, want %s", tc.sha, entry.OrphanedAt, stamp)
 					}
 				default:
-					if entry.CleanupAt != nil {
-						t.Errorf("media %s state %q reports cleanup_at %s, want null", tc.sha, tc.state, entry.CleanupAt)
+					// A restorable medium may still carry a stale stamp until the next sweep clears it (its state, not
+					// the stamp, decides); every other non-pending state must have none.
+					if tc.state != MediaStateRestorable && entry.OrphanedAt != nil {
+						t.Errorf("media %s state %q reports orphan stamp %s, want null", tc.sha, tc.state, entry.OrphanedAt)
 					}
 				}
 			}
@@ -488,8 +491,8 @@ func TestMediaLibraryStateMatchesCollector(t *testing.T) {
 			if state := libraryEntryBySha(t, remaining, f.shaUnreferenced).State; state != MediaStatePending {
 				t.Errorf("newly stamped medium state = %q, want %q", state, MediaStatePending)
 			}
-			if entry := libraryEntryBySha(t, remaining, f.shaRestorable); entry.State != MediaStateRestorable || entry.CleanupAt != nil {
-				t.Errorf("restorable medium after the sweep = state %q cleanup %v, want restorable and null", entry.State, entry.CleanupAt)
+			if entry := libraryEntryBySha(t, remaining, f.shaRestorable); entry.State != MediaStateRestorable || entry.OrphanedAt != nil {
+				t.Errorf("restorable medium after the sweep = state %q orphan stamp %v, want restorable and no stamp", entry.State, entry.OrphanedAt)
 			}
 		})
 	}

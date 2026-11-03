@@ -83,7 +83,7 @@ Imports between internal packages, as reported by `go list`:
 cmd/engram → web, api, mcp, auth, config, digest, i18n, jobs, mail, media, reminder, retention, store
 web        → answer, api, mcp, auth, config, i18n, jobs, mail, media, mediatype, notetype, reminder, reviewday, schedule, store
 mcp        → api, store
-api        → answer, auth, media, notetype, reviewday, schedule, store, urlfetch
+api        → answer, auth, media, notetype, retention, reviewday, schedule, store, urlfetch
 digest     → i18n, mail, reminder, reviewday, schedule, store, worker
 reminder   → i18n, mail, reviewday, schedule, store, worker
 jobs       → schedule, store
@@ -92,7 +92,7 @@ mailstyle  → texmath
 schedule   → reviewday, store
 auth       → store
 media      → mediatype, store
-store      → anki, answer, mailstyle, mediatype, notetype, retention, reviewday, texmath
+store      → anki, answer, mailstyle, mediatype, notetype, reviewday, texmath
 answer     → notetype
 retention  → worker
 anki, config, i18n, mediatype, notetype, reviewday, texmath, urlfetch, worker, pgtest → (no internal imports)
