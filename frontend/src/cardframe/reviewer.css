@@ -77,9 +77,28 @@ body.night_mode {
   color: var(--foreground);
 }
 
+/*
+ * Answer controls sit on their own lines below the question text, so each needs its own space above and below: the
+ * card's line-height spaces lines of text, not a text line from a box. The space is in em so it follows the card's
+ * type size. A box is capped at a comfortable reading width and centred, because the stock note types centre their
+ * text and a box that spans the whole frame dwarfs a one-word answer; a note type rule for the same selector loads after
+ * this file and so overrides the width, the centring or the spacing.
+ */
+.answer-input,
+.answer-inputs,
+.answer-choices {
+  margin-block: 0.75em;
+  margin-inline: auto;
+}
+
+/* The face's last control sits at the frame's bottom edge, where the page around the frame already spaces it. */
+#qa > :is(.answer-input, .answer-inputs, .answer-choices):last-child {
+  margin-bottom: 0;
+}
+
 .answer-input {
   display: block;
-  width: 100%;
+  width: min(100%, 28rem);
   min-height: 2.75rem;
   padding: 0.5rem 0.75rem;
   font: inherit;
@@ -96,6 +115,7 @@ body.night_mode {
 }
 
 textarea.answer-input {
+  width: min(100%, 40rem);
   min-height: 6rem;
   resize: vertical;
 }
@@ -103,10 +123,13 @@ textarea.answer-input {
 /*
  * The type-in input a template without an answer spec draws. Its font and size come from the note type's field config as
  * an inline style, because an input does not inherit the card's typography; only the box and its states are styled here.
+ * It shares the answer controls' width and centring but adds no vertical space: Anki's templates already place it after
+ * an empty line (`<br><br>`), and a margin on top of that would double the gap.
  */
 #typeans {
   display: block;
-  width: 100%;
+  width: min(100%, 28rem);
+  margin-inline: auto;
   min-height: 2.75rem;
   padding: 0.5rem 0.75rem;
   color: inherit;
@@ -121,16 +144,24 @@ textarea.answer-input {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
 }
 
+/* The boxes of one group are spaced by the group's gap alone; their own block margins would add to it. */
 .answer-inputs {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  width: min(100%, 28rem);
+}
+
+.answer-inputs > .answer-input {
+  width: 100%;
+  margin-block: 0;
 }
 
 .answer-choices {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  width: min(100%, 32rem);
 }
 
 .answer-choice {
