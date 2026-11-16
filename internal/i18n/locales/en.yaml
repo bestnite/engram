@@ -255,7 +255,7 @@ It renders with sample variables; real recipients see their own data."
 - id: mail.study.reminder.title
   translation: "Time to study"
 - id: mail.study.reminder.body
-  translation: "You have {{.new_available}} new cards to learn and {{.review_available}} cards to review on {{.site}}. Review cards include learning and relearning steps."
+  translation: "You have {{.new_available}} new cards to learn and {{.review_available}} cards to review on {{.site}}."
 - id: mail.study.reminder.link_label
   translation: "Start studying"
 - id: mail.study.digest.new

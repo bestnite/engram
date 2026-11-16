@@ -255,7 +255,7 @@
 - id: mail.study.reminder.title
   translation: "该学习了"
 - id: mail.study.reminder.body
-  translation: "你在 {{.site}} 上有 {{.new_available}} 张卡片待新学，{{.review_available}} 张卡片待复习。复习包含学习步骤和重学。"
+  translation: "你在 {{.site}} 上有 {{.new_available}} 张卡片待新学，{{.review_available}} 张卡片待复习。"
 - id: mail.study.reminder.link_label
   translation: "开始学习"
 - id: mail.study.digest.new
