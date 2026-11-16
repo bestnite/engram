@@ -186,12 +186,12 @@ var defaultSpecs = map[Type]defaultSpec{
 		},
 	},
 	TypeReviewReminder: {
-		subjectID: "mail.reminder.subject",
+		subjectID: "mail.study.reminder.subject",
 		body: func(tf TfFunc, ph Vars, has func(string) bool) string {
 			return htmlJoin(
-				htmlHeading(tf, "mail.reminder.title"),
-				htmlPara(tf, "mail.reminder.body", anyMap(ph)),
-				htmlCTA(tf, "mail.reminder.link_label", "url"),
+				htmlHeading(tf, "mail.study.reminder.title"),
+				htmlPara(tf, "mail.study.reminder.body", anyMap(ph)),
+				htmlCTA(tf, "mail.study.reminder.link_label", "url"),
 			)
 		},
 	},
@@ -204,11 +204,12 @@ var defaultSpecs = map[Type]defaultSpec{
 				htmlHeading(tf, "mail.digest.title"),
 				htmlPara(tf, "mail.digest.intro", nil),
 				htmlList(
-					tf("mail.digest.reviewed", map[string]any{"count": ph["count"]}),
+					tf("mail.study.digest.new", map[string]any{"count": ph["new_count"]}),
+					tf("mail.digest.reviewed", map[string]any{"count": ph["review_count"]}),
 					tf("mail.digest.pass_rate", map[string]any{"rate": ph["rate"]}),
 					tf("mail.digest.streak", map[string]any{"days": ph["days"]}),
-					tf("mail.digest.new_cards", map[string]any{"count": ph["new_cards"]}),
-					tf("mail.digest.due", map[string]any{"count": ph["due"]}),
+					tf("mail.study.digest.new_available", map[string]any{"count": ph["new_available"]}),
+					tf("mail.digest.due", map[string]any{"count": ph["review_available"]}),
 				),
 				htmlCTA(tf, "mail.digest.link_label", "url"),
 			)

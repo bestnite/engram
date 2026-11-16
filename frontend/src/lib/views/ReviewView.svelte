@@ -41,7 +41,7 @@
     /** Whether the self-graded card is already flipped (flipped by reveal() in production; the initial value overrides it in tests). */
     initialRevealed?: boolean;
     /** The undo record of the most recent submission (written by submit in production; the initial value overrides it in tests). */
-    initialLastUndo?: { cardId: string; version: number; rating: number } | null;
+    initialLastUndo?: { cardId: string; version: number; rating: number; wasNew?: boolean } | null;
   }
 
   let {
@@ -81,7 +81,9 @@
   // svelte-ignore state_referenced_locally
   let revealed = $state(initialRevealed);
   let submitting = $state(false);
-  let done = $state(0);
+  let newDone = $state(0);
+  let reviewDone = $state(0);
+  const done = $derived(newDone + reviewDone);
   // svelte-ignore state_referenced_locally
   let remaining = $state(initialCards.length);
   // The header splits the due count into new and review cards. Every queue-bearing response carries the full remaining queue
@@ -105,7 +107,7 @@
   // After a self-graded submission the screen flips to the next card at once with no result panel, so undo can only rely on this record; graded cards use the same record,
   // and the panel button and the header entry share it, avoiding two sets of state.
   // svelte-ignore state_referenced_locally
-  let lastUndo = $state<{ cardId: string; version: number; rating: number } | null>(initialLastUndo);
+  let lastUndo = $state<{ cardId: string; version: number; rating: number; wasNew?: boolean } | null>(initialLastUndo);
   // svelte-ignore state_referenced_locally
   let revealedAnswerHTML = $state(initialRevealedAnswerHTML);
   let revealedAVTags = $state<AVTag[]>([]);
@@ -429,6 +431,7 @@
     submitting = true;
     error = null;
     try {
+      const wasNew = current.state === 'new';
       const elapsed = Math.max(0, Date.now() - startedAt);
       const ratedCardId = current.card_id;
       const written = essay && essayText.trim() !== '' ? essayText : undefined;
@@ -444,9 +447,10 @@
       cards = response.cards.slice(0, 1);
       remaining = response.remaining;
       newRemaining = countNew(response.cards);
-      done += 1;
+      if (wasNew) newDone += 1;
+      else reviewDone += 1;
       // The screen has already flipped to the next card after self-grading: remember this submission so the header's "undo the last rating" becomes available.
-      lastUndo = { cardId: ratedCardId, version: response.version, rating };
+      lastUndo = { cardId: ratedCardId, version: response.version, rating, wasNew };
       revealed = false;
       startedAt = Date.now();
     } catch (cause) {
@@ -483,6 +487,8 @@
   /** Submit the raw answer and let the server grade it; the result panel keeps the answered card, and the card only changes when the user presses "continue". */
   async function submitGraded(): Promise<void> {
     if (!current || submitting) return;
+    const ratedCard = current;
+    const wasNew = ratedCard.state === 'new';
     const answerValue = currentAnswer();
     if (answerValue === undefined) {
       needAnswer = true;
@@ -509,8 +515,9 @@
       newRemaining = countNew(response.cards);
       feedback = response.feedback ?? null;
       feedbackMediaBase = response.feedback?.back?.media_base ?? backFace?.media_base ?? '';
-      lastUndo = { cardId: current.card_id, version: response.version, rating: response.feedback?.rating ?? 0 };
-      done += 1;
+      lastUndo = { cardId: ratedCard.card_id, version: response.version, rating: response.feedback?.rating ?? 0, wasNew };
+      if (wasNew) newDone += 1;
+      else reviewDone += 1;
       // The answer face goes into the frame; only the per-item breakdown stays here, so it is what gets typeset and enhanced.
       await tick();
       await typeset([feedbackSection]);
@@ -553,6 +560,8 @@
   /** Give up answering after the answer was revealed: the server records a self-grade as Again without grading. */
   async function giveUp(): Promise<void> {
     if (!current || submitting) return;
+    const ratedCard = current;
+    const wasNew = ratedCard.state === 'new';
     submitting = true;
     error = null;
     try {
@@ -568,8 +577,9 @@
       remaining = response.remaining;
       newRemaining = countNew(response.cards);
       // Giving up records a self-grade log as Again; the undo entry is available there as well.
-      lastUndo = { cardId: current.card_id, version: response.version, rating: 1 };
-      done += 1;
+      lastUndo = { cardId: ratedCard.card_id, version: response.version, rating: 1, wasNew };
+      if (wasNew) newDone += 1;
+      else reviewDone += 1;
       gradedRevealed = false;
       revealedAnswerHTML = '';
       resetAnswerState();
@@ -681,7 +691,8 @@
       if (restored) cards = [restored];
       remaining = response.remaining;
       newRemaining = countNew(response.cards);
-      done = Math.max(0, done - 1);
+      if (target.wasNew) newDone = Math.max(0, newDone - 1);
+      else reviewDone = Math.max(0, reviewDone - 1);
       lastUndo = null;
       feedback = null;
       pendingCards = [];
@@ -940,8 +951,8 @@
           <strong class="font-mono text-foreground text-sm">{reviewRemaining}</strong>
         </span>
         <span class="w-1 h-3 border-r border-input"></span>
-        <span class="text-muted-foreground">
-          {$t('review.done', { count: done })}
+        <span class="text-muted-foreground" data-testid="review-session-done">
+          {$t('review.done', { new: newDone, review: reviewDone })}
         </span>
       </div>
       <!-- Undo the last rating: a self-graded submission has no result panel, so the entry lives here; it is hidden while the graded card's panel is open, avoiding two entries. -->

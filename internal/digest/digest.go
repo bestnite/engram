@@ -216,12 +216,16 @@ func (w *Worker) maybeSend(ctx context.Context, c store.DigestCandidate, now tim
 	switch w.mailer.Send(ctx, lc, mail.Mail{
 		Type: mail.TypeStudyDigest, To: c.Email, UserID: c.ID,
 		Vars: mail.Vars{
-			"count":     strconv.FormatInt(stats.Reviewed, 10),
-			"rate":      store.FormatPercent(stats.PassRate),
-			"days":      strconv.Itoa(stats.StreakCurrent),
-			"new_cards": strconv.FormatInt(stats.NewCards, 10),
-			"due":       strconv.FormatInt(stats.DueNow, 10),
-			"url":       w.mailer.URL("", w.statsPath),
+			"count":            strconv.FormatInt(stats.Reviewed, 10), // Legacy total rating count.
+			"new_count":        strconv.FormatInt(stats.NewCards, 10),
+			"review_count":     strconv.FormatInt(stats.ReviewCount, 10),
+			"new_available":    strconv.FormatInt(stats.NewAvailable, 10),
+			"review_available": strconv.FormatInt(stats.DueNow, 10),
+			"rate":             store.FormatPercent(stats.PassRate),
+			"days":             strconv.Itoa(stats.StreakCurrent),
+			"new_cards":        strconv.FormatInt(stats.NewCards, 10),
+			"due":              strconv.FormatInt(stats.DueNow, 10),
+			"url":              w.mailer.URL("", w.statsPath),
 		},
 	}) {
 	case mail.SendQueued:
@@ -242,8 +246,12 @@ type DigestStats struct {
 	// WindowFrom / WindowTo are the review-count window (review_day inclusive), matching the stats page's "last 7 days".
 	WindowFrom string
 	WindowTo   string
-	// Reviewed is the number of reviews within the window (= ReviewVolume.Last7Days).
+	// Reviewed preserves the legacy total rating count within the window (= ReviewVolume.Last7Days).
 	Reviewed int64
+	// ReviewCount counts non-New ratings, including learning and relearning steps.
+	ReviewCount int64
+	// NewAvailable counts new cards available now after queue limits and scope.
+	NewAvailable int64
 	// PassRate is the pass rate / retention rate on the same basis as the stats page (= RetentionByStability.Rate, 0–1).
 	PassRate float64
 	// StreakCurrent is the unbroken streak of review days up to "today" (= Streak.Current).
@@ -278,16 +286,21 @@ func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time
 	if err != nil {
 		return DigestStats{}, err
 	}
-	due, err := schedule.NewQueueBuilder(db, store.NewDeckStore(db), nil).DueNow(ctx, userID, schedule.QueueOptions{
+	counts, err := schedule.NewQueueBuilder(db, store.NewDeckStore(db), nil).DeckCounts(ctx, userID, nil, schedule.QueueOptions{
 		Now: now, Location: loc, DayCutoffHour: &cutoffHour,
 	})
 	if err != nil {
 		return DigestStats{}, err
 	}
 
-	var newCards int64
+	var newCards, reviewCount, newAvailable, due int64
+	for _, count := range counts {
+		newAvailable += int64(count.New)
+		due += int64(count.Review)
+	}
 	for _, p := range curve {
 		newCards += p.New
+		reviewCount += p.Review
 	}
 	return DigestStats{
 		WindowFrom:    from,
@@ -296,6 +309,8 @@ func ComputeStats(ctx context.Context, db *gorm.DB, userID uint64, now time.Time
 		PassRate:      retention.Rate,
 		StreakCurrent: streak.Current,
 		NewCards:      newCards,
+		ReviewCount:   reviewCount,
+		NewAvailable:  newAvailable,
 		DueNow:        due,
 	}, nil
 }

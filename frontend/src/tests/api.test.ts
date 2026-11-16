@@ -961,6 +961,9 @@ describe('Centralized typed same-origin REST API client', () => {
         notes: 1,
         cards: 1,
         due: 1,
+        new_today: 1,
+        new_total: 1,
+        new_available: 3,
         reviews_today: 2,
         reviews_total: 2,
         retention: 0.5,
@@ -988,6 +991,9 @@ describe('Centralized typed same-origin REST API client', () => {
       expect(result).toEqual(goFixture);
       expect(result.decks).toBe(1);
       expect(result.due).toBe(1);
+      expect(result.new_today).toBe(1);
+      expect(result.new_total).toBe(1);
+      expect(result.new_available).toBe(3);
       expect(result.reviews_today).toBe(2);
       expect(result.reviews_total).toBe(2);
       expect(result.retention).toBe(0.5);
@@ -999,6 +1005,9 @@ describe('Centralized typed same-origin REST API client', () => {
         notes: 0,
         cards: 0,
         due: 0,
+        new_today: 0,
+        new_total: 0,
+        new_available: 0,
         reviews_today: 0,
         reviews_total: 0,
         retention: 0,

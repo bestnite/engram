@@ -103,8 +103,8 @@ func TestReminderLogIsUniquePerUserDay(t *testing.T) {
 	}
 }
 
-// TestReminderCandidatesOnlyReturnsDueActiveUsers verifies the candidates hold only active users with due cards,
-// excluding suspended cards, cards not yet due, buried new cards and disabled accounts. It runs on both drivers: the candidate query's GROUP BY + JOIN is a hotspot for cross-database differences.
+// TestReminderCandidatesOnlyReturnsDueActiveUsers covers the portable candidate prefilter.
+// Due reviews and new cards qualify; exact new availability is checked by the worker.
 func TestReminderCandidatesOnlyReturnsDueActiveUsers(t *testing.T) {
 	for driver, db := range testDatabases(t) {
 		t.Run(driver, func(t *testing.T) {
@@ -119,7 +119,7 @@ func TestReminderCandidatesOnlyReturnsDueActiveUsers(t *testing.T) {
 			due := seedReminderUser(t, db, "due", "due@example.com", past, false)
 			seedReminderUser(t, db, "suspended", "suspended@example.com", past, true)
 			seedReminderUser(t, db, "future", "future@example.com", future, false)
-			// A buried new card keeps state=new with a due_at that has passed; the queue treats it as a new card, so no reminder.
+			// A New card with a past burial time is available for study.
 			buried := seedReminderUser(t, db, "buried", "buried@example.com", past, false)
 			if err := db.Model(&CardState{}).Where("user_id = ?", buried).Update("state", "new").Error; err != nil {
 				t.Fatalf("mark state new: %v", err)
@@ -130,12 +130,34 @@ func TestReminderCandidatesOnlyReturnsDueActiveUsers(t *testing.T) {
 				t.Fatalf("disable user: %v", err)
 			}
 
+			fresh := seedReminderUser(t, db, "fresh", "fresh@example.com", future, false)
+			if err := db.Where("user_id = ?", fresh).Delete(&CardState{}).Error; err != nil {
+				t.Fatal(err)
+			}
+			member := User{Username: "member", Email: "member@example.com", Status: StatusActive, Role: RoleUser}
+			if err := db.Create(&member).Error; err != nil {
+				t.Fatal(err)
+			}
+			var deck Deck
+			if err := db.Where("owner_user_id = ?", fresh).Take(&deck).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Create(&DeckGrant{DeckID: deck.ID, UserID: member.ID, Role: "reader"}).Error; err != nil {
+				t.Fatal(err)
+			}
+
 			got, err := ReminderCandidates(ctx, db, now)
 			if err != nil {
 				t.Fatalf("ReminderCandidates: %v", err)
 			}
-			if len(got) != 1 {
-				t.Fatalf("ReminderCandidates returned %d candidates, want 1", len(got))
+			if len(got) != 4 {
+				t.Fatalf("ReminderCandidates returned %d candidates, want 4", len(got))
+			}
+			if got[2].ID != fresh || got[3].ID != member.ID {
+				t.Errorf("missing state-free owner/member candidates: %+v", got)
+			}
+			if got[1].ID != buried {
+				t.Errorf("new-card candidate id = %d, want %d", got[1].ID, buried)
 			}
 			if got[0].ID != due {
 				t.Errorf("candidate id = %d, want %d", got[0].ID, due)

@@ -140,8 +140,8 @@ func TestStatsVisibleContentButFullReviewHistory(t *testing.T) {
 	if visible.Decks != 1 || visible.Notes != 1 || visible.Cards != 1 || visible.Due != 1 {
 		t.Fatalf("Stats (granted) content = %+v, want decks=1 notes=1 cards=1 due=1", visible)
 	}
-	if visible.ReviewsTotal != 3 || visible.ReviewsToday != 3 {
-		t.Fatalf("Stats (granted) reviews = %+v, want total=3 today=3", visible)
+	if visible.ReviewsTotal != 2 || visible.ReviewsToday != 2 || visible.NewToday != 1 || visible.NewTotal != 1 {
+		t.Fatalf("Stats (granted) reviews = %+v, want reviews total=2 today=2, new total=1 today=1", visible)
 	}
 	if visible.Retention != 0.5 || visible.RetentionTotal != 2 || visible.RetentionPassed != 1 {
 		t.Fatalf("Stats (granted) retention = %v (%d/%d), want 0.5 (1/2)", visible.Retention, visible.RetentionPassed, visible.RetentionTotal)
@@ -158,8 +158,8 @@ func TestStatsVisibleContentButFullReviewHistory(t *testing.T) {
 	if revoked.Decks != 0 || revoked.Notes != 0 || revoked.Cards != 0 || revoked.Due != 0 {
 		t.Fatalf("Stats (revoked) content = %+v, want all content counts 0", revoked)
 	}
-	if revoked.ReviewsTotal != 3 || revoked.ReviewsToday != 3 {
-		t.Fatalf("Stats (revoked) reviews = %+v, want total=3 today=3 (history preserved)", revoked)
+	if revoked.ReviewsTotal != 2 || revoked.ReviewsToday != 2 || revoked.NewToday != 1 || revoked.NewTotal != 1 {
+		t.Fatalf("Stats (revoked) reviews = %+v, want reviews total=2 today=2, new total=1 today=1 (history preserved)", revoked)
 	}
 	if revoked.Retention != 0.5 || revoked.RetentionTotal != 2 {
 		t.Fatalf("Stats (revoked) retention = %v over %d, want 0.5 over 2 (history preserved)", revoked.Retention, revoked.RetentionTotal)

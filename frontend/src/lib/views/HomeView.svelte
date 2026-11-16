@@ -55,7 +55,7 @@
    * API contract and metric definitions (Gap notes):
    * 1. GET /api/v1/decks only provides deck configuration (new_per_day, reviews_per_day); the per-deck count of cards still available today
    *    comes from GET /api/v1/decks/queue-counts (getDeckQueueCounts), which is supplementary and may fail without failing the page;
-   * 2. GET /api/v1/stats/summary provides the whole-library aggregates due, reviews_today, reviews_total, retention (plus its denominator
+   * 2. GET /api/v1/stats/summary provides the whole-library aggregates due, new_available, new_today, new_total, reviews_today, reviews_total, retention (plus its denominator
    *    retention_total / numerator retention_passed), decks, notes, cards and the consecutive check-in streak (streak).
    * This view strictly follows the principle of data truthfulness: it only shows the metrics the API actually provides, and never fabricates
    * or invents today's remaining card count or streak on the frontend.
@@ -113,11 +113,11 @@
     <div data-testid="home-data">
       <PageHeader title={$t('home.title')}>
         {#snippet actions()}
-          {#if summary && summary.due > 0}
+          {#if summary && summary.due + summary.new_available > 0}
             <Button href="/review" testId="home-start-review" variant="primary" size="lg">
               <Play class="size-4" aria-hidden="true" />
               <span>{$t('home.start_review')}</span>
-              <span class="rounded bg-primary-foreground/15 px-1.5 text-xs tabular-nums">{formatNumber(summary.due, $localeStore)}</span>
+              <span class="rounded bg-primary-foreground/15 px-1.5 text-xs tabular-nums">{formatNumber(summary.due + summary.new_available, $localeStore)}</span>
             </Button>
           {:else}
             <Badge variant="success" class="px-2.5 py-1"><CircleCheck class="size-3.5" aria-hidden="true" />{$t('home.all_caught_up')}</Badge>
@@ -125,8 +125,22 @@
         {/snippet}
       </PageHeader>
 
-      <!-- Aggregate metrics: one horizontal metric band, the four items separated only by vertical bars, no longer four cards. -->
-      <dl data-testid="home-summary" class="grid grid-cols-2 border-y border-border sm:grid-cols-4">
+      <!-- New cards and non-new ratings remain separate in the queue and completed counts. -->
+      <dl data-testid="home-summary" class="grid grid-cols-2 border-y border-border sm:grid-cols-3 lg:grid-cols-6">
+        <div class="border-border px-4 py-4 text-center max-sm:border-b max-sm:border-r sm:border-r">
+          <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
+            {$t('home.new_available')}
+            <HelpTip testId="home-new-available-help" label={$t('home.new_available')} text={$t('help.home.new_available')} />
+          </dt>
+          <dd data-testid="home-new-available" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.new_available, $localeStore)}</dd>
+        </div>
+        <div class="border-border px-4 py-4 text-center max-sm:border-b sm:border-r">
+          <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
+            {$t('home.new_today')}
+            <HelpTip testId="home-new-today-help" label={$t('home.new_today')} text={$t('help.home.new_today')} />
+          </dt>
+          <dd data-testid="home-new-today" class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{formatNumber(summary.new_today, $localeStore)}</dd>
+        </div>
         <div class="border-border px-4 py-4 text-center max-sm:border-b max-sm:border-r sm:border-r">
           <dt class="flex items-center justify-center gap-0.5 text-xs text-muted-foreground">
             <CalendarClock class="mr-0.5 size-3.5" aria-hidden="true" />

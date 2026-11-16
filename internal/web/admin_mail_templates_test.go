@@ -14,6 +14,21 @@ import (
 // This file is the acceptance test for the admin panel's "mail templates": cutover, reads, save validation,
 // delete fallback, preview's side-effect freeness, and the negative case of a missing CSRF.
 
+// TestStudyMailPreviewCounts keeps the admin preview's two categories independently visible.
+func TestStudyMailPreviewCounts(t *testing.T) {
+	for _, typ := range []mail.Type{mail.TypeReviewReminder, mail.TypeStudyDigest} {
+		vars := sampleVars(typ)
+		for name, want := range map[string]string{"new_available": "12", "review_available": "8"} {
+			if vars[name] != want {
+				t.Errorf("%s preview %s = %q, want %q", typ, name, vars[name], want)
+			}
+		}
+		if typ == mail.TypeStudyDigest && (vars["new_count"] != "15" || vars["review_count"] != "27") {
+			t.Errorf("digest preview categories = %v", vars)
+		}
+	}
+}
+
 // TestAdminMailTemplatePagesCutover asserts the pages go through the SPA shell and non-admins get 403.
 func TestAdminMailTemplatePagesCutover(t *testing.T) {
 	srv, db, _, cookies, _ := newNotesServer(t)

@@ -72,17 +72,23 @@ var mailVars = map[Type][]VarSpec{
 		{Name: "expires", Required: false, NoteKey: "admin.mail.var.expires"},
 	},
 	TypeReviewReminder: {
+		{Name: "new_available", Required: false, NoteKey: "admin.mail.var.new_available"},
+		{Name: "review_available", Required: false, NoteKey: "admin.mail.var.review_available"},
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
 		{Name: "count", Required: false, NoteKey: "admin.mail.var.due_count"},
 		{Name: "url", Required: true, NoteKey: "admin.mail.var.review_url"},
 		{Name: "unsubscribe_url", Required: false, NoteKey: "admin.mail.var.unsubscribe_url"},
 	},
 	TypeStudyDigest: {
+		{Name: "new_available", Required: false, NoteKey: "admin.mail.var.new_available"},
+		{Name: "review_available", Required: false, NoteKey: "admin.mail.var.review_available"},
 		{Name: "site", Required: false, NoteKey: "admin.mail.var.site"},
-		{Name: "count", Required: false, NoteKey: "admin.mail.var.reviewed_count"},
+		{Name: "count", Required: false, NoteKey: "admin.mail.var.study_count"},
+		{Name: "new_count", Required: false, NoteKey: "admin.mail.var.new_count"},
+		{Name: "review_count", Required: false, NoteKey: "admin.mail.var.review_count"},
 		{Name: "rate", Required: false, NoteKey: "admin.mail.var.pass_rate"},
 		{Name: "days", Required: false, NoteKey: "admin.mail.var.streak_days"},
-		// The digest has six statistics lines, and every variable the built-in body uses must be listed
+		// Every variable the built-in body uses must be listed
 		// here -- "used but not registered" is judged a typo by Validate, and the pre-filled default could
 		// not be saved back.
 		{Name: "new_cards", Required: false, NoteKey: "admin.mail.var.new_cards"},

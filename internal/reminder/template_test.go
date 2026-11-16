@@ -102,7 +102,7 @@ func TestReminderWithoutTemplateRendersBuiltinHTML(t *testing.T) {
 	if !strings.Contains(msg.HTMLBody, "<!DOCTYPE html>") {
 		t.Errorf("html body = %q, want the fixed HTML shell", msg.HTMLBody)
 	}
-	if !strings.Contains(msg.HTMLBody, "Time to review") || !strings.Contains(msg.HTMLBody, "/review") {
+	if !strings.Contains(msg.HTMLBody, "Time to study") || !strings.Contains(msg.HTMLBody, "/review") {
 		t.Errorf("html body = %q, want the built-in body with the review link", msg.HTMLBody)
 	}
 	if !strings.Contains(msg.TextBody, "/review") {

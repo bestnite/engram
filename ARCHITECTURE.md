@@ -67,7 +67,7 @@ There is no top-level `test/` directory. Integration tests live beside the code 
 | `internal/i18n` | Server-side translation catalogs (`internal/i18n/locales/*.yaml`), request language resolution, and the localiser placed in the request context. |
 | `internal/mail` | Mail templates (built-in HTML defaults and admin overrides share one renderer), the fixed inline-styled HTML shell, the outbox, SMTP transport, and the delivery worker with backoff retry. `Mailer` is the single send path: it checks SMTP and the recipient's preference, resolves the site name and template, adds the footer and the unsubscribe link, and enqueues. The web layer builds the process's one `Mailer` and the reminder and digest workers receive it from `cmd/engram`. Rendering is four steps: placeholders become salted tokens, tokens become HTML-escaped values, the plain-text part comes from `notetype.PlainText`, and the fixed shell is applied. Nothing is sanitised and no Markdown is parsed at send time: administrators write HTML/CSS, and the built-in bodies carry the inline styles. |
 | `internal/mailstyle` | Leaf package holding the inline style map of a mail body and the one Markdown-to-HTML conversion used by the store's template migration. The built-in bodies and the migration read the same styles, so a converted custom template keeps the delivered look. |
-| `internal/reminder` | Worker that emails users who have due cards. |
+| `internal/reminder` | Worker that emails users who have new or due review cards available in their study queue. |
 | `internal/digest` | Worker that sends the weekly digest email. |
 | `internal/retention` | Two workers: one deletes expired sessions, used or expired action tokens, expired invites, deck share invites, old login fingerprints and periodic history rows older than 30 days; the other reclaims orphaned media. |
 | `internal/worker` | The shared start, stop, and tick loop used by the periodic workers, the summary and in-memory status of each worker's latest round, the manual trigger, and the `Registry` the admin jobs page reads. |
@@ -296,10 +296,15 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
   which are new (no state row, or state new; a buried new card is still new, never due). The queue,
   the deck list counts, deck progress, the due forecast, the health page and the reminder prefilter
   all build on it.
-- **Due now.** `QueueBuilder.DueNow` sums the review half of `DeckCounts` over the active decks. It is
-  the only "due" number shown to a user outside a deck: the home summary (REST and MCP), the review
-  reminder mail and the weekly digest. The stats page's per-deck table shows `DeckCounts` too, so every
-  page agrees with what `/review` serves.
+- **Available study counts.** The home summary (REST and MCP), daily reminder and weekly digest sum
+  the New and Review halves of `QueueBuilder.DeckCounts` over active decks separately. New counts
+  cards available for first learning; Review counts due learning, relearning and review cards.
+  `QueueBuilder.DueNow` remains the Review-only sum. Both halves respect the current daily allowances.
+  The stats page's per-deck table also reads `DeckCounts`, so these surfaces agree with `/review`.
+- **Completed study counts.** A rating with `state_before = 0` counts as new learning. Every other
+  rating counts as review, including learning and relearning steps. The home summary exposes disjoint
+  daily and historical counts. Statistics that retain combined ratings are labeled as study totals,
+  not review totals. The review log and FSRS state transitions remain unchanged.
 - **Queue.** The queue builder selects due reviews and new cards for one or more decks and a tag
   filter, for the user's current review day. With no deck named it covers the user's active decks
   (`DeckStore.ActiveIDs`), so a paused deck only enters the queue when it is named.

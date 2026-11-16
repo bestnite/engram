@@ -14,7 +14,7 @@ import (
 )
 
 // TestStatsSummaryUsesTrueRetention pins down the home summary's retention convention: the same true retention rate as the stats page,
-// counting only due reviews (state_before=Review), while a new card's first review and learning/relearning steps only count into reviews_total.
+// counting only due reviews (state_before=Review). First ratings count as new learning; learning/relearning steps count as reviews.
 // A user who has only been through learning steps has retention_total 0, and the client shows "no data yet" from that.
 func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 	type review struct{ rating, stateBefore int }
@@ -22,6 +22,7 @@ func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 		name        string
 		reviews     []review
 		wantReviews int64
+		wantNew     int64
 		wantTotal   int64
 		wantPassed  int64
 		wantRate    float64
@@ -32,12 +33,12 @@ func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 				{3, 0}, {1, 1}, {1, 3}, // New / Learning(Again) / Relearning(Again)
 				{3, 2}, {4, 2}, {1, 2}, {2, 2}, // Review: Good / Easy / Again / Hard
 			},
-			wantReviews: 7, wantTotal: 4, wantPassed: 3, wantRate: 0.75,
+			wantReviews: 6, wantNew: 1, wantTotal: 4, wantPassed: 3, wantRate: 0.75,
 		},
 		{
 			name:        "learning steps only give no retention data",
 			reviews:     []review{{3, 0}, {3, 1}, {4, 3}},
-			wantReviews: 3, wantTotal: 0, wantPassed: 0, wantRate: 0,
+			wantReviews: 2, wantNew: 1, wantTotal: 0, wantPassed: 0, wantRate: 0,
 		},
 		{
 			name:        "no reviews at all",
@@ -69,6 +70,9 @@ func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Stats() error = %v", err)
 			}
+			if got.NewToday != tc.wantNew || got.NewTotal != tc.wantNew || got.ReviewsToday != tc.wantReviews {
+				t.Errorf("Stats() categories = %+v, want new %d reviews %d", got, tc.wantNew, tc.wantReviews)
+			}
 			if got.ReviewsTotal != tc.wantReviews || got.RetentionTotal != tc.wantTotal ||
 				got.RetentionPassed != tc.wantPassed || got.Retention != tc.wantRate {
 				t.Errorf("Stats() = %+v, want reviews_total %d retention %d/%d = %v",
@@ -84,6 +88,10 @@ func TestStatsSummaryUsesTrueRetention(t *testing.T) {
 			var raw map[string]any
 			if err := json.Unmarshal(body, &raw); err != nil {
 				t.Fatalf("decode summary: %v", err)
+			}
+			if raw["new_today"] != float64(tc.wantNew) || raw["new_total"] != float64(tc.wantNew) ||
+				raw["reviews_today"] != float64(tc.wantReviews) || raw["reviews_total"] != float64(tc.wantReviews) {
+				t.Errorf("GET /stats/summary study categories = %v, want new %d reviews %d", raw, tc.wantNew, tc.wantReviews)
 			}
 			if raw["retention_total"] != float64(tc.wantTotal) || raw["retention_passed"] != float64(tc.wantPassed) {
 				t.Errorf("GET /stats/summary = %v, want retention_total %d retention_passed %d", raw, tc.wantTotal, tc.wantPassed)

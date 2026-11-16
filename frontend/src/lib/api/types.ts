@@ -731,6 +731,12 @@ export interface DecksZipExportRequest {
 export interface StatsSummary {
   decks: number;
   due: number;
+  /** First ratings of new cards, using the account review day. */
+  new_today: number;
+  new_total: number;
+  /** New cards available in the active-deck queue after daily limits. */
+  new_available: number;
+  /** All non-new ratings, including learning and relearning. */
   reviews_today: number;
   reviews_total: number;
   /** True retention: among due reviews, the share not graded Again (same rule as the stats page). */

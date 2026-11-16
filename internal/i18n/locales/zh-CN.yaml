@@ -91,7 +91,7 @@
 - id: mail.prefs.type.invite
   translation: "注册邀请"
 - id: mail.prefs.type.review_reminder
-  translation: "复习到期提醒"
+  translation: "每日学习提醒"
 - id: mail.prefs.type.study_digest
   translation: "学习摘要"
 - id: mail.prefs.type.optimize_done
@@ -248,3 +248,17 @@
   translation: "字段名以 engram_ 开头，已按普通字段导入。"
 - id: m20.metadata_field_locked
   translation: "engram_meta 字段为内置字段，不能重命名或删除。"
+
+# Separate first New ratings from subsequent study ratings.
+- id: mail.study.reminder.subject
+  translation: "该学习了 - {{.site}}"
+- id: mail.study.reminder.title
+  translation: "该学习了"
+- id: mail.study.reminder.body
+  translation: "你在 {{.site}} 上有 {{.new_available}} 张卡片待新学，{{.review_available}} 张卡片待复习。复习包含学习步骤和重学。"
+- id: mail.study.reminder.link_label
+  translation: "开始学习"
+- id: mail.study.digest.new
+  translation: "**新学次数**：{{.count}}"
+- id: mail.study.digest.new_available
+  translation: "**待新学**：{{.count}}"

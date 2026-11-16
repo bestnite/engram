@@ -106,15 +106,15 @@ func TestDefaultTemplateRendersWithRealValues(t *testing.T) {
 }
 
 // TestDefaultTemplateDigestMapsEachCount pins down the value mapping of the digest's statistics list:
-// "reviewed / new cards / due" all write `{{.count}}` in the language pack but read three different
-// variables.
+// New ratings, review ratings and the two available counts use separate variables.
 func TestDefaultTemplateDigestMapsEachCount(t *testing.T) {
 	typ := TypeStudyDigest
 	_, body, _ := DefaultTemplate(typ, VariantDefault, echoTF(), PlaceholderVars(typ))
 	for _, want := range []string{
-		"mail.digest.reviewed(count={{count}})",
-		"mail.digest.new_cards(count={{new_cards}})",
-		"mail.digest.due(count={{due}})",
+		"mail.study.digest.new(count={{new_count}})",
+		"mail.digest.reviewed(count={{review_count}})",
+		"mail.study.digest.new_available(count={{new_available}})",
+		"mail.digest.due(count={{review_available}})",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("digest built-in body is missing %q:\n%s", want, body)
@@ -177,6 +177,14 @@ func sampleVars(t Type) Vars {
 			out[name] = "https://example.com/unsubscribe"
 		case "expires":
 			out[name] = "2026-01-01 00:00 UTC"
+		case "new_available":
+			out[name] = "12"
+		case "review_available":
+			out[name] = "8"
+		case "new_count":
+			out[name] = "15"
+		case "review_count":
+			out[name] = "27"
 		case "role":
 			out[name] = "readable"
 		default:

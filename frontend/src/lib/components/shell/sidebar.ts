@@ -33,13 +33,13 @@ export function setSidebarCollapsed(collapsed: boolean): void {
 export interface SidebarDeck {
   id: string;
   name: string;
-  /** How many cards can still be reviewed today (new cards + due reviews); null when the queue counts are unavailable. */
+  /** How many cards can still be studied today (new cards + due reviews); null when the queue counts are unavailable. */
   due: number | null;
 }
 
 export interface SidebarDecksState {
   decks: SidebarDeck[];
-  /** Total due count today across all decks; null when the queue counts are unavailable, and the UI then shows no number. */
+  /** Total available study count today across all decks; null when the queue counts are unavailable, and the UI then shows no number. */
   totalDue: number | null;
 }
 

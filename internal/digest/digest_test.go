@@ -167,7 +167,7 @@ func newWorker(t *testing.T, db *gorm.DB, enq mail.Enqueuer, now func() time.Tim
 		t.Fatalf("NewActionTokenService: %v", err)
 	}
 	mailer := mail.NewMailer(mail.MailerDeps{
-		DB: db, Outbox: enq, Tokens: tokens, BaseURL: "http://localhost:3012", Locales: translator.SupportedCodes(),
+		DB: db, Outbox: enq, Tokens: tokens, Templates: mail.StoreLookup(store.NewMailTemplateStore(db), nil), BaseURL: "http://localhost:3012", Locales: translator.SupportedCodes(),
 	})
 	w, err := New(Deps{DB: db, Mailer: mailer, Translator: translator, Now: now})
 	if err != nil {
@@ -382,7 +382,7 @@ func TestDigestNumbersMatchStatsPage(t *testing.T) {
 		t.Fatalf("enqueued %d, want 1", enq.count())
 	}
 	body := enq.last().TextBody
-	if !strings.Contains(body, "Reviews: 4") {
+	if !strings.Contains(body, "Reviews: 2") {
 		t.Errorf("body missing reviewed count, got:\n%s", body)
 	}
 	if !strings.Contains(body, "Current streak: 3 days") {

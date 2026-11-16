@@ -54,6 +54,9 @@ describe('HomeView component response states and truthful rendering', () => {
       notes: 0,
       cards: 0,
       due: 0,
+      new_today: 0,
+      new_total: 0,
+      new_available: 0,
       reviews_today: 0,
       reviews_total: 0,
       retention: 0,
@@ -71,7 +74,7 @@ describe('HomeView component response states and truthful rendering', () => {
     expect(html).toContain('data-testid="home-data"');
     expect(html).toContain('data-testid="home-empty-decks"');
     expect(html).toContain('暂无卡组');
-    expect(html).toContain('当前没有到期卡片');
+    expect(html).toContain('当前没有待新学或待复习卡片');
     expect(html).not.toContain('data-testid="home-start-review"');
   });
 
@@ -83,8 +86,11 @@ describe('HomeView component response states and truthful rendering', () => {
       notes: 1,
       cards: 1,
       due: 1,
-      reviews_today: 3,
-      reviews_total: 3,
+      new_today: 1,
+      new_total: 1,
+      new_available: 0,
+      reviews_today: 2,
+      reviews_total: 2,
       retention: 0.5,
       retention_total: 2,
       retention_passed: 1,
@@ -115,7 +121,7 @@ describe('HomeView component response states and truthful rendering', () => {
     expect(html).toContain('data-testid="home-due-count"');
     expect(html).toMatch(/data-testid="home-due-count"[^>]*>\s*1\s*</);
     expect(html).toContain('data-testid="home-reviews-today"');
-    expect(html).toMatch(/data-testid="home-reviews-today"[^>]*>\s*3\s*</);
+    expect(html).toMatch(/data-testid="home-reviews-today"[^>]*>\s*2\s*</);
     expect(html).toContain('data-testid="home-retention"');
     expect(html).toMatch(/data-testid="home-retention"[^>]*>\s*50\.0%\s*</);
     expect(html).toContain('data-testid="home-decks-count"');
@@ -125,7 +131,7 @@ describe('HomeView component response states and truthful rendering', () => {
     expect(html).toContain('data-testid="home-start-review"');
     expect(html).toContain('href="/review"');
     // The count sits in its own numeric badge inside the button.
-    expect(html).toMatch(/data-testid="home-start-review"[^>]*>[\s\S]*?开始复习[\s\S]*?<span[^>]*>\s*1\s*<\/span>/);
+    expect(html).toMatch(/data-testid="home-start-review"[^>]*>[\s\S]*?开始学习[\s\S]*?<span[^>]*>\s*1\s*<\/span>/);
 
     // Verify the deck list and XSS-safe escaping
     expect(html).toContain('data-testid="home-decks-list"');
@@ -144,6 +150,9 @@ describe('HomeView component response states and truthful rendering', () => {
       notes: 1,
       cards: 1,
       due: 0,
+      new_today: 0,
+      new_total: 0,
+      new_available: 0,
       reviews_today: 3,
       reviews_total: 3,
       retention: 0,
@@ -158,12 +167,37 @@ describe('HomeView component response states and truthful rendering', () => {
     expect(html).not.toMatch(/data-testid="home-retention"[^>]*>\s*0\.0%/);
   });
 
+  it.each([
+    ['zh-CN', '待新学', '今日新学', '开始学习'],
+    ['en', 'New available', 'New today', 'Start studying'],
+  ] as const)('shows new-only work and distinct daily counts in %s', (locale, available, today, action) => {
+    setLocale(locale);
+    const summary: StatsSummary = {
+      decks: 1, notes: 3, cards: 3, due: 0,
+      new_available: 3, new_today: 2, new_total: 4,
+      reviews_today: 5, reviews_total: 8,
+      retention: 0, retention_total: 0, retention_passed: 0,
+    };
+    const { html } = render(HomeView, { props: { initialLoading: false, initialSummary: summary } });
+    expect(html).toContain(available);
+    expect(html).toContain(today);
+    expect(html).toContain(action);
+    expect(html).toMatch(/data-testid="home-new-available"[^>]*>\s*3\s*</);
+    expect(html).toMatch(/data-testid="home-new-today"[^>]*>\s*2\s*</);
+    expect(html).toMatch(/data-testid="home-reviews-today"[^>]*>\s*5\s*</);
+    expect(html).toMatch(/data-testid="home-due-count"[^>]*>\s*0\s*</);
+    expect(html).toContain('data-testid="home-start-review"');
+  });
+
   it('puts a help button with a localized label next to each explained metric', () => {
     const summary: StatsSummary = {
       decks: 1,
       notes: 1,
       cards: 1,
       due: 0,
+      new_today: 0,
+      new_total: 0,
+      new_available: 0,
       reviews_today: 0,
       reviews_total: 0,
       retention: 0,
@@ -294,7 +328,7 @@ describe('StatsView component response states and truthful rendering', () => {
     // The tag dimension's definition must be written on the page: it only counts tags on
     // already-reviewed cards, and without saying so it looks like a duplicate of the deck dimension (a heavily used tag with no reviews never appears, and users conclude the stats only know deck names).
     expect(html).toContain('data-testid="stats-tag-scope"');
-    expect(html).toContain('只列出近 30 天内复习过的卡片上的标签');
+    expect(html).toContain('只列出近 30 天内学习过的卡片上的标签');
 
     // Average time invested is total / timed count, i.e. per attempt rather than per day.
     expect(html).toContain('平均每次');
@@ -364,7 +398,7 @@ describe('StatsView component response states and truthful rendering', () => {
       expect(html).toContain(`data-testid="${id}"`);
     }
     expect(html).toContain('aria-label="记忆强度是什么意思？"');
-    expect(html).toContain('aria-label="今日复习是什么意思？"');
+    expect(html).toContain('aria-label="待复习是什么意思？"');
   });
 
   it('localizes detail labels into English when the locale is en', () => {
@@ -373,11 +407,11 @@ describe('StatsView component response states and truthful rendering', () => {
       props: { initialLoading: false, initialDetail: detailFixture },
     });
 
-    expect(html).toContain('Review volume');
+    expect(html).toContain('Total study ratings');
     expect(html).toContain('Due forecast');
     expect(html).toContain('Grading method');
-    expect(html).toContain('Only tags on cards reviewed in the last 30 days');
-    expect(html).toContain('Average per review');
+    expect(html).toContain('Only tags on cards studied in the last 30 days');
+    expect(html).toContain('Average per study rating');
     expect(html).toContain('aria-label="What does “Retention” mean?"');
     expect(html).not.toContain('复习量');
   });

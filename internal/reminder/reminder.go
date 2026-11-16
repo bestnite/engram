@@ -18,7 +18,7 @@
 // and stuffing reminders into jobs would block parameter optimisation and vice versa. A reminder is not a long task, just a periodic "due scan",
 // so it gets its own lightweight worker, started with serve and gracefully stopped on signal.
 //
-// "Event-driven" here lands as: every round scans the event "are there due cards", and sends only if there are; no due cards, no send.
+// "Event-driven" here lands as: every round scans the event "are there study cards", and sends only if new or review cards are available.
 package reminder
 
 import (
@@ -155,7 +155,7 @@ func New(deps Deps) (*Reminder, error) {
 	return r, nil
 }
 
-// RunOnce runs one due scan: for every active user with due cards, decide whether a reminder should be sent.
+// RunOnce runs one due scan: for every active user with study cards, decide whether a reminder should be sent.
 // Exported so tests and operators can trigger it manually; the summary's queued counts the reminders enqueued in this round. The returned
 // error only reflects query/enqueue-level failures, a single user's failure is logged and the remaining users are still processed.
 func (r *Reminder) RunOnce(ctx context.Context) (worker.Summary, error) {
@@ -195,7 +195,7 @@ func (r *Reminder) RunOnce(ctx context.Context) (worker.Summary, error) {
 //     back-to-back double send when "the chosen hour precedes the day cutoff" (the daily ledger counts by review day and cannot stop it).
 //  3. Daily cap: if the user's local review day already had a send, do not send again.
 //  4. Preference gate: class C defaults to off, and the user turning it off takes effect immediately (preferences are read fresh every round, not cached).
-//  5. Something to review: the number of cards the user's queue serves now (schedule.QueueBuilder.DueNow) must be above zero;
+//  5. Something to study: at least one new or review card must be available in DeckCounts;
 //     an empty queue skips the round without touching the ledger.
 //
 // The ledger is written only after Enqueue succeeds, so a failed enqueue does not consume that day's quota. The boolean reports
@@ -236,18 +236,28 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 
 	// The candidate list is only a prefilter; the number announced is what /review serves. A queue emptied by daily caps,
 	// paused decks or revoked grants sends nothing and leaves the ledger untouched, so a later round can still send.
-	due, err := r.queue.DueNow(ctx, c.ID, schedule.QueueOptions{Now: now, Timezone: c.Timezone, DayCutoffHour: c.DayCutoffHour})
+	counts, err := r.queue.DeckCounts(ctx, c.ID, nil, schedule.QueueOptions{Now: now, Timezone: c.Timezone, DayCutoffHour: c.DayCutoffHour})
 	if err != nil {
 		return false, err
 	}
-	if due == 0 {
+	var fresh, due int64
+	for _, count := range counts {
+		fresh += int64(count.New)
+		due += int64(count.Review)
+	}
+	if fresh == 0 && due == 0 {
 		return false, nil
 	}
 
 	lc := r.translator.Localizer(r.translator.Pick("", c.Locale, ""))
 	switch r.mailer.Send(ctx, lc, mail.Mail{
 		Type: mail.TypeReviewReminder, To: c.Email, UserID: c.ID,
-		Vars: mail.Vars{"count": strconv.FormatInt(due, 10), "url": r.mailer.URL("", r.reviewPath)},
+		Vars: mail.Vars{
+			"count":            strconv.FormatInt(due, 10), // Preserve the legacy review-only count.
+			"new_available":    strconv.FormatInt(fresh, 10),
+			"review_available": strconv.FormatInt(due, 10),
+			"url":              r.mailer.URL("", r.reviewPath),
+		},
 	}) {
 	case mail.SendQueued:
 	case mail.SendOptedOut, mail.SendNotConfigured:
@@ -258,7 +268,7 @@ func (r *Reminder) maybeSend(ctx context.Context, c store.ReminderCandidate, now
 	if err := store.RecordReminderSent(ctx, r.db, c.ID, day, now); err != nil {
 		return true, err
 	}
-	r.logger.Info("review reminder enqueued", "user_id", c.ID, "review_day", day, "due_count", due)
+	r.logger.Info("review reminder enqueued", "user_id", c.ID, "review_day", day, "due_count", due, "new_available", fresh)
 	return true, nil
 }
 

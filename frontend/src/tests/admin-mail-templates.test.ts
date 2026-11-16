@@ -110,7 +110,7 @@ describe('mail template admin route and catalog keys', () => {
     'status', 'streak_days', 'time', 'unsubscribe_url', 'username', 'verify_url', 'what',
     // Two of the summary's six stat rows were originally only passed to the render function and never made it into the variable table; prefilling the defaults needs them,
     // so they were added to internal/mail/vars.go — pinned here to follow.
-    'new_cards',
+    'new_cards', 'new_available', 'review_available', 'new_count', 'review_count', 'study_count',
   ];
 
   it('defines every variable note key in both catalogs', () => {

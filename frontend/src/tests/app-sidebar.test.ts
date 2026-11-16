@@ -99,7 +99,7 @@ describe('AppSidebar', () => {
     expect(html).toMatch(/href="\/decks\/d1"[^>]*aria-current="page"/);
     // When the current deck is already listed below, the parent "decks" item is no longer highlighted at the same time.
     expect(html).not.toMatch(/href="\/decks"[^>]*aria-current="page"/);
-    expect(html).toContain('36 张待复习');
+    expect(html).toContain('36 张待学习');
   });
 
   it('hides labels and deck shortcuts when collapsed, keeping accessible names', () => {

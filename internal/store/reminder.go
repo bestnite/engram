@@ -45,17 +45,26 @@ type ReminderCandidate struct {
 	ReminderHour *int `gorm:"column:reminder_hour" json:"reminder_hour,omitempty"`
 }
 
-// ReminderCandidates returns the active users with an email address who have at least one due card (WhereDue on a live,
-// unsuspended card). It is a cheap prefilter over all users: daily caps, paused decks and deck visibility are per-user
-// rules, so the worker asks schedule.QueueBuilder.DueNow for the exact number before sending and skips a user whose
-// queue turns out to be empty.
+// ReminderCandidates prefilters active mail recipients with due cards or visible live cards that might be new.
+// The content query does not require card_states: a user may have never studied any card. Exact new/review availability,
+// including suspension, burial, daily limits and pauses, is decided by QueueBuilder.DeckCounts before sending.
 func ReminderCandidates(ctx context.Context, db *gorm.DB, now time.Time) ([]ReminderCandidate, error) {
 	due := WhereDue(LiveCardStates(db), now.UTC()).Select("1").Where("cs.user_id = u.id")
+	// Correlate ownership and grants to the candidate, never to another user's progress.
+	content := db.Table("cards AS candidate_cards").Select("1").
+		Joins("JOIN notes AS candidate_notes ON candidate_notes.id = candidate_cards.note_id AND candidate_notes.deleted_at IS NULL").
+		Joins("JOIN decks AS candidate_decks ON candidate_decks.id = candidate_notes.deck_id").
+		Joins("LEFT JOIN card_states AS cs ON cs.card_id = candidate_cards.id AND cs.user_id = u.id").
+		Where("candidate_cards.deleted_at IS NULL AND cs.suspended_at IS NULL").
+		Where("cs.card_id IS NULL OR cs.state = ?", CardStateNew).
+		Where("candidate_decks.owner_user_id = u.id OR EXISTS (?)",
+			db.Table("deck_grants AS candidate_grants").Select("1").
+				Where("candidate_grants.deck_id = candidate_decks.id AND candidate_grants.user_id = u.id"))
 	var out []ReminderCandidate
 	err := db.WithContext(ctx).Table("users AS u").
 		Select("u.id AS id, u.email AS email, u.locale AS locale, u.timezone AS timezone, "+
 			"u.day_cutoff_hour AS day_cutoff_hour, u.reminder_hour AS reminder_hour").
-		Where("u.status = ? AND u.email <> '' AND EXISTS (?)", StatusActive, due).
+		Where("u.status = ? AND u.email <> '' AND (EXISTS (?) OR EXISTS (?))", StatusActive, due, content).
 		Order("u.id asc").
 		Scan(&out).Error
 	if err != nil {

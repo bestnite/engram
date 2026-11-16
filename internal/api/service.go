@@ -1061,6 +1061,9 @@ type StatsSummary struct {
 	Due          int64 `json:"due"`
 	ReviewsToday int64 `json:"reviews_today"`
 	ReviewsTotal int64 `json:"reviews_total"`
+	NewAvailable int64 `json:"new_available"`
+	NewToday     int64 `json:"new_today"`
+	NewTotal     int64 `json:"new_total"`
 	// Retention is the true retention rate: the share of due reviews (state_before=Review) whose grade is not Again,
 	// on the same convention as the stats page (store.StatsStore.RetentionByStability).
 	Retention float64 `json:"retention"`
@@ -1076,11 +1079,10 @@ type StatsSummary struct {
 //
 // The convention is deliberately asymmetric (2026-10-06 decision): decks/due/notes/cards count only currently visible
 // decks (the same store predicate as list_decks, the web list page and the review queue), and are 0 when the deck set is empty;
-// due is the review part of the default review queue (due learning/relearning cards + due review cards within each deck's
-// reviews_per_day), taken from schedule.QueueBuilder.DueNow: a hand-written count drifted from the queue and counted
-// suspended cards and buried new cards that /review never shows, so the home page announced cards the review page did not have;
-// like the default queue it leaves out the decks the user paused, and new cards are not part of it;
-// reviews_today / reviews_total / retention keep the full history per user_id - reviews are the person's own record,
+// due and new_available are the Review and New halves of the default queue's DeckCounts. Both respect
+// daily allowances, suspension, burying and paused decks, so the summary announces only studyable cards.
+// reviews_today / reviews_total count non-New ratings; new_today / new_total count first ratings in the New state.
+// Both categories and retention keep the full history per user_id - reviews are the person's own record,
 // and revoking a grant does not reach back. So even with no visible deck at all, reviews must still be aggregated; returning early would
 // silently zero the historical numbers. retention shares RetentionByStability with the stats page: likewise not limited to visible decks,
 // but counting only due reviews, and excluding reviews of deleted cards (consistent with the stats page).
@@ -1094,7 +1096,7 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	}
 	resp := StatsSummary{Decks: len(deckIDs)}
 	// due follows the default review queue, so the paused decks are left out while the deck, note and card counts keep them.
-	due, err := schedule.NewQueueBuilder(a.db, a.decks, nil).DueNow(ctx, u.ID, schedule.QueueOptions{
+	counts, err := schedule.NewQueueBuilder(a.db, a.decks, nil).DeckCounts(ctx, u.ID, nil, schedule.QueueOptions{
 		Now: now, Timezone: u.Timezone, DayCutoffHour: u.DayCutoffHour,
 	})
 	if err != nil {
@@ -1105,14 +1107,24 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 	day := reviewday.Day(now, reviewday.Location(u.Timezone), reviewday.ResolveCutoff(u.DayCutoffHour))
 	var reviewsToday int64
 	if err := a.db.WithContext(ctx).Model(&store.Review{}).
-		Where("user_id = ? AND review_day = ?", u.ID, day).Count(&reviewsToday).Error; err != nil {
+		Where("user_id = ? AND review_day = ? AND state_before <> ?", u.ID, day, int(schedule.StateNew)).Count(&reviewsToday).Error; err != nil {
 		a.logger.Error("count reviews today failed", "user_id", u.ID, "error", err)
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
 	}
 	var reviewsTotal int64
 	if err := a.db.WithContext(ctx).Model(&store.Review{}).
-		Where("user_id = ?", u.ID).Count(&reviewsTotal).Error; err != nil {
+		Where("user_id = ? AND state_before <> ?", u.ID, int(schedule.StateNew)).Count(&reviewsTotal).Error; err != nil {
 		a.logger.Error("count reviews failed", "user_id", u.ID, "error", err)
+		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
+	}
+	var introduced struct {
+		Today int64
+		Total int64
+	}
+	if err := a.db.WithContext(ctx).Model(&store.Review{}).
+		Select("COALESCE(SUM(CASE WHEN review_day = ? THEN 1 ELSE 0 END), 0) AS today, COUNT(*) AS total", day).
+		Where("user_id = ? AND state_before = ?", u.ID, int(schedule.StateNew)).Scan(&introduced).Error; err != nil {
+		a.logger.Error("count newly learned cards failed", "user_id", u.ID, "error", err)
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
 	}
 	// Retention reuses the stats page's aggregation, so the home page and the stats page give the same number for the same user.
@@ -1136,7 +1148,12 @@ func (a *API) Stats(ctx context.Context, u *store.User) (StatsSummary, error) {
 		return StatsSummary{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load statistics")
 	}
 
-	resp.Due = due
+	for _, count := range counts {
+		resp.Due += int64(count.Review)
+		resp.NewAvailable += int64(count.New)
+	}
+	resp.NewToday = introduced.Today
+	resp.NewTotal = introduced.Total
 	resp.ReviewsToday = reviewsToday
 	resp.ReviewsTotal = reviewsTotal
 	resp.Notes = notes
