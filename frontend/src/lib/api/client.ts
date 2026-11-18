@@ -1110,11 +1110,15 @@ export class ApiClient {
     }));
   }
 
-  /** Submit self-grades through the web-only CSRF endpoint; the server rebuilds the same-scope queue. */
+  /**
+   * Submit self-grades through the web-only CSRF endpoint; the server rebuilds the same-scope queue and renders the
+   * next card inline. The request asks for frame-ready HTML because that face goes into the frame.
+   */
   async submitSelfReview(input: SubmitSelfReviewRequest): Promise<SubmitReviewResult> {
     const { deck, ...review } = input;
     return this.notifying('review', this.request<SubmitReviewResult>('/api/v1/review/answer', {
       method: 'POST',
+      headers: frameHeaders({ frame: true }),
       body: JSON.stringify({ ...review, deck }),
     }));
   }
@@ -1203,7 +1207,8 @@ export class ApiClient {
 
   /**
    * Bury the current card (POST /api/v1/review/bury): writes only your own progress and creates no reviews rows.
-   * The response carries the queue rebuilt over the same scope, so cross-deck review does not degrade to a single deck.
+   * The response carries the same-scope queue counts and the next card rendered inline (frame-ready HTML), so a
+   * cross-deck review does not degrade to a single deck and no render request is needed for that card.
    */
   async buryReview(input: { card_id: string; deck?: string[]; tags?: string[] }): Promise<ReviewQueueResponse> {
     if (!this.csrfToken) {
@@ -1211,13 +1216,14 @@ export class ApiClient {
     }
     return this.notifying('review', this.request<ReviewQueueResponse>('/api/v1/review/bury', {
       method: 'POST',
+      headers: frameHeaders({ frame: true }),
       body: JSON.stringify(input),
     }));
   }
 
   /**
    * Suspend the current card (POST /api/v1/review/suspend): applies to you only and creates no reviews rows;
-   * the response carries the queue rebuilt over the same scope.
+   * the response carries the same-scope queue counts and the next card rendered inline.
    */
   async suspendReview(input: { card_id: string; deck?: string[]; tags?: string[] }): Promise<ReviewQueueResponse> {
     if (!this.csrfToken) {
@@ -1225,14 +1231,16 @@ export class ApiClient {
     }
     return this.notifying('review', this.request<ReviewQueueResponse>('/api/v1/review/suspend', {
       method: 'POST',
+      headers: frameHeaders({ frame: true }),
       body: JSON.stringify(input),
     }));
   }
 
   /**
    * Undo the review just submitted (POST /api/v1/review/undo): restores progress and deletes the undone review log.
-   * The response carries the rebuilt same-scope queue and the undone card's public id (undone_card_id); the queue is sorted by due_at,
-   * so the undone card is not guaranteed to be first and callers must relocate the current card using undone_card_id.
+   * The response carries the same-scope queue counts, the undone card's public id (undone_card_id) and that undone
+   * card in cards, rendered inline. The queue is sorted by due_at, so the undone card is not guaranteed to be first;
+   * callers relocate the current card using undone_card_id.
    */
   async undoReview(input: { card_id: string; expected_version: number; deck?: string[]; tags?: string[] }): Promise<ReviewUndoResponse> {
     if (!this.csrfToken) {
@@ -1240,6 +1248,7 @@ export class ApiClient {
     }
     return this.notifying('review', this.request<ReviewUndoResponse>('/api/v1/review/undo', {
       method: 'POST',
+      headers: frameHeaders({ frame: true }),
       body: JSON.stringify(input),
     }));
   }

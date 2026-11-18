@@ -917,14 +917,34 @@ export interface SubmitSelfReviewRequest {
   tags?: string[];
 }
 
-export interface SubmitReviewResult {
+/**
+ * The queue an action response reports (POST /api/v1/review/{answer,grade,undo,suspend,bury}).
+ *
+ * `cards` holds at most one card — the next card, or the undone card for undo — so the body does not grow with the
+ * queue. The totals are counted by the server over the complete queue: `queue_size` is its remaining length and
+ * `new_remaining` the number of never-studied cards in it. `remaining` carries the same total as `queue_size` and is
+ * kept for callers written before the split.
+ */
+export interface ReviewActionQueue {
+  cards: DueCard[];
+  /** Total cards left in the same-scope queue; the same number `remaining` carries. */
+  queue_size: number;
+  /** Never-studied cards in that complete queue, counted by the server. */
+  new_remaining: number;
+  remaining: number;
+  /**
+   * The card in `cards[0]`, rendered through the same path as POST /api/v1/review/render. Absent when the server
+   * could not render it; the caller then fetches the faces from the render endpoint instead.
+   */
+  rendered_card?: ReviewRenderResponse | null;
+}
+
+export interface SubmitReviewResult extends ReviewActionQueue {
   card_id: string;
   state: string;
   due_at: string | null;
   version: number;
   stability: number | null;
-  cards: DueCard[];
-  remaining: number;
 }
 
 /**
@@ -968,14 +988,12 @@ export interface GradedFeedback {
  * POST /api/v1/review/grade response body (aligned with the Go backend's internal/web/review_api.go).
  * Both the grade and give-up paths return the new state and the same-scope queue; reveal goes through RevealAnswerResponse.
  */
-export interface GradedReviewResult {
+export interface GradedReviewResult extends ReviewActionQueue {
   card_id: string;
   state: string;
   due_at: string | null;
   version: number;
   stability: number | null;
-  cards: DueCard[];
-  remaining: number;
   feedback?: GradedFeedback;
   gave_up?: boolean;
 }
@@ -1077,21 +1095,17 @@ export interface DeckPreviewNoteStepResponse {
 }
 
 /**
- * POST /api/v1/review/bury response body: burying writes only your own progress and creates no reviews rows;
- * cards / remaining are the queue rebuilt over the same scope.
+ * POST /api/v1/review/bury and /api/v1/review/suspend response body: both write only your own progress and create no
+ * reviews rows; cards / queue_size / new_remaining describe the queue rebuilt over the same scope.
  */
-export interface ReviewQueueResponse {
-  cards: DueCard[];
-  remaining: number;
-}
+export interface ReviewQueueResponse extends ReviewActionQueue {}
 
 /**
- * POST /api/v1/review/undo response body: besides the rebuilt same-scope queue, it explicitly carries the undone card's public id.
- * The queue is sorted by due_at, so the undone card is not guaranteed to be first and the frontend must locate the current card via undone_card_id.
+ * POST /api/v1/review/undo response body: the same-scope queue counts, the undone card's public id, and cards holding
+ * that undone card itself. The queue is sorted by due_at, so the undone card is not guaranteed to be its head; the
+ * frontend locates the current card by undone_card_id.
  */
-export interface ReviewUndoResponse {
-  cards: DueCard[];
-  remaining: number;
+export interface ReviewUndoResponse extends ReviewActionQueue {
   undone_card_id: string;
 }
 

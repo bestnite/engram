@@ -34,8 +34,8 @@ describe('study session counts', () => {
     const learning = { ...card('learning'), version: 1 };
     const submitSelfReview = vi.fn()
       .mockRejectedValueOnce(new Error('Rating refused'))
-      .mockResolvedValueOnce({ card_id: 'c1', state: 'learning', version: 1, remaining: 1, cards: [learning] })
-      .mockResolvedValueOnce({ card_id: 'c1', state: 'review', version: 2, remaining: 0, cards: [] });
+      .mockResolvedValueOnce({ card_id: 'c1', state: 'learning', version: 1, remaining: 1, queue_size: 1, new_remaining: 0, cards: [learning] })
+      .mockResolvedValueOnce({ card_id: 'c1', state: 'review', version: 2, remaining: 0, queue_size: 0, new_remaining: 0, cards: [] });
     const client = {
       getDueCards: vi.fn().mockResolvedValue({ cards: [fresh] }),
       renderReviewCard: vi.fn().mockResolvedValue({ card_id: 'c1', ...faces('<p>Question</p>', '<p>Answer</p>'), edit_href: '' }),
@@ -71,7 +71,7 @@ describe('study session counts', () => {
         setLocale(locale);
         const original = card(state, flow !== 'self');
         const response = {
-          card_id: 'c1', state: 'learning', version: 1, remaining: 0, cards: [],
+          card_id: 'c1', state: 'learning', version: 1, remaining: 0, queue_size: 0, new_remaining: 0, cards: [],
           feedback: { verdict: 'correct', score: 1, rating: 3, answer_html: '<p>Answer</p>' },
         };
         const client = {
@@ -80,7 +80,9 @@ describe('study session counts', () => {
           submitSelfReview: vi.fn().mockResolvedValue(response),
           submitGradedReview: vi.fn().mockResolvedValue(response),
           revealGradedAnswer: vi.fn().mockResolvedValue({ card_id: 'c1', revealed: true, answer_html: '<p>Answer</p>' }),
-          undoReview: vi.fn().mockResolvedValue({ undone_card_id: 'c1', remaining: 1, cards: [original] }),
+          undoReview: vi.fn().mockResolvedValue({
+            undone_card_id: 'c1', remaining: 1, queue_size: 1, new_remaining: state === 'new' ? 1 : 0, cards: [original],
+          }),
         } as unknown as ApiClient;
         const target = document.createElement('div');
         document.body.appendChild(target);

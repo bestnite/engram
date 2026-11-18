@@ -191,7 +191,7 @@ func (s *Server) gradeGiveUp(c *gin.Context, user *store.User, req gradeRequest,
 
 // reviewBury is the SPA entry point for bury: session + CSRF protected. The business lives in the service's BuryCard (shared
 // with REST and MCP: the caller's own card is postponed to their next review day, reader suffices); the response carries
-// the queue rebuilt over the same scope.
+// the same-scope queue counts and the next card rendered inline.
 func (s *Server) reviewBury(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -212,11 +212,12 @@ func (s *Server) reviewBury(c *gin.Context) {
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeQueue(c, user, scope)
+	s.writeQueue(c, user, scope, queueHead)
 }
 
 // reviewSuspend is the SPA entry point for the review page's "suspend this card": session + CSRF protected, the business lives in the service's
-// SetCardSuspended (writes only the caller's own progress, reader suffices); the response carries the queue rebuilt over the same scope.
+// SetCardSuspended (writes only the caller's own progress, reader suffices); the response carries the same-scope queue
+// counts and the next card rendered inline.
 func (s *Server) reviewSuspend(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -237,7 +238,7 @@ func (s *Server) reviewSuspend(c *gin.Context) {
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeQueue(c, user, scope)
+	s.writeQueue(c, user, scope, queueHead)
 }
 
 // reviewUndoRequest is the request body of the undo entry point: besides the target card and deck scope, it must carry the
@@ -255,9 +256,9 @@ type reviewUndoRequest struct {
 // that is unreadable fails the whole request (reviewCard is reused, same criterion as bury).
 //
 // The request must carry expected_version: undo only takes effect when the version matches, and a replayed request or a stale-version request from a window opened twice
-// returns 409 without deleting any grade. Response contract: besides the queue rebuilt over the same scope (cards/remaining), it explicitly carries
-// the public id of the undone card (undone_card_id). The queue is ordered by due_at, so the undone card is not guaranteed to be first;
-// the frontend must locate the current card by undone_card_id and must not assume it appears first in the queue.
+// returns 409 without deleting any grade. Response contract: the same-scope queue counts (queue_size / new_remaining), the undone card's public id
+// (undone_card_id), and cards holding exactly that undone card. The queue is ordered by due_at, so the undone card is not guaranteed to be first;
+// cards therefore carries the undone card itself rather than the queue head, and the frontend locates the current card by undone_card_id.
 func (s *Server) reviewUndo(c *gin.Context) {
 	user, ok := auth.CurrentUser(c)
 	if !ok {
@@ -282,7 +283,7 @@ func (s *Server) reviewUndo(c *gin.Context) {
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	s.writeQueue(c, user, scope, gin.H{"undone_card_id": result.CardID})
+	s.writeQueue(c, user, scope, s.undoneCard(user, result.CardID), gin.H{"undone_card_id": result.CardID})
 }
 
 // reviewRender returns both sides of a card.
@@ -360,18 +361,63 @@ func (s *Server) reviewCard(c *gin.Context, user *store.User, deckPublicIDs, tag
 	return card, note, scope, true
 }
 
-// writeReviewResult writes the unified response after a grade: the new state + the queue over the same scope (prefetching the next card),
-// plus fields the caller adds (grading feedback / give-up marker). The scope comes back verbatim, so the queue cannot degrade to a single deck and tags are not lost.
+// reviewQueueLimit is the bound on the same-scope queue an action response counts over. It equals the largest limit
+// GET /api/v1/review/due accepts and the page size the review page requests, so the counts describe exactly the queue
+// the client could load; a longer queue is counted up to that bound.
+const reviewQueueLimit = 500
+
+// reviewRenderedCard is the response's inline render of the one card it serializes. Its fields mirror the
+// POST /api/v1/review/render body, so the client applies it through the same code path as a render response.
+type reviewRenderedCard struct {
+	CardID                 string   `json:"card_id"`
+	Ordinal                int      `json:"ordinal"`
+	Front                  CardFace `json:"front"`
+	Back                   CardFace `json:"back"`
+	TypeIn                 bool     `json:"type_in"`
+	AnswerIncludesQuestion bool     `json:"answer_includes_question"`
+	EditHref               string   `json:"edit_href"`
+}
+
+// writeReviewResult writes the unified response after a grade: the new state, the same-scope queue counts, the next
+// card serialized and rendered, plus fields the caller adds (grading feedback / give-up marker). The scope comes back
+// verbatim, so the queue cannot degrade to a single deck and tags are not lost.
 func (s *Server) writeReviewResult(c *gin.Context, user *store.User, scope reviewScope, result api.SubmitReviewResult, extra ...gin.H) {
-	cards, err := s.api.DueCards(c.Request.Context(), user, scope.deckIDs, scope.tags, 500)
+	state := gin.H{
+		"card_id": result.CardID, "state": result.State,
+		"due_at": result.DueAt, "version": result.Version, "stability": result.Stability,
+	}
+	s.writeQueue(c, user, scope, queueHead, append([]gin.H{state}, extra...)...)
+}
+
+// reviewQueuePick selects the one card an action response serializes out of the complete same-scope queue. It may read
+// further rows when the card the response must show is outside that queue.
+type reviewQueuePick func(ctx context.Context, queue []api.DueCard) []api.DueCard
+
+// writeQueue writes an action response that reports the same-scope queue: the counts over the complete queue plus the
+// one card the client should show next, rendered inline when possible. pick selects that card (bury and suspend show
+// the queue head; undo shows the card it restored). extra holds fields the caller adds (such as undone_card_id on
+// undo), merged into the response body in write order.
+//
+// The complete queue is still built, because queue_size and new_remaining are totals over it; only one card is
+// serialized, so the response body does not grow with the queue.
+func (s *Server) writeQueue(c *gin.Context, user *store.User, scope reviewScope, pick reviewQueuePick, extra ...gin.H) {
+	queue, err := s.api.DueCards(c.Request.Context(), user, scope.deckIDs, scope.tags, reviewQueueLimit)
 	if err != nil {
 		se := apiError(err)
 		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
 		return
 	}
-	body := gin.H{"card_id": result.CardID, "state": result.State,
-		"due_at": result.DueAt, "version": result.Version, "stability": result.Stability,
-		"cards": cards, "remaining": len(cards)}
+	cards := pick(c.Request.Context(), queue)
+	body := gin.H{
+		"cards": cards,
+		// remaining is the total the pre-slim response carried; queue_size names the same total explicitly.
+		"remaining":     len(queue),
+		"queue_size":    len(queue),
+		"new_remaining": newCardsInQueue(queue),
+	}
+	if rendered, ok := s.inlineCardRender(c, user, cards); ok {
+		body["rendered_card"] = rendered
+	}
 	for _, item := range extra {
 		for k, v := range item {
 			body[k] = v
@@ -380,23 +426,78 @@ func (s *Server) writeReviewResult(c *gin.Context, user *store.User, scope revie
 	c.JSON(http.StatusOK, body)
 }
 
-// writeQueue returns only the queue rebuilt over the same scope (no grade state fields), for actions like bury that produce no reviews row:
-// the client moves to the next card from it, and the queue scope cannot degrade to a single deck.
-// extra holds fields the caller adds (such as undone_card_id on undo), merged into the response body in write order.
-func (s *Server) writeQueue(c *gin.Context, user *store.User, scope reviewScope, extra ...gin.H) {
-	cards, err := s.api.DueCards(c.Request.Context(), user, scope.deckIDs, scope.tags, 500)
-	if err != nil {
-		se := apiError(err)
-		c.AbortWithStatusJSON(se.Status, gin.H{"error": gin.H{"code": se.Code, "message": se.Message}})
-		return
+// queueHead is the card an action response shows next: the head of the complete queue, or no card when it is empty.
+func queueHead(_ context.Context, queue []api.DueCard) []api.DueCard {
+	if len(queue) == 0 {
+		return queue[:0]
 	}
-	body := gin.H{"cards": cards, "remaining": len(cards)}
-	for _, item := range extra {
-		for k, v := range item {
-			body[k] = v
+	return queue[:1]
+}
+
+// undoneCard selects the card an undo response shows: the restored card itself. The queue is ordered by due_at, so the
+// undone card is not necessarily its head, and serializing the head would hide the card the user just restored.
+//
+// The restored card can also be outside the queue entirely: undo restores the state and due time the card had before the
+// grade, which may be later than today (a card reviewed ahead of its due date, or one that was buried). The response
+// still has to carry it, so it is read and assembled on its own through the same rules the queue uses. That read is for
+// this response only; queue_size and new_remaining keep counting the real queue, and GET /review/due does not change.
+// When even that read fails, the response still reports the write and leaves the card out; undone_card_id names it.
+func (s *Server) undoneCard(user *store.User, cardID string) reviewQueuePick {
+	return func(ctx context.Context, queue []api.DueCard) []api.DueCard {
+		for _, card := range queue {
+			if card.CardID == cardID {
+				return []api.DueCard{card}
+			}
+		}
+		card, err := s.api.DueCardFor(ctx, user, cardID)
+		if err != nil {
+			s.logger.Error("load undone card outside the queue failed", "card_id", cardID, "error", err)
+			return queue[:0]
+		}
+		return []api.DueCard{card}
+	}
+}
+
+// newCardsInQueue counts the never-studied cards in the complete queue. The client cannot derive this number from the
+// single card it receives, so the server counts it over the queue it built.
+func newCardsInQueue(queue []api.DueCard) int {
+	count := 0
+	for _, card := range queue {
+		if card.State == store.CardStateNew {
+			count++
 		}
 	}
-	c.JSON(http.StatusOK, body)
+	return count
+}
+
+// inlineCardRender renders the card an action response serializes through the same frame-ready path as
+// POST /api/v1/review/render, so the client can show it without a second request.
+//
+// A render failure must not fail the action: when this response is assembled the write has already committed, so a face
+// that cannot be produced is logged and left out of the body, and the client falls back to the render endpoint.
+func (s *Server) inlineCardRender(c *gin.Context, user *store.User, cards []api.DueCard) (*reviewRenderedCard, bool) {
+	if len(cards) == 0 {
+		return nil, false
+	}
+	card, err := s.cards.ByPublicID(c.Request.Context(), cards[0].CardID)
+	if err != nil {
+		s.logger.Error("resolve card for inline review render failed", "card_id", cards[0].CardID, "error", err)
+		return nil, false
+	}
+	view, err := s.cardViewWithAnswer(c.Request.Context(), user, schedule.QueueItem{CardID: card.ID}, nil, nil, frameOutputRequested(c))
+	if err != nil {
+		s.logger.Error("render inline review card failed", "card_id", cards[0].CardID, "error", err)
+		return nil, false
+	}
+	return &reviewRenderedCard{
+		CardID:                 view.CardID,
+		Ordinal:                view.Ordinal,
+		Front:                  view.Front,
+		Back:                   view.Back,
+		TypeIn:                 view.TypeIn,
+		AnswerIncludesQuestion: view.AnswerIncludesQuestion,
+		EditHref:               view.EditHref,
+	}, true
 }
 
 // gradeFeedback assembles the grading feedback: the verdict, score and answer text come from the service's grading

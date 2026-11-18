@@ -58,7 +58,7 @@ describe('ReviewView header key activation', () => {
             ...faces('<p>Q</p>', '<p>A</p>'),
             edit_href: '/decks/d1/notes/n1',
           }),
-          submitSelfReview: vi.fn().mockResolvedValue({ cards: [card('c2')], remaining: 1, version: 1 }),
+          submitSelfReview: vi.fn().mockResolvedValue({ cards: [card('c2')], remaining: 1, queue_size: 1, new_remaining: 1, version: 1 }),
         } as unknown as ApiClient,
       },
     });

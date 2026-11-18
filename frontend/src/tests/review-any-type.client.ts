@@ -61,7 +61,7 @@ describe('ReviewView any note type', () => {
       { answer_control: null, machine_graded: false },
       { 'f-front': '自定义问题', 'f-back': '自定义答案' },
     );
-    const submitSelfReview = vi.fn().mockResolvedValue({ card_id: 'x1', state: 'learning', version: 1, remaining: 0, cards: [] });
+    const submitSelfReview = vi.fn().mockResolvedValue({ card_id: 'x1', state: 'learning', version: 1, remaining: 0, queue_size: 0, new_remaining: 0, cards: [] });
     const target = await mountView(card, {
       renderReviewCard: vi.fn().mockResolvedValue({
         card_id: 'x1',

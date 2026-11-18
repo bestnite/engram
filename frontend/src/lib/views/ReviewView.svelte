@@ -4,7 +4,7 @@
   import { t } from '../i18n';
   import { fieldText, htmlToText } from '../format';
   import { apiClient, ApiClientError } from '../api';
-  import type { ApiClient, AVTag, CardFace, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback } from '../api';
+  import type { ApiClient, AVTag, CardFace, DueCard, ExtraNewStatus, GradedAnswer, GradedFeedback, ReviewQueueResponse, ReviewRenderResponse } from '../api';
   import { toast } from '../components/ui/toast';
   import { typeset } from '../mathjax';
   import { enhanceShortcodes, stopShortcodePlayback } from '../shortcodes';
@@ -72,6 +72,13 @@
     return queue.filter((card) => card.state === 'new').length;
   }
 
+  /**
+   * The card faces an action response already rendered, keyed by card id. An action response carries only the next
+   * card (or the undone card) plus that card's faces, so applying the cached entry when the card becomes current
+   * skips a render request the server has already answered. A card without an entry falls back to the render endpoint.
+   */
+  const inlineRenders = new Map<string, ReviewRenderResponse>();
+
   // svelte-ignore state_referenced_locally
   let cards = $state<DueCard[]>(initialCards);
   // svelte-ignore state_referenced_locally
@@ -86,9 +93,9 @@
   const done = $derived(newDone + reviewDone);
   // svelte-ignore state_referenced_locally
   let remaining = $state(initialCards.length);
-  // The header splits the due count into new and review cards. Every queue-bearing response carries the full remaining queue
-  // (the visible card is only the first slice of it), so the new count is read off that queue and the review count is the
-  // rest of the due total — no extra request is needed and the two numbers always add up to the due total.
+  // The header splits the due count into new and review cards. An action response carries only one card, so the totals
+  // come from the server: queue_size is the complete remaining queue and new_remaining the never-studied part of it.
+  // The first load still receives the whole queue from GET /review/due and counts its new cards directly.
   // svelte-ignore state_referenced_locally
   let newRemaining = $state(countNew(initialCards));
   const reviewRemaining = $derived(remaining - newRemaining);
@@ -272,6 +279,17 @@
   // Server-side rendering (svelte/server in tests) has no window, so there is no address to read and it is treated as having no tags.
   const scopeTags = typeof window === 'undefined' ? [] : (selectedTags() ?? []);
 
+  /** Show one render response's faces: the render endpoint and an action response's inline render share this shape. */
+  function applyRender(response: ReviewRenderResponse): void {
+    renderFailed = false;
+    frontFace = response.front;
+    backFace = response.back;
+    cardOrdinal = response.ordinal ?? 0;
+    typeIn = response.type_in ?? false;
+    answerIncludesQuestion = response.answer_includes_question ?? false;
+    editHref = response.edit_href;
+  }
+
   /**
    * Fetch the current card's two faces. The token keeps an old request from overwriting the new card's content after a card change;
    * on failure it only discards the rich text and falls back to plain text, never interrupting the review flow.
@@ -284,13 +302,7 @@
         { frame: true },
       );
       if (token !== renderToken) return;
-      renderFailed = false;
-      frontFace = response.front;
-      backFace = response.back;
-      cardOrdinal = response.ordinal ?? 0;
-      typeIn = response.type_in ?? false;
-      answerIncludesQuestion = response.answer_includes_question ?? false;
-      editHref = response.edit_href;
+      applyRender(response);
     } catch {
       if (token !== renderToken) return;
       renderFailed = true;
@@ -303,7 +315,21 @@
     }
   }
 
-  // A card change refetches the faces; the old card's content is cleared so the previous card's rich text is not shown before the response arrives.
+  /**
+   * Remember the faces an action response already rendered for the card it leaves on screen. The entry is looked up by
+   * the current card's id, so a render cached for a different card is never applied. A response whose render failed
+   * server-side carries no rendered_card, so nothing is remembered and that card falls back to the render endpoint.
+   */
+  function rememberInlineRender(response: { rendered_card?: ReviewRenderResponse | null }): void {
+    const rendered = response.rendered_card;
+    if (!rendered || !rendered.card_id || !rendered.front || !rendered.back) return;
+    inlineRenders.set(rendered.card_id, rendered);
+  }
+
+  // A card change refetches the faces; the old card's content is cleared so the previous card's rich text is not shown
+  // before the response arrives. A card an action response already rendered applies that render instead, so the common
+  // path (the next card straight after a grade) costs no request. Every change still bumps renderToken, so a render
+  // request left in flight for the previous card cannot overwrite this card's faces.
   $effect(() => {
     const card = current;
     const token = ++renderToken;
@@ -316,7 +342,16 @@
     editHref = '';
     essayText = '';
     frameAnswer = undefined;
-    if (card) void loadRender(card, token);
+    if (card) {
+      const rendered = inlineRenders.get(card.card_id);
+      if (rendered) {
+        // One-shot: the entry is consumed here, so a later visit to the card renders it again against the then-current state.
+        inlineRenders.delete(card.card_id);
+        applyRender(rendered);
+      } else {
+        void loadRender(card, token);
+      }
+    }
     // A new card starts at the top of the page: its question is read from the beginning, and the previous card's scroll
     // offset says nothing about where this face's content sits.
     if (card) window.scrollTo({ top: 0 });
@@ -410,6 +445,7 @@
     lastUndo = null;
     gradedRevealed = false;
     revealedAnswerHTML = '';
+    inlineRenders.clear();
     resetAnswerState();
     try {
       const query = selectedDecks();
@@ -444,9 +480,10 @@
         deck: selectedDecks(),
         tags: selectedTags(),
       });
+      rememberInlineRender(response);
       cards = response.cards.slice(0, 1);
-      remaining = response.remaining;
-      newRemaining = countNew(response.cards);
+      remaining = response.queue_size;
+      newRemaining = response.new_remaining;
       if (wasNew) newDone += 1;
       else reviewDone += 1;
       // The screen has already flipped to the next card after self-grading: remember this submission so the header's "undo the last rating" becomes available.
@@ -510,9 +547,11 @@
         // The graded answer face is rendered by the frame, so this response must carry frame-ready HTML.
         { frame: true },
       );
+      // The response already rendered the next card; the entry stays cached until "continue" makes that card current.
+      rememberInlineRender(response);
       pendingCards = response.cards;
-      remaining = response.remaining;
-      newRemaining = countNew(response.cards);
+      remaining = response.queue_size;
+      newRemaining = response.new_remaining;
       feedback = response.feedback ?? null;
       feedbackMediaBase = response.feedback?.back?.media_base ?? backFace?.media_base ?? '';
       lastUndo = { cardId: ratedCard.card_id, version: response.version, rating: response.feedback?.rating ?? 0, wasNew };
@@ -573,9 +612,10 @@
         tags: selectedTags(),
         action: 'give_up',
       });
+      rememberInlineRender(response);
       cards = response.cards.slice(0, 1);
-      remaining = response.remaining;
-      newRemaining = countNew(response.cards);
+      remaining = response.queue_size;
+      newRemaining = response.new_remaining;
       // Giving up records a self-grade log as Again; the undo entry is available there as well.
       lastUndo = { cardId: ratedCard.card_id, version: response.version, rating: 1, wasNew };
       if (wasNew) newDone += 1;
@@ -607,15 +647,16 @@
   }
 
   /** Shared by bury and suspend: after a successful request it swaps in the queue rebuilt by the server and resets this card's answer state. */
-  async function skipCurrent(send: (cardId: string) => Promise<{ cards: DueCard[]; remaining: number }>): Promise<void> {
+  async function skipCurrent(send: (cardId: string) => Promise<ReviewQueueResponse>): Promise<void> {
     if (!current || submitting) return;
     submitting = true;
     error = null;
     try {
       const response = await send(current.card_id);
+      rememberInlineRender(response);
       cards = response.cards.slice(0, 1);
-      remaining = response.remaining;
-      newRemaining = countNew(response.cards);
+      remaining = response.queue_size;
+      newRemaining = response.new_remaining;
       revealed = false;
       feedback = null;
       pendingCards = [];
@@ -670,8 +711,9 @@
 
   /**
    * Undo the last submission's rating (self-graded and graded cards share this one entry): the server restores the progress and deletes that
-   * review log, and the response carries the queue rebuilt for the same scope. After undoing, the undone card is put back at the current
-   * position — the queue is sorted by due_at and is not guaranteed to come first, so it is looked up by undone_card_id inside the queue.
+   * review log. The response carries the same-scope queue counts, the undone card's faces and the undone card itself in cards, so the
+   * restored card is shown even when the queue's due_at order does not put it first; undone_card_id still names it for callers that
+   * need to locate the card themselves.
    *
    * The target is the card recorded in lastUndo, not the card currently on screen: after a self-graded submission the screen has already flipped to the next card.
    */
@@ -687,10 +729,12 @@
         tags: selectedTags(),
         expected_version: target.version,
       });
+      // The server puts the undone card itself in cards, so it is found even when the queue's due_at order does not put it first.
+      rememberInlineRender(response);
       const restored = response.cards.find((card) => card.card_id === response.undone_card_id);
       if (restored) cards = [restored];
-      remaining = response.remaining;
-      newRemaining = countNew(response.cards);
+      remaining = response.queue_size;
+      newRemaining = response.new_remaining;
       if (target.wasNew) newDone = Math.max(0, newDone - 1);
       else reviewDone = Math.max(0, reviewDone - 1);
       lastUndo = null;

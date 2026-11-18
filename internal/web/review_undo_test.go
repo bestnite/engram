@@ -8,14 +8,18 @@ import (
 	"git.nite07.com/nite/engram/internal/store"
 )
 
-// undoBody is the external shape of the undo endpoint: the queue rebuilt over the same scope + the public id of the undone card.
-// undone_card_id is what the frontend uses to locate the current card again (the queue is ordered by due_at, so it is not guaranteed to be first).
+// undoBody is the external shape of the undo endpoint: the same-scope queue counts, the single card it serializes, and
+// the public id of the undone card. cards holds that undone card itself, located inside the rebuilt queue, because the
+// queue is ordered by due_at and the undone card is not guaranteed to be its head.
 type undoBody struct {
 	UndoneCardID string `json:"undone_card_id"`
 	Remaining    int    `json:"remaining"`
+	QueueSize    int    `json:"queue_size"`
+	NewRemaining int    `json:"new_remaining"`
 	Cards        []struct {
 		CardID string `json:"card_id"`
 	} `json:"cards"`
+	RenderedCard *reviewRenderedCard `json:"rendered_card"`
 }
 
 // submitSelfReview grades a card through the SPA self-assessment entry point (writes one reviews row and advances card_states).
@@ -183,8 +187,14 @@ func TestReviewUndoReturnsCardToQueue(t *testing.T) {
 	if !found {
 		t.Errorf("undone card %s missing from the rebuilt queue: %s", cardPub, snippet(rec.Body.String()))
 	}
-	if body.Remaining != len(body.Cards) {
-		t.Errorf("remaining = %d, want %d (len(cards))", body.Remaining, len(body.Cards))
+	if len(body.Cards) != 1 || body.Cards[0].CardID != cardPub {
+		t.Errorf("cards = %+v, want exactly the undone card %s", body.Cards, cardPub)
+	}
+	if body.QueueSize != body.Remaining {
+		t.Errorf("queue_size = %d, remaining = %d, want the same total", body.QueueSize, body.Remaining)
+	}
+	if body.RenderedCard == nil || body.RenderedCard.CardID != cardPub {
+		t.Errorf("rendered_card = %+v, want the undone card %s rendered inline", body.RenderedCard, cardPub)
 	}
 }
 

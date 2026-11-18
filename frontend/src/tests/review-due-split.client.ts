@@ -6,10 +6,10 @@ import { setLocale } from '../lib/i18n';
 import { faces } from './card-face-fixture';
 
 /**
- * The header's due counter is split into new cards and review cards. Both numbers come from the
- * queue already carried by the response: `cards` is sliced down to the card on screen, so the new
- * count is read from the response's full queue and the review count is the rest of `remaining`.
- * A new count of zero is hidden rather than rendered as "new 0".
+ * The header's due counter is split into new cards and review cards. The first load receives the whole queue, so its new
+ * count is counted from that queue; an action response carries only one card, so its totals come from the server's
+ * `queue_size` and `new_remaining` and the review count is the rest of the due total. A new count of zero is hidden
+ * rather than rendered as "new 0".
  */
 describe('ReviewView due counter split', () => {
   let instance: ReturnType<typeof mount> | null = null;
@@ -89,7 +89,7 @@ describe('ReviewView due counter split', () => {
     expect(counterText(target, 'review-due-review')).toBe('复习：3');
   });
 
-  it('refreshes both counters from the queue returned by a rating', async () => {
+  it('refreshes both counters from the totals a rating returns', async () => {
     setLocale('zh-CN');
     const queue = [
       dueCard('c1', 'new'),
@@ -97,10 +97,20 @@ describe('ReviewView due counter split', () => {
       dueCard('c3', 'review'),
       dueCard('c4', 'learning'),
     ];
-    const afterRating = [dueCard('c2', 'new'), dueCard('c3', 'review'), dueCard('c4', 'learning')];
+    // The action response carries one card only, so the new count cannot come from it: the visible card is a review
+    // card while new_remaining says one new card is still queued.
+    const afterRating = [dueCard('c2', 'review')];
     const submitSelfReview = vi
       .fn()
-      .mockResolvedValue({ card_id: 'c1', state: 'learning', version: 1, remaining: 3, cards: afterRating });
+      .mockResolvedValue({
+        card_id: 'c1',
+        state: 'learning',
+        version: 1,
+        remaining: 3,
+        queue_size: 3,
+        new_remaining: 1,
+        cards: afterRating,
+      });
     const client = {
       getDueCards: vi.fn().mockResolvedValue({ cards: queue }),
       renderReviewCard: vi.fn().mockResolvedValue({

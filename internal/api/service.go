@@ -1338,43 +1338,113 @@ func (a *API) DueCards(ctx context.Context, u *store.User, deckIDs []uint64, tag
 			// The note is not visible (soft-deleted): consistent with dropping the card when a per-card read fails.
 			continue
 		}
-		view := types.load(ctx, note)
-		values := store.NoteFieldValues(note.FieldsJSON)
-		entry := DueCard{
-			NoteID:         note.PublicID,
-			State:          it.State.String(),
-			DueAt:          it.DueAt,
-			Retrievability: it.Retrievability,
-			Fields:         values,
-			Tags:           store.TagsOrEmpty(note.TagsJSON),
-			FieldOrder:     fieldOrder(view.config),
+		var state *store.CardState
+		if row, ok := statesByCard[it.CardID]; ok {
+			state = &row
 		}
-		// Missing card_states / card / deck stay zero-valued, consistent with the result of a failed per-card read.
-		if state, ok := statesByCard[it.CardID]; ok {
-			entry.Version = state.Version
-		}
-		if card, ok := cardsByID[it.CardID]; ok {
-			entry.CardID = card.PublicID
-			entry.Template = card.Template
-		}
-		if d, ok := decksByID[note.DeckID]; ok {
-			entry.DeckID = d.PublicID
-		}
-		// The template's answer spec decides how the review page answers this card. The same spec drives the option
-		// shuffle: only a control that reads options has a display order.
-		if spec, _, err := templateAnswer(view.config, entry.Template); err == nil {
-			if spec != nil {
-				control := spec.Control
-				entry.AnswerControl = &control
-			}
-			entry.MachineGraded = answer.IsMachineGraded(spec)
-			if count := optionCount(spec, values); count > 0 {
-				entry.OptionOrder = OptionOrder(count, u.ID, it.CardID, entry.Version)
-			}
-		}
-		out = append(out, entry)
+		out = append(out, dueCardEntry(u, note, cardsByID[it.CardID], state, decksByID[note.DeckID], types.load(ctx, note), it))
 	}
 	return out, nil
+}
+
+// DueCardFor returns the external shape of one card, assembled by the same rules DueCards uses, whether or not the card
+// is currently due. A review action response uses it for a card it has to show even when that card is outside the
+// queue: after an undo, the restored card can be due later than today, and the response still has to carry it. This
+// reads one card and does not change what GET /api/v1/review/due returns.
+//
+// The caller must be at least a reader of the card's deck, the same rule the queue applies. A card the user has never
+// studied is reported as new with the current time as its due time, which is what the queue builder does for a new card.
+func (a *API) DueCardFor(ctx context.Context, u *store.User, cardPublicID string) (DueCard, error) {
+	card, err := a.cards.ByPublicID(ctx, strings.TrimSpace(cardPublicID))
+	if err != nil {
+		return DueCard{}, newServiceError(http.StatusNotFound, CodeNotFound, "card not found")
+	}
+	note, err := a.notes.ByID(ctx, card.NoteID)
+	if err != nil {
+		return DueCard{}, newServiceError(http.StatusNotFound, CodeNotFound, "note not found")
+	}
+	deck, err := a.RequireDeckRole(ctx, u.ID, note.DeckID, store.RoleReader)
+	if err != nil {
+		return DueCard{}, err
+	}
+	states, err := store.CardStatesByCardIDs(ctx, a.db, u.ID, []uint64{card.ID})
+	if err != nil {
+		a.logger.Error("load card state failed", "card_id", card.ID, "user_id", u.ID, "error", err)
+		return DueCard{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load the card")
+	}
+	state := store.CardState{State: store.CardStateNew}
+	if row, ok := states[card.ID]; ok && row.State != "" {
+		state = row
+	}
+	dueAt := a.now()
+	if state.DueAt != nil {
+		dueAt = state.DueAt.UTC()
+	}
+	queueState, err := schedule.ParseState(state.State)
+	if err != nil {
+		a.logger.Error("parse card state failed", "card_id", card.ID, "state", state.State, "error", err)
+		return DueCard{}, newServiceError(http.StatusInternalServerError, CodeInternal, "failed to load the card")
+	}
+	item := schedule.QueueItem{
+		CardID: card.ID, NoteID: note.ID, DeckID: note.DeckID,
+		State: queueState, DueAt: dueAt,
+	}
+	// DueCards computes retrievability only for a review card; every other queue state carries zero. This mirrors that
+	// rule instead of inventing a second definition of the field.
+	if queueState == schedule.StateReview {
+		if sched, err := a.schedulerForDeck(ctx, u.ID, deck); err == nil {
+			if r, err := sched.Retrievability(&state, a.now()); err == nil {
+				item.Retrievability = r
+			} else {
+				a.logger.Error("compute card retrievability failed", "card_id", card.ID, "user_id", u.ID, "error", err)
+			}
+		} else {
+			a.logger.Error("load deck scheduler failed", "card_id", card.ID, "user_id", u.ID, "error", err)
+		}
+	}
+	types := newNoteTypeCache(a.db)
+	return dueCardEntry(u, note, card, &state, deck, types.load(ctx, note), item), nil
+}
+
+// dueCardEntry assembles the external shape of one card from its loaded rows. DueCards and DueCardFor both call it, so
+// the queue and a single-card view cannot disagree about a card's fields, answer control or option order.
+//
+// card, state and deck may be nil: a row that failed to load keeps that part of the entry zero-valued, which is what
+// DueCards has always returned for a missing row.
+func dueCardEntry(u *store.User, note *store.Note, card *store.Card, state *store.CardState, deck *store.Deck, view noteTypeView, item schedule.QueueItem) DueCard {
+	values := store.NoteFieldValues(note.FieldsJSON)
+	entry := DueCard{
+		NoteID:         note.PublicID,
+		State:          item.State.String(),
+		DueAt:          item.DueAt,
+		Retrievability: item.Retrievability,
+		Fields:         values,
+		Tags:           store.TagsOrEmpty(note.TagsJSON),
+		FieldOrder:     fieldOrder(view.config),
+	}
+	if state != nil {
+		entry.Version = state.Version
+	}
+	if card != nil {
+		entry.CardID = card.PublicID
+		entry.Template = card.Template
+	}
+	if deck != nil {
+		entry.DeckID = deck.PublicID
+	}
+	// The template's answer spec decides how the review page answers this card. The same spec drives the option
+	// shuffle: only a control that reads options has a display order.
+	if spec, _, err := templateAnswer(view.config, entry.Template); err == nil {
+		if spec != nil {
+			control := spec.Control
+			entry.AnswerControl = &control
+		}
+		entry.MachineGraded = answer.IsMachineGraded(spec)
+		if count := optionCount(spec, values); count > 0 {
+			entry.OptionOrder = OptionOrder(count, u.ID, item.CardID, entry.Version)
+		}
+	}
+	return entry
 }
 
 // ReviewTags normalizes the tag set for reviewing by tag and validates it against the deck scope; deckIDs must already be deduplicated.

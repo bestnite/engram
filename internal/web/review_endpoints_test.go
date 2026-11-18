@@ -20,12 +20,15 @@ import (
 // both write endpoints carry session CSRF, and the scope parameters must pass validation for the whole request.
 
 type queueBody struct {
-	CardID    string `json:"card_id"`
-	Remaining int    `json:"remaining"`
-	Cards     []struct {
+	CardID       string `json:"card_id"`
+	Remaining    int    `json:"remaining"`
+	QueueSize    int    `json:"queue_size"`
+	NewRemaining int    `json:"new_remaining"`
+	Cards        []struct {
 		CardID string `json:"card_id"`
 		DeckID string `json:"deck_id"`
 	} `json:"cards"`
+	RenderedCard *reviewRenderedCard `json:"rendered_card"`
 }
 
 // reviewRenderBody is the external shape of the card render response.
@@ -136,6 +139,12 @@ func TestReviewBuryDefersCardAndKeepsScope(t *testing.T) {
 	}
 	if body.Remaining != 1 || len(body.Cards) != 1 {
 		t.Fatalf("after bury remaining=%d cards=%d, want 1/1 (body %s)", body.Remaining, len(body.Cards), snippet(rec.Body.String()))
+	}
+	if body.QueueSize != 1 || body.NewRemaining != 1 {
+		t.Errorf("after bury queue_size/new_remaining = %d/%d, want 1/1", body.QueueSize, body.NewRemaining)
+	}
+	if body.RenderedCard == nil || body.RenderedCard.CardID != body.Cards[0].CardID {
+		t.Errorf("after bury rendered_card = %+v, want the surviving card %s rendered inline", body.RenderedCard, body.Cards[0].CardID)
 	}
 	if body.Cards[0].DeckID != deckB.PublicID {
 		t.Errorf("after bury the surviving card is from deck %s, want deck B %s", body.Cards[0].DeckID, deckB.PublicID)
@@ -386,6 +395,12 @@ func TestReviewSuspendRemovesCardForCallerOnly(t *testing.T) {
 		if c.CardID == cardPub {
 			t.Fatalf("suspended card %s is still in the returned queue", cardPub)
 		}
+	}
+	if len(body.Cards) != 1 || body.QueueSize != 1 || body.NewRemaining != 1 {
+		t.Errorf("after suspend cards/queue_size/new_remaining = %d/%d/%d, want 1/1/1", len(body.Cards), body.QueueSize, body.NewRemaining)
+	}
+	if body.RenderedCard == nil || body.RenderedCard.CardID != body.Cards[0].CardID {
+		t.Errorf("after suspend rendered_card = %+v, want the surviving card rendered inline", body.RenderedCard)
 	}
 	var st store.CardState
 	if err := db.Where("card_id = ? AND user_id = ?", cardID, ownerID).First(&st).Error; err != nil {

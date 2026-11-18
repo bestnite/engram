@@ -76,7 +76,7 @@ describe('ReviewView empty-state icon', () => {
         ...faces('<p>q</p>', '<p>a</p>'),
         edit_href: '',
       }),
-      submitSelfReview: vi.fn().mockResolvedValue({ card_id: 'c1', state: 'review', version: 1, remaining: 0, cards: [] }),
+      submitSelfReview: vi.fn().mockResolvedValue({ card_id: 'c1', state: 'review', version: 1, remaining: 0, queue_size: 0, new_remaining: 0, cards: [] }),
     } as unknown as ApiClient;
     const target = mountReview(client);
     await flush();

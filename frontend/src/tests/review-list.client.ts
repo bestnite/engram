@@ -48,6 +48,8 @@ describe('ReviewView list items', () => {
       state: 'learning',
       version: 1,
       remaining: 0,
+      queue_size: 0,
+      new_remaining: 0,
       cards: [],
       feedback: {
         verdict: 'partial',

@@ -44,7 +44,7 @@ describe('ReviewView short answer', () => {
 
   async function setup(backHTML: string) {
     setLocale('zh-CN');
-    const submitSelfReview = vi.fn().mockResolvedValue({ card_id: 's1', state: 'learning', version: 1, remaining: 0, cards: [] });
+    const submitSelfReview = vi.fn().mockResolvedValue({ card_id: 's1', state: 'learning', version: 1, remaining: 0, queue_size: 0, new_remaining: 0, cards: [] });
     const client = {
       getDueCards: vi.fn().mockResolvedValue({ cards: [card] }),
       renderReviewCard: vi.fn().mockResolvedValue({

@@ -180,6 +180,29 @@ table lists the internal packages; the `frontend` package `internal/web` embeds 
   submitted answer, grades it, and maps its score through the preset's mapping; a template with no
   spec, or the self-assessed short answer control, takes the four-grade self-assessment. A
   self-graded template refuses a machine answer, and a stale `expected_version` is `409`.
+- **Review page requests.** The review page writes through the session-and-CSRF endpoints
+  `POST /api/v1/review/answer`, `/grade`, `/bury`, `/suspend` and `/undo`, which call the
+  `internal/api` service methods. An action response reports the same-scope queue through
+  `queue_size`, `new_remaining` and `remaining`, and carries a card to show in `cards`;
+  `/review/grade` with the `reveal` action writes nothing and returns the revealed face instead.
+  `queue_size` counts the complete queue the server builds for the same decks and tags after the
+  action, `new_remaining` counts the never-studied cards in that queue, and `remaining` carries
+  the same number as `queue_size` for callers written before the split. `queue_size` and
+  `new_remaining` are bounded at 500 cards, which is also the largest `limit`
+  `GET /api/v1/review/due` accepts, so a longer queue is counted up to that bound.
+  `cards` holds at most one card: for `answer`, `grade`, `bury` and `suspend` it is the queue's
+  next card; for `undo` it is the undone card rather than the queue head, and `undone_card_id`
+  names the same card; the undone card is not necessarily first by `due_at`. Undo restores the
+  state and due time the card had before the grade, so the restored card can be absent from the
+  due queue; the response then still carries that card on its own, and the counts keep counting
+  the queue without it. When the server cannot read that card, the response leaves it out and
+  `undone_card_id` still names it. `rendered_card` carries the `front` and `back` faces of the
+  card in `cards[0]`, plus `card_id`, `ordinal`, `type_in`, `answer_includes_question` and
+  `edit_href`, rendered by the same path as `POST /api/v1/review/render`; it is present only when
+  `cards` holds a card and the render succeeded. A render failure is logged and leaves
+  `rendered_card` out without failing the action, and the client then requests the faces from
+  `POST /api/v1/review/render`. The complete queue those counts describe is available only from
+  `GET /api/v1/review/due` with `limit=500`; an action response carries no more than one card.
 - **REST clients.** `/api/v1` (`internal/api`) accepts either the session channel or a bearer API
   key. An API key carries scopes, and each route declares the scope it requires. A note is sent and
   received as `{"note_type": "<public id>", "fields": {"<field name>": "<HTML>"}}`; the server

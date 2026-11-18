@@ -129,7 +129,7 @@ describe('ReviewView scrolling', () => {
   });
 
   it('scrolls a new card to the page top after a rating', async () => {
-    const submitSelfReview = vi.fn().mockResolvedValue({ cards: [card('c2')], remaining: 1, version: 1 });
+    const submitSelfReview = vi.fn().mockResolvedValue({ cards: [card('c2')], remaining: 1, queue_size: 1, new_remaining: 0, version: 1 });
     const { target, scrollTo } = await mountView('<p>A</p>', { submitSelfReview });
     await reveal(target);
     scrollTo.mockClear();
