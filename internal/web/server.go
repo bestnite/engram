@@ -325,6 +325,10 @@ func New(addr string, deps Deps) (*Server, error) {
 	// Security headers are mounted globally, covering static assets, /media, /api/v1, /mcp and the 404 fallback;
 	// they sit before session/locale so that any response aborted early still carries the full set. The CSP is enforcing, not report-only.
 	router.Use(securityHeaders())
+	// JSON responses are compressed here, directly after the security headers and before any route is registered:
+	// the headers are already on the response when the compressor adds Vary, so both live on every JSON reply. The
+	// middleware reads the Content-Type a handler sets, so the routes themselves stay unaware of it.
+	router.Use(gzipJSON())
 	// JSON bodies are capped and given a read deadline here, before any handler binds them. The middleware is mounted
 	// globally so it also covers the internal/api routes; multipart uploads keep their own per-endpoint caps.
 	router.Use(jsonBodyLimit(maxJSONBodyBytes, jsonBodyReadTimeout))
