@@ -60,3 +60,6 @@ PROGRESS.local.md
 # ── 设计规范（不入库：规范由维护者本地持有，不进开源仓库）──────────
 DESIGN.md
 .hermes/
+
+# Go 本地构建缓存（不要放进仓库）
+.gocache/
