@@ -6,7 +6,7 @@
   import { listClasses } from '../components/ui/variants';
   import { Plus, X } from '@lucide/svelte';
   import { onMount } from 'svelte';
-  import { t, localeStore, setLocale, type SupportedLocale, isSupportedLocale } from '../i18n';
+  import { t, localeStore, setLocale, isSupportedLocale, SUPPORTED_LOCALES, type SupportedLocale } from '../i18n';
   import {
     apiClient,
     ApiClientError,
@@ -60,6 +60,12 @@
   let dayCutoff = $state(String(DEFAULT_DAY_CUTOFF_HOUR));
   // Early learning window (in minutes): NULL in the database shows the default value, and it becomes an explicit value after saving; 0 means disabled.
   let learnAhead = $state(String(DEFAULT_LEARN_AHEAD_MINUTES));
+
+  // The language list has one source, SUPPORTED_LOCALES: this field, the header switcher and the account menu all
+  // render it, so adding a language never leaves one of the three behind.
+  const localeOptions = $derived(
+    SUPPORTED_LOCALES.map((code) => ({ value: code, label: $t(`language.${code}`) }))
+  );
 
   // The candidates must be computed from the current value: the database may hold a historical timezone name this browser does not recognize, and the field would render empty if it were not merged into the list.
   const timezoneChoices = $derived(timezoneOptions(timezone));
@@ -277,7 +283,7 @@
               onValueChange={handleLocaleChange}
               testId="settings-locale"
               ariaLabel={$t('settings.profile.locale_label')}
-              options={[{ value: 'zh-CN', label: $t('language.zh-CN') }, { value: 'en', label: $t('language.en') }]}
+              options={localeOptions}
               class="mt-1.5"
             />
             {#if fieldErrors.locale}

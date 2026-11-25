@@ -42,16 +42,39 @@ describe('i18n language resolution and formatting', () => {
         userSetting: null,
         navigatorLang: 'zh-TW',
       })
-    ).toBe('zh-CN');
+    ).toBe('zh-TW');
 
     // Priority 4: no recognizable preference at all — fall back to the site default (zh-CN)
     expect(
       resolveLocale({
         urlParam: null,
         userSetting: null,
-        navigatorLang: 'ja-JP',
+        navigatorLang: 'it-IT',
       })
     ).toBe('zh-CN');
+  });
+
+  it('maps regional and script variants onto the shipped catalogs', () => {
+    const resolved = (navigatorLang: string) =>
+      resolveLocale({ urlParam: null, userSetting: null, navigatorLang });
+
+    // Traditional Chinese: script and the Taiwan, Hong Kong and Macau regions select zh-TW.
+    expect(resolved('zh-Hant')).toBe('zh-TW');
+    expect(resolved('zh-HK')).toBe('zh-TW');
+    expect(resolved('zh-MO')).toBe('zh-TW');
+    // Simplified Chinese and a bare base select zh-CN.
+    expect(resolved('zh-Hans')).toBe('zh-CN');
+    expect(resolved('zh-SG')).toBe('zh-CN');
+    expect(resolved('zh')).toBe('zh-CN');
+    // Portuguese always lands on the one Portuguese catalog shipped.
+    expect(resolved('pt-PT')).toBe('pt-BR');
+    // Any other region of a shipped language keeps that language.
+    expect(resolved('fr-CA')).toBe('fr');
+    expect(resolved('de-AT')).toBe('de');
+    expect(resolved('es-419')).toBe('es');
+    expect(resolved('ja-JP')).toBe('ja');
+    expect(resolved('ko-KR')).toBe('ko');
+    expect(resolved('ru-RU')).toBe('ru');
   });
 
   it('formats messages with parameter interpolation and fallback', () => {

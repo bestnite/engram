@@ -138,7 +138,7 @@ func TestMailerComposeSiteAndUnsubscribe(t *testing.T) {
 
 // TestMailerSiteDefaultLocale ignores a configured default locale the site does not support.
 func TestMailerSiteDefaultLocale(t *testing.T) {
-	cases := []struct{ configured, want string }{{"en", "en"}, {"fr", ""}, {"", ""}}
+	cases := []struct{ configured, want string }{{"en", "en"}, {"it", ""}, {"", ""}}
 	for _, tc := range cases {
 		db := testDB(t)
 		if tc.configured != "" {

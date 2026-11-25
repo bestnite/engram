@@ -115,7 +115,7 @@ func TestAdminSettingsReadAndSave(t *testing.T) {
 
 	// Invalid locale: 400 and nothing persisted.
 	if rec := adminPostJSON(t, srv, "/api/v1/admin/settings", adminSettingsRequest{
-		Values: map[string]string{"site.default_locale": "de"},
+		Values: map[string]string{"site.default_locale": "it"},
 	}, cookies, csrf); rec.Code != http.StatusBadRequest {
 		t.Errorf("invalid locale = %d, want 400", rec.Code)
 	}

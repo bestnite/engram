@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { DropdownMenu } from 'bits-ui';
   import { ChevronsUpDown, Moon, Sun, LogOut, Check } from '@lucide/svelte';
-  import { t, localeStore } from '../../i18n';
+  import { t, localeStore, SUPPORTED_LOCALES } from '../../i18n';
   import { navigate } from '../../router';
   import { authStore, logout } from '../../auth';
   import { isDark, toggleTheme } from '../../theme';
@@ -48,10 +48,9 @@
     }
   }
 
-  const locales = $derived([
-    { value: 'zh-CN', label: $t('language.zh-CN') },
-    { value: 'en', label: $t('language.en') },
-  ]);
+  const locales = $derived(
+    SUPPORTED_LOCALES.map((code) => ({ value: code, label: $t(`language.${code}`) }))
+  );
 </script>
 
 {#if user}

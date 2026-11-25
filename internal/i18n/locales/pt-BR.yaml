@@ -1,0 +1,247 @@
+# Brazilian Portuguese catalog. Keys are lowercase dotted English.
+# The key set must match en.yaml exactly; TestCatalogsHaveIdenticalKeys enforces it.
+
+- id: app.name
+  translation: "Engram"
+- id: cardtype.basic
+  translation: "Básico"
+- id: cardtype.basic_both
+  translation: "Básico (e invertido)"
+- id: cardtype.cloze
+  translation: "Cloze"
+- id: cardtype.list
+  translation: "Lista"
+- id: cardtype.typed
+  translation: "Resposta digitada"
+- id: cardtype.numeric
+  translation: "Resposta numérica"
+- id: cardtype.choice_single
+  translation: "Escolha única"
+- id: cardtype.choice_multi
+  translation: "Múltipla escolha"
+- id: cardtype.true_false
+  translation: "Verdadeiro / falso"
+- id: cardtype.short_answer
+  translation: "Resposta curta"
+- id: clone.name_suffix
+  translation: " (cópia)"
+- id: media.quota.exceeded
+  translation: "Cota de mídia excedida: você usou {{.used}} do seu limite de {{.limit}}. Remova alguma mídia que não usa mais e tente novamente."
+- id: admin.mail.test.subject
+  translation: "E-mail de teste: prévia do modelo {{site}}"
+- id: admin.mail.test.body
+  translation: "Este é um e-mail de teste: você está visualizando um modelo de e-mail no painel administrativo.\nEle é renderizado com variáveis de exemplo; os destinatários reais veem seus próprios dados."
+- id: mail.role.reader
+  translation: "leitura"
+- id: mail.role.editor
+  translation: "edição"
+- id: mail.deck_shared.subject
+  translation: "{{.inviter}} convidou você para um baralho ({{.deck}}) - {{.site}}"
+- id: mail.deck_shared.title
+  translation: "Um baralho foi compartilhado com você"
+- id: mail.deck_shared.body
+  translation: "{{.inviter}} deu a você acesso de {{.role}} ao baralho {{.deck}} em {{.site}}."
+- id: mail.deck_shared.link_label
+  translation: "Abrir o baralho"
+- id: mail.deck_permission.subject
+  translation: "Seu acesso ao baralho mudou - {{.site}}"
+- id: mail.deck_permission.title
+  translation: "Seu acesso ao baralho mudou"
+- id: mail.deck_permission.granted
+  translation: "{{.actor}} alterou seu acesso ao baralho {{.deck}} para {{.role}}."
+- id: mail.deck_permission.revoked
+  translation: "{{.actor}} removeu seu acesso ao baralho {{.deck}}."
+- id: mail.deck_permission.link_label
+  translation: "Abrir o baralho"
+- id: mail.optimize.subject
+  translation: "Otimização de parâmetros concluída - {{.site}}"
+- id: mail.optimize.title
+  translation: "Seus parâmetros de estudo foram atualizados"
+- id: mail.optimize.body
+  translation: "Os parâmetros da predefinição {{.preset}} foram otimizados a partir de {{.count}} revisões. Eles já estão ativos; você pode revisá-los ou revertê-los a qualquer momento."
+- id: mail.optimize.link_label
+  translation: "Revisar parâmetros"
+- id: mail.footer.note
+  translation: "Você recebe isto porque ativou esta notificação. Você pode desativá-la a qualquer momento nas configurações."
+- id: mail.footer.unsubscribe
+  translation: "Cancelar inscrição nestes e-mails"
+- id: mail.footer.automated
+  translation: "Esta mensagem foi enviada automaticamente. Não responda."
+- id: mail.prefs.type.password_reset
+  translation: "Redefinição de senha"
+- id: mail.prefs.type.email_verification
+  translation: "Verificação de e-mail e confirmação de troca de e-mail"
+- id: mail.prefs.type.new_device_login
+  translation: "Aviso de entrada em novo dispositivo ou novo IP"
+- id: mail.prefs.type.credential_changed
+  translation: "Aviso de alteração de senha, verificação em duas etapas ou códigos de recuperação"
+- id: mail.prefs.type.account_status
+  translation: "Aviso de conta desativada ou excluída"
+- id: mail.prefs.type.deck_shared
+  translation: "Um baralho foi compartilhado com você"
+- id: mail.prefs.type.deck_permission_changed
+  translation: "Permissão de baralho alterada ou revogada"
+- id: mail.prefs.type.invite
+  translation: "Convite para cadastro"
+- id: mail.prefs.type.review_reminder
+  translation: "Lembrete de estudo"
+- id: mail.prefs.type.study_digest
+  translation: "Resumo de estudo"
+- id: mail.prefs.type.optimize_done
+  translation: "Otimização de parâmetros concluída"
+- id: mail.prefs.type.job_failed
+  translation: "Tarefa falhou"
+- id: mail.prefs.type.media_disk_alert
+  translation: "Alerta de cota de mídia ou disco"
+- id: mail.invite.subject
+  translation: "Seu convite para {{.site}}"
+- id: mail.invite.title
+  translation: "Você foi convidado para {{.site}}"
+- id: mail.invite.body
+  translation: "Crie sua conta com o botão abaixo para começar a usar {{.site}}."
+- id: mail.invite.link_label
+  translation: "Criar minha conta"
+- id: mail.invite.expires
+  translation: "Este convite expira em {{.expires}}."
+- id: mail.invite.note
+  translation: "Se você não esperava este convite, pode ignorar este e-mail."
+- id: mail.reminder.subject
+  translation: "Hora de revisar - {{.site}}"
+- id: mail.reminder.title
+  translation: "Hora de revisar"
+- id: mail.reminder.body
+  translation: "Você tem {{.count}} cartões pendentes em {{.site}}. Alguns minutos agora mantêm seu cronograma em dia."
+- id: mail.reminder.link_label
+  translation: "Começar a revisar"
+- id: mail.reset.subject
+  translation: "Redefina sua senha do {{.site}}"
+- id: mail.reset.title
+  translation: "Redefina sua senha"
+- id: mail.reset.body
+  translation: "Recebemos um pedido para redefinir a senha da sua conta em {{.site}}. Use o botão abaixo para escolher uma nova senha."
+- id: mail.reset.link_label
+  translation: "Escolher uma nova senha"
+- id: mail.reset.note
+  translation: "O link expira em {{.expires}}. Se você não pediu uma redefinição, pode ignorar este e-mail — sua senha permanece a mesma."
+- id: mail.verify.subject
+  translation: "Verifique seu endereço de e-mail do {{.site}}"
+- id: mail.verify.title
+  translation: "Confirme seu endereço de e-mail"
+- id: mail.verify.body
+  translation: "Confirme que este endereço é seu para concluir a configuração da sua conta em {{.site}}."
+- id: mail.verify.link_label
+  translation: "Confirmar endereço de e-mail"
+- id: mail.verify.note
+  translation: "O link expira em {{.expires}}. Se você não criou uma conta, pode ignorar este e-mail."
+- id: mail.verify.change_subject
+  translation: "Confirme seu novo endereço de e-mail do {{.site}}"
+- id: mail.verify.change_title
+  translation: "Confirme seu novo endereço de e-mail"
+- id: mail.verify.change_body
+  translation: "Confirme este novo endereço para começar a usá-lo na sua conta em {{.site}}."
+- id: mail.verify.change_link_label
+  translation: "Confirmar novo endereço"
+- id: mail.verify.change_note
+  translation: "O link expira em {{.expires}}. Se você não pediu para trocar seu e-mail, ignore esta mensagem e continue usando seu endereço atual."
+- id: mail.notice.new_device.subject
+  translation: "Nova entrada na sua conta do {{.site}}"
+- id: mail.notice.new_device.title
+  translation: "Nova entrada na sua conta"
+- id: mail.notice.new_device.body
+  translation: "Sua conta em {{.site}} acabou de receber uma entrada de um dispositivo ou rede que não vimos antes."
+- id: mail.notice.new_device.time
+  translation: "**Hora:** {{.time}}"
+- id: mail.notice.new_device.ip
+  translation: "**Endereço IP:** {{.ip}}"
+- id: mail.notice.new_device.note
+  translation: "Se foi você, nenhuma ação é necessária. Se não foi, altere sua senha imediatamente e reveja suas sessões ativas."
+- id: mail.notice.credential.subject
+  translation: "Suas credenciais do {{.site}} mudaram"
+- id: mail.notice.credential.title
+  translation: "Suas configurações de segurança mudaram"
+- id: mail.notice.credential.body
+  translation: "Isto foi alterado na sua conta em {{.site}}: {{.what}}."
+- id: mail.notice.credential.note
+  translation: "Se você não fez esta alteração, redefina sua senha imediatamente e contate um administrador."
+- id: mail.notice.credential.password
+  translation: "senha"
+- id: mail.notice.credential.totp_enabled
+  translation: "verificação em duas etapas ativada"
+- id: mail.notice.credential.totp_disabled
+  translation: "verificação em duas etapas desativada"
+- id: mail.notice.credential.recovery_codes
+  translation: "códigos de recuperação regenerados"
+- id: mail.notice.credential.email
+  translation: "endereço de e-mail"
+- id: mail.notice.account.subject
+  translation: "O status da sua conta em {{.site}} mudou"
+- id: mail.notice.account.title
+  translation: "O status da sua conta mudou"
+- id: mail.notice.account.body
+  translation: "Sua conta em {{.site}} foi {{.status}}."
+- id: mail.notice.account.note
+  translation: "Se você acha que isto é um erro, contate o administrador do site."
+- id: mail.notice.account.disabled
+  translation: "desativada"
+- id: mail.notice.account.deleted
+  translation: "excluída"
+- id: mail.admin.job_failed.subject
+  translation: "Tarefa falhou #{{.job_id}} - {{.site}}"
+- id: mail.admin.job_failed.title
+  translation: "Uma tarefa em segundo plano falhou"
+- id: mail.admin.job_failed.body
+  translation: "A tarefa #{{.job_id}} ({{.kind}}) falhou em {{.site}}."
+- id: mail.admin.job_failed.reason_label
+  translation: "**Motivo da falha**"
+- id: mail.admin.job_failed.note
+  translation: "Abra a página de tarefas no painel administrativo para ver o registro completo e tentar novamente."
+- id: mail.admin.media_alert.subject
+  translation: "Alerta de cota de mídia - {{.site}}"
+- id: mail.admin.media_alert.title
+  translation: "Um usuário atingiu a cota de mídia"
+- id: mail.admin.media_alert.body
+  translation: "{{.username}} usou {{.used}} da cota de {{.limit}} em {{.site}}. Novos envios deste usuário são recusados até que alguma mídia seja removida."
+- id: mail.admin.media_alert.note
+  translation: "Considere aumentar a cota ou pedir ao usuário que remova mídia não usada."
+- id: mail.digest.subject
+  translation: "Seu resumo semanal de estudo"
+- id: mail.digest.title
+  translation: "Sua semana em revisão"
+- id: mail.digest.intro
+  translation: "Veja como foi seu estudo nos últimos sete dias."
+- id: mail.digest.reviewed
+  translation: "**Revisões:** {{.count}}"
+- id: mail.digest.pass_rate
+  translation: "**Taxa de acerto:** {{.rate}}%"
+- id: mail.digest.streak
+  translation: "**Sequência atual:** {{.days}} dias"
+- id: mail.digest.new_cards
+  translation: "**Cartões novos:** {{.count}}"
+- id: mail.digest.due
+  translation: "**Pendentes agora:** {{.count}}"
+- id: mail.digest.link_label
+  translation: "Ver suas estatísticas"
+- id: presets.default_name
+  translation: "Padrão"
+- id: review.empty_card.notice
+  translation: "Este cartão está vazio. A limpeza de Cartões vazios o remove."
+- id: m20.metadata_template
+  translation: "Os modelos não podem referenciar o campo engram_meta."
+- id: m20.reserved_prefix
+  translation: "Nomes de campo que começam com engram_ são reservados, exceto engram_meta."
+- id: m20.reserved_prefix_import
+  translation: "Nomes de campo que começam com engram_ foram importados como campos comuns."
+- id: m20.metadata_field_locked
+  translation: "O campo engram_meta é interno e não pode ser renomeado nem removido."
+- id: mail.study.reminder.subject
+  translation: "Hora de estudar - {{.site}}"
+- id: mail.study.reminder.title
+  translation: "Hora de estudar"
+- id: mail.study.reminder.body
+  translation: "Você tem {{.new_available}} cartões novos para aprender e {{.review_available}} cartões para revisar em {{.site}}."
+- id: mail.study.reminder.link_label
+  translation: "Começar a estudar"
+- id: mail.study.digest.new
+  translation: "**Novas avaliações:** {{.count}}"
+- id: mail.study.digest.new_available
+  translation: "**Cartões novos disponíveis agora:** {{.count}}"

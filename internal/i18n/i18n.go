@@ -29,9 +29,9 @@ const localesDir = "locales"
 // DefaultLocaleCode is the site default language; it is used when every language resolution fails.
 const DefaultLocaleCode = "zh-CN"
 
-// supportedCodes lists the launch languages; the order is the display order of the "language switcher".
+// supportedCodes lists the shipped languages; the order is the display order of the "language switcher".
 // Adding a language = add locales/<code>.yaml and append the code here.
-var supportedCodes = []string{"zh-CN", "en"}
+var supportedCodes = []string{"zh-CN", "zh-TW", "en", "ja", "ko", "es", "fr", "de", "pt-BR", "ru"}
 
 // Translator holds the loaded language packs and the matching information for supported languages.
 type Translator struct {
@@ -147,7 +147,10 @@ func (t *Translator) SupportedCodes() []string {
 
 // Pick chooses the request language by fixed precedence: requested (explicit ?lang override) > userLocale (user setting)
 // > acceptLanguage > site default. When one level yields an unsupported language it moves to the next level instead of
-// doing a nearest match -- otherwise a user who set the language to "de" would beat the "en" in Accept-Language.
+// doing a nearest match -- otherwise a user who set the language to "it" would beat the "en" in Accept-Language.
+// A supported language that ships more than one regional catalog is resolved by script and region: Traditional script
+// or a Taiwan, Hong Kong or Macau region selects zh-TW and every other Chinese tag selects zh-CN, and pt-PT selects
+// pt-BR because it is the only Portuguese catalog shipped.
 func (t *Translator) Pick(requested, userLocale, acceptLanguage string) language.Tag {
 	for _, raw := range []string{requested, userLocale} {
 		if raw == "" {
@@ -171,17 +174,57 @@ func (t *Translator) Pick(requested, userLocale, acceptLanguage string) language
 	return t.defaultTag
 }
 
-// match only accepts tags with the same base as a supported language and maps them to the supported canonical
-// tag (en-US->en, zh-TW->zh-CN).
+// match returns the canonical tag of the supported catalog a parsed tag resolves to.
 func (t *Translator) match(tag language.Tag) (language.Tag, bool) {
-	base, _ := tag.Base()
+	code, ok := t.matchCode(tag)
+	if !ok {
+		return language.Tag{}, false
+	}
+	return t.tags[code], true
+}
+
+// matchCode maps a parsed tag to a supported language code. An exact code wins, because a visitor who asked for a
+// specific regional catalog gets it. Otherwise the tag's language base selects the shipped catalog with that base.
+// Chinese is the one base that ships two catalogs, so its script and region decide: Traditional script or a Taiwan,
+// Hong Kong or Macau region selects zh-TW, every other Chinese tag selects zh-CN. A base that ships no catalog is
+// unsupported and reports false, so the caller can fall through to the next precedence level.
+func (t *Translator) matchCode(tag language.Tag) (string, bool) {
+	want := tag.String()
 	for _, code := range t.codes {
-		want, _ := t.tags[code].Base()
-		if base.String() == want.String() {
-			return t.tags[code], true
+		if t.tags[code].String() == want {
+			return code, true
 		}
 	}
-	return language.Tag{}, false
+	base, _ := tag.Base()
+	if base.String() == "zh" {
+		return t.chineseCode(tag)
+	}
+	for _, code := range t.codes {
+		if codeBase, _ := t.tags[code].Base(); codeBase.String() == base.String() {
+			return code, true
+		}
+	}
+	return "", false
+}
+
+// chineseCode chooses between the shipped Chinese catalogs from the tag's script and region.
+// It reports false only when neither catalog is shipped.
+func (t *Translator) chineseCode(tag language.Tag) (string, bool) {
+	script, _ := tag.Script()
+	region, _ := tag.Region()
+	traditional := script.String() == "Hant"
+	switch region.String() {
+	case "TW", "HK", "MO":
+		traditional = true
+	}
+	code := "zh-CN"
+	if traditional {
+		code = "zh-TW"
+	}
+	if _, ok := t.tags[code]; !ok {
+		return "", false
+	}
+	return code, true
 }
 
 // Localizer is bound to one language, for handlers and templates to fetch values.
@@ -191,16 +234,11 @@ type Localizer struct {
 	lc   *goi18n.Localizer
 }
 
-// Localizer builds a localizer for the given language; unsupported tags fall back to the site default language.
+// Localizer builds a localizer for the given language; a tag no shipped catalog covers falls back to the site default.
 func (t *Translator) Localizer(tag language.Tag) *Localizer {
-	code := DefaultLocaleCode
-	base, _ := tag.Base()
-	for _, c := range t.codes {
-		want, _ := t.tags[c].Base()
-		if base.String() == want.String() {
-			code = c
-			break
-		}
+	code, ok := t.matchCode(tag)
+	if !ok {
+		code = DefaultLocaleCode
 	}
 	return &Localizer{code: code, tag: tag, lc: goi18n.NewLocalizer(t.bundle, code)}
 }

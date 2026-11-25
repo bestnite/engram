@@ -123,7 +123,7 @@ func TestShellLanguageFollowsI18nRules(t *testing.T) {
 		{name: "site default", path: "/", want: `lang="zh-CN"`},
 		{name: "lang query override", path: "/?lang=en", want: `lang="en"`},
 		{name: "accept-language fallback", path: "/", headers: map[string]string{"Accept-Language": "en-US,en;q=0.9"}, want: `lang="en"`},
-		{name: "unsupported lang falls back", path: "/?lang=de", want: `lang="zh-CN"`},
+		{name: "unsupported lang falls back", path: "/?lang=it", want: `lang="zh-CN"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

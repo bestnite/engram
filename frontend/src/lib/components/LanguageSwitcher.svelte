@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Globe } from '@lucide/svelte';
-  import { localeStore, t } from '../i18n';
+  import { localeStore, t, SUPPORTED_LOCALES } from '../i18n';
   import Select from './ui/Select.svelte';
   import { switchLocale } from './language-switch';
   import { toast } from './ui/toast';
@@ -11,10 +11,9 @@
    * The dropdown itself is ui/Select (bits-ui) rather than a native select element: with the native control, under both the light and dark themes
    * the appearance is decided by the system, and its height and colors never align with the other header controls.
    */
-  const options = $derived([
-    { value: 'zh-CN', label: $t('language.zh-CN') },
-    { value: 'en', label: $t('language.en') },
-  ]);
+  const options = $derived(
+    SUPPORTED_LOCALES.map((code) => ({ value: code, label: $t(`language.${code}`) }))
+  );
 
   let saving = $state(false);
 

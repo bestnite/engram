@@ -442,7 +442,10 @@ rules as a timer round), and lists the history with `GET /api/v1/admin/jobs`.
   the session payload carries and `timeZoneStore` (`frontend/src/lib/auth`) exposes, never in the browser's; an empty
   or unknown name reads as UTC, as in `internal/reviewday`. Admin pages whose times the server formats get them in the
   viewing admin's timezone, and a mail shows its times in the recipient's timezone followed by the zone name.
-- UI text comes from `frontend/src/lib/i18n/locales/{zh-CN,en}.ts`. Text produced by the
-  server (emails, server-side messages) comes from `internal/i18n/locales/{zh-CN,en}.yaml`.
+- UI text comes from `frontend/src/lib/i18n/locales/*.ts`, one file per shipped language
+  (`zh-CN`, `zh-TW`, `en`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR`, `ru`). Text produced by the
+  server (emails, server-side messages) comes from `internal/i18n/locales/*.yaml` with the same
+  language codes. Every catalog covers the same messages; a count-driven message may add the plural
+  variants its own language selects (see `frontend/src/lib/i18n/plural.ts`).
 - Tests run in two vitest suites: an SSR suite and a happy-dom suite for `*.client.ts` files.
   `svelte-check` type-checks the components.

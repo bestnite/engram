@@ -8,6 +8,7 @@ import {
   validateProfileForm,
   COMMON_TIMEZONES,
 } from '../lib/api/validation';
+import { SUPPORTED_LOCALES } from '../lib/i18n/types';
 
 describe('Registration and setup password confirmation', () => {
   describe('validatePasswordConfirmation', () => {
@@ -63,16 +64,17 @@ describe('Profile and settings form validation', () => {
   });
 
   describe('validateLocale', () => {
-    it('accepts supported locales (zh-CN and en)', () => {
-      expect(validateLocale('zh-CN')).toEqual({ valid: true, value: 'zh-CN' });
-      expect(validateLocale('en')).toEqual({ valid: true, value: 'en' });
+    it('accepts every shipped locale', () => {
+      for (const code of SUPPORTED_LOCALES) {
+        expect(validateLocale(code)).toEqual({ valid: true, value: code });
+      }
       expect(validateLocale('  zh-CN  ')).toEqual({ valid: true, value: 'zh-CN' });
     });
 
     it('rejects unsupported locales with localized error key', () => {
-      expect(validateLocale('fr')).toEqual({
+      expect(validateLocale('it')).toEqual({
         valid: false,
-        value: 'fr',
+        value: 'it',
         errorKey: 'settings.error.locale_invalid',
       });
       expect(validateLocale('ja-JP')).toEqual({
@@ -260,7 +262,7 @@ describe('Profile and settings form validation', () => {
     it('aggregates multiple field errors simultaneously', () => {
       const res = validateProfileForm({
         display_name: '',
-        locale: 'fr',
+        locale: 'it',
         timezone: 'Mars/Phobos',
         day_cutoff_hour: '99',
       });

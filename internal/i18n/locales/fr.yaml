@@ -1,0 +1,247 @@
+# French catalog. Keys are lowercase dotted English.
+# The key set must match en.yaml exactly; TestCatalogsHaveIdenticalKeys enforces it.
+
+- id: app.name
+  translation: "Engram"
+- id: cardtype.basic
+  translation: "Basique"
+- id: cardtype.basic_both
+  translation: "Basique (et inversée)"
+- id: cardtype.cloze
+  translation: "Texte à trous"
+- id: cardtype.list
+  translation: "Liste"
+- id: cardtype.typed
+  translation: "Réponse saisie"
+- id: cardtype.numeric
+  translation: "Réponse numérique"
+- id: cardtype.choice_single
+  translation: "Choix unique"
+- id: cardtype.choice_multi
+  translation: "Choix multiple"
+- id: cardtype.true_false
+  translation: "Vrai / faux"
+- id: cardtype.short_answer
+  translation: "Réponse courte"
+- id: clone.name_suffix
+  translation: " (copie)"
+- id: media.quota.exceeded
+  translation: "Quota de médias dépassé : vous avez utilisé {{.used}} sur votre limite de {{.limit}}. Supprimez des médias que vous n'utilisez plus et réessayez."
+- id: admin.mail.test.subject
+  translation: "E-mail de test : aperçu du modèle {{site}}"
+- id: admin.mail.test.body
+  translation: "Ceci est un e-mail de test : vous prévisualisez un modèle d'e-mail dans le panneau d'administration.\nIl est rendu avec des variables d'exemple ; les vrais destinataires voient leurs propres données."
+- id: mail.role.reader
+  translation: "lecteur"
+- id: mail.role.editor
+  translation: "éditeur"
+- id: mail.deck_shared.subject
+  translation: "{{.inviter}} vous a invité à un paquet ({{.deck}}) - {{.site}}"
+- id: mail.deck_shared.title
+  translation: "Un paquet a été partagé avec vous"
+- id: mail.deck_shared.body
+  translation: "{{.inviter}} vous a accordé un accès {{.role}} au paquet {{.deck}} sur {{.site}}."
+- id: mail.deck_shared.link_label
+  translation: "Ouvrir le paquet"
+- id: mail.deck_permission.subject
+  translation: "Votre accès au paquet a changé - {{.site}}"
+- id: mail.deck_permission.title
+  translation: "Votre accès au paquet a changé"
+- id: mail.deck_permission.granted
+  translation: "{{.actor}} a modifié votre accès au paquet {{.deck}} : {{.role}}."
+- id: mail.deck_permission.revoked
+  translation: "{{.actor}} a retiré votre accès au paquet {{.deck}}."
+- id: mail.deck_permission.link_label
+  translation: "Ouvrir le paquet"
+- id: mail.optimize.subject
+  translation: "Optimisation des paramètres terminée - {{.site}}"
+- id: mail.optimize.title
+  translation: "Vos paramètres d'étude ont été mis à jour"
+- id: mail.optimize.body
+  translation: "Les paramètres du préréglage {{.preset}} ont été optimisés à partir de {{.count}} révisions. Ils sont actifs dès maintenant ; vous pouvez les consulter ou revenir aux valeurs précédentes à tout moment."
+- id: mail.optimize.link_label
+  translation: "Consulter les paramètres"
+- id: mail.footer.note
+  translation: "Vous recevez ce message parce que vous avez activé cette notification. Vous pouvez la désactiver à tout moment dans les paramètres."
+- id: mail.footer.unsubscribe
+  translation: "Se désabonner de ces e-mails"
+- id: mail.footer.automated
+  translation: "Ce message a été envoyé automatiquement. Merci de ne pas y répondre."
+- id: mail.prefs.type.password_reset
+  translation: "Réinitialisation du mot de passe"
+- id: mail.prefs.type.email_verification
+  translation: "Vérification de l'e-mail et confirmation du changement d'e-mail"
+- id: mail.prefs.type.new_device_login
+  translation: "Avis de connexion depuis un nouvel appareil ou une nouvelle IP"
+- id: mail.prefs.type.credential_changed
+  translation: "Avis de changement de mot de passe, de double authentification ou de codes de récupération"
+- id: mail.prefs.type.account_status
+  translation: "Avis de désactivation ou de suppression de compte"
+- id: mail.prefs.type.deck_shared
+  translation: "Un paquet a été partagé avec vous"
+- id: mail.prefs.type.deck_permission_changed
+  translation: "Autorisation de paquet modifiée ou révoquée"
+- id: mail.prefs.type.invite
+  translation: "Invitation à s'inscrire"
+- id: mail.prefs.type.review_reminder
+  translation: "Rappel d'étude"
+- id: mail.prefs.type.study_digest
+  translation: "Récapitulatif d'étude"
+- id: mail.prefs.type.optimize_done
+  translation: "Optimisation des paramètres terminée"
+- id: mail.prefs.type.job_failed
+  translation: "Tâche en échec"
+- id: mail.prefs.type.media_disk_alert
+  translation: "Alerte de quota de médias ou d'espace disque"
+- id: mail.invite.subject
+  translation: "Votre invitation à {{.site}}"
+- id: mail.invite.title
+  translation: "Vous êtes invité à {{.site}}"
+- id: mail.invite.body
+  translation: "Créez votre compte avec le bouton ci-dessous pour commencer à utiliser {{.site}}."
+- id: mail.invite.link_label
+  translation: "Créer mon compte"
+- id: mail.invite.expires
+  translation: "Cette invitation expire le {{.expires}}."
+- id: mail.invite.note
+  translation: "Si vous n'attendiez pas cette invitation, vous pouvez ignorer cet e-mail."
+- id: mail.reminder.subject
+  translation: "C'est l'heure de réviser - {{.site}}"
+- id: mail.reminder.title
+  translation: "C'est l'heure de réviser"
+- id: mail.reminder.body
+  translation: "Vous avez {{.count}} cartes à réviser sur {{.site}}. Quelques minutes suffisent pour rester à jour."
+- id: mail.reminder.link_label
+  translation: "Commencer à réviser"
+- id: mail.reset.subject
+  translation: "Réinitialisez votre mot de passe {{.site}}"
+- id: mail.reset.title
+  translation: "Réinitialiser votre mot de passe"
+- id: mail.reset.body
+  translation: "Nous avons reçu une demande de réinitialisation du mot de passe de votre compte {{.site}}. Utilisez le bouton ci-dessous pour choisir un nouveau mot de passe."
+- id: mail.reset.link_label
+  translation: "Choisir un nouveau mot de passe"
+- id: mail.reset.note
+  translation: "Le lien expire le {{.expires}}. Si vous n'avez pas demandé de réinitialisation, ignorez cet e-mail — votre mot de passe reste inchangé."
+- id: mail.verify.subject
+  translation: "Vérifiez votre adresse e-mail {{.site}}"
+- id: mail.verify.title
+  translation: "Confirmer votre adresse e-mail"
+- id: mail.verify.body
+  translation: "Confirmez que cette adresse vous appartient pour terminer la configuration de votre compte {{.site}}."
+- id: mail.verify.link_label
+  translation: "Confirmer l'adresse e-mail"
+- id: mail.verify.note
+  translation: "Le lien expire le {{.expires}}. Si vous n'avez pas créé de compte, ignorez cet e-mail."
+- id: mail.verify.change_subject
+  translation: "Confirmez votre nouvelle adresse e-mail {{.site}}"
+- id: mail.verify.change_title
+  translation: "Confirmer votre nouvelle adresse e-mail"
+- id: mail.verify.change_body
+  translation: "Confirmez cette nouvelle adresse pour l'utiliser avec votre compte {{.site}}."
+- id: mail.verify.change_link_label
+  translation: "Confirmer la nouvelle adresse"
+- id: mail.verify.change_note
+  translation: "Le lien expire le {{.expires}}. Si vous n'avez pas demandé à changer d'adresse e-mail, ignorez cet e-mail et continuez d'utiliser votre adresse actuelle."
+- id: mail.notice.new_device.subject
+  translation: "Nouvelle connexion à votre compte {{.site}}"
+- id: mail.notice.new_device.title
+  translation: "Nouvelle connexion à votre compte"
+- id: mail.notice.new_device.body
+  translation: "Une connexion vient d'être effectuée sur votre compte {{.site}} depuis un appareil ou un réseau que nous n'avons encore jamais vu."
+- id: mail.notice.new_device.time
+  translation: "**Heure :** {{.time}}"
+- id: mail.notice.new_device.ip
+  translation: "**Adresse IP :** {{.ip}}"
+- id: mail.notice.new_device.note
+  translation: "S'il s'agit de vous, aucune action n'est nécessaire. Sinon, changez immédiatement votre mot de passe et vérifiez vos sessions actives."
+- id: mail.notice.credential.subject
+  translation: "Vos identifiants {{.site}} ont changé"
+- id: mail.notice.credential.title
+  translation: "Vos paramètres de sécurité ont changé"
+- id: mail.notice.credential.body
+  translation: "Ceci a été modifié sur votre compte {{.site}} : {{.what}}."
+- id: mail.notice.credential.note
+  translation: "Si vous n'êtes pas à l'origine de ce changement, réinitialisez immédiatement votre mot de passe et contactez un administrateur."
+- id: mail.notice.credential.password
+  translation: "mot de passe"
+- id: mail.notice.credential.totp_enabled
+  translation: "double authentification activée"
+- id: mail.notice.credential.totp_disabled
+  translation: "double authentification désactivée"
+- id: mail.notice.credential.recovery_codes
+  translation: "codes de récupération régénérés"
+- id: mail.notice.credential.email
+  translation: "adresse e-mail"
+- id: mail.notice.account.subject
+  translation: "Le statut de votre compte {{.site}} a changé"
+- id: mail.notice.account.title
+  translation: "Le statut de votre compte a changé"
+- id: mail.notice.account.body
+  translation: "Votre compte {{.site}} a été {{.status}}."
+- id: mail.notice.account.note
+  translation: "Si vous pensez qu'il s'agit d'une erreur, contactez l'administrateur du site."
+- id: mail.notice.account.disabled
+  translation: "désactivé"
+- id: mail.notice.account.deleted
+  translation: "supprimé"
+- id: mail.admin.job_failed.subject
+  translation: "Échec de la tâche n° {{.job_id}} - {{.site}}"
+- id: mail.admin.job_failed.title
+  translation: "Une tâche d'arrière-plan a échoué"
+- id: mail.admin.job_failed.body
+  translation: "La tâche n° {{.job_id}} ({{.kind}}) a échoué sur {{.site}}."
+- id: mail.admin.job_failed.reason_label
+  translation: "**Raison de l'échec**"
+- id: mail.admin.job_failed.note
+  translation: "Ouvrez la page des tâches du panneau d'administration pour consulter le journal complet et relancer."
+- id: mail.admin.media_alert.subject
+  translation: "Alerte de quota de médias - {{.site}}"
+- id: mail.admin.media_alert.title
+  translation: "Un utilisateur a atteint son quota de médias"
+- id: mail.admin.media_alert.body
+  translation: "{{.username}} a utilisé {{.used}} sur un quota de {{.limit}} sur {{.site}}. Les nouveaux envois de cet utilisateur sont refusés jusqu'à ce que des médias soient supprimés."
+- id: mail.admin.media_alert.note
+  translation: "Envisagez d'augmenter le quota ou de demander à l'utilisateur de supprimer les médias inutilisés."
+- id: mail.digest.subject
+  translation: "Votre récapitulatif d'étude hebdomadaire"
+- id: mail.digest.title
+  translation: "Votre semaine en révision"
+- id: mail.digest.intro
+  translation: "Voici le déroulement de votre étude au cours des sept derniers jours."
+- id: mail.digest.reviewed
+  translation: "**Révisions :** {{.count}}"
+- id: mail.digest.pass_rate
+  translation: "**Taux de réussite :** {{.rate}} %"
+- id: mail.digest.streak
+  translation: "**Série actuelle :** {{.days}} jours"
+- id: mail.digest.new_cards
+  translation: "**Nouvelles cartes :** {{.count}}"
+- id: mail.digest.due
+  translation: "**À réviser maintenant :** {{.count}}"
+- id: mail.digest.link_label
+  translation: "Voir vos statistiques"
+- id: presets.default_name
+  translation: "Par défaut"
+- id: review.empty_card.notice
+  translation: "Cette carte est vide. Le nettoyage des cartes vides la supprime."
+- id: m20.metadata_template
+  translation: "Les modèles ne peuvent pas référencer le champ engram_meta."
+- id: m20.reserved_prefix
+  translation: "Les noms de champ commençant par engram_ sont réservés, sauf engram_meta."
+- id: m20.reserved_prefix_import
+  translation: "Les noms de champ commençant par engram_ ont été importés comme champs ordinaires."
+- id: m20.metadata_field_locked
+  translation: "Le champ engram_meta est intégré et ne peut être ni renommé ni supprimé."
+- id: mail.study.reminder.subject
+  translation: "C'est l'heure d'étudier - {{.site}}"
+- id: mail.study.reminder.title
+  translation: "C'est l'heure d'étudier"
+- id: mail.study.reminder.body
+  translation: "Vous avez {{.new_available}} nouvelles cartes à apprendre et {{.review_available}} cartes à réviser sur {{.site}}."
+- id: mail.study.reminder.link_label
+  translation: "Commencer à étudier"
+- id: mail.study.digest.new
+  translation: "**Nouvelles notes :** {{.count}}"
+- id: mail.study.digest.new_available
+  translation: "**Nouvelles cartes disponibles maintenant :** {{.count}}"

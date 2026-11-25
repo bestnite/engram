@@ -148,7 +148,7 @@ func TestProfileAuthorizationAndValidation(t *testing.T) {
 		body profileRequest
 	}{
 		{"empty display name", profileRequest{DisplayName: "  ", Locale: "en", Timezone: "UTC"}},
-		{"unsupported locale", profileRequest{DisplayName: "Name", Locale: "fr", Timezone: "UTC"}},
+		{"unsupported locale", profileRequest{DisplayName: "Name", Locale: "it", Timezone: "UTC"}},
 		{"invalid timezone", profileRequest{DisplayName: "Name", Locale: "en", Timezone: "No/Such_Zone"}},
 		{"cutoff above range", profileRequest{DisplayName: "Name", Locale: "en", Timezone: "UTC", DayCutoffHour: &badCutoff}},
 	}
@@ -160,7 +160,7 @@ func TestProfileAuthorizationAndValidation(t *testing.T) {
 			}
 		})
 	}
-	if rec := patchProfile(t, srv, "/api/v1/settings/locale", localeRequest{Locale: "fr"}, cookies, csrf, ""); rec.Code != http.StatusBadRequest {
+	if rec := patchProfile(t, srv, "/api/v1/settings/locale", localeRequest{Locale: "it"}, cookies, csrf, ""); rec.Code != http.StatusBadRequest {
 		t.Errorf("unsupported locale PATCH = %d, want 400", rec.Code)
 	}
 	stored, err := store.NewUserStore(db).ByID(context.Background(), userID)

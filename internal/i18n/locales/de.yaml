@@ -1,0 +1,247 @@
+# German catalog. Keys are lowercase dotted English.
+# The key set must match en.yaml exactly; TestCatalogsHaveIdenticalKeys enforces it.
+
+- id: app.name
+  translation: "Engram"
+- id: cardtype.basic
+  translation: "Standard"
+- id: cardtype.basic_both
+  translation: "Standard (und umgekehrt)"
+- id: cardtype.cloze
+  translation: "Lückentext"
+- id: cardtype.list
+  translation: "Liste"
+- id: cardtype.typed
+  translation: "Eingetippte Antwort"
+- id: cardtype.numeric
+  translation: "Zahlenantwort"
+- id: cardtype.choice_single
+  translation: "Einzelauswahl"
+- id: cardtype.choice_multi
+  translation: "Mehrfachauswahl"
+- id: cardtype.true_false
+  translation: "Wahr / falsch"
+- id: cardtype.short_answer
+  translation: "Kurzantwort"
+- id: clone.name_suffix
+  translation: " (Kopie)"
+- id: media.quota.exceeded
+  translation: "Medienkontingent überschritten: Sie haben {{.used}} von {{.limit}} verbraucht. Entfernen Sie nicht mehr benötigte Medien und versuchen Sie es erneut."
+- id: admin.mail.test.subject
+  translation: "Testmail: Vorschau der Vorlage {{site}}"
+- id: admin.mail.test.body
+  translation: "Dies ist eine Testmail: Sie sehen eine Vorschau einer E-Mail-Vorlage im Verwaltungsbereich.\nSie wird mit Beispielvariablen gerendert; echte Empfänger sehen ihre eigenen Daten."
+- id: mail.role.reader
+  translation: "lesbar"
+- id: mail.role.editor
+  translation: "bearbeitbar"
+- id: mail.deck_shared.subject
+  translation: "{{.inviter}} hat Sie zu einem Stapel eingeladen ({{.deck}}) - {{.site}}"
+- id: mail.deck_shared.title
+  translation: "Ein Stapel wurde mit Ihnen geteilt"
+- id: mail.deck_shared.body
+  translation: "{{.inviter}} hat Ihnen auf {{.site}} Zugriff auf den Stapel {{.deck}} gegeben: {{.role}}."
+- id: mail.deck_shared.link_label
+  translation: "Stapel öffnen"
+- id: mail.deck_permission.subject
+  translation: "Ihr Stapelzugriff wurde geändert - {{.site}}"
+- id: mail.deck_permission.title
+  translation: "Ihr Stapelzugriff wurde geändert"
+- id: mail.deck_permission.granted
+  translation: "{{.actor}} hat Ihren Zugriff auf den Stapel {{.deck}} geändert: {{.role}}."
+- id: mail.deck_permission.revoked
+  translation: "{{.actor}} hat Ihren Zugriff auf den Stapel {{.deck}} entfernt."
+- id: mail.deck_permission.link_label
+  translation: "Stapel öffnen"
+- id: mail.optimize.subject
+  translation: "Parameteroptimierung abgeschlossen - {{.site}}"
+- id: mail.optimize.title
+  translation: "Ihre Lernparameter sind aktualisiert"
+- id: mail.optimize.body
+  translation: "Die Parameter der Voreinstellung {{.preset}} wurden aus {{.count}} Wiederholungen optimiert. Sie sind jetzt aktiv; Sie können sie jederzeit prüfen oder zurücksetzen."
+- id: mail.optimize.link_label
+  translation: "Parameter prüfen"
+- id: mail.footer.note
+  translation: "Sie erhalten diese E-Mail, weil Sie diese Benachrichtigung aktiviert haben. Sie können sie jederzeit in den Einstellungen abschalten."
+- id: mail.footer.unsubscribe
+  translation: "Von diesen E-Mails abmelden"
+- id: mail.footer.automated
+  translation: "Diese Nachricht wurde automatisch gesendet. Bitte antworten Sie nicht."
+- id: mail.prefs.type.password_reset
+  translation: "Passwort zurücksetzen"
+- id: mail.prefs.type.email_verification
+  translation: "E-Mail-Bestätigung und Bestätigung einer E-Mail-Änderung"
+- id: mail.prefs.type.new_device_login
+  translation: "Hinweis auf Anmeldung von neuem Gerät oder neuer IP"
+- id: mail.prefs.type.credential_changed
+  translation: "Hinweis auf Änderung von Passwort, Zwei-Faktor oder Wiederherstellungscodes"
+- id: mail.prefs.type.account_status
+  translation: "Hinweis auf deaktiviertes oder gelöschtes Konto"
+- id: mail.prefs.type.deck_shared
+  translation: "Ein Stapel wurde mit Ihnen geteilt"
+- id: mail.prefs.type.deck_permission_changed
+  translation: "Stapelberechtigung geändert oder entzogen"
+- id: mail.prefs.type.invite
+  translation: "Einladung zur Registrierung"
+- id: mail.prefs.type.review_reminder
+  translation: "Lernerinnerung"
+- id: mail.prefs.type.study_digest
+  translation: "Lern-Zusammenfassung"
+- id: mail.prefs.type.optimize_done
+  translation: "Parameteroptimierung abgeschlossen"
+- id: mail.prefs.type.job_failed
+  translation: "Auftrag fehlgeschlagen"
+- id: mail.prefs.type.media_disk_alert
+  translation: "Medienkontingent- oder Speicherwarnung"
+- id: mail.invite.subject
+  translation: "Ihre Einladung zu {{.site}}"
+- id: mail.invite.title
+  translation: "Sie sind zu {{.site}} eingeladen"
+- id: mail.invite.body
+  translation: "Erstellen Sie Ihr Konto mit der Schaltfläche unten, um {{.site}} zu nutzen."
+- id: mail.invite.link_label
+  translation: "Konto erstellen"
+- id: mail.invite.expires
+  translation: "Diese Einladung läuft am {{.expires}} ab."
+- id: mail.invite.note
+  translation: "Wenn Sie diese Einladung nicht erwartet haben, können Sie diese E-Mail ignorieren."
+- id: mail.reminder.subject
+  translation: "Zeit zum Wiederholen - {{.site}}"
+- id: mail.reminder.title
+  translation: "Zeit zum Wiederholen"
+- id: mail.reminder.body
+  translation: "Auf {{.site}} sind {{.count}} Karten fällig. Ein paar Minuten jetzt halten Ihren Plan im Takt."
+- id: mail.reminder.link_label
+  translation: "Wiederholen starten"
+- id: mail.reset.subject
+  translation: "Setzen Sie Ihr Passwort für {{.site}} zurück"
+- id: mail.reset.title
+  translation: "Passwort zurücksetzen"
+- id: mail.reset.body
+  translation: "Wir haben eine Anfrage erhalten, das Passwort für Ihr Konto auf {{.site}} zurückzusetzen. Wählen Sie mit der Schaltfläche unten ein neues Passwort."
+- id: mail.reset.link_label
+  translation: "Neues Passwort wählen"
+- id: mail.reset.note
+  translation: "Der Link läuft am {{.expires}} ab. Wenn Sie kein Zurücksetzen angefordert haben, können Sie diese E-Mail ignorieren — Ihr Passwort bleibt unverändert."
+- id: mail.verify.subject
+  translation: "Bestätigen Sie Ihre E-Mail-Adresse für {{.site}}"
+- id: mail.verify.title
+  translation: "E-Mail-Adresse bestätigen"
+- id: mail.verify.body
+  translation: "Bestätigen Sie, dass diese Adresse Ihnen gehört, um die Einrichtung Ihres Kontos auf {{.site}} abzuschließen."
+- id: mail.verify.link_label
+  translation: "E-Mail-Adresse bestätigen"
+- id: mail.verify.note
+  translation: "Der Link läuft am {{.expires}} ab. Wenn Sie kein Konto erstellt haben, können Sie diese E-Mail ignorieren."
+- id: mail.verify.change_subject
+  translation: "Bestätigen Sie Ihre neue E-Mail-Adresse für {{.site}}"
+- id: mail.verify.change_title
+  translation: "Neue E-Mail-Adresse bestätigen"
+- id: mail.verify.change_body
+  translation: "Bestätigen Sie diese neue Adresse, um sie mit Ihrem Konto auf {{.site}} zu verwenden."
+- id: mail.verify.change_link_label
+  translation: "Neue Adresse bestätigen"
+- id: mail.verify.change_note
+  translation: "Der Link läuft am {{.expires}} ab. Wenn Sie die Änderung Ihrer E-Mail-Adresse nicht angefordert haben, ignorieren Sie diese E-Mail und verwenden Sie Ihre aktuelle Adresse weiter."
+- id: mail.notice.new_device.subject
+  translation: "Neue Anmeldung an Ihrem Konto auf {{.site}}"
+- id: mail.notice.new_device.title
+  translation: "Neue Anmeldung an Ihrem Konto"
+- id: mail.notice.new_device.body
+  translation: "Ihr Konto auf {{.site}} wurde gerade von einem Gerät oder Netzwerk angemeldet, das wir noch nicht gesehen haben."
+- id: mail.notice.new_device.time
+  translation: "**Zeit:** {{.time}}"
+- id: mail.notice.new_device.ip
+  translation: "**IP-Adresse:** {{.ip}}"
+- id: mail.notice.new_device.note
+  translation: "Wenn Sie das waren, ist nichts zu tun. Wenn nicht, ändern Sie sofort Ihr Passwort und prüfen Sie Ihre aktiven Sitzungen."
+- id: mail.notice.credential.subject
+  translation: "Ihre Zugangsdaten für {{.site}} wurden geändert"
+- id: mail.notice.credential.title
+  translation: "Ihre Sicherheitseinstellungen wurden geändert"
+- id: mail.notice.credential.body
+  translation: "Dies wurde an Ihrem Konto auf {{.site}} geändert: {{.what}}."
+- id: mail.notice.credential.note
+  translation: "Wenn Sie diese Änderung nicht vorgenommen haben, setzen Sie sofort Ihr Passwort zurück und wenden Sie sich an einen Administrator."
+- id: mail.notice.credential.password
+  translation: "Passwort"
+- id: mail.notice.credential.totp_enabled
+  translation: "Zwei-Faktor-Authentifizierung aktiviert"
+- id: mail.notice.credential.totp_disabled
+  translation: "Zwei-Faktor-Authentifizierung deaktiviert"
+- id: mail.notice.credential.recovery_codes
+  translation: "Wiederherstellungscodes neu erzeugt"
+- id: mail.notice.credential.email
+  translation: "E-Mail-Adresse"
+- id: mail.notice.account.subject
+  translation: "Der Status Ihres Kontos auf {{.site}} hat sich geändert"
+- id: mail.notice.account.title
+  translation: "Ihr Kontostatus hat sich geändert"
+- id: mail.notice.account.body
+  translation: "Ihr Konto auf {{.site}} wurde {{.status}}."
+- id: mail.notice.account.note
+  translation: "Wenn Sie das für einen Irrtum halten, wenden Sie sich an den Administrator der Seite."
+- id: mail.notice.account.disabled
+  translation: "deaktiviert"
+- id: mail.notice.account.deleted
+  translation: "gelöscht"
+- id: mail.admin.job_failed.subject
+  translation: "Auftrag fehlgeschlagen #{{.job_id}} - {{.site}}"
+- id: mail.admin.job_failed.title
+  translation: "Ein Hintergrundauftrag ist fehlgeschlagen"
+- id: mail.admin.job_failed.body
+  translation: "Auftrag #{{.job_id}} ({{.kind}}) ist auf {{.site}} fehlgeschlagen."
+- id: mail.admin.job_failed.reason_label
+  translation: "**Fehlerursache**"
+- id: mail.admin.job_failed.note
+  translation: "Öffnen Sie die Auftragsseite in der Administration für das vollständige Protokoll und einen neuen Versuch."
+- id: mail.admin.media_alert.subject
+  translation: "Medienkontingent-Warnung - {{.site}}"
+- id: mail.admin.media_alert.title
+  translation: "Ein Benutzer hat das Medienkontingent erreicht"
+- id: mail.admin.media_alert.body
+  translation: "{{.username}} hat {{.used}} des Kontingents von {{.limit}} auf {{.site}} belegt. Neue Uploads dieses Benutzers werden abgelehnt, bis Medien entfernt werden."
+- id: mail.admin.media_alert.note
+  translation: "Erwägen Sie, das Kontingent zu erhöhen oder den Benutzer zu bitten, ungenutzte Medien zu entfernen."
+- id: mail.digest.subject
+  translation: "Ihre wöchentliche Lern-Zusammenfassung"
+- id: mail.digest.title
+  translation: "Ihre Woche im Rückblick"
+- id: mail.digest.intro
+  translation: "So lief Ihr Lernen in den letzten sieben Tagen."
+- id: mail.digest.reviewed
+  translation: "**Wiederholungen:** {{.count}}"
+- id: mail.digest.pass_rate
+  translation: "**Bestehensquote:** {{.rate}} %"
+- id: mail.digest.streak
+  translation: "**Aktuelle Serie:** {{.days}} Tage"
+- id: mail.digest.new_cards
+  translation: "**Neue Karten:** {{.count}}"
+- id: mail.digest.due
+  translation: "**Jetzt fällig:** {{.count}}"
+- id: mail.digest.link_label
+  translation: "Ihre Statistiken ansehen"
+- id: presets.default_name
+  translation: "Standard"
+- id: review.empty_card.notice
+  translation: "Diese Karte ist leer. Die Bereinigung „Leere Karten“ entfernt sie."
+- id: m20.metadata_template
+  translation: "Vorlagen können nicht auf das Feld engram_meta verweisen."
+- id: m20.reserved_prefix
+  translation: "Feldnamen, die mit engram_ beginnen, sind reserviert, außer engram_meta."
+- id: m20.reserved_prefix_import
+  translation: "Feldnamen, die mit engram_ begannen, wurden als gewöhnliche Felder importiert."
+- id: m20.metadata_field_locked
+  translation: "Das Feld engram_meta ist integriert und kann nicht umbenannt oder entfernt werden."
+- id: mail.study.reminder.subject
+  translation: "Zeit zum Lernen - {{.site}}"
+- id: mail.study.reminder.title
+  translation: "Zeit zum Lernen"
+- id: mail.study.reminder.body
+  translation: "Auf {{.site}} haben Sie {{.new_available}} neue Karten zum Lernen und {{.review_available}} Karten zur Wiederholung."
+- id: mail.study.reminder.link_label
+  translation: "Lernen starten"
+- id: mail.study.digest.new
+  translation: "**Neue Bewertungen:** {{.count}}"
+- id: mail.study.digest.new_available
+  translation: "**Neue Karten jetzt verfügbar:** {{.count}}"

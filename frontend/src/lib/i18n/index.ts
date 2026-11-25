@@ -6,14 +6,30 @@ import {
   DEFAULT_LOCALE,
 } from './types';
 import { zhCN } from './locales/zh-CN';
+import { zhTW } from './locales/zh-TW';
 import { en } from './locales/en';
+import { ja } from './locales/ja';
+import { ko } from './locales/ko';
+import { es } from './locales/es';
+import { fr } from './locales/fr';
+import { de } from './locales/de';
+import { ptBR } from './locales/pt-BR';
+import { ru } from './locales/ru';
 
 /**
  * Language pack map
  */
 const catalogs: Record<SupportedLocale, LocaleCatalog> = {
   'zh-CN': zhCN,
+  'zh-TW': zhTW,
   en,
+  ja,
+  ko,
+  es,
+  fr,
+  de,
+  'pt-BR': ptBR,
+  ru,
 };
 
 /**
@@ -25,15 +41,31 @@ export function isSupportedLocale(code: string | null | undefined): code is Supp
 }
 
 /**
- * Match any language code to the nearest supported language
- * e.g. 'zh', 'zh-CN', 'zh-TW' -> 'zh-CN'; 'en-US', 'en' -> 'en'
+ * Match any language code to the nearest supported language.
+ *
+ * An exact code wins. Otherwise the base language decides, and Chinese — the one base with two
+ * catalogs — is decided by script and region: Traditional script and the Taiwan, Hong Kong and
+ * Macau regions select zh-TW, every other Chinese tag selects zh-CN. Portuguese always lands on
+ * pt-BR, the only Portuguese catalog shipped.
+ * e.g. 'zh-TW' and 'zh-Hant' -> zh-TW; 'zh', 'zh-CN', 'zh-SG' -> zh-CN; 'pt-PT' -> pt-BR;
+ * 'en-US' -> en; 'fr-CA' -> fr.
  */
 function matchSupportedLocale(lang: string | null | undefined): SupportedLocale | null {
   if (!lang) return null;
-  const normalized = lang.trim().toLowerCase();
-  if (normalized.startsWith('zh')) return 'zh-CN';
-  if (normalized.startsWith('en')) return 'en';
-  return null;
+  const normalized = lang.trim().toLowerCase().replace(/_/g, '-');
+  if (!normalized) return null;
+  const exact = SUPPORTED_LOCALES.find((code) => code.toLowerCase() === normalized);
+  if (exact) return exact;
+  const [base, ...subtags] = normalized.split('-');
+  if (base === 'zh') {
+    const traditional =
+      subtags.includes('hant') ||
+      subtags.includes('tw') ||
+      subtags.includes('hk') ||
+      subtags.includes('mo');
+    return traditional ? 'zh-TW' : 'zh-CN';
+  }
+  return SUPPORTED_LOCALES.find((code) => code.toLowerCase().split('-')[0] === base) ?? null;
 }
 
 export interface ResolveLocaleOptions {
@@ -127,10 +159,10 @@ export function formatMessage(
   let text = catalog[key] || catalogs[DEFAULT_LOCALE][key] || key;
 
   if (params) {
-    // A count-driven key may carry a `.one` variant; every other plural category
-    // and every single-form key fall back to the base text. The category comes
-    // from the locale's own plural rule, so a language that has no singular form
-    // simply has no variant to select.
+    // A count-driven key carries one entry per plural category this language selects
+    // (`.one`, `.few`, `.many`, ...; see PLURAL_BASE_KEYS). The category comes from the
+    // locale's own plural rule, and a category without an entry falls back to the base
+    // text, so a language that never selects it needs no variant.
     const count = pluralCount(params);
     if (count !== null) {
       const category = new Intl.PluralRules(locale).select(count);
@@ -170,3 +202,4 @@ export const t = derived(localeStore, ($locale) => {
 
 export * from './types';
 export * from './parity';
+export * from './plural';

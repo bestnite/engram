@@ -1,0 +1,247 @@
+# Spanish catalog. Keys are lowercase dotted English.
+# The key set must match en.yaml exactly; TestCatalogsHaveIdenticalKeys enforces it.
+
+- id: app.name
+  translation: "Engram"
+- id: cardtype.basic
+  translation: "Básico"
+- id: cardtype.basic_both
+  translation: "Básico (y reverso)"
+- id: cardtype.cloze
+  translation: "Cloze"
+- id: cardtype.list
+  translation: "Lista"
+- id: cardtype.typed
+  translation: "Respuesta escrita"
+- id: cardtype.numeric
+  translation: "Respuesta numérica"
+- id: cardtype.choice_single
+  translation: "Opción única"
+- id: cardtype.choice_multi
+  translation: "Opción múltiple"
+- id: cardtype.true_false
+  translation: "Verdadero / falso"
+- id: cardtype.short_answer
+  translation: "Respuesta corta"
+- id: clone.name_suffix
+  translation: " (copia)"
+- id: media.quota.exceeded
+  translation: "Se ha superado la cuota de multimedia: has usado {{.used}} de tu límite de {{.limit}}. Elimina parte de la multimedia que ya no uses e inténtalo de nuevo."
+- id: admin.mail.test.subject
+  translation: "Correo de prueba: vista previa de la plantilla de {{site}}"
+- id: admin.mail.test.body
+  translation: "Este es un correo de prueba: estás previsualizando una plantilla de correo en el panel de administración.\nSe genera con variables de ejemplo; los destinatarios reales ven sus propios datos."
+- id: mail.role.reader
+  translation: "de solo lectura"
+- id: mail.role.editor
+  translation: "de edición"
+- id: mail.deck_shared.subject
+  translation: "{{.inviter}} te ha invitado a un mazo ({{.deck}}) - {{.site}}"
+- id: mail.deck_shared.title
+  translation: "Se ha compartido un mazo contigo"
+- id: mail.deck_shared.body
+  translation: "{{.inviter}} te ha dado acceso {{.role}} al mazo {{.deck}} en {{.site}}."
+- id: mail.deck_shared.link_label
+  translation: "Abrir el mazo"
+- id: mail.deck_permission.subject
+  translation: "Tu acceso al mazo ha cambiado - {{.site}}"
+- id: mail.deck_permission.title
+  translation: "Tu acceso al mazo ha cambiado"
+- id: mail.deck_permission.granted
+  translation: "{{.actor}} ha cambiado tu acceso al mazo {{.deck}}: ahora es {{.role}}."
+- id: mail.deck_permission.revoked
+  translation: "{{.actor}} ha eliminado tu acceso al mazo {{.deck}}."
+- id: mail.deck_permission.link_label
+  translation: "Abrir el mazo"
+- id: mail.optimize.subject
+  translation: "Optimización de parámetros finalizada - {{.site}}"
+- id: mail.optimize.title
+  translation: "Tus parámetros de estudio están actualizados"
+- id: mail.optimize.body
+  translation: "Los parámetros del preajuste {{.preset}} se optimizaron a partir de {{.count}} repasos. Ya están activos; puedes revisarlos o revertirlos en cualquier momento."
+- id: mail.optimize.link_label
+  translation: "Revisar los parámetros"
+- id: mail.footer.note
+  translation: "Recibes esto porque activaste esta notificación. Puedes desactivarla en cualquier momento en los ajustes."
+- id: mail.footer.unsubscribe
+  translation: "Darse de baja de estos correos"
+- id: mail.footer.automated
+  translation: "Este mensaje se envió automáticamente. No respondas."
+- id: mail.prefs.type.password_reset
+  translation: "Restablecimiento de contraseña"
+- id: mail.prefs.type.email_verification
+  translation: "Verificación de correo y confirmación de cambio de correo"
+- id: mail.prefs.type.new_device_login
+  translation: "Aviso de inicio de sesión desde un dispositivo o una IP nuevos"
+- id: mail.prefs.type.credential_changed
+  translation: "Aviso de cambio de contraseña, verificación en dos pasos o códigos de recuperación"
+- id: mail.prefs.type.account_status
+  translation: "Aviso de cuenta deshabilitada o eliminada"
+- id: mail.prefs.type.deck_shared
+  translation: "Se ha compartido un mazo contigo"
+- id: mail.prefs.type.deck_permission_changed
+  translation: "Permiso del mazo cambiado o revocado"
+- id: mail.prefs.type.invite
+  translation: "Invitación de registro"
+- id: mail.prefs.type.review_reminder
+  translation: "Recordatorio de estudio"
+- id: mail.prefs.type.study_digest
+  translation: "Resumen de estudio"
+- id: mail.prefs.type.optimize_done
+  translation: "Optimización de parámetros finalizada"
+- id: mail.prefs.type.job_failed
+  translation: "Tarea fallida"
+- id: mail.prefs.type.media_disk_alert
+  translation: "Aviso de cuota multimedia o de disco"
+- id: mail.invite.subject
+  translation: "Tu invitación a {{.site}}"
+- id: mail.invite.title
+  translation: "Te han invitado a {{.site}}"
+- id: mail.invite.body
+  translation: "Crea tu cuenta con el botón de abajo para empezar a usar {{.site}}."
+- id: mail.invite.link_label
+  translation: "Crear mi cuenta"
+- id: mail.invite.expires
+  translation: "Esta invitación caduca el {{.expires}}."
+- id: mail.invite.note
+  translation: "Si no esperabas esta invitación, puedes ignorar este correo."
+- id: mail.reminder.subject
+  translation: "Es hora de repasar - {{.site}}"
+- id: mail.reminder.title
+  translation: "Es hora de repasar"
+- id: mail.reminder.body
+  translation: "Tienes {{.count}} tarjetas pendientes en {{.site}}. Unos minutos ahora mantienen tu programación al día."
+- id: mail.reminder.link_label
+  translation: "Empezar a repasar"
+- id: mail.reset.subject
+  translation: "Restablece tu contraseña de {{.site}}"
+- id: mail.reset.title
+  translation: "Restablece tu contraseña"
+- id: mail.reset.body
+  translation: "Hemos recibido una solicitud para restablecer la contraseña de tu cuenta de {{.site}}. Usa el botón de abajo para elegir una contraseña nueva."
+- id: mail.reset.link_label
+  translation: "Elegir una contraseña nueva"
+- id: mail.reset.note
+  translation: "El enlace caduca el {{.expires}}. Si no solicitaste un restablecimiento, puedes ignorar este correo; tu contraseña no cambiará."
+- id: mail.verify.subject
+  translation: "Verifica tu dirección de correo de {{.site}}"
+- id: mail.verify.title
+  translation: "Confirma tu dirección de correo"
+- id: mail.verify.body
+  translation: "Confirma que esta dirección es tuya para terminar de configurar tu cuenta de {{.site}}."
+- id: mail.verify.link_label
+  translation: "Confirmar la dirección de correo"
+- id: mail.verify.note
+  translation: "El enlace caduca el {{.expires}}. Si no creaste una cuenta, puedes ignorar este correo."
+- id: mail.verify.change_subject
+  translation: "Confirma tu nueva dirección de correo de {{.site}}"
+- id: mail.verify.change_title
+  translation: "Confirma tu nueva dirección de correo"
+- id: mail.verify.change_body
+  translation: "Confirma esta nueva dirección para empezar a usarla con tu cuenta de {{.site}}."
+- id: mail.verify.change_link_label
+  translation: "Confirmar la nueva dirección"
+- id: mail.verify.change_note
+  translation: "El enlace caduca el {{.expires}}. Si no pediste cambiar tu correo, ignora este correo y sigue usando tu dirección actual."
+- id: mail.notice.new_device.subject
+  translation: "Nuevo inicio de sesión en tu cuenta de {{.site}}"
+- id: mail.notice.new_device.title
+  translation: "Nuevo inicio de sesión en tu cuenta"
+- id: mail.notice.new_device.body
+  translation: "Se acaba de iniciar sesión en tu cuenta de {{.site}} desde un dispositivo o una red que no habíamos visto antes."
+- id: mail.notice.new_device.time
+  translation: "**Hora:** {{.time}}"
+- id: mail.notice.new_device.ip
+  translation: "**Dirección IP:** {{.ip}}"
+- id: mail.notice.new_device.note
+  translation: "Si has sido tú, no hace falta hacer nada. Si no, cambia tu contraseña de inmediato y revisa tus sesiones activas."
+- id: mail.notice.credential.subject
+  translation: "Tus credenciales de {{.site}} han cambiado"
+- id: mail.notice.credential.title
+  translation: "Tus ajustes de seguridad han cambiado"
+- id: mail.notice.credential.body
+  translation: "Se ha cambiado esto en tu cuenta de {{.site}}: {{.what}}."
+- id: mail.notice.credential.note
+  translation: "Si no has hecho este cambio, restablece tu contraseña de inmediato y contacta con un administrador."
+- id: mail.notice.credential.password
+  translation: "contraseña"
+- id: mail.notice.credential.totp_enabled
+  translation: "verificación en dos pasos activada"
+- id: mail.notice.credential.totp_disabled
+  translation: "verificación en dos pasos desactivada"
+- id: mail.notice.credential.recovery_codes
+  translation: "códigos de recuperación regenerados"
+- id: mail.notice.credential.email
+  translation: "dirección de correo"
+- id: mail.notice.account.subject
+  translation: "El estado de tu cuenta de {{.site}} ha cambiado"
+- id: mail.notice.account.title
+  translation: "El estado de tu cuenta ha cambiado"
+- id: mail.notice.account.body
+  translation: "Tu cuenta de {{.site}} se ha {{.status}}."
+- id: mail.notice.account.note
+  translation: "Si crees que es un error, contacta con el administrador del sitio."
+- id: mail.notice.account.disabled
+  translation: "deshabilitado"
+- id: mail.notice.account.deleted
+  translation: "eliminado"
+- id: mail.admin.job_failed.subject
+  translation: "Tarea fallida n.º {{.job_id}} - {{.site}}"
+- id: mail.admin.job_failed.title
+  translation: "Una tarea en segundo plano ha fallado"
+- id: mail.admin.job_failed.body
+  translation: "La tarea n.º {{.job_id}} ({{.kind}}) ha fallado en {{.site}}."
+- id: mail.admin.job_failed.reason_label
+  translation: "**Motivo del fallo**"
+- id: mail.admin.job_failed.note
+  translation: "Abre la página de tareas del panel de administración para ver el registro completo y reintentar."
+- id: mail.admin.media_alert.subject
+  translation: "Aviso de cuota de multimedia - {{.site}}"
+- id: mail.admin.media_alert.title
+  translation: "Un usuario ha alcanzado la cuota de multimedia"
+- id: mail.admin.media_alert.body
+  translation: "{{.username}} ha usado {{.used}} de la cuota de {{.limit}} en {{.site}}. Las nuevas subidas de este usuario se rechazan hasta que se elimine algo de multimedia."
+- id: mail.admin.media_alert.note
+  translation: "Considera aumentar la cuota o pedir al usuario que elimine la multimedia que no use."
+- id: mail.digest.subject
+  translation: "Tu resumen semanal de estudio"
+- id: mail.digest.title
+  translation: "Tu semana de repaso"
+- id: mail.digest.intro
+  translation: "Así ha ido tu estudio durante los últimos siete días."
+- id: mail.digest.reviewed
+  translation: "**Repasos:** {{.count}}"
+- id: mail.digest.pass_rate
+  translation: "**Tasa de aprobados:** {{.rate}}%"
+- id: mail.digest.streak
+  translation: "**Racha actual:** {{.days}} días"
+- id: mail.digest.new_cards
+  translation: "**Tarjetas nuevas:** {{.count}}"
+- id: mail.digest.due
+  translation: "**Pendientes ahora:** {{.count}}"
+- id: mail.digest.link_label
+  translation: "Ver tus estadísticas"
+- id: presets.default_name
+  translation: "Predeterminado"
+- id: review.empty_card.notice
+  translation: "Esta tarjeta está vacía. La limpieza de tarjetas vacías la elimina."
+- id: m20.metadata_template
+  translation: "Las plantillas no pueden hacer referencia al campo engram_meta."
+- id: m20.reserved_prefix
+  translation: "Los nombres de campo que empiezan por engram_ están reservados, excepto engram_meta."
+- id: m20.reserved_prefix_import
+  translation: "Los nombres de campo que empiezan por engram_ se importaron como campos normales."
+- id: m20.metadata_field_locked
+  translation: "El campo engram_meta es integrado y no se puede renombrar ni eliminar."
+- id: mail.study.reminder.subject
+  translation: "Es hora de estudiar - {{.site}}"
+- id: mail.study.reminder.title
+  translation: "Es hora de estudiar"
+- id: mail.study.reminder.body
+  translation: "Tienes {{.new_available}} tarjetas nuevas que aprender y {{.review_available}} tarjetas que repasar en {{.site}}."
+- id: mail.study.reminder.link_label
+  translation: "Empezar a estudiar"
+- id: mail.study.digest.new
+  translation: "**Calificaciones nuevas:** {{.count}}"
+- id: mail.study.digest.new_available
+  translation: "**Tarjetas nuevas disponibles ahora:** {{.count}}"

@@ -34,11 +34,11 @@ func TestPickResolutionOrder(t *testing.T) {
 		{"user setting beats accept-language", "", "en", "zh-CN,zh;q=0.9", "en"},
 		{"user setting beats accept-language reversed", "", "zh-CN", "en-US,en;q=0.9", "zh-CN"},
 		{"explicit request beats user setting", "en", "zh-CN", "zh-CN", "en"},
-		{"unsupported user setting falls through to header", "", "de", "en-GB,en;q=0.9", "en"},
+		{"unsupported user setting falls through to header", "", "it", "en-GB,en;q=0.9", "en"},
 		{"header region maps to base language", "", "", "en-US,en;q=0.9", "en"},
-		{"header order decides between two supported languages", "", "", "fr-FR,en;q=0.9,zh;q=0.1", "en"},
+		{"header order decides between two supported languages", "", "", "it-IT,en;q=0.9,zh;q=0.1", "en"},
 		{"header quality decides between two supported languages", "", "", "en;q=0.2,zh-CN;q=0.9", "zh-CN"},
-		{"nothing supported falls back to default", "", "", "fr-FR,de;q=0.8", DefaultLocaleCode},
+		{"nothing supported falls back to default", "", "", "it-IT,pl;q=0.8", DefaultLocaleCode},
 		{"empty inputs fall back to default", "", "", "", DefaultLocaleCode},
 	}
 	for _, tc := range cases {
@@ -58,19 +58,21 @@ func TestPickResolutionOrder(t *testing.T) {
 // TestCatalogsHaveIdenticalKeys is the language pack completeness check: fail this test if any
 // language is missing a key.
 func TestCatalogsHaveIdenticalKeys(t *testing.T) {
-	zh := catalogKeys(t, "locales/zh-CN.yaml")
 	en := catalogKeys(t, "locales/en.yaml")
-	if len(zh) == 0 {
-		t.Fatal("zh-CN.yaml contains no messages")
+	if len(en) == 0 {
+		t.Fatal("en.yaml contains no messages")
 	}
-	for id := range zh {
-		if _, ok := en[id]; !ok {
-			t.Errorf("en.yaml is missing key %q that zh-CN.yaml defines", id)
+	for _, code := range supportedCodes {
+		got := catalogKeys(t, "locales/"+code+".yaml")
+		for id := range en {
+			if _, ok := got[id]; !ok {
+				t.Errorf("%s.yaml is missing key %q that en.yaml defines", code, id)
+			}
 		}
-	}
-	for id := range en {
-		if _, ok := zh[id]; !ok {
-			t.Errorf("zh-CN.yaml is missing key %q that en.yaml defines", id)
+		for id := range got {
+			if _, ok := en[id]; !ok {
+				t.Errorf("%s.yaml has key %q that en.yaml does not define", code, id)
+			}
 		}
 	}
 }
@@ -79,9 +81,13 @@ func TestCatalogsHaveIdenticalKeys(t *testing.T) {
 // construction fails when a language is missing a key, instead of waiting until untranslated text
 // shows up on the page.
 func TestNewFromFSRejectsCatalogMissingAKey(t *testing.T) {
-	fsys := fstest.MapFS{
-		"locales/zh-CN.yaml": &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Engram\"\n- id: nav.today\n  translation: \"今日\"\n")},
-		"locales/en.yaml":    &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Engram\"\n")},
+	fsys := fstest.MapFS{}
+	for _, code := range supportedCodes {
+		body := "- id: app.name\n  translation: \"Engram\"\n- id: nav.today\n  translation: \"today\"\n"
+		if code == "en" {
+			body = "- id: app.name\n  translation: \"Engram\"\n"
+		}
+		fsys["locales/"+code+".yaml"] = &fstest.MapFile{Data: []byte(body)}
 	}
 	if _, err := NewFromFS(fsys, "locales"); err == nil {
 		t.Fatal("NewFromFS() accepted a catalog missing a key, want an error")
@@ -91,9 +97,13 @@ func TestNewFromFSRejectsCatalogMissingAKey(t *testing.T) {
 }
 
 func TestNewFromFSRejectsUnknownExtraKey(t *testing.T) {
-	fsys := fstest.MapFS{
-		"locales/zh-CN.yaml": &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Engram\"\n")},
-		"locales/en.yaml":    &fstest.MapFile{Data: []byte("- id: app.name\n  translation: \"Engram\"\n- id: only.in.en\n  translation: \"extra\"\n")},
+	fsys := fstest.MapFS{}
+	for _, code := range supportedCodes {
+		body := "- id: app.name\n  translation: \"Engram\"\n"
+		if code == "en" {
+			body += "- id: only.in.en\n  translation: \"extra\"\n"
+		}
+		fsys["locales/"+code+".yaml"] = &fstest.MapFile{Data: []byte(body)}
 	}
 	if _, err := NewFromFS(fsys, "locales"); err == nil {
 		t.Fatal("NewFromFS() accepted a key only present in one catalog, want an error")
@@ -119,7 +129,29 @@ func TestLocalizeTranslatesAndFallsBackToID(t *testing.T) {
 
 func TestLocalizerMapsTagToSupportedCode(t *testing.T) {
 	tr := newTestTranslator(t)
-	cases := map[string]string{"en-US": "en", "zh-TW": "zh-CN", "en": "en", "zh-CN": "zh-CN", "de": DefaultLocaleCode}
+	cases := map[string]string{
+		"en-US":   "en",
+		"en":      "en",
+		"zh":      "zh-CN",
+		"zh-CN":   "zh-CN",
+		"zh-SG":   "zh-CN",
+		"zh-Hans": "zh-CN",
+		"zh-TW":   "zh-TW",
+		"zh-HK":   "zh-TW",
+		"zh-MO":   "zh-TW",
+		"zh-Hant": "zh-TW",
+		"pt-PT":   "pt-BR",
+		"pt-BR":   "pt-BR",
+		"es-419":  "es",
+		"fr-CA":   "fr",
+		"de-AT":   "de",
+		"ja-JP":   "ja",
+		"ko-KR":   "ko",
+		"ru-RU":   "ru",
+		"it":      DefaultLocaleCode,
+		// language.Parse("und") infers English as the default language, so an unspecified tag resolves to en.
+		"und": "en",
+	}
 	for tag, want := range cases {
 		parsed, err := language.Parse(tag)
 		if err != nil {
@@ -145,7 +177,7 @@ func TestLocalizerContextRoundTrip(t *testing.T) {
 
 func TestSupportedCodesAreOrderedAndComplete(t *testing.T) {
 	tr := newTestTranslator(t)
-	want := []string{"zh-CN", "en"}
+	want := []string{"zh-CN", "zh-TW", "en", "ja", "ko", "es", "fr", "de", "pt-BR", "ru"}
 	got := tr.SupportedCodes()
 	if len(got) != len(want) {
 		t.Fatalf("SupportedCodes() = %v, want %v", got, want)
@@ -154,6 +186,33 @@ func TestSupportedCodesAreOrderedAndComplete(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("SupportedCodes()[%d] = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+// TestPickRegionalVariants covers the one case where a supported language ships two catalogs: the
+// script and region of the tag decide between zh-CN and zh-TW, and Portuguese always resolves to the
+// single shipped pt-BR catalog.
+func TestPickRegionalVariants(t *testing.T) {
+	tr := newTestTranslator(t)
+	cases := []struct{ name, requested, want string }{
+		{"taiwan region", "zh-TW", "zh-TW"},
+		{"hong kong region", "zh-HK", "zh-TW"},
+		{"macau region", "zh-MO", "zh-TW"},
+		{"traditional script", "zh-Hant", "zh-TW"},
+		{"traditional script with region", "zh-Hant-HK", "zh-TW"},
+		{"simplified script", "zh-Hans", "zh-CN"},
+		{"singapore region", "zh-SG", "zh-CN"},
+		{"bare chinese base", "zh", "zh-CN"},
+		{"portugal falls to the brazilian catalog", "pt-PT", "pt-BR"},
+		{"latin american spanish falls to spanish", "es-419", "es"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tr.Pick(tc.requested, "", "")
+			if got.String() != tc.want {
+				t.Errorf("Pick(%q) = %q, want %q", tc.requested, got, tc.want)
+			}
+		})
 	}
 }
 

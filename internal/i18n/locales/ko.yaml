@@ -1,0 +1,247 @@
+# Korean catalog. Keys are lowercase dotted English.
+# The key set must match en.yaml exactly; TestCatalogsHaveIdenticalKeys enforces it.
+
+- id: app.name
+  translation: "Engram"
+- id: cardtype.basic
+  translation: "기본"
+- id: cardtype.basic_both
+  translation: "기본 (역방향 포함)"
+- id: cardtype.cloze
+  translation: "빈칸 채우기"
+- id: cardtype.list
+  translation: "목록"
+- id: cardtype.typed
+  translation: "입력 답"
+- id: cardtype.numeric
+  translation: "숫자 답"
+- id: cardtype.choice_single
+  translation: "단일 선택"
+- id: cardtype.choice_multi
+  translation: "복수 선택"
+- id: cardtype.true_false
+  translation: "참 / 거짓"
+- id: cardtype.short_answer
+  translation: "단답형"
+- id: clone.name_suffix
+  translation: " (복사본)"
+- id: media.quota.exceeded
+  translation: "미디어 할당량을 초과했습니다: {{.used}} / {{.limit}} 한도까지 사용했습니다. 더 이상 사용하지 않는 미디어를 제거한 후 다시 시도해 주세요."
+- id: admin.mail.test.subject
+  translation: "테스트 메일: {{site}} 템플릿 미리보기"
+- id: admin.mail.test.body
+  translation: "테스트 메일입니다. 관리자 패널에서 이메일 템플릿을 미리 보고 있습니다.\n샘플 변수로 렌더링되며, 실제 받는 사람에게는 각자의 데이터가 표시됩니다."
+- id: mail.role.reader
+  translation: "읽기 전용"
+- id: mail.role.editor
+  translation: "편집 가능"
+- id: mail.deck_shared.subject
+  translation: "{{.inviter}} 님이 덱({{.deck}})에 초대했습니다 - {{.site}}"
+- id: mail.deck_shared.title
+  translation: "덱이 나와 공유되었습니다"
+- id: mail.deck_shared.body
+  translation: "{{.inviter}} 님이 {{.site}}의 덱 {{.deck}}에 {{.role}} 권한을 부여했습니다."
+- id: mail.deck_shared.link_label
+  translation: "덱 열기"
+- id: mail.deck_permission.subject
+  translation: "덱 접근 권한이 변경되었습니다 - {{.site}}"
+- id: mail.deck_permission.title
+  translation: "덱 접근 권한이 변경되었습니다"
+- id: mail.deck_permission.granted
+  translation: "{{.actor}} 님이 덱 {{.deck}}에 대한 내 접근 권한을 변경했습니다: {{.role}}."
+- id: mail.deck_permission.revoked
+  translation: "{{.actor}} 님이 덱 {{.deck}}에 대한 내 접근 권한을 회수했습니다."
+- id: mail.deck_permission.link_label
+  translation: "덱 열기"
+- id: mail.optimize.subject
+  translation: "매개변수 최적화 완료 - {{.site}}"
+- id: mail.optimize.title
+  translation: "학습 매개변수가 갱신되었습니다"
+- id: mail.optimize.body
+  translation: "프리셋 {{.preset}}의 매개변수를 복습 {{.count}}건으로 최적화했습니다. 지금부터 적용되며, 언제든지 확인하거나 되돌릴 수 있습니다."
+- id: mail.optimize.link_label
+  translation: "매개변수 확인"
+- id: mail.footer.note
+  translation: "이 알림을 켜 두었기 때문에 이 메일을 받고 있습니다. 설정에서 언제든지 끌 수 있습니다."
+- id: mail.footer.unsubscribe
+  translation: "이 이메일 구독 취소"
+- id: mail.footer.automated
+  translation: "이 메시지는 자동으로 발송되었습니다. 회신하지 마세요."
+- id: mail.prefs.type.password_reset
+  translation: "비밀번호 재설정"
+- id: mail.prefs.type.email_verification
+  translation: "이메일 인증 및 이메일 변경 확인"
+- id: mail.prefs.type.new_device_login
+  translation: "새 기기 또는 새 IP 로그인 알림"
+- id: mail.prefs.type.credential_changed
+  translation: "비밀번호, 2단계 인증 또는 복구 코드 변경 알림"
+- id: mail.prefs.type.account_status
+  translation: "계정 비활성화 또는 삭제 알림"
+- id: mail.prefs.type.deck_shared
+  translation: "덱이 나와 공유되었습니다"
+- id: mail.prefs.type.deck_permission_changed
+  translation: "덱 권한 변경 또는 회수"
+- id: mail.prefs.type.invite
+  translation: "가입 초대"
+- id: mail.prefs.type.review_reminder
+  translation: "학습 알림"
+- id: mail.prefs.type.study_digest
+  translation: "학습 요약"
+- id: mail.prefs.type.optimize_done
+  translation: "매개변수 최적화 완료"
+- id: mail.prefs.type.job_failed
+  translation: "작업 실패"
+- id: mail.prefs.type.media_disk_alert
+  translation: "미디어 할당량 또는 디스크 경고"
+- id: mail.invite.subject
+  translation: "{{.site}} 초대"
+- id: mail.invite.title
+  translation: "{{.site}}에 초대되었습니다"
+- id: mail.invite.body
+  translation: "아래 버튼으로 계정을 만들면 {{.site}}를 사용할 수 있습니다."
+- id: mail.invite.link_label
+  translation: "내 계정 만들기"
+- id: mail.invite.expires
+  translation: "이 초대는 {{.expires}}에 만료됩니다."
+- id: mail.invite.note
+  translation: "예상하지 못한 초대라면 이 이메일을 무시하셔도 됩니다."
+- id: mail.reminder.subject
+  translation: "복습할 시간입니다 - {{.site}}"
+- id: mail.reminder.title
+  translation: "복습할 시간입니다"
+- id: mail.reminder.body
+  translation: "{{.site}}에 마감된 카드가 {{.count}}장 있습니다. 지금 몇 분만 투자하면 학습 일정을 지킬 수 있습니다."
+- id: mail.reminder.link_label
+  translation: "복습 시작"
+- id: mail.reset.subject
+  translation: "{{.site}} 비밀번호 재설정"
+- id: mail.reset.title
+  translation: "비밀번호 재설정"
+- id: mail.reset.body
+  translation: "{{.site}} 계정의 비밀번호 재설정 요청을 받았습니다. 아래 버튼으로 새 비밀번호를 설정하세요."
+- id: mail.reset.link_label
+  translation: "새 비밀번호 설정"
+- id: mail.reset.note
+  translation: "링크는 {{.expires}}에 만료됩니다. 재설정을 요청하지 않았다면 이 이메일을 무시하셔도 됩니다. 비밀번호는 그대로 유지됩니다."
+- id: mail.verify.subject
+  translation: "{{.site}} 이메일 주소 인증"
+- id: mail.verify.title
+  translation: "이메일 주소 확인"
+- id: mail.verify.body
+  translation: "이 주소가 본인의 것임을 확인하면 {{.site}} 계정 설정이 완료됩니다."
+- id: mail.verify.link_label
+  translation: "이메일 주소 확인"
+- id: mail.verify.note
+  translation: "링크는 {{.expires}}에 만료됩니다. 계정을 만들지 않았다면 이 이메일을 무시하셔도 됩니다."
+- id: mail.verify.change_subject
+  translation: "새 {{.site}} 이메일 주소 확인"
+- id: mail.verify.change_title
+  translation: "새 이메일 주소 확인"
+- id: mail.verify.change_body
+  translation: "이 새 주소를 확인하면 {{.site}} 계정에 사용할 수 있습니다."
+- id: mail.verify.change_link_label
+  translation: "새 주소 확인"
+- id: mail.verify.change_note
+  translation: "링크는 {{.expires}}에 만료됩니다. 이메일 변경을 요청하지 않았다면 이 이메일을 무시하고 현재 주소를 계속 사용하세요."
+- id: mail.notice.new_device.subject
+  translation: "{{.site}} 계정에 새 로그인"
+- id: mail.notice.new_device.title
+  translation: "계정에 새 로그인"
+- id: mail.notice.new_device.body
+  translation: "{{.site}} 계정에 처음 보는 기기 또는 네트워크에서 방금 로그인했습니다."
+- id: mail.notice.new_device.time
+  translation: "**시간:** {{.time}}"
+- id: mail.notice.new_device.ip
+  translation: "**IP 주소:** {{.ip}}"
+- id: mail.notice.new_device.note
+  translation: "본인이 로그인했다면 별도 조치는 필요 없습니다. 아니라면 즉시 비밀번호를 변경하고 활성 세션을 확인하세요."
+- id: mail.notice.credential.subject
+  translation: "{{.site}} 계정 인증 정보가 변경되었습니다"
+- id: mail.notice.credential.title
+  translation: "보안 설정이 변경되었습니다"
+- id: mail.notice.credential.body
+  translation: "{{.site}} 계정에서 변경된 항목: {{.what}}."
+- id: mail.notice.credential.note
+  translation: "본인이 변경하지 않았다면 즉시 비밀번호를 재설정하고 관리자에게 문의하세요."
+- id: mail.notice.credential.password
+  translation: "비밀번호"
+- id: mail.notice.credential.totp_enabled
+  translation: "2단계 인증 사용"
+- id: mail.notice.credential.totp_disabled
+  translation: "2단계 인증 사용 중지"
+- id: mail.notice.credential.recovery_codes
+  translation: "복구 코드 재생성"
+- id: mail.notice.credential.email
+  translation: "이메일 주소"
+- id: mail.notice.account.subject
+  translation: "{{.site}} 계정 상태가 변경되었습니다"
+- id: mail.notice.account.title
+  translation: "계정 상태가 변경되었습니다"
+- id: mail.notice.account.body
+  translation: "{{.site}} 계정이 {{.status}}되었습니다."
+- id: mail.notice.account.note
+  translation: "실수라고 생각되면 사이트 관리자에게 문의하세요."
+- id: mail.notice.account.disabled
+  translation: "비활성화"
+- id: mail.notice.account.deleted
+  translation: "삭제"
+- id: mail.admin.job_failed.subject
+  translation: "작업 실패 #{{.job_id}} - {{.site}}"
+- id: mail.admin.job_failed.title
+  translation: "백그라운드 작업이 실패했습니다"
+- id: mail.admin.job_failed.body
+  translation: "{{.site}}에서 작업 #{{.job_id}}({{.kind}})이 실패했습니다."
+- id: mail.admin.job_failed.reason_label
+  translation: "**실패 이유**"
+- id: mail.admin.job_failed.note
+  translation: "전체 로그를 확인하고 다시 시도하려면 관리자 패널의 작업 페이지를 여세요."
+- id: mail.admin.media_alert.subject
+  translation: "미디어 할당량 경고 - {{.site}}"
+- id: mail.admin.media_alert.title
+  translation: "사용자가 미디어 할당량에 도달했습니다"
+- id: mail.admin.media_alert.body
+  translation: "{{.username}} 님이 {{.site}}에서 할당량 {{.limit}} 중 {{.used}}를 사용했습니다. 일부 미디어를 제거할 때까지 이 사용자의 새 업로드는 거부됩니다."
+- id: mail.admin.media_alert.note
+  translation: "할당량을 늘리거나 사용자에게 사용하지 않는 미디어를 제거하도록 요청하세요."
+- id: mail.digest.subject
+  translation: "주간 학습 요약"
+- id: mail.digest.title
+  translation: "이번 주 복습 기록"
+- id: mail.digest.intro
+  translation: "지난 7일 동안의 학습 결과입니다."
+- id: mail.digest.reviewed
+  translation: "**복습:** {{.count}}"
+- id: mail.digest.pass_rate
+  translation: "**정답률:** {{.rate}}%"
+- id: mail.digest.streak
+  translation: "**현재 연속 일수:** {{.days}}일"
+- id: mail.digest.new_cards
+  translation: "**새 카드:** {{.count}}"
+- id: mail.digest.due
+  translation: "**지금 마감:** {{.count}}"
+- id: mail.digest.link_label
+  translation: "통계 보기"
+- id: presets.default_name
+  translation: "기본"
+- id: review.empty_card.notice
+  translation: "이 카드는 비어 있습니다. 빈 카드 정리에서 제거됩니다."
+- id: m20.metadata_template
+  translation: "템플릿은 engram_meta 필드를 참조할 수 없습니다."
+- id: m20.reserved_prefix
+  translation: "engram_으로 시작하는 필드 이름은 예약되어 있습니다(engram_meta 제외)."
+- id: m20.reserved_prefix_import
+  translation: "engram_으로 시작하는 필드 이름은 일반 필드로 가져왔습니다."
+- id: m20.metadata_field_locked
+  translation: "engram_meta 필드는 내장되어 있어 이름을 바꾸거나 제거할 수 없습니다."
+- id: mail.study.reminder.subject
+  translation: "학습할 시간입니다 - {{.site}}"
+- id: mail.study.reminder.title
+  translation: "학습할 시간입니다"
+- id: mail.study.reminder.body
+  translation: "{{.site}}에서 학습할 새 카드가 {{.new_available}}장, 복습할 카드가 {{.review_available}}장 있습니다."
+- id: mail.study.reminder.link_label
+  translation: "학습 시작"
+- id: mail.study.digest.new
+  translation: "**새 카드 평가:** {{.count}}"
+- id: mail.study.digest.new_available
+  translation: "**지금 사용 가능한 새 카드:** {{.count}}"
