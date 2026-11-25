@@ -4,6 +4,7 @@ import {
   type LocaleCatalog,
   SUPPORTED_LOCALES,
   DEFAULT_LOCALE,
+  FALLBACK_LOCALE,
 } from './types';
 import { zhCN } from './locales/zh-CN';
 import { zhTW } from './locales/zh-TW';
@@ -77,7 +78,8 @@ export interface ResolveLocaleOptions {
 
 /**
  * Resolve language priority:
- * URL param ?lang=<code> > logged-in user's profile settings > Accept-Language / navigator.language > site default language
+ * URL param ?lang=<code> > logged-in user's profile settings > navigator.language > site default language.
+ * A browser language no catalog covers resolves to FALLBACK_LOCALE instead of the site default.
  */
 export function resolveLocale(options: ResolveLocaleOptions = {}): SupportedLocale {
   const { urlParam, userSetting, navigatorLang, siteDefault = DEFAULT_LOCALE } = options;
@@ -94,10 +96,12 @@ export function resolveLocale(options: ResolveLocaleOptions = {}): SupportedLoca
     if (matched) return matched;
   }
 
-  // 3. Browser language preference
+  // 3. Browser language preference: a stated preference no catalog covers is answered in the fallback
+  // language, because the site default is reserved for visitors who state no preference at all.
   if (navigatorLang) {
     const matched = matchSupportedLocale(navigatorLang);
     if (matched) return matched;
+    return FALLBACK_LOCALE;
   }
 
   // 4. Site default

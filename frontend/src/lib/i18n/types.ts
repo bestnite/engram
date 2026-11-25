@@ -35,6 +35,12 @@ export const SUPPORTED_LOCALES: readonly SupportedLocale[] = [
 export const DEFAULT_LOCALE: SupportedLocale = 'zh-CN';
 
 /**
+ * The language answered when the browser states a preference no shipped catalog covers. The site default is reserved
+ * for visitors who state no preference at all.
+ */
+export const FALLBACK_LOCALE: SupportedLocale = 'en';
+
+/**
  * Language pack catalog structure definition
  */
 export type LocaleCatalog = Record<string, string>;

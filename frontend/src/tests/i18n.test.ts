@@ -44,14 +44,17 @@ describe('i18n language resolution and formatting', () => {
       })
     ).toBe('zh-TW');
 
-    // Priority 4: no recognizable preference at all — fall back to the site default (zh-CN)
+    // A browser language no catalog covers is answered in the fallback language, not the site default
     expect(
       resolveLocale({
         urlParam: null,
         userSetting: null,
         navigatorLang: 'it-IT',
       })
-    ).toBe('zh-CN');
+    ).toBe('en');
+
+    // No stated preference at all — fall back to the site default (zh-CN)
+    expect(resolveLocale({ urlParam: null, userSetting: null, navigatorLang: null })).toBe('zh-CN');
   });
 
   it('maps regional and script variants onto the shipped catalogs', () => {

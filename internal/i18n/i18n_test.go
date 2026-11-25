@@ -38,7 +38,9 @@ func TestPickResolutionOrder(t *testing.T) {
 		{"header region maps to base language", "", "", "en-US,en;q=0.9", "en"},
 		{"header order decides between two supported languages", "", "", "it-IT,en;q=0.9,zh;q=0.1", "en"},
 		{"header quality decides between two supported languages", "", "", "en;q=0.2,zh-CN;q=0.9", "zh-CN"},
-		{"nothing supported falls back to default", "", "", "it-IT,pl;q=0.8", DefaultLocaleCode},
+		{"unsupported browser language falls back to english", "", "", "it-IT,pl;q=0.8", FallbackLocaleCode},
+		{"unsupported user setting and header fall back to english", "", "it", "pl-PL", FallbackLocaleCode},
+		{"unsupported explicit request alone falls back to default", "it", "", "", DefaultLocaleCode},
 		{"empty inputs fall back to default", "", "", "", DefaultLocaleCode},
 	}
 	for _, tc := range cases {

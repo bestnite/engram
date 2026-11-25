@@ -26,8 +26,14 @@ var localesFS embed.FS
 // localesDir is the directory name holding the language packs inside the embedded FS.
 const localesDir = "locales"
 
-// DefaultLocaleCode is the site default language; it is used when every language resolution fails.
+// DefaultLocaleCode is the site default language; it is used when the request states no language preference at all,
+// and as the last resort when even the fallback language is not shipped.
 const DefaultLocaleCode = "zh-CN"
+
+// FallbackLocaleCode is the language answered when the request states a language preference that no shipped catalog
+// covers, for example "Accept-Language: it-IT". A visitor who named a language we cannot serve is better served by the
+// most widely understood catalog than by the site default, which exists for visitors who state no preference.
+const FallbackLocaleCode = "en"
 
 // supportedCodes lists the shipped languages; the order is the display order of the "language switcher".
 // Adding a language = add locales/<code>.yaml and append the code here.
@@ -148,6 +154,8 @@ func (t *Translator) SupportedCodes() []string {
 // Pick chooses the request language by fixed precedence: requested (explicit ?lang override) > userLocale (user setting)
 // > acceptLanguage > site default. When one level yields an unsupported language it moves to the next level instead of
 // doing a nearest match -- otherwise a user who set the language to "it" would beat the "en" in Accept-Language.
+// An Accept-Language header that matches no shipped catalog at all resolves to FallbackLocaleCode, not to the site
+// default: the site default is reserved for requests that state no preference.
 // A supported language that ships more than one regional catalog is resolved by script and region: Traditional script
 // or a Taiwan, Hong Kong or Macau region selects zh-TW and every other Chinese tag selects zh-CN, and pt-PT selects
 // pt-BR because it is the only Portuguese catalog shipped.
@@ -169,6 +177,10 @@ func (t *Translator) Pick(requested, userLocale, acceptLanguage string) language
 					return matched
 				}
 			}
+		}
+		// The header states a preference none of the shipped catalogs covers: answer in the fallback language.
+		if matched, ok := t.match(language.Make(FallbackLocaleCode)); ok {
+			return matched
 		}
 	}
 	return t.defaultTag
