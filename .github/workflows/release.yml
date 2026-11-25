@@ -50,6 +50,7 @@ jobs:
       matrix:
         include:
           # A non-empty rust_target = this target produces a static musl binary (Linux only). macOS/windows leave it empty and build natively.
+          # macOS must stay on an Apple-silicon image: macos-14 was retired on 2026-11-02 and jobs that ask for it are cancelled at queue time.
           - runner: ubuntu-latest
             goos: linux
             goarch: amd64
@@ -60,7 +61,7 @@ jobs:
             goarch: arm64
             ext: ""
             rust_target: aarch64-unknown-linux-musl
-          - runner: macos-14
+          - runner: macos-15
             goos: darwin
             goarch: arm64
             ext: ""
