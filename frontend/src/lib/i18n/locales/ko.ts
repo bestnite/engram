@@ -15,7 +15,7 @@ export const ko: LocaleCatalog = {
   'nav.logout': '로그아웃',
   'nav.toggle_theme': '라이트/다크 테마 전환',
   'language.label': '언어',
-  'language.zh-CN': '中文',
+  'language.zh-CN': '简体中文',
   'language.zh-TW': '繁體中文',
   'language.en': 'English',
   'language.ja': '日本語',

@@ -15,7 +15,7 @@ export const es: LocaleCatalog = {
   'nav.logout': 'Cerrar sesión',
   'nav.toggle_theme': 'Cambiar entre tema claro y oscuro',
   'language.label': 'Idioma',
-  'language.zh-CN': '中文',
+  'language.zh-CN': '简体中文',
   'language.zh-TW': '繁體中文',
   'language.en': 'English',
   'language.ja': '日本語',

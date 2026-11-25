@@ -15,7 +15,7 @@ export const ja: LocaleCatalog = {
   'nav.logout': 'ログアウト',
   'nav.toggle_theme': 'ライトテーマとダークテーマを切り替え',
   'language.label': '言語',
-  'language.zh-CN': '中文',
+  'language.zh-CN': '简体中文',
   'language.zh-TW': '繁體中文',
   'language.en': 'English',
   'language.ja': '日本語',

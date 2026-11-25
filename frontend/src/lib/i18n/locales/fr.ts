@@ -15,7 +15,7 @@ export const fr: LocaleCatalog = {
   'nav.logout': 'Se déconnecter',
   'nav.toggle_theme': 'Basculer entre le thème clair et le thème sombre',
   'language.label': 'Langue',
-  'language.zh-CN': '中文',
+  'language.zh-CN': '简体中文',
   'language.zh-TW': '繁體中文',
   'language.en': 'English',
   'language.ja': '日本語',

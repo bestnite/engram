@@ -15,7 +15,7 @@ export const ru: LocaleCatalog = {
   'nav.logout': 'Выйти',
   'nav.toggle_theme': 'Переключить светлую или тёмную тему',
   'language.label': 'Язык',
-  'language.zh-CN': '中文',
+  'language.zh-CN': '简体中文',
   'language.zh-TW': '繁體中文',
   'language.en': 'English',
   'language.ja': '日本語',

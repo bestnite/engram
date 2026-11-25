@@ -14,7 +14,7 @@ export const en: LocaleCatalog = {
   'nav.logout': 'Log Out',
   'nav.toggle_theme': 'Toggle light or dark theme',
   'language.label': 'Language',
-  'language.zh-CN': '中文',
+  'language.zh-CN': '简体中文',
   'language.zh-TW': '繁體中文',
   'language.en': 'English',
   'language.ja': '日本語',

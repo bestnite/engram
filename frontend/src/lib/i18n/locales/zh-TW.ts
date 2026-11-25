@@ -15,7 +15,7 @@ export const zhTW: LocaleCatalog = {
   'nav.logout': '登出',
   'nav.toggle_theme': '切換深淺主題',
   'language.label': '介面語言',
-  'language.zh-CN': '中文',
+  'language.zh-CN': '简体中文',
   'language.zh-TW': '繁體中文',
   'language.en': 'English',
   'language.ja': '日本語',

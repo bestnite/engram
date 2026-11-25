@@ -15,7 +15,7 @@ export const ptBR: LocaleCatalog = {
   'nav.logout': 'Sair',
   'nav.toggle_theme': 'Alternar tema claro ou escuro',
   'language.label': 'Idioma',
-  'language.zh-CN': '中文',
+  'language.zh-CN': '简体中文',
   'language.zh-TW': '繁體中文',
   'language.en': 'English',
   'language.ja': '日本語',
